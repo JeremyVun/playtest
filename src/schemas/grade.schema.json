@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "dummy/grade.schema.json",
+  "title": "Grader report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["score", "completion", "efficiency", "findings", "summary"],
+  "properties": {
+    "score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Overall quality of the journey: how smoothly the app let the user succeed."
+    },
+    "completion": {
+      "enum": ["full", "partial", "none"],
+      "description": "Did the user accomplish what the story asked?"
+    },
+    "efficiency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assessment"],
+      "properties": {
+        "assessment": { "type": "string", "description": "Step count vs. what the task should take; backtracking; hesitation." },
+        "wasted_steps": { "type": "number", "description": "Steps that did not advance the task." }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["severity", "note"],
+        "properties": {
+          "severity": { "enum": ["info", "minor", "major"] },
+          "note": { "type": "string" },
+          "step": { "type": "number", "description": "Step number the finding refers to, if specific." }
+        }
+      },
+      "description": "Free-form UX/quality observations, e.g. 'the error message after an invalid card is blank'."
+    },
+    "summary": { "type": "string", "description": "Two or three sentences a developer reads in the report." }
+  }
+}

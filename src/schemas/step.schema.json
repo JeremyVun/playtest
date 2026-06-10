@@ -1,0 +1,99 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "dummy/step.schema.json",
+  "title": "Actor step",
+  "description": "The actor agent's entire turn: one thought, one action, one expectation. schema_version 2.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["thought", "action", "expectation"],
+  "properties": {
+    "thought": {
+      "type": "string",
+      "description": "Free-form reasoning about the current page and what to do next."
+    },
+    "expectation": {
+      "type": "string",
+      "description": "Free-form prediction of what should happen after the action executes."
+    },
+    "action": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "ref"],
+          "properties": {
+            "type": { "const": "click" },
+            "ref": { "type": "string", "description": "Element ref from the latest snapshot, e.g. \"e42\"." }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "ref", "text"],
+          "properties": {
+            "type": { "const": "type" },
+            "ref": { "type": "string" },
+            "text": { "type": "string", "description": "Text to type into the element (replaces current value)." },
+            "submit": { "type": "boolean", "description": "Press Enter after typing.", "default": false }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "ref", "value"],
+          "properties": {
+            "type": { "const": "select" },
+            "ref": { "type": "string" },
+            "value": { "type": "string", "description": "Visible label or value of the option to select." }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "direction"],
+          "properties": {
+            "type": { "const": "scroll" },
+            "direction": { "enum": ["up", "down"] },
+            "ref": { "type": "string", "description": "Optional: scroll within this element instead of the page." }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "url"],
+          "properties": {
+            "type": { "const": "navigate" },
+            "url": { "type": "string", "description": "Absolute URL or path relative to base_url." }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "seconds"],
+          "properties": {
+            "type": { "const": "wait" },
+            "seconds": { "type": "number", "minimum": 0.1, "maximum": 10 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "summary"],
+          "properties": {
+            "type": { "const": "done" },
+            "summary": { "type": "string", "description": "What was accomplished, in the persona's voice." }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "reason"],
+          "properties": {
+            "type": { "const": "give_up" },
+            "reason": { "type": "string", "description": "Why the task cannot be completed." }
+          }
+        }
+      ]
+    }
+  }
+}

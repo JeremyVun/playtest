@@ -1,0 +1,175 @@
+// Run directories, step envelopes, baselines, action track, diff. See docs/CONTRACTS.md §1, §3.
+import fs from "node:fs";
+import path from "node:path";
+import crypto from "node:crypto";
+
+export const HARNESS_VERSION = "0.1.0";
+export const STEP_SCHEMA_VERSION = 2;
+export const SNAPSHOT_FORMAT = "a11y-text-v1";
+export const PROMPTS_VERSION = "prompts-v1";
+export const SETTLE = { name: "settle-v1", dom_quiet_ms: 500, net_quiet_ms: 500, max_ms: 10000 };
+
+// Base of manifest.pins; runner adds actor_model, grader_model, gateway.
+export const PINS_BASE = {
+  harness_version: HARNESS_VERSION,
+  prompts_version: PROMPTS_VERSION,
+  step_schema_version: STEP_SCHEMA_VERSION,
+  snapshot_format: SNAPSHOT_FORMAT,
+  settle: SETTLE,
+};
+
+/** UTC "2026-06-10T0300-ab12". */
+export function newRunId(now = new Date()) {
+  const p = (n) => String(n).padStart(2, "0");
+  const ts =
+    `${now.getUTCFullYear()}-${p(now.getUTCMonth() + 1)}-${p(now.getUTCDate())}` +
+    `T${p(now.getUTCHours())}${p(now.getUTCMinutes())}`;
+  return `${ts}-${crypto.randomBytes(2).toString("hex")}`;
+}
+
+export class RunWriter {
+  constructor(runsRoot, runId, caseId) {
+    this.#dir = path.resolve(runsRoot, runId, caseId);
+    fs.mkdirSync(path.join(this.#dir, "steps"), { recursive: true });
+  }
+  #dir;
+
+  get dir() {
+    return this.#dir;
+  }
+
+  stepPaths(n) {
+    const nnn = String(n).padStart(3, "0");
+    return {
+      screenshot: path.join(this.#dir, "steps", `${nnn}.png`),
+      mhtml: path.join(this.#dir, "steps", `${nnn}.mhtml`),
+      a11y: path.join(this.#dir, "steps", `${nnn}.a11y.txt`),
+    };
+  }
+
+  appendEnvelope(envelope) {
+    fs.appendFileSync(path.join(this.#dir, "trajectory.jsonl"), JSON.stringify(envelope) + "\n");
+  }
+
+  writeManifest(manifest) {
+    fs.writeFileSync(path.join(this.#dir, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
+  }
+
+  writeGrade(grade) {
+    fs.writeFileSync(path.join(this.#dir, "grade.json"), JSON.stringify(grade, null, 2) + "\n");
+  }
+
+  copyBaseline(srcJsonlPath) {
+    fs.copyFileSync(srcJsonlPath, path.join(this.#dir, "baseline.jsonl"));
+  }
+}
+
+/** @returns {object[]} envelopes */
+export function readTrajectory(jsonlPath) {
+  return fs
+    .readFileSync(jsonlPath, "utf8")
+    .split("\n")
+    .filter((line) => line.trim())
+    .map((line) => JSON.parse(line));
+}
+
+function actionOf(envelope) {
+  return envelope.agent?.action ?? envelope.action ?? null;
+}
+
+/** The actable projection: executed steps with resolved locators. Computed, never stored. */
+export function actionTrack(envelopes) {
+  return envelopes.filter((e) => {
+    const type = actionOf(e)?.type;
+    if (type === "done" || type === "give_up") return false;
+    return Boolean(e.resolution) && Boolean(e.result?.ok);
+  });
+}
+
+function stepSignature(envelope) {
+  const a = actionOf(envelope) ?? {};
+  return `${a.type}|${envelope.resolution?.locator ?? a.url ?? ""}|${a.text ?? ""}`;
+}
+
+/**
+ * LCS diff of two action tracks.
+ * @returns {{ ops: {op: "same"|"del"|"add", a: object|null, b: object|null}[],
+ *             summary: { same: number, del: number, add: number } }}
+ */
+export function diffTracks(baselineTrack, newTrack) {
+  const A = baselineTrack.map(stepSignature);
+  const B = newTrack.map(stepSignature);
+  const n = A.length;
+  const m = B.length;
+  // lcs[i][j] = LCS length of A[i..] and B[j..]
+  const lcs = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      lcs[i][j] = A[i] === B[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+    }
+  }
+  const ops = [];
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (A[i] === B[j]) ops.push({ op: "same", a: baselineTrack[i++], b: newTrack[j++] });
+    else if (lcs[i + 1][j] >= lcs[i][j + 1]) ops.push({ op: "del", a: baselineTrack[i++], b: null });
+    else ops.push({ op: "add", a: null, b: newTrack[j++] });
+  }
+  while (i < n) ops.push({ op: "del", a: baselineTrack[i++], b: null });
+  while (j < m) ops.push({ op: "add", a: null, b: newTrack[j++] });
+
+  const summary = { same: 0, del: 0, add: 0 };
+  for (const o of ops) summary[o.op]++;
+  return { ops, summary };
+}
+
+export function baselinePaths(caseFile) {
+  const base = caseFile.replace(/\.yaml$/, "");
+  return {
+    traj: `${base}.baseline.jsonl`,
+    meta: `${base}.baseline.json`,
+    healedTraj: `${base}.healed.jsonl`,
+    healedMeta: `${base}.healed.json`,
+  };
+}
+
+/** @returns {{ envelopes: object[], meta: object|null } | null} */
+export function readBaseline(caseFile) {
+  const p = baselinePaths(caseFile);
+  if (!fs.existsSync(p.traj)) return null;
+  const meta = fs.existsSync(p.meta) ? JSON.parse(fs.readFileSync(p.meta, "utf8")) : null;
+  return { envelopes: readTrajectory(p.traj), meta };
+}
+
+/** Copy the run's trajectory next to the case file; healed runs become review candidates. */
+export function blessBaseline(caseFile, runDir, { healed = false } = {}) {
+  const manifest = JSON.parse(fs.readFileSync(path.join(runDir, "manifest.json"), "utf8"));
+  const meta = {
+    blessed_at: new Date().toISOString(),
+    run_id: manifest.run_id,
+    run_dir: path.resolve(runDir),
+    healed_from_run_id: healed ? (manifest.baseline?.run_id ?? null) : null,
+    pins: manifest.pins,
+    ...(healed ? { candidate: true } : {}),
+  };
+  const p = baselinePaths(caseFile);
+  fs.copyFileSync(path.join(runDir, "trajectory.jsonl"), healed ? p.healedTraj : p.traj);
+  fs.writeFileSync(healed ? p.healedMeta : p.meta, JSON.stringify(meta, null, 2) + "\n");
+  return meta;
+}
+
+/** Healed candidate -> baseline; removes the candidate files. Throws if no candidate. */
+export function promoteHealed(caseFile) {
+  const p = baselinePaths(caseFile);
+  if (!fs.existsSync(p.healedTraj)) {
+    throw new Error(`no healed candidate to promote for ${caseFile}`);
+  }
+  const meta = fs.existsSync(p.healedMeta) ? JSON.parse(fs.readFileSync(p.healedMeta, "utf8")) : {};
+  delete meta.candidate;
+  fs.copyFileSync(p.healedTraj, p.traj);
+  fs.writeFileSync(p.meta, JSON.stringify(meta, null, 2) + "\n");
+  fs.rmSync(p.healedTraj);
+  fs.rmSync(p.healedMeta, { force: true });
+  return meta;
+}

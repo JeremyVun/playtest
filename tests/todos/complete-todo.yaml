@@ -1,0 +1,9 @@
+story: |
+  You are planning your evening. Add a todo called "buy milk" and add a
+  todo called "walk the dog". You already bought milk on the way home,
+  so mark "buy milk" as done.
+success:
+  - api_called: "PATCH /api/todos/*"
+  - assert: the counter shows "1 item left"
+perf:
+  console_errors: 0

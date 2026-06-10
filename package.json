@@ -1,0 +1,22 @@
+{
+  "name": "dummy",
+  "version": "0.1.0",
+  "description": "Agentic regression testing for web apps: an AI agent role-plays a user against your app and the harness scores whether the app let it succeed.",
+  "type": "module",
+  "bin": {
+    "dummy": "./src/harness/cli.js"
+  },
+  "scripts": {
+    "todo-app": "node src/todo-app/server.js",
+    "mock-llm": "node src/harness/testing/mock-llm.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "commander": "^13.1.0",
+    "playwright": "^1.53.0",
+    "yaml": "^2.7.0"
+  }
+}

@@ -24,17 +24,18 @@ const GRADE_TOOL = {
 
 const oneLine = (s) => String(s).replace(/\s*\n\s*/g, " ").trim();
 
-// Compact trajectory digest: per step — action, outcome, settle, confusion, thought.
+// Compact trajectory digest: per step — action, outcome, settle, url, confusion, thought.
 function digest(envelopes) {
   const lines = [];
   for (const env of envelopes) {
     const what = env.agent ? describeAction(env.agent.action) : `act ${env.resolution?.locator ?? "(baseline step)"}`;
     const outcome = env.result?.ok === false ? `error ${env.result.error}` : "ok";
     const settle = env.result?.settle_ms != null ? `, settled in ${env.result.settle_ms}ms` : "";
+    const url = env.result?.url ? `, url ${env.result.url}` : "";
     const confusion = env.confusion
       ? ` [confusion: ${env.confusion.type}${env.confusion.note ? ` — ${oneLine(env.confusion.note)}` : ""}]`
       : "";
-    lines.push(`step ${env.step}: ${what} -> ${outcome}${settle}${confusion}`);
+    lines.push(`step ${env.step}: ${what} -> ${outcome}${settle}${url}${confusion}`);
     if (env.agent?.thought) lines.push(`  thought: ${oneLine(env.agent.thought)}`);
   }
   return lines.join("\n") || "(empty trajectory)";

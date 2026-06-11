@@ -66,22 +66,25 @@ const oneLine = (s) => String(s).replace(/\s*\n\s*/g, " ").trim();
 function stepLine(env) {
   const what = env.agent ? describeAction(env.agent.action) : `acted ${env.resolution?.locator ?? "(baseline step)"}`;
   const outcome = env.result?.ok === false ? `error ${env.result.error}` : "ok";
-  const url = env.url ?? env.result?.url;
+  const url = env.result?.url;
   return `step ${env.step}: ${what} -> ${outcome}${url ? ` | url now ${url}` : ""}`;
 }
 
 const VERBOSE_STEPS = 15;
+const FOLD_BATCH = 10;
 
-// Compact append-only log: last 15 steps verbose (with thoughts), older steps
-// folded to one line each with thoughts dropped.
+// Compact append-only log: recent steps verbose (with thoughts), older steps
+// folded to one line each with thoughts dropped. Folding happens in batches of
+// FOLD_BATCH so the folded prefix is byte-stable between turns (prompt
+// caching); the verbose tail holds the last 15-24 steps.
 function renderLog(history) {
   if (!history.length) return "Steps so far: (none — this is your first step)";
   const lines = ["Steps so far:"];
-  const fold = Math.max(0, history.length - VERBOSE_STEPS);
+  const fold = Math.floor(Math.max(0, history.length - VERBOSE_STEPS) / FOLD_BATCH) * FOLD_BATCH;
   if (fold > 0) {
     lines.push(`steps 1-${fold} (thoughts dropped):`);
     for (const env of history.slice(0, fold)) lines.push(stepLine(env));
-    lines.push(`steps ${fold + 1}-${history.length}:`);
+    lines.push(`steps ${fold + 1} onward:`);
   }
   for (const env of history.slice(fold)) {
     lines.push(stepLine(env));
@@ -113,10 +116,11 @@ export class Actor {
   }
 
   /**
-   * @param {{ history: object[], snapshotText: string, stepNum: number }} turn
+   * @param {{ history: object[], snapshotText: string, stepNum: number,
+   *           signal?: AbortSignal|null }} turn
    * @returns {Promise<{ agentStep: object, tokens: {in: number, out: number, cache_read: number} }>}
    */
-  async nextStep({ history, snapshotText, stepNum }) {
+  async nextStep({ history, snapshotText, stepNum, signal = null }) {
     const messages = [
       { role: "system", content: this.system },
       { role: "user", content: renderLog(history) },
@@ -134,6 +138,7 @@ export class Actor {
         messages: turnMessages,
         tools: [STEP_TOOL],
         toolChoice: "step",
+        signal,
       });
       tokens.in += usage.in;
       tokens.out += usage.out;

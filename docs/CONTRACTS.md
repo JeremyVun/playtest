@@ -93,7 +93,8 @@ as `PINS_BASE` (see Manifest).
 ```
 
 `dummy.yaml` inheritance: collect `dummy.yaml` files from the repo root (dir containing
-`.git`, or the named root if none) down to the case's directory; deep-merge top-down
+`.git`; when no `.git` ancestor exists, every ancestor directory of the case contributes)
+down to the case's directory; deep-merge top-down
 (nearest file wins per key; `env` merges per-key, `success`/`tags` are NOT inherited —
 they are case-only). Relative paths inside any YAML (`compose`, `init`, `storage_state`)
 resolve relative to the file that declared them. Durations accept `"5m"`, `"90s"`, `"250ms"`,
@@ -118,7 +119,8 @@ or a number (ms). Defaults when nothing specifies them: `actor_model: "claude-ha
     locator: "role=button[name=\"Checkout\"]",   // durable Playwright selector string
     bbox: { x: 612, y: 480, w: 120, h: 36 }      // viewport px at execution time
   },
-  result: { ok: true, error: null, settle_ms: 480 },
+  result: { ok: true, error: null, settle_ms: 480,
+            url: "http://localhost:4173/" },   // page URL after the action settled; null if unknown
   perf: {
     input_to_paint_ms: 120,         // null when unmeasurable
     long_tasks_ms: 90,
@@ -249,7 +251,8 @@ export class Session {
   async executeLocator(actedStep, stepNum)  // act-mode: drive from envelope.resolution.locator
   // Both -> ExecResult:
   // { ok, error: string|null, resolution: {ref?, locator, bbox}|null,
-  //   settle_ms, perf: {input_to_paint_ms, long_tasks_ms, requests, js_errors, nav|null},
+  //   settle_ms, url: string|null /* page URL after settle */,
+  //   perf: {input_to_paint_ms, long_tasks_ms, requests, js_errors, nav|null},
   //   har_entries: [int], timed_out: false }
   // Validation failures (unknown ref, hidden, disabled) -> { ok:false, error:"...", resolution:null }
   // and NO browser action happens. Action execution errors are caught -> ok:false. Never throws
@@ -336,7 +339,9 @@ export class Actor {
   //   system: actor-system.md + persona overlay + the story  (stable prefix, never changes mid-run)
   //   then one user message: compact append-only log of prior steps
   //     "step N: <action human-readable> -> ok|error <error> | url now <u>" (+ the agent's thought,
-  //     one line each), older steps beyond the last 15 folded to "steps 1-K: <one line each, thoughts dropped>"
+  //     one line each), older steps folded in batches of 10 to "steps 1-K: <one line each,
+  //     thoughts dropped>" once more than 15+ steps accrue (the verbose tail holds the last
+  //     15-24 steps), so the folded prefix is byte-stable between turns for prompt caching
   //   then final user message: "Current page snapshot (step N):\n" + snapshotText
   // Calls chat() with the step tool (schema = step.schema.json, name "step", forced via toolChoice).
   // Ajv-validates returned args; on failure retries ONCE with the validation error appended.
@@ -373,7 +378,7 @@ export async function evaluateGate(resolvedCase, ctx)
 ```js
 export async function gradeRun(runDir, resolvedCase)
   // Reads trajectory + manifest + final step's a11y text. Prompt = grader-system.md + case story +
-  // compact trajectory digest (per step: action, ok, settle_ms, confusion, thought) + gate result +
+  // compact trajectory digest (per step: action, ok, settle_ms, url, confusion, thought) + gate result +
   // totals + (if baseline exists) baseline step count. Forced tool call "grade" with
   // grade.schema.json. Ajv-validate, retry once. Writes grade.json (adds {model, graded_at, tokens}).
   // -> grade object.

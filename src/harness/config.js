@@ -71,6 +71,8 @@ async function walkYaml(dir) {
     if (name.startsWith(".") || name === "node_modules") continue;
     const full = path.join(dir, name);
     if (entry.isDirectory()) {
+      // personas/ holds persona definitions (actor.js loadPersona), not cases.
+      if (name === "personas") continue;
       out.push(...(await walkYaml(full)));
     } else if (
       name.endsWith(".yaml") &&
@@ -86,7 +88,7 @@ async function walkYaml(dir) {
 
 async function resolveCase(file, namedRoot, baseUrl) {
   const caseDir = path.dirname(file);
-  const top = findRepoRoot(caseDir) ?? namedRoot;
+  const top = findRepoRoot(caseDir); // null -> no .git ancestor: every ancestor contributes
 
   const merged = { ...DEFAULTS, env: {} };
   for (const f of defaultsChain(top, caseDir)) mergeDoc(merged, await loadYaml(f), false);
@@ -159,18 +161,23 @@ function findRepoRoot(fromDir) {
   }
 }
 
-/** Existing dummy.yaml files from `top` down to `caseDir`, top first. */
+/**
+ * Existing dummy.yaml files from `top` down to `caseDir`, top first. Walks UP
+ * from the case dir so ancestor defaults are found even when the user named a
+ * path below them; with no repo root (`top` null) it walks to the fs root.
+ */
 function defaultsChain(top, caseDir) {
-  const rel = path.relative(top, caseDir);
-  let dirs;
-  if (rel === "") dirs = [top];
-  else if (rel.startsWith("..")) dirs = [caseDir]; // top is not an ancestor; defensive
-  else {
-    dirs = [top];
-    let d = top;
-    for (const seg of rel.split(path.sep)) dirs.push((d = path.join(d, seg)));
+  const files = [];
+  let dir = caseDir;
+  for (;;) {
+    const f = path.join(dir, "dummy.yaml");
+    if (existsSync(f)) files.unshift(f);
+    if (dir === top) break;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
   }
-  return dirs.map((d) => path.join(d, "dummy.yaml")).filter((f) => existsSync(f));
+  return files;
 }
 
 async function loadYaml(file) {

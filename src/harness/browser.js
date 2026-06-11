@@ -17,6 +17,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  * @property {string|null} error
  * @property {{ref?: string, locator: string|null, bbox: object|null}|null} resolution
  * @property {number} settle_ms
+ * @property {string|null} url page URL after the action settled
  * @property {{input_to_paint_ms: number|null, long_tasks_ms: number, requests: number,
  *             js_errors: number, nav: object|null}} perf
  * @property {number[]} har_entries
@@ -33,6 +34,22 @@ function initInstrumentation() {
       d.lastMutationAt = performance.now();
     }).observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
   } catch {}
+  // The first input event after a perf window opens arms the input-to-paint
+  // measurement: the double rAF then resolves at the first paint AFTER the
+  // action's input, not at whatever frame happened to follow window-open.
+  const arm = () => {
+    const w = window.__dummyWin;
+    if (!w || w.inputAt != null) return;
+    w.inputAt = performance.now();
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (window.__dummyWin === w) w.paint = performance.now() - w.inputAt;
+      });
+    });
+  };
+  for (const t of ["pointerdown", "mousedown", "keydown", "input", "wheel", "scroll"]) {
+    window.addEventListener(t, arm, { capture: true, passive: true });
+  }
   const observe = (type, fn) => {
     try {
       new PerformanceObserver(fn).observe({ type, buffered: true });
@@ -50,16 +67,12 @@ function initInstrumentation() {
   });
 }
 
-// Per-action perf window, page side. The rAF double-tick approximates
-// input-to-next-paint; the marker object doubles as a same-document token
-// (gone after navigation -> the step navigated).
+// Per-action perf window, page side. The marker object doubles as a
+// same-document token (gone after navigation -> the step navigated). The
+// input-to-paint measurement itself is armed by the init script's input
+// listeners (see initInstrumentation), so it spans input dispatch -> paint.
 function openWindowInPage() {
-  const w = (window.__dummyWin = { t0: performance.now(), paint: null });
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      w.paint = performance.now() - w.t0;
-    });
-  });
+  window.__dummyWin = { inputAt: null, paint: null };
   return window.__dummy ? window.__dummy.longTasksMs : 0;
 }
 
@@ -161,19 +174,25 @@ export class Session {
   static async launch({ baseUrl, runDir, storageState = null, headed = false, settle = SETTLE }) {
     fs.mkdirSync(path.join(runDir, "steps"), { recursive: true });
     const browser = await chromium.launch({ headless: !headed });
-    const context = await browser.newContext({
-      viewport: { width: 1280, height: 800 },
-      recordVideo: { dir: runDir, size: { width: 1280, height: 800 } },
-      ...(storageState ? { storageState } : {}),
-    });
-    context.setDefaultTimeout(ACTION_TIMEOUT_MS);
-    context.setDefaultNavigationTimeout(NAV_TIMEOUT_MS);
-    await context.tracing.start({ screenshots: true, snapshots: true });
-    await context.addInitScript(initInstrumentation);
-    const page = await context.newPage();
-    const session = new Session({ baseUrl, runDir, settle, browser, context, page });
-    session.#cdp = await context.newCDPSession(page);
-    return session;
+    try {
+      const context = await browser.newContext({
+        viewport: { width: 1280, height: 800 },
+        recordVideo: { dir: runDir, size: { width: 1280, height: 800 } },
+        ...(storageState ? { storageState } : {}),
+      });
+      context.setDefaultTimeout(ACTION_TIMEOUT_MS);
+      context.setDefaultNavigationTimeout(NAV_TIMEOUT_MS);
+      await context.tracing.start({ screenshots: true, snapshots: true });
+      await context.addInitScript(initInstrumentation);
+      const page = await context.newPage();
+      const session = new Session({ baseUrl, runDir, settle, browser, context, page });
+      session.#cdp = await context.newCDPSession(page);
+      return session;
+    } catch (e) {
+      // No Session exists yet for the caller to close; don't leak the process.
+      await browser.close().catch(() => {});
+      throw e;
+    }
   }
 
   #browser;
@@ -386,6 +405,7 @@ export class Session {
       error,
       resolution,
       settle_ms: settle.settle_ms,
+      url: this.#pageUrl(),
       perf: {
         input_to_paint_ms: navigated || win.paint == null ? null : Math.round(win.paint),
         long_tasks_ms: Math.round(navigated ? win.longTasksMs : Math.max(0, win.longTasksMs - longTasksStart)),
@@ -445,7 +465,6 @@ export class Session {
     for (;;) {
       const now = Date.now();
       if (now - start >= max_ms) return { settle_ms: now - start, timed_out: true };
-      const netQuiet = this.#inflight.size === 0 && now - this.#lastNetAt >= net_quiet_ms;
       let domQuiet = false;
       try {
         const since = await this.page.evaluate(() => {
@@ -457,6 +476,9 @@ export class Session {
         if (this.page.isClosed()) throw e;
         // execution context destroyed mid-navigation: not quiet yet
       }
+      // Net-quiet is checked AFTER the async DOM probe so a request that
+      // started during the probe can't slip past a stale earlier reading.
+      const netQuiet = this.#inflight.size === 0 && Date.now() - this.#lastNetAt >= net_quiet_ms;
       if (netQuiet && domQuiet) return { settle_ms: Date.now() - start, timed_out: false };
       await sleep(SETTLE_POLL_MS);
     }
@@ -488,7 +510,24 @@ export class Session {
         if ((await l.count()) === 1 && (await l.getAttribute("data-dummy-ref")) === ref) return cand;
       } catch {}
     }
-    return candidates[candidates.length - 1] ?? `[data-dummy-ref="${ref}"]`;
+    if (candidates.length) return candidates[candidates.length - 1];
+    // Last resort: a structural css path. Never data-dummy-ref — refs die with
+    // the snapshot, so a baseline carrying one could never be replayed.
+    try {
+      return await loc.evaluate((el) => {
+        const seg = (n) => {
+          let i = 1;
+          let sib = n;
+          while ((sib = sib.previousElementSibling)) if (sib.tagName === n.tagName) i++;
+          return n.tagName.toLowerCase() + ":nth-of-type(" + i + ")";
+        };
+        const segs = [];
+        for (let n = el; n && n !== document.body; n = n.parentElement) segs.unshift(seg(n));
+        return segs.length ? "body > " + segs.join(" > ") : "body";
+      });
+    } catch {
+      return null;
+    }
   }
 
   async #bbox(loc) {
@@ -510,12 +549,21 @@ export class Session {
     fs.writeFileSync(path.join(this.#runDir, "har.json"), JSON.stringify({ log: { entries: this.#har } }) + "\n");
   }
 
+  #pageUrl() {
+    try {
+      return this.page.url();
+    } catch {
+      return null;
+    }
+  }
+
   #fail(error) {
     return {
       ok: false,
       error,
       resolution: null,
       settle_ms: 0,
+      url: this.#pageUrl(),
       perf: { input_to_paint_ms: null, long_tasks_ms: 0, requests: 0, js_errors: 0, nav: null },
       har_entries: [],
       timed_out: false,

@@ -18,13 +18,18 @@ export function llmConfig() {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Per-attempt cap so a stalled gateway cannot hang a case past its deadline or
+// keep the process alive after the suite; a timed-out attempt is retryable.
+const ATTEMPT_TIMEOUT_MS = 60000;
+
 /**
  * @param {{ model: string, messages: object[], tools?: object[]|null,
- *           toolChoice?: string|object|null, maxTokens?: number }} opts
+ *           toolChoice?: string|object|null, maxTokens?: number,
+ *           signal?: AbortSignal|null }} opts
  * @returns {Promise<{ text: string, toolCall: {name: string, args: object}|null,
  *                     usage: {in: number, out: number, cache_read: number} }>}
  */
-export async function chat({ model, messages, tools = null, toolChoice = null, maxTokens = 1024 }) {
+export async function chat({ model, messages, tools = null, toolChoice = null, maxTokens = 1024, signal = null }) {
   const { baseUrl, apiKey, available } = llmConfig();
   if (!available) {
     throw new LlmError("no LLM configured: set DUMMY_LLM_API_KEY (or ANTHROPIC_API_KEY / OPENAI_API_KEY) or DUMMY_LLM_BASE_URL");
@@ -42,13 +47,18 @@ export async function chat({ model, messages, tools = null, toolChoice = null, m
 
   let res;
   for (let attempt = 0; ; attempt++) {
+    const timeout = AbortSignal.timeout(ATTEMPT_TIMEOUT_MS);
     try {
       res = await fetch(`${baseUrl}/chat/completions`, {
         method: "POST",
         headers,
         body: JSON.stringify(body),
+        signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
       });
     } catch (err) {
+      if (signal?.aborted) {
+        throw new LlmError(`LLM request aborted: ${signal.reason?.message ?? signal.reason ?? "aborted"}`);
+      }
       if (attempt >= 2) throw new LlmError(`LLM request failed: ${err.message}`);
       await sleep(500 * 2 ** attempt);
       continue;

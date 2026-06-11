@@ -10,6 +10,7 @@ import {
   readBaseline,
   baselinePaths,
   blessBaseline,
+  promoteHealed,
   actionTrack,
   diffTracks,
   HARNESS_VERSION,
@@ -130,11 +131,24 @@ program
   .argument("<runDir>")
   .action(run(async (runDir) => {
     const manifest = readManifest(runDir);
-    const meta = blessBaseline(manifest.case.file, path.resolve(runDir));
-    // a direct bless supersedes any pending healed candidate
     const p = baselinePaths(manifest.case.file);
-    fs.rmSync(p.healedTraj, { force: true });
-    fs.rmSync(p.healedMeta, { force: true });
+    let candidate = null;
+    try {
+      if (fs.existsSync(p.healedTraj) && fs.existsSync(p.healedMeta)) {
+        candidate = JSON.parse(fs.readFileSync(p.healedMeta, "utf8"));
+      }
+    } catch {}
+    let meta;
+    if (candidate?.run_id === manifest.run_id) {
+      // This run produced the pending healed candidate: promote it (§3),
+      // keeping its healed_from_run_id provenance.
+      meta = promoteHealed(manifest.case.file);
+    } else {
+      meta = blessBaseline(manifest.case.file, path.resolve(runDir));
+      // a direct bless supersedes any pending healed candidate
+      fs.rmSync(p.healedTraj, { force: true });
+      fs.rmSync(p.healedMeta, { force: true });
+    }
     console.log(`blessed ${manifest.case.id} baseline from run ${meta.run_id}\n  ${p.traj}`);
   }));
 

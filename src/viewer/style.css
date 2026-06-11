@@ -53,6 +53,8 @@ svg.ic { width: 14px; height: 14px; flex: none; }
 
 button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
 
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
 .label {
   font-size: 10px;
   letter-spacing: 0.16em;
@@ -323,7 +325,7 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   text-transform: uppercase;
   color: var(--faint);
 }
-.dcell { background: var(--bg1); padding: 8px 12px; min-height: 42px; }
+.dcell { background: var(--bg1); padding: 8px 12px; min-height: 42px; text-align: left; }
 .dcell.empty { background: var(--bg0); }
 .dcell.del { background: var(--fail-soft); box-shadow: inset 2px 0 0 var(--fail); }
 .dcell.add { background: var(--pass-soft); box-shadow: inset 2px 0 0 var(--pass); }
@@ -363,7 +365,9 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+  cursor: pointer;
 }
+.cap-thought.expanded { display: block; -webkit-line-clamp: none; max-height: 40vh; overflow-y: auto; }
 .cap-thought.quiet { color: var(--faint); font-size: 15px; }
 
 .cap-expect { margin-top: 4px; font-size: 11px; color: var(--dim); }
@@ -429,6 +433,7 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 .wf-bar { position: absolute; top: 0; height: 100%; background: var(--accent); min-width: 2px; }
 .wf-bar.bad { background: var(--fail); }
 .wf-bar.slow { background: var(--warn); }
+.wf-bar.pending { background: repeating-linear-gradient(90deg, var(--line2) 0 4px, transparent 4px 8px); }
 
 /* gate */
 .gate-row { display: flex; gap: 9px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 11.5px; align-items: flex-start; }

@@ -53,10 +53,21 @@ export async function runCase(rc, opts) {
   const startedAt = new Date();
   const llm = llmConfig();
 
-  const baseline = mode === "agent" || rebaseline ? null : readBaseline(rc.file);
+  // A corrupt/unparseable committed baseline must fail this case as infra,
+  // not throw out of runCase (contract §10: never throws).
+  let baseline = null;
+  let baselineError = null;
+  if (mode !== "agent" && !rebaseline) {
+    try {
+      baseline = readBaseline(rc.file);
+    } catch (e) {
+      baselineError = `unreadable baseline ${baselinePaths(rc.file).traj}: ${firstLine(e)}`;
+    }
+  }
   const startMode = baseline && actionTrack(baseline.envelopes).length > 0 ? "act" : "record";
 
   // Mutable run state shared with the loops.
+  const abort = new AbortController();
   const r = {
     envelopes: [],
     tokens: { in: 0, out: 0, cache_read: 0 },
@@ -64,6 +75,8 @@ export async function runCase(rc, opts) {
     initialNav: null,
     endReason: "error",
     runError: null,
+    aborted: false, // set on hard timeout; loops stop appending/acting
+    signal: abort.signal, // cancels in-flight LLM calls on hard timeout
   };
 
   const finishInfra = async (error, { session = null, env = null } = {}) => {
@@ -77,6 +90,8 @@ export async function runCase(rc, opts) {
     writer.writeManifest(manifest);
     return { status: "infra", runDir: writer.dir, manifest, error };
   };
+
+  if (baselineError) return finishInfra(baselineError);
 
   if (startMode === "record" && !llm.available) {
     return finishInfra("record mode needs a model: set DUMMY_LLM_BASE_URL or an API key");
@@ -140,9 +155,15 @@ export async function runCase(rc, opts) {
     });
     const loop = body();
     if ((await Promise.race([loop, cap])) === HARD_TIMEOUT) {
+      // Stop the loop and wait for it to settle before the gate/manifest/bless
+      // below read shared state: the abort cancels any in-flight LLM call, the
+      // aborted flag stops the loop at its next checkpoint, and Playwright ops
+      // are bounded by their own timeouts.
+      r.aborted = true;
+      abort.abort(new Error("hard timeout"));
+      await loop.catch(() => {});
       r.endReason = "timeout";
       r.runError = "hard timeout: the run exceeded its budget and did not respond to the deadline";
-      loop.catch(() => {}); // abandoned; the session close below unblocks it
     }
   } catch (e) {
     if (e instanceof InfraError) infra = e;
@@ -200,7 +221,9 @@ export async function runCase(rc, opts) {
   }
 
   if (status === "pass") {
-    if (actualMode === "record" && (rebaseline || !readBaseline(rc.file))) {
+    // existsSync, not readBaseline: a corrupt-but-present baseline must not
+    // throw here, and must not be silently overwritten by a bless.
+    if (actualMode === "record" && (rebaseline || !fs.existsSync(baselinePaths(rc.file).traj))) {
       blessBaseline(rc.file, writer.dir);
     } else if (actualMode === "heal") {
       blessBaseline(rc.file, writer.dir, { healed: true });
@@ -214,18 +237,22 @@ export async function runCase(rc, opts) {
 async function recordLoop({ session, writer, rc, deadline, r }) {
   const actor = new Actor(rc, loadPersona(rc.persona, rc.file));
   while (r.envelopes.length < rc.limits.max_steps) {
+    if (r.aborted) return;
     if (Date.now() >= deadline) {
       r.endReason = "timeout";
       return;
     }
     const stepNum = r.envelopes.length + 1;
     const snap = await session.captureSnapshot(stepNum);
+    if (r.aborted) return;
     r.lastSnapshot = snap.text;
     const { agentStep, tokens } = await actor.nextStep({
       history: r.envelopes,
       snapshotText: snap.text,
       stepNum,
+      signal: r.signal,
     });
+    if (r.aborted) return;
     addTokens(r.tokens, tokens);
 
     const envelope = {
@@ -238,7 +265,7 @@ async function recordLoop({ session, writer, rc, deadline, r }) {
     const type = agentStep.action.type;
     if (type === "done" || type === "give_up") {
       Object.assign(envelope, {
-        result: { ok: true, error: null, settle_ms: 0 },
+        result: { ok: true, error: null, settle_ms: 0, url: snap.url },
         perf: emptyPerf(),
         artifacts: artifactsFor(stepNum, []),
         tokens,
@@ -253,12 +280,13 @@ async function recordLoop({ session, writer, rc, deadline, r }) {
     const exec = await session.execute(agentStep.action, stepNum);
     Object.assign(envelope, {
       ...(exec.resolution ? { resolution: exec.resolution } : {}),
-      result: { ok: exec.ok, error: exec.error, settle_ms: exec.settle_ms },
+      result: { ok: exec.ok, error: exec.error, settle_ms: exec.settle_ms, url: exec.url ?? null },
       perf: exec.perf,
       artifacts: artifactsFor(stepNum, exec.har_entries),
       tokens,
     });
     const confusion = await detectConfusion(envelope, r.envelopes, exec, before, session);
+    if (r.aborted) return; // do not append past the hard-timeout cut
     if (confusion) envelope.confusion = confusion;
     writer.appendEnvelope(envelope);
     r.envelopes.push(envelope);
@@ -272,6 +300,7 @@ async function recordLoop({ session, writer, rc, deadline, r }) {
  */
 async function actLoop({ session, writer, rc, deadline, r, baselineEnvelopes }) {
   for (const baseStep of actionTrack(baselineEnvelopes)) {
+    if (r.aborted) return null;
     if (Date.now() >= deadline) {
       r.endReason = "timeout";
       return null;
@@ -280,6 +309,7 @@ async function actLoop({ session, writer, rc, deadline, r, baselineEnvelopes }) 
     const snap = await session.captureSnapshot(stepNum);
     r.lastSnapshot = snap.text;
     const exec = await session.executeLocator(baseStep, stepNum);
+    if (r.aborted) return null; // do not append past the hard-timeout cut
     const envelope = {
       step: stepNum,
       schema_version: STEP_SCHEMA_VERSION,
@@ -288,7 +318,7 @@ async function actLoop({ session, writer, rc, deadline, r, baselineEnvelopes }) 
       acted_from: baseStep.step,
       action: actionOf(baseStep),
       ...(exec.resolution ? { resolution: exec.resolution } : {}),
-      result: { ok: exec.ok, error: exec.error, settle_ms: exec.settle_ms },
+      result: { ok: exec.ok, error: exec.error, settle_ms: exec.settle_ms, url: exec.url ?? null },
       perf: exec.perf,
       artifacts: artifactsFor(stepNum, exec.har_entries),
     };
@@ -299,12 +329,16 @@ async function actLoop({ session, writer, rc, deadline, r, baselineEnvelopes }) 
   }
 
   // Track done: act the baseline's done step so the run records the final state.
+  if (r.aborted) return null;
   const doneStep = baselineEnvelopes.findLast((e) => actionOf(e)?.type === "done");
   const stepNum = r.envelopes.length + 1;
+  let finalUrl = null;
   try {
     const snap = await session.captureSnapshot(stepNum);
     r.lastSnapshot = snap.text;
+    finalUrl = snap.url;
   } catch {}
+  if (r.aborted) return null;
   const envelope = {
     step: stepNum,
     schema_version: STEP_SCHEMA_VERSION,
@@ -312,7 +346,7 @@ async function actLoop({ session, writer, rc, deadline, r, baselineEnvelopes }) 
     mode: "act",
     ...(doneStep ? { acted_from: doneStep.step } : {}),
     action: doneStep ? actionOf(doneStep) : { type: "done", summary: "acted the baseline track to completion" },
-    result: { ok: true, error: null, settle_ms: 0 },
+    result: { ok: true, error: null, settle_ms: 0, url: finalUrl },
     perf: emptyPerf(),
     artifacts: artifactsFor(stepNum, []),
   };
@@ -449,7 +483,14 @@ export async function runAll(resolvedCases, opts) {
       const i = next++;
       if (i >= jobs.length) return;
       const { rc, runIndex } = jobs[i];
-      results[i] = await runCase(rc, { ...opts, runIndex });
+      // runCase never throws per contract, but stay defensive: one rejected
+      // job must not reject Promise.all and suppress the report/JUnit output.
+      results[i] = await runCase(rc, { ...opts, runIndex }).catch((e) => ({
+        status: "infra",
+        runDir: null,
+        manifest: null,
+        error: `runner error for ${rc.id}: ${firstLine(e)}`,
+      }));
       console.log(caseLine(results[i]));
     }
   };

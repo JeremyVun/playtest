@@ -196,6 +196,7 @@ async function loadRun() {
   $("#app").hidden = false;
 
   renderHeader();
+  initCaption();
   renderSparkline();
   renderStrip();
   renderInspectorStatic();
@@ -385,6 +386,17 @@ function select(i, { instant = false } = {}) {
   renderInspectorStep(env);
 }
 
+// the thought is clamped to 2 lines by CSS; click / Enter / Space toggles the full text
+function initCaption() {
+  const thought = $("#cap-thought");
+  const toggle = () =>
+    thought.setAttribute("aria-expanded", String(thought.classList.toggle("expanded")));
+  thought.addEventListener("click", toggle);
+  thought.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); }
+  });
+}
+
 function updateCaption(env, instant) {
   const fade = $("#cap-fade");
   const apply = () => {
@@ -403,6 +415,7 @@ function updateCaption(env, instant) {
       thought.textContent = `Acted from the baseline — ${d.verb} ${d.arg ?? ""}. No narration on acted steps.`;
       thought.className = "cap-thought quiet";
     }
+    thought.setAttribute("aria-expanded", "false"); // className reset re-collapses
 
     const exp = $("#cap-expect");
     if (env.agent?.expectation) {
@@ -447,6 +460,8 @@ function showStill(env) {
     img.onload = place;
     img.src = src;
     if (img.complete && img.naturalWidth) place();
+  } else if (img.complete && !img.naturalWidth) {
+    stillMissing(env); // this src already failed to load — keep the placeholder
   } else {
     place();
   }
@@ -544,6 +559,8 @@ function initVideo() {
   video.addEventListener("loadedmetadata", () => {
     state.videoOk = true;
     renderVideoMarks(video.duration);
+    // the user may have opened the tab (and picked a step) before metadata arrived
+    if (state.view === "video" && state.steps.length) seekVideo(state.steps[state.cur]);
   });
   video.src = state.base + "/" + rel;
 }
@@ -557,8 +574,9 @@ function renderVideoMarks(duration) {
     if (env.ts == null) return;
     const t = (env.ts - vsa) / 1000;
     if (t < 0 || t > duration) return;
-    marks.append(h("span", {
+    marks.append(h("button", {
       class: "vmark", "data-i": i, title: `step ${env.step} @ ${fmtClock(t)}`,
+      "aria-label": `step ${env.step} @ ${fmtClock(t)}`,
       style: `left:${(t / duration) * 100}%`,
       onclick: () => select(i),
     }));
@@ -615,19 +633,18 @@ function lcsDiff(A, B, sigA, sigB) {
 function diffCell(env, op) {
   if (!env) return h("div", { class: "dcell empty" });
   const d = describe(env);
-  const cls = "dcell " + op + (op !== "del" ? " clickable" : "");
-  const cell = h("div", { class: cls },
+  // baseline-side envelopes aren't in state.steps — only this run's cells navigate
+  const idx = op === "del" ? -1 : state.steps.indexOf(env);
+  return h(idx >= 0 ? "button" : "div", {
+    class: "dcell " + op + (idx >= 0 ? " clickable" : ""),
+    onclick: idx >= 0 ? () => select(idx) : null,
+  },
     h("div", { class: "d-act" },
       h("span", { class: "d-num" }, String(env.step).padStart(2, "0")),
       icon(d.icon),
       h("span", {}, `${d.verb} ${d.arg ?? ""}`)),
     env.resolution?.locator ? h("div", { class: "d-loc" }, env.resolution.locator) : null,
   );
-  if (op !== "del") {
-    const idx = state.steps.indexOf(env);
-    if (idx >= 0) cell.addEventListener("click", () => select(idx));
-  }
-  return cell;
 }
 
 function renderDiff() {
@@ -658,20 +675,14 @@ function renderDiff() {
   );
 
   // divergence frame: first changed op that has a step in this run with a screenshot
-  const div = ops.find((o) => o.op !== "same");
-  if (div) {
-    const frameEnv = ops.find((o) => o.op !== "same" && o.b?.artifacts?.screenshot)?.b;
-    const note = sum.del || sum.add
-      ? "The journey diverges here: the baseline action no longer matched, and the agent found a new path. If the run is green, the UI changed but the journey survived — review and bless."
-      : "";
-    if (frameEnv) {
-      const img = h("img", { src: state.base + "/" + frameEnv.artifacts.screenshot, alt: "divergence frame" });
-      img.addEventListener("error", () => img.remove());
-      body.append(h("div", { class: "diff-frame" }, img,
-        h("div", {},
-          h("div", { class: "label" }, `first divergence — step ${frameEnv.step} of this run`),
-          h("p", {}, note))));
-    }
+  const frameEnv = ops.find((o) => o.op !== "same" && o.b?.artifacts?.screenshot)?.b;
+  if (frameEnv) {
+    const img = h("img", { src: state.base + "/" + frameEnv.artifacts.screenshot, alt: "divergence frame" });
+    img.addEventListener("error", () => img.remove());
+    body.append(h("div", { class: "diff-frame" }, img,
+      h("div", {},
+        h("div", { class: "label" }, `first divergence — step ${frameEnv.step} of this run`),
+        h("p", {}, "The journey diverges here: the baseline action no longer matched, and the agent found a new path. If the run is green, the UI changed but the journey survived — review and bless."))));
   }
 }
 
@@ -755,37 +766,47 @@ function renderInspectorStep(env) {
   $("#sec-tele").replaceChildren(sec("i-gauge", "telemetry", null, ...teleKids));
 
   // network waterfall
-  $("#sec-net").replaceChildren(sec("i-net", "network", `${(env.artifacts?.har_entries ?? []).length} req`,
-    renderWaterfall(env.artifacts?.har_entries ?? [])));
+  const netEntries = (env.artifacts?.har_entries ?? []).map((i) => state.har[i]).filter(Boolean);
+  const netLabel = netEntries.length > MAX_WF_ROWS
+    ? `${MAX_WF_ROWS} of ${netEntries.length} req`
+    : `${netEntries.length} req`;
+  $("#sec-net").replaceChildren(sec("i-net", "network", netLabel, renderWaterfall(netEntries)));
 
   // tokens
   $("#sec-tok").replaceChildren(renderTokens(env));
 }
 
-function renderWaterfall(indices) {
-  const entries = indices.map((i) => state.har[i]).filter(Boolean);
+const MAX_WF_ROWS = 24;
+
+function renderWaterfall(entries) {
   if (!entries.length) return h("div", { class: "empty-note" }, "no requests in this step’s window");
 
   const starts = entries.map((e) => Date.parse(e.startedDateTime) || 0);
   const t0 = Math.min(...starts);
-  const total = Math.max(1, ...entries.map((e, i) => starts[i] - t0 + (e.time ?? 0)));
+  const total = Math.max(1, ...entries.map((e, i) => starts[i] - t0 + Math.max(0, e.time ?? 0)));
 
-  const rows = entries.slice(0, 24).map((e, i) => {
-    const bad = e._failed || (e.response?.status ?? 0) >= 400;
-    const slow = !bad && (e.time ?? 0) > 500;
+  const rows = entries.slice(0, MAX_WF_ROWS).map((e, i) => {
+    const failed = !!e._failed;
+    const pending = !failed && (e.time ?? -1) < 0; // never finished within the run
+    const status = e.response?.status ?? 0;
+    const bad = failed || status >= 400;
+    const slow = !bad && !pending && (e.time ?? 0) > 500;
     const left = ((starts[i] - t0) / total) * 100;
-    const width = Math.max(1.5, ((e.time ?? 0) / total) * 100);
+    const width = pending
+      ? Math.max(1.5, 100 - left) // open-ended bar to the lane's edge
+      : Math.max(1.5, (Math.max(0, e.time ?? 0) / total) * 100);
     let path;
     try { path = new URL(e.request?.url ?? "", "http://x").pathname + (new URL(e.request?.url ?? "", "http://x").search || ""); }
     catch { path = e.request?.url ?? "?"; }
     return h("div", { class: "wf-row" },
       h("div", { class: "wf-top" },
         h("span", { class: "wf-method" }, e.request?.method ?? "GET"),
-        h("span", { class: "wf-status" + (bad ? " bad" : "") }, String(e.response?.status ?? (e._failed ? "✕" : ""))),
+        h("span", { class: "wf-status" + (bad ? " bad" : "") },
+          status > 0 ? String(status) : failed ? "✕ failed" : pending ? "… pending" : "?"),
         h("span", { class: "wf-url", title: e.request?.url ?? "" }, "‎" + path),
-        h("span", { class: "wf-time" }, `${fmtBytes(e.response?.bodySize)} · ${fmtMs(e.time)}`)),
+        h("span", { class: "wf-time" }, `${fmtBytes(e.response?.bodySize)} · ${pending ? "—" : fmtMs(Math.max(0, e.time ?? 0))}`)),
       h("div", { class: "wf-lane" },
-        h("div", { class: "wf-bar" + (bad ? " bad" : slow ? " slow" : ""), style: `left:${left}%;width:${width}%` })));
+        h("div", { class: "wf-bar" + (bad ? " bad" : pending ? " pending" : slow ? " slow" : ""), style: `left:${left}%;width:${width}%` })));
   });
   return h("div", { class: "wf" }, ...rows);
 }
@@ -831,7 +852,7 @@ function renderGrade() {
     h("div", { class: "finding" },
       h("span", { class: "chip " + (sevCls[f.severity] ?? "") }, f.severity),
       h("p", {}, f.note + " ",
-        f.step != null ? h("span", { class: "f-step", onclick: () => {
+        f.step != null ? h("button", { class: "f-step", onclick: () => {
           const i = state.steps.findIndex((s) => s.step === f.step);
           if (i >= 0) select(i);
         } }, `→ step ${f.step}`) : null)));

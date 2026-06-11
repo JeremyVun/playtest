@@ -149,7 +149,9 @@ export function blessBaseline(caseFile, runDir, { healed = false } = {}) {
     blessed_at: new Date().toISOString(),
     run_id: manifest.run_id,
     run_dir: path.resolve(runDir),
-    healed_from_run_id: healed ? (manifest.baseline?.run_id ?? null) : null,
+    // Provenance survives `dummy bless <healRunDir>` too: a heal run's manifest
+    // records which baseline it healed from even when blessed directly.
+    healed_from_run_id: healed || manifest.healed ? (manifest.baseline?.run_id ?? null) : null,
     pins: manifest.pins,
     ...(healed ? { candidate: true } : {}),
   };

@@ -2,7 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { chromium } from "playwright";
-import { SETTLE } from "./trajectory.js";
+import { SETTLE, firstLine } from "./trajectory.js";
 import { SNAPSHOT_SOURCE } from "./snapshot-injected.js";
 
 const ACTION_TIMEOUT_MS = 5000;
@@ -21,7 +21,6 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  * @property {{input_to_paint_ms: number|null, long_tasks_ms: number, requests: number,
  *             js_errors: number, nav: object|null}} perf
  * @property {number[]} har_entries
- * @property {boolean} timed_out
  */
 
 // Init script, installed on every document: mutation timestamp for dom-quiet,
@@ -171,7 +170,7 @@ function locatorCandidatesInPage(el) {
 
 export class Session {
   /** @returns {Promise<Session>} */
-  static async launch({ baseUrl, runDir, storageState = null, headed = false, settle = SETTLE }) {
+  static async launch({ baseUrl, runDir, storageState = null, headed = false }) {
     fs.mkdirSync(path.join(runDir, "steps"), { recursive: true });
     const browser = await chromium.launch({ headless: !headed });
     try {
@@ -185,7 +184,7 @@ export class Session {
       await context.tracing.start({ screenshots: true, snapshots: true });
       await context.addInitScript(initInstrumentation);
       const page = await context.newPage();
-      const session = new Session({ baseUrl, runDir, settle, browser, context, page });
+      const session = new Session({ baseUrl, runDir, browser, context, page });
       session.#cdp = await context.newCDPSession(page);
       return session;
     } catch (e) {
@@ -199,20 +198,18 @@ export class Session {
   #context;
   #cdp = null;
   #runDir;
-  #settleCfg;
   #har = [];
   #reqInfo = new Map(); // request -> { index, startMs }
   #inflight = new Set();
   #lastNetAt = 0;
   #errors = 0; // console errors + pageerrors, run total
 
-  constructor({ baseUrl, runDir, settle, browser, context, page }) {
+  constructor({ baseUrl, runDir, browser, context, page }) {
     this.baseUrl = baseUrl;
     this.page = page;
     this.#browser = browser;
     this.#context = context;
     this.#runDir = runDir;
-    this.#settleCfg = settle;
 
     context.on("request", (req) => {
       this.#reqInfo.set(req, { index: this.#har.length, startMs: Date.now() });
@@ -288,7 +285,7 @@ export class Session {
    * per-action problems.
    * @returns {Promise<ExecResult>}
    */
-  async execute(action, stepNum) {
+  async execute(action) {
     const type = action?.type;
     const needsElement = type === "click" || type === "type" || type === "select";
     if (!needsElement && !(type === "scroll" && action.ref)) {
@@ -317,7 +314,7 @@ export class Session {
    * Act mode: re-execute a baseline envelope from its resolved locator.
    * @returns {Promise<ExecResult>}
    */
-  async executeLocator(actedStep, stepNum) {
+  async executeLocator(actedStep) {
     const action = actedStep.agent?.action ?? actedStep.action;
     if (!action) return this.#fail("acted step has no action");
     const locatorStr = actedStep.resolution?.locator ?? null;
@@ -344,10 +341,6 @@ export class Session {
   /** Total console errors + pageerrors so far (gate console_errors). */
   consoleErrors() {
     return this.#errors;
-  }
-
-  harEntryCount() {
-    return this.#har.length;
   }
 
   /** element_exists gate support. */
@@ -393,7 +386,7 @@ export class Session {
       error = firstLine(e);
     }
 
-    const settle = await this.#settle();
+    const settle_ms = await this.#settle();
     const win = await this.#readWindow();
     const navigated = action.type === "navigate" || !win.sameDoc;
     const harEntries = [];
@@ -404,7 +397,7 @@ export class Session {
       ok: !error,
       error,
       resolution,
-      settle_ms: settle.settle_ms,
+      settle_ms,
       url: this.#pageUrl(),
       perf: {
         input_to_paint_ms: navigated || win.paint == null ? null : Math.round(win.paint),
@@ -420,7 +413,6 @@ export class Session {
           : null,
       },
       har_entries: harEntries,
-      timed_out: settle.timed_out,
     };
   }
 
@@ -457,14 +449,14 @@ export class Session {
 
   /**
    * settle-v1: wait until no tracked in-flight requests for net_quiet_ms AND
-   * no DOM mutations for dom_quiet_ms, capped at max_ms.
+   * no DOM mutations for dom_quiet_ms, capped at max_ms. Returns elapsed ms.
    */
   async #settle() {
-    const { dom_quiet_ms, net_quiet_ms, max_ms } = this.#settleCfg;
+    const { dom_quiet_ms, net_quiet_ms, max_ms } = SETTLE;
     const start = Date.now();
     for (;;) {
       const now = Date.now();
-      if (now - start >= max_ms) return { settle_ms: now - start, timed_out: true };
+      if (now - start >= max_ms) return now - start;
       let domQuiet = false;
       try {
         const since = await this.page.evaluate(() => {
@@ -479,7 +471,7 @@ export class Session {
       // Net-quiet is checked AFTER the async DOM probe so a request that
       // started during the probe can't slip past a stale earlier reading.
       const netQuiet = this.#inflight.size === 0 && Date.now() - this.#lastNetAt >= net_quiet_ms;
-      if (netQuiet && domQuiet) return { settle_ms: Date.now() - start, timed_out: false };
+      if (netQuiet && domQuiet) return Date.now() - start;
       await sleep(SETTLE_POLL_MS);
     }
   }
@@ -566,11 +558,6 @@ export class Session {
       url: this.#pageUrl(),
       perf: { input_to_paint_ms: null, long_tasks_ms: 0, requests: 0, js_errors: 0, nav: null },
       har_entries: [],
-      timed_out: false,
     };
   }
-}
-
-function firstLine(e) {
-  return String(e?.message ?? e).split("\n")[0];
 }

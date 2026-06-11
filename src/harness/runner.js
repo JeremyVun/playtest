@@ -5,9 +5,11 @@ import {
   PINS_BASE,
   STEP_SCHEMA_VERSION,
   RunWriter,
+  actionOf,
   actionTrack,
   baselinePaths,
   blessBaseline,
+  firstLine,
   readBaseline,
 } from "./trajectory.js";
 import { Session } from "./browser.js";
@@ -31,8 +33,6 @@ function artifactsFor(stepNum, harEntries) {
     har_entries: harEntries,
   };
 }
-
-const actionOf = (env) => env.agent?.action ?? env.action ?? null;
 
 function addTokens(total, t) {
   total.in += t.in ?? 0;
@@ -277,7 +277,7 @@ async function recordLoop({ session, writer, rc, deadline, r }) {
     }
 
     const before = await effectToken(session);
-    const exec = await session.execute(agentStep.action, stepNum);
+    const exec = await session.execute(agentStep.action);
     Object.assign(envelope, {
       ...(exec.resolution ? { resolution: exec.resolution } : {}),
       result: { ok: exec.ok, error: exec.error, settle_ms: exec.settle_ms, url: exec.url ?? null },
@@ -308,7 +308,7 @@ async function actLoop({ session, writer, rc, deadline, r, baselineEnvelopes }) 
     const stepNum = r.envelopes.length + 1;
     const snap = await session.captureSnapshot(stepNum);
     r.lastSnapshot = snap.text;
-    const exec = await session.executeLocator(baseStep, stepNum);
+    const exec = await session.executeLocator(baseStep);
     if (r.aborted) return null; // do not append past the hard-timeout cut
     const envelope = {
       step: stepNum,
@@ -385,7 +385,7 @@ async function detectConfusion(envelope, prior, exec, beforeToken, session) {
 async function effectToken(session) {
   try {
     return await session.page.evaluate(() => {
-      const vals = Array.from(document.querySelectorAll("input,textarea,select"), (el) => el.value).join(" ");
+      const vals = Array.from(document.querySelectorAll("input,textarea,select"), (el) => el.value).join("\u0000");
       const d = window.__dummy;
       return `${d ? d.lastMutationAt : 0}|${vals}|${location.href}`;
     });
@@ -452,10 +452,6 @@ function readHar(runDir) {
   } catch {
     return [];
   }
-}
-
-function firstLine(e) {
-  return String(e?.message ?? e).split("\n")[0];
 }
 
 /**

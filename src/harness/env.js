@@ -2,6 +2,7 @@
 import { execFile as execFileCb } from "node:child_process";
 import { promisify } from "node:util";
 import path from "node:path";
+import { firstLine } from "./trajectory.js";
 
 const execFile = promisify(execFileCb);
 
@@ -36,7 +37,7 @@ export async function prepareEnv(resolvedCase, runId) {
       baseUrl = await resolveComposeUrl(compose, baseUrl);
     } catch (e) {
       await teardown();
-      throw new InfraError(`compose boot failed (${env.compose}): ${detail(e)}`);
+      throw new InfraError(`compose boot failed (${env.compose}): ${firstLine(e)}`);
     }
   }
 
@@ -45,7 +46,7 @@ export async function prepareEnv(resolvedCase, runId) {
     if (env.init) await runInit(env.init, baseUrl, runId);
   } catch (e) {
     await teardown();
-    throw e instanceof InfraError ? e : new InfraError(detail(e));
+    throw e instanceof InfraError ? e : new InfraError(firstLine(e));
   }
 
   return { baseUrl, managed, teardown };
@@ -75,7 +76,7 @@ async function probe(baseUrl) {
       if (res.status < 500) return;
       last = `status ${res.status}`;
     } catch (e) {
-      last = e.cause?.code || detail(e.cause ?? e) || detail(e);
+      last = e.cause?.code || firstLine(e.cause ?? e) || firstLine(e);
     }
   }
   throw new InfraError(`health probe failed for ${baseUrl}: ${last}`);
@@ -90,10 +91,6 @@ async function runInit(script, baseUrl, runId) {
     });
   } catch (e) {
     const stderr = e.stderr ? `: ${String(e.stderr).trim()}` : "";
-    throw new InfraError(`init script failed (${script}): ${detail(e)}${stderr}`);
+    throw new InfraError(`init script failed (${script}): ${firstLine(e)}${stderr}`);
   }
-}
-
-function detail(e) {
-  return String(e?.message ?? e).split("\n")[0];
 }

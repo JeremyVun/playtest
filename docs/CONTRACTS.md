@@ -213,11 +213,12 @@ export function newRunId(now = new Date())                  // "2026-06-10T0300-
 export class RunWriter {
   constructor(runsRoot, runId, caseId)   // creates runs/<runId>/<caseId>/steps/
   get dir()
-  stepPaths(n)               // -> { screenshot, mhtml, a11y } absolute paths for step n
   appendEnvelope(envelope)   // sync append one JSONL line
-  writeManifest(manifest); writeGrade(grade); copyBaseline(srcJsonlPath)
+  writeManifest(manifest); copyBaseline(srcJsonlPath)
 }
 export function readTrajectory(jsonlPath)                   // -> envelope[]
+export function actionOf(envelope)                          // agent.action ?? action ?? null
+export function firstLine(e)                                // first line of an error's message (shared helper)
 export function actionTrack(envelopes)
   // The actable projection: envelopes where resolution exists && result.ok,
   // excluding done/give_up. Computed, never stored.
@@ -235,7 +236,7 @@ export function promoteHealed(caseFile)   // healed candidate -> baseline; throw
 
 ```js
 export class Session {
-  static async launch({ baseUrl, runDir, storageState = null, headed = false, settle = SETTLE })
+  static async launch({ baseUrl, runDir, storageState = null, headed = false })  // settle-v1 is pinned, not a knob
   // Chromium. Context: viewport 1280x800, recordVideo into runDir (rename to video.webm on close),
   // tracing start (screenshots+snapshots) -> trace.zip on close.
   // Instruments from construction: console messages, pageerror, request/response/requestfailed
@@ -247,18 +248,17 @@ export class Session {
   // Injects snapshot-injected.js source; assigns data-dummy-ref="eN" attributes (fresh numbering
   // each call); writes steps/NNN.a11y.txt + steps/NNN.png + steps/NNN.mhtml.
   // -> { text, url, title, refCount, truncated }
-  async execute(action, stepNum)        // agent-mode: validate ref exists/visible/enabled first
-  async executeLocator(actedStep, stepNum)  // act-mode: drive from envelope.resolution.locator
+  async execute(action)                 // agent-mode: validate ref exists/visible/enabled first
+  async executeLocator(actedStep)       // act-mode: drive from envelope.resolution.locator
   // Both -> ExecResult:
   // { ok, error: string|null, resolution: {ref?, locator, bbox}|null,
   //   settle_ms, url: string|null /* page URL after settle */,
   //   perf: {input_to_paint_ms, long_tasks_ms, requests, js_errors, nav|null},
-  //   har_entries: [int], timed_out: false }
+  //   har_entries: [int] }
   // Validation failures (unknown ref, hidden, disabled) -> { ok:false, error:"...", resolution:null }
   // and NO browser action happens. Action execution errors are caught -> ok:false. Never throws
   // for per-action problems; throws only for catastrophes (browser died).
   consoleErrors()                       // -> total count so far (for gate console_errors)
-  harEntryCount()
   async finalPageCheck(selector)        // element_exists gate support: locator.count() > 0
   async close()                         // stop tracing, finalize video.webm + har.json
 }
@@ -269,7 +269,7 @@ Action execution semantics: `click` → locator.click; `type` → fill, then opt
 (or element.scrollBy via evaluate when ref given); `navigate` → goto; `wait` → bounded sleep
 (still measured). After every action: **settle** = wait until (no in-flight tracked requests
 for `net_quiet_ms`) AND (no DOM mutations for `dom_quiet_ms`), capped at `max_ms`
-(cap reached → `timed_out: true`, still ok). MutationObserver + rAF-paint hooks are installed
+(cap reached → settled anyway, still ok). MutationObserver + rAF-paint hooks are installed
 via an init script on every document.
 
 Durable locator computed at execution time, preference order:
@@ -321,6 +321,10 @@ export async function chat({ model, messages, tools = null, toolChoice = null, m
   //      usage: { in, out, cache_read } }   // cache_read from usage.prompt_tokens_details.cached_tokens
   //                                         // or anthropic-style fields if present; else 0.
   // Retries: 2x on 429/5xx/network with backoff. Throws LlmError on terminal failure.
+export async function forcedToolCall({ model, messages, tool, validate = () => null, maxTokens = 1024, signal = null })
+  // chat() with the tool forced; `validate(args)` returns an error string or null. On a wrong/invalid
+  // tool call, retries ONCE with the validation error appended as a user message. -> { args, tokens }.
+  // Throws LlmError after the retry fails. The actor's step and the grader's grade both go through this.
 export function estimateCost(model, usage)  // -> USD float; pricing table for haiku-4-5 ($1/$5 per MTok,
                                             // cache read $0.10), sonnet-4-6 ($3/$15, $0.30); unknown -> 0.
 export class LlmError extends Error {}

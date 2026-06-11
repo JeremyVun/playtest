@@ -106,6 +106,40 @@ export async function chat({ model, messages, tools = null, toolChoice = null, m
   };
 }
 
+/**
+ * chat() with a forced tool call whose arguments must pass `validate`; retried
+ * once with the validation error attached. This closes the schema loop for the
+ * actor and the grader without heavier schema-alignment machinery.
+ * @param {{ model: string, messages: object[], tool: object,
+ *           validate?: (args: object) => string|null, maxTokens?: number,
+ *           signal?: AbortSignal|null }} opts `validate` returns an error
+ *           string, or null when the args are acceptable.
+ * @returns {Promise<{ args: object, tokens: {in: number, out: number, cache_read: number} }>}
+ */
+export async function forcedToolCall({ model, messages, tool, validate = () => null, maxTokens = 1024, signal = null }) {
+  const name = tool.function.name;
+  const tokens = { in: 0, out: 0, cache_read: 0 };
+  let lastError = "";
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const turnMessages = attempt === 0 ? messages : [...messages, {
+      role: "user",
+      content: `Your previous ${name} was invalid: ${lastError}\nCall the ${name} tool again with a corrected ${name}.`,
+    }];
+    const { toolCall, usage } = await chat({ model, messages: turnMessages, tools: [tool], toolChoice: name, maxTokens, signal });
+    tokens.in += usage.in;
+    tokens.out += usage.out;
+    tokens.cache_read += usage.cache_read;
+    if (!toolCall || toolCall.name !== name) {
+      lastError = `expected a "${name}" tool call, got ${toolCall ? `"${toolCall.name}"` : "none"}`;
+      continue;
+    }
+    lastError = validate(toolCall.args);
+    if (lastError) continue;
+    return { args: toolCall.args, tokens };
+  }
+  throw new LlmError(`${name} failed validation after retry: ${lastError}`);
+}
+
 // USD per million tokens, pinned with the harness (CONTRACTS.md §5).
 const PRICING = [
   { match: "haiku-4-5", in: 1, out: 5, cacheRead: 0.1 },

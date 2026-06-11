@@ -1,7 +1,7 @@
 {
-  "blessed_at": "2026-06-11T02:23:46.589Z",
-  "run_id": "2026-06-11T0223-012b",
-  "run_dir": "/Users/jeremy/projects/dummy/runs/2026-06-11T0223-012b/todos/clear-completed",
+  "blessed_at": "2026-06-11T04:20:24.514Z",
+  "run_id": "2026-06-11T0420-966c",
+  "run_dir": "/Users/jeremy/projects/dummy/runs/2026-06-11T0420-966c/todos/clear-completed",
   "healed_from_run_id": null,
   "pins": {
     "harness_version": "0.1.0",

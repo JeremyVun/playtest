@@ -3,7 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import Ajv from "ajv";
-import { chat, LlmError } from "./llm.js";
+import { chat, forcedToolCall, LlmError } from "./llm.js";
 import { readTrajectory, readBaseline } from "./trajectory.js";
 import { describeAction } from "./actor.js";
 
@@ -61,46 +61,24 @@ export async function gradeRun(runDir, resolvedCase) {
   if (baseline) sections.push(`## Baseline\n\nbaseline step count: ${baseline.envelopes.length}`);
   sections.push(`## Final page snapshot\n\n${finalSnapshot}`);
 
-  const messages = [
-    { role: "system", content: graderSystem },
-    { role: "user", content: sections.join("\n\n") },
-  ];
-
-  const tokens = { in: 0, out: 0, cache_read: 0 };
-  let lastError = "";
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const turnMessages = attempt === 0 ? messages : [...messages, {
-      role: "user",
-      content: `Your previous grade was invalid: ${lastError}\nCall the grade tool again with a corrected grade.`,
-    }];
-    const { toolCall, usage } = await chat({
-      model: resolvedCase.grader_model,
-      messages: turnMessages,
-      tools: [GRADE_TOOL],
-      toolChoice: "grade",
-      maxTokens: 2048,
-    });
-    tokens.in += usage.in;
-    tokens.out += usage.out;
-    tokens.cache_read += usage.cache_read;
-    if (!toolCall || toolCall.name !== "grade") {
-      lastError = `expected a "grade" tool call, got ${toolCall ? `"${toolCall.name}"` : "none"}`;
-      continue;
-    }
-    if (!validateGrade(toolCall.args)) {
-      lastError = ajv.errorsText(validateGrade.errors);
-      continue;
-    }
-    const grade = {
-      ...toolCall.args,
-      model: resolvedCase.grader_model,
-      graded_at: new Date().toISOString(),
-      tokens,
-    };
-    writeFileSync(join(runDir, "grade.json"), JSON.stringify(grade, null, 2) + "\n");
-    return grade;
-  }
-  throw new LlmError(`grade failed validation after retry: ${lastError}`);
+  const { args, tokens } = await forcedToolCall({
+    model: resolvedCase.grader_model,
+    messages: [
+      { role: "system", content: graderSystem },
+      { role: "user", content: sections.join("\n\n") },
+    ],
+    tool: GRADE_TOOL,
+    validate: (a) => (validateGrade(a) ? null : ajv.errorsText(validateGrade.errors)),
+    maxTokens: 2048,
+  });
+  const grade = {
+    ...args,
+    model: resolvedCase.grader_model,
+    graded_at: new Date().toISOString(),
+    tokens,
+  };
+  writeFileSync(join(runDir, "grade.json"), JSON.stringify(grade, null, 2) + "\n");
+  return grade;
 }
 
 const VERDICT_TOOL = {

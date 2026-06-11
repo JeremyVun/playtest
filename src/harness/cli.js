@@ -11,6 +11,7 @@ import {
   baselinePaths,
   blessBaseline,
   promoteHealed,
+  actionOf,
   actionTrack,
   diffTracks,
   HARNESS_VERSION,
@@ -115,7 +116,7 @@ program
     const b = actionTrack(readTrajectory(path.join(path.resolve(runDir), "trajectory.jsonl")));
     const { ops, summary } = diffTracks(a, b);
     const fmt = (env) => {
-      const act = env.agent?.action ?? env.action ?? {};
+      const act = actionOf(env) ?? {};
       return [act.type, env.resolution?.locator ?? act.url ?? "", act.text != null ? JSON.stringify(act.text) : ""]
         .filter(Boolean)
         .join(" ");

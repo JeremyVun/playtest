@@ -38,25 +38,12 @@ export class RunWriter {
     return this.#dir;
   }
 
-  stepPaths(n) {
-    const nnn = String(n).padStart(3, "0");
-    return {
-      screenshot: path.join(this.#dir, "steps", `${nnn}.png`),
-      mhtml: path.join(this.#dir, "steps", `${nnn}.mhtml`),
-      a11y: path.join(this.#dir, "steps", `${nnn}.a11y.txt`),
-    };
-  }
-
   appendEnvelope(envelope) {
     fs.appendFileSync(path.join(this.#dir, "trajectory.jsonl"), JSON.stringify(envelope) + "\n");
   }
 
   writeManifest(manifest) {
     fs.writeFileSync(path.join(this.#dir, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
-  }
-
-  writeGrade(grade) {
-    fs.writeFileSync(path.join(this.#dir, "grade.json"), JSON.stringify(grade, null, 2) + "\n");
   }
 
   copyBaseline(srcJsonlPath) {
@@ -73,8 +60,14 @@ export function readTrajectory(jsonlPath) {
     .map((line) => JSON.parse(line));
 }
 
-function actionOf(envelope) {
+/** The step's action, whether agent-decided (`agent.action`) or acted (`action`). */
+export function actionOf(envelope) {
   return envelope.agent?.action ?? envelope.action ?? null;
+}
+
+/** First line of an error's message — the shared error-formatting helper. */
+export function firstLine(e) {
+  return String(e?.message ?? e).split("\n")[0];
 }
 
 /** The actable projection: executed steps with resolved locators. Computed, never stored. */

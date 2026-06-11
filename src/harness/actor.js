@@ -5,7 +5,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import YAML from "yaml";
 import Ajv from "ajv";
-import { chat, LlmError } from "./llm.js";
+import { forcedToolCall } from "./llm.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const prompt = (name) => readFileSync(join(here, "prompts", name), "utf8");
@@ -121,38 +121,17 @@ export class Actor {
    * @returns {Promise<{ agentStep: object, tokens: {in: number, out: number, cache_read: number} }>}
    */
   async nextStep({ history, snapshotText, stepNum, signal = null }) {
-    const messages = [
-      { role: "system", content: this.system },
-      { role: "user", content: renderLog(history) },
-      { role: "user", content: `Current page snapshot (step ${stepNum}):\n${snapshotText}` },
-    ];
-    const tokens = { in: 0, out: 0, cache_read: 0 };
-    let lastError = "";
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const turnMessages = attempt === 0 ? messages : [...messages, {
-        role: "user",
-        content: `Your previous step was invalid: ${lastError}\nCall the step tool again with a corrected step.`,
-      }];
-      const { toolCall, usage } = await chat({
-        model: this.case.actor_model,
-        messages: turnMessages,
-        tools: [STEP_TOOL],
-        toolChoice: "step",
-        signal,
-      });
-      tokens.in += usage.in;
-      tokens.out += usage.out;
-      tokens.cache_read += usage.cache_read;
-      if (!toolCall || toolCall.name !== "step") {
-        lastError = `expected a "step" tool call, got ${toolCall ? `"${toolCall.name}"` : "none"}`;
-        continue;
-      }
-      if (!validateStep(toolCall.args)) {
-        lastError = ajv.errorsText(validateStep.errors);
-        continue;
-      }
-      return { agentStep: toolCall.args, tokens };
-    }
-    throw new LlmError(`actor step failed validation after retry: ${lastError}`);
+    const { args, tokens } = await forcedToolCall({
+      model: this.case.actor_model,
+      messages: [
+        { role: "system", content: this.system },
+        { role: "user", content: renderLog(history) },
+        { role: "user", content: `Current page snapshot (step ${stepNum}):\n${snapshotText}` },
+      ],
+      tool: STEP_TOOL,
+      validate: (a) => (validateStep(a) ? null : ajv.errorsText(validateStep.errors)),
+      signal,
+    });
+    return { agentStep: args, tokens };
   }
 }

@@ -1,12 +1,13 @@
-// Zero-dep static server for `dummy view`. See docs/CONTRACTS.md §13.
-// Serves the viewer at /, run files at /run/*, /runs.json (runs-root picker)
-// and /history.json?case=<id> (cross-run sparkline). Supports Range requests
-// so the browser can seek video.webm.
+// Static server for `playtest view` (vanilla, GET/HEAD only). See docs/CONTRACTS.md §13.
+// Serves the viewer at /, run files at /run/*, /runs.json (runs-root picker),
+// /changed.json (changed-journey review list) and /history.json?case=<id>
+// (cross-run sparkline). Supports Range requests so the browser can seek video.webm.
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { baselinePaths } from "./trajectory.js";
 
 const VIEWER_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../viewer");
 
@@ -26,9 +27,11 @@ const MIME = {
 
 /**
  * @param {string} dir a single run dir (has manifest.json) or a runs root
+ * @param {{ port?: number, open?: boolean, query?: string }} [opts] query (e.g.
+ *   "?filter=changed") is appended to the URL printed and opened; the viewer reads it
  * @returns {Promise<import("node:http").Server>}
  */
-export async function serveRun(dir, { port = 0, open = true } = {}) {
+export async function serveRun(dir, { port = 0, open = true, query = "" } = {}) {
   const root = path.resolve(dir);
   if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) {
     throw new Error(`not a directory: ${dir}`);
@@ -47,8 +50,8 @@ export async function serveRun(dir, { port = 0, open = true } = {}) {
     server.listen(port, "127.0.0.1", resolve);
   });
 
-  const url = `http://localhost:${server.address().port}/`;
-  console.log(`Dummy viewer: ${url}`);
+  const url = `http://localhost:${server.address().port}/${query}`;
+  console.log(`Playtest viewer: ${url}`);
   if (open) openBrowser(url);
   return server;
 }
@@ -68,6 +71,9 @@ function handle(req, res, root, singleRun) {
   if (pathname === "/runs.json") {
     if (singleRun) return notFound(res);
     return json(res, listRuns(root));
+  }
+  if (pathname === "/changed.json") {
+    return json(res, changed(root, singleRun));
   }
   if (pathname === "/history.json") {
     return json(res, history(root, singleRun, u.searchParams.get("case")));
@@ -120,7 +126,7 @@ function sendFile(req, res, base, rel) {
 }
 
 /** All run dirs under a runs root: every manifest.json at any depth (bounded). */
-function findManifests(root, maxDepth = 6) {
+export function findManifests(root, maxDepth = 6) {
   const out = [];
   const walk = (dir, depth) => {
     if (depth > maxDepth) return;
@@ -150,7 +156,8 @@ function readJson(file) {
   }
 }
 
-function listRuns(root) {
+/** Picker entries for every run under a runs root (also `view --json`). */
+export function listRuns(root) {
   const runs = [];
   for (const dir of findManifests(root)) {
     const m = readJson(path.join(dir, "manifest.json"));
@@ -162,13 +169,56 @@ function listRuns(root) {
       path: rel.join("/"),
       status: m.result?.status ?? null,
       mode: m.mode ?? null,
+      healed: m.healed ?? false,
       started_at: m.started_at ?? null,
+      duration_ms: m.duration_ms ?? null,
     });
   }
   return runs.sort((a, b) => String(b.started_at).localeCompare(String(a.started_at)));
 }
 
-/** Sibling runs of one case across run ids, oldest first. */
+/**
+ * Changed journeys (healed passes) across the runs root, newest first (also
+ * `view --json --changed`). An entry is `pending` when its candidate files
+ * (<case>.healed.jsonl/.json) still exist and the candidate's run_dir is that
+ * run directory — run_id alone cannot tell runs_per_case siblings apart, so
+ * it is only the fallback for old metas lacking run_dir. Older healed passes
+ * stay listed as history. run_dir_rel is cwd-relative for copy-paste
+ * accept/reject commands; the viewer itself stays read-only.
+ */
+export function changed(root, singleRun) {
+  const runsRoot = (singleRun ? runsRootOf(root) : root) ?? root;
+  const out = [];
+  for (const dir of findManifests(runsRoot)) {
+    const m = readJson(path.join(dir, "manifest.json"));
+    if (m?.healed !== true || m.result?.status !== "pass") continue;
+    let pending = false;
+    if (typeof m.case?.file === "string") {
+      const p = baselinePaths(m.case.file);
+      const meta = readJson(p.healedMeta);
+      pending =
+        fs.existsSync(p.healedTraj) &&
+        meta != null &&
+        (meta.run_dir ? path.resolve(meta.run_dir) === path.resolve(dir) : meta.run_id === m.run_id);
+    }
+    out.push({
+      case_id: m.case?.id ?? null,
+      run_id: m.run_id ?? null,
+      started_at: m.started_at ?? null,
+      score: readJson(path.join(dir, "grade.json"))?.score ?? null,
+      path: path.relative(runsRoot, dir).split(path.sep).join("/"),
+      run_dir_rel: path.relative(process.cwd(), dir),
+      pending,
+    });
+  }
+  return out.sort((a, b) => String(b.started_at).localeCompare(String(a.started_at)));
+}
+
+/**
+ * Sibling runs of one case across run ids, oldest first. `path` is
+ * root-relative (like listRuns) so sparkline dots can link `?run=<path>` —
+ * only resolvable when the server is serving the runs root, not a single run.
+ */
 function history(root, singleRun, caseId) {
   if (!caseId) return [];
   const runsRoot = singleRun ? runsRootOf(root) : root;
@@ -183,11 +233,13 @@ function history(root, singleRun, caseId) {
       started_at: m.started_at ?? null,
       status: m.result?.status ?? null,
       mode: m.mode ?? null,
+      healed: m.healed ?? false,
       duration_ms: m.duration_ms ?? null,
       steps: m.totals?.steps ?? null,
       score: readJson(path.join(dir, "grade.json"))?.score ?? null,
       lcp_ms: worstLcp(path.join(dir, "trajectory.jsonl")),
       cost_usd: m.totals?.cost_usd ?? 0,
+      path: path.relative(runsRoot, dir).split(path.sep).join("/"),
     });
   }
   return entries.sort((a, b) => String(a.started_at).localeCompare(String(b.started_at)));

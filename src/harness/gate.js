@@ -50,18 +50,28 @@ async function checkSuccess(kind, value, ctx) {
     case "api_called": {
       const [method, ...rest] = String(value).trim().split(/\s+/);
       const re = globToRegExp(rest.join(" "));
-      const entries = ctx.harEntries ?? [];
-      const hits = entries.filter(
-        (e) =>
-          e.request?.method?.toUpperCase() === method.toUpperCase() &&
-          re.test(pathnameOf(e.request.url)),
+      // Embedded per-envelope network data is the source of truth; the HAR
+      // sidecar is the fallback only when no envelope carries a network field
+      // at all (runs/baselines from before network data was embedded).
+      const trajectory = ctx.trajectory ?? [];
+      const requests = trajectory.some((e) => e.network)
+        ? trajectory.flatMap((e) => e.network?.requests ?? [])
+        : (ctx.harEntries ?? []).map((e) => ({
+            method: e.request?.method ?? "",
+            url: e.request?.url ?? "",
+            path: pathnameOf(e.request?.url ?? ""),
+          }));
+      const hits = requests.filter(
+        (r) =>
+          r.method?.toUpperCase() === method.toUpperCase() &&
+          re.test(r.path ?? pathnameOf(r.url)),
       );
       return {
         pass: hits.length > 0,
         detail:
           hits.length > 0
-            ? `${hits.length} matching request(s), e.g. ${hits[0].request.method} ${hits[0].request.url}`
-            : `no matching request among ${entries.length} entries`,
+            ? `${hits.length} matching request(s), e.g. ${hits[0].method} ${hits[0].url}`
+            : `no matching request among ${requests.length} request(s)`,
       };
     }
 

@@ -142,8 +142,8 @@ export function blessBaseline(caseFile, runDir, { healed = false } = {}) {
     blessed_at: new Date().toISOString(),
     run_id: manifest.run_id,
     run_dir: path.resolve(runDir),
-    // Provenance survives `dummy bless <healRunDir>` too: a heal run's manifest
-    // records which baseline it healed from even when blessed directly.
+    // Provenance survives `playtest accept <healRunDir>` too: a heal run's
+    // manifest records which baseline it healed from even when blessed directly.
     healed_from_run_id: healed || manifest.healed ? (manifest.baseline?.run_id ?? null) : null,
     pins: manifest.pins,
     ...(healed ? { candidate: true } : {}),
@@ -152,6 +152,16 @@ export function blessBaseline(caseFile, runDir, { healed = false } = {}) {
   fs.copyFileSync(path.join(runDir, "trajectory.jsonl"), healed ? p.healedTraj : p.traj);
   fs.writeFileSync(healed ? p.healedMeta : p.meta, JSON.stringify(meta, null, 2) + "\n");
   return meta;
+}
+
+/** Dismiss a pending healed candidate; run artifacts are untouched. Throws if no candidate. */
+export function rejectHealed(caseFile) {
+  const p = baselinePaths(caseFile);
+  if (!fs.existsSync(p.healedTraj) && !fs.existsSync(p.healedMeta)) {
+    throw new Error(`no healed candidate to reject for ${caseFile}`);
+  }
+  fs.rmSync(p.healedTraj, { force: true });
+  fs.rmSync(p.healedMeta, { force: true });
 }
 
 /** Healed candidate -> baseline; removes the candidate files. Throws if no candidate. */

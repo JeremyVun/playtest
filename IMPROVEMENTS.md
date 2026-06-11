@@ -20,10 +20,9 @@ grading, and review mechanics available under clearer names.
 ## Proposed CLI
 
 ```txt
-playtest new                  # create a suite or case interactively
+playtest [paths...]          # run tests (paths default to .)
 playtest new suite <name> [dir]
 playtest new case <name> [suite_dir]
-playtest <paths...>          # run tests
 playtest view [run_or_root]  # open the GUI to inspect runs and review changes
 playtest refresh <paths...>  # force fresh recordings and accept passing ones
 playtest list [paths...]     # show selected suites/cases
@@ -33,6 +32,7 @@ Hidden or advanced commands:
 
 ```txt
 playtest accept <runDir>     # accept a specific changed journey
+playtest reject <runDir>     # dismiss a pending changed journey
 playtest grade <runDir>      # re-grade an existing run
 ```
 
@@ -41,6 +41,10 @@ Compatibility alias can remain during transition:
 ```txt
 playtest run <paths...>      # alias for playtest <paths...>
 ```
+
+On a name conflict, subcommands win: `playtest view` is always the `view`
+command even if a `./view` directory exists. Run a conflicting path with
+`playtest ./view` or `playtest run view`.
 
 ## Naming Model
 
@@ -88,17 +92,12 @@ Accepting makes that run the new saved path.
 
 ## `playtest new`
 
-`playtest new` should be the first-time suite and case creation flow. A separate
-`playtest init` is probably unnecessary if Playtest is already installed as a
-JavaScript bin and the only project artifacts are suite and case YAML files.
+`playtest new` is the suite and case creation flow. A separate `playtest init`
+is probably unnecessary if Playtest is already installed as a JavaScript bin
+and the only project artifacts are suite and case YAML files.
 
-The interactive command should start with a clear choice:
-
-```txt
-What would you like to create?
-> Suite
-  Case
-```
+Ship the scripted forms with good error messages; the interactive layer (bare
+`playtest new` chooser, prompts, pickers) is deferred — see NICE_TO_HAVE.md.
 
 ### Suite Creation
 
@@ -110,8 +109,8 @@ Rules:
 - `playtest new suite checkout tests/checkout` creates
   `tests/checkout/playtest.yaml`.
 - The suite name should be written into the config if a `name` field exists.
-- If `suite_dir` is omitted in interactive mode, default to `.` or to a
-  slugified directory based on the suite name, depending on the prompt answer.
+- If `dir` is omitted, default to a slugified directory based on the suite
+  name.
 - Do not overwrite an existing `playtest.yaml` unless `--force` is passed.
 
 Initial suite config should stay small:
@@ -120,14 +119,6 @@ Initial suite config should stay small:
 name: checkout
 env:
   base_url: http://localhost:3000
-```
-
-Interactive prompts:
-
-```txt
-Suite name: checkout
-Directory: ./checkout
-Base URL: http://localhost:3000
 ```
 
 After creation, print the created path and next command:
@@ -149,8 +140,9 @@ Rules:
 - If `suite_dir` is omitted and the current directory is inside a suite, use
   the nearest suite.
 - If exactly one suite exists under the current directory, use it.
-- If multiple suites exist, show a picker with relative paths.
-- If no suites exist, offer to create one first.
+- If multiple suites exist, require `--suite` (a picker is deferred to
+  NICE_TO_HAVE.md).
+- If no suites exist, suggest `playtest new suite <name>`.
 - Do not overwrite an existing case unless `--force` is passed.
 
 Support a clearer scripted form as well:
@@ -168,30 +160,6 @@ story: |
 
 success:
   - assert: Describe what should be true when the task is complete.
-
-perf:
-  console_errors: 0
-```
-
-Interactive prompts:
-
-```txt
-Case name: add-todo
-Suite: tests/todos
-Story: Add a todo called "buy milk"
-Success assertion: The list shows a todo called "buy milk"
-Tags: smoke
-```
-
-Generated example:
-
-```yaml
-tags: [smoke]
-story: |
-  Add a todo called "buy milk".
-
-success:
-  - assert: The list shows a todo called "buy milk".
 
 perf:
   console_errors: 0
@@ -218,12 +186,11 @@ tests/e2e is not a Playtest suite. Expected tests/e2e/playtest.yaml.
 ```
 
 - Prefer relative paths in all creation output.
-- Add `--yes` for non-interactive defaults and `--force` for explicit
-  overwrites.
+- Add `--force` for explicit overwrites.
 
-## `playtest <paths...>`
+## `playtest [paths...]`
 
-The default command should run cases.
+The default command should run cases. Paths default to `.`.
 
 Examples:
 
@@ -234,14 +201,12 @@ playtest tests/checkout/guest-checkout.yaml
 playtest tests/ --base-url https://pr-417.preview.example.com
 ```
 
-`playtest` with no paths should do something useful:
-
-1. If the current directory is inside a suite, run that suite.
-2. Else if suites are discovered below the current directory, run them.
-3. Else print a precise onboarding hint:
+Bare `playtest` is simply `playtest .`: discover suites and cases below the
+current directory and run them. If nothing is found, print a precise
+onboarding hint:
 
 ```txt
-No Playtest suites found. Create one with: playtest new
+No Playtest suites found. Create one with: playtest new suite <name>
 ```
 
 Behavior:
@@ -273,7 +238,8 @@ The exact prompt should be conservative:
 - Provide the exact command to resume later:
 
 ```txt
-Review and accept later with: playtest view --changed
+Review later with:  playtest view --changed
+Accept later with:  playtest accept <runDir>
 ```
 
 End every run with concise next actions:
@@ -339,16 +305,10 @@ specific changed journey as the new saved path:
 playtest accept runs/2026-06-10T1325-cd37/todos/add-todo
 ```
 
-The primary human workflow should be `playtest view`, where acceptance is an
-explicit action after inspection:
-
-```txt
-playtest view --changed
-```
-
-This keeps the normal CLI focused on one GUI surface while preserving a
-load-bearing direct command for automation, CI repair workflows, and exact-run
-approval.
+The primary human workflow is: review in the GUI (`playtest view --changed`),
+then accept from the CLI — via the end-of-run prompt or
+`playtest accept <runDir>`. The viewer stays read-only and never writes
+baselines.
 
 ### Outstanding Acceptance Items
 
@@ -366,43 +326,27 @@ current baseline.
 ### Changed-Journey Review In The GUI
 
 `playtest view --changed` should open the GUI focused on changed journeys that
-need review.
+need review: a read-only list of pending candidates (status, case, run,
+started, score) linking to each run's artifacts and its action-track diff.
 
-Suggested layout:
+The viewer stays read-only. For each pending candidate, display the exact
+copy-pasteable commands:
 
 ```txt
-Changed journeys awaiting review
-
-  Status  Case              Run                      Started              Score
-> pass    todos/add-todo    2026-06-10T1325-cd37     2026-06-10 13:25     92
-  pass    checkout/guest    2026-06-10T1410-ab12     2026-06-10 14:10     88
-
-Actions: Enter view | a accept | r reject | q quit
+playtest accept runs/2026-06-10T1325-cd37/todos/add-todo
+playtest reject runs/2026-06-10T1325-cd37/todos/add-todo
 ```
 
-Useful actions:
-
-- `Enter`: open artifacts for the selected run.
-- `a`: accept the selected run.
-- `A`: accept all selected runs after confirmation.
-- `r`: reject/dismiss the candidate after confirmation.
-- `space`: select/unselect.
-- `q`: quit.
-
-Acceptance should still be explicit. The GUI should make review easy, not hide
-the decision.
+Accept/reject buttons inside the GUI are deferred (see NICE_TO_HAVE.md): they
+would require the view server — deliberately GET-only today — to accept writes
+against versioned baseline files.
 
 ### Rejecting
 
-There should be a way to reject or dismiss an outstanding changed journey inside
-the GUI:
-
-```txt
-r reject selected
-```
-
-Rejecting should remove the pending changed-journey marker files, but should not
-delete the run artifacts. The run remains available for inspection.
+`playtest reject <runDir>` dismisses a pending changed journey. It removes the
+pending candidate marker files (`<case>.healed.jsonl` / `<case>.healed.json`)
+but does not delete the run artifacts. The run remains available for
+inspection.
 
 ## `playtest refresh <paths...>`
 
@@ -440,81 +384,75 @@ Possible alternate names:
 
 Current preference: `refresh`.
 
-## TUI During Runs
+## Live Progress During Runs
 
-The current line-by-line report is useful for CI, but interactive local runs
-could show richer status.
+Today the reporter prints one line per case only after the case finishes, so a
+multi-minute agentic run produces no output at all and the harness can look
+stuck or frozen with no diagnostic information.
 
-Use a TUI only when stdout is a TTY. Keep plain output for CI.
-
-Suggested run TUI:
+The need is liveness, not a full-screen TUI. Chosen design: a live region at
+the bottom of normal output, in the style of vitest or cargo. When stdout is
+a TTY, each active case gets one updating line; when a case finishes, its
+line leaves the live region and its final report line prints permanently
+above it, so scrollback reads exactly like today's output:
 
 ```txt
-Playtest
+run 2026-06-10T1325-cd37 — 3 case(s) → runs/2026-06-10T1325-cd37
+Environment: external http://localhost:4173
 
-Run: 2026-06-10T1325-cd37
-Target: http://localhost:3000
-
-Cases
-  PASS  todos/add-todo        act      4 steps    3.2s    $0.00
-  RUN   todos/clear-completed heal     step 6     8.7s    $0.02
-  WAIT  checkout/guest        record
-
-Current
-  Case: todos/clear-completed
-  Mode: heal
-  Step: 6 / 30
-  Action: click "Clear completed"
-  Last result: action failed, asking agent to recover
-
-Totals
-  1 passed, 0 failed, 0 infra, 1 running, 1 queued
+ PASS todos/add-todo  checking · 4 steps · 3.2s
+⠹ RUN  todos/clear-completed  healing   step 6/50  click "Clear completed"  8.7s  $0.02
+⠸ RUN  checkout/guest         checking  step 2/50  open /checkout           1.1s
 ```
 
-Information worth showing:
-
-- Current run id and run root.
-- Per-case status: queued, running, pass, fail, infra.
-- Mode: record, act, heal.
-- Current step count and max steps.
-- Current action summary.
-- Gate failures as they happen.
-- Token and cost totals.
-- Browser/env status.
-- Links or commands for viewing artifacts.
-- Outstanding accepts at the end.
+Each live line shows: spinner, case id, mode (recording/checking/healing),
+step k of max, current action summary, elapsed time, and cost so far. Heal
+transitions and gate failures print as permanent lines the moment they
+happen, not only at the end.
 
 Implementation notes:
 
-- Keep the existing reporter for non-TTY output.
-- Add structured progress events from the runner instead of scraping logs.
-- Use a small TUI dependency only if it earns its keep.
-- Avoid hiding important errors behind animation.
+- Keep the existing reporter for non-TTY output; CI behavior is unchanged.
+- Add structured progress events from the runner/session/actor (case_start,
+  step_start, step_result, heal_start, gate_fail, case_end) instead of
+  scraping logs. This is the load-bearing piece; renderers are cheap after it.
+- No new dependency: `report.js` already writes raw ANSI; the live region
+  needs only cursor-up/erase-line escapes and a redraw throttle (~10 fps or
+  on event).
+- Parallel runs fall out naturally: one live line per active case, completed
+  lines flush in completion order.
+- Errors always print as permanent lines — never hidden behind animation.
 - Make `--plain` or `--no-tui` available.
+
+A richer multi-pane full-screen TUI is deferred — see NICE_TO_HAVE.md.
 
 ## Suggested Implementation Phases
 
 ### Phase 1: CLI Contract
 
-- Rename package/bin from `dummy` to `playtest`.
-- Make root `playtest <paths...>` run cases.
+- Rename the package to `@<scope>/playtest` for the private registry (the bare
+  name `playtest` is squatted on the public npm registry, and a scoped name
+  also prevents dependency confusion) and the bin to `playtest`.
+- Make root `playtest [paths...]` run cases, with paths defaulting to `.`.
+- Subcommand names win over path arguments on conflict.
 - Keep `playtest run` as a hidden compatibility alias.
-- Add command routing for `playtest new`, `playtest new suite`, and
-  `playtest new case`.
+- Add command routing for `playtest new suite` and `playtest new case`.
 - Keep `view` as the primary GUI inspection and changed-journey review command.
-- Add `accept` as an advanced direct approval command.
+- Add `accept` and `reject` as advanced direct commands.
 - Add `refresh` as the replacement for the old rebaseline workflow.
-- Remove standalone `diff`; show changed action tracks inside the GUI instead.
+- Remove standalone `diff`; the viewer already renders an action-track diff
+  stage, so the GUI replacement exists today.
 - Hide `grade` from normal help.
 - Update README and contracts.
+- Preserve the exit-code contract: 0 pass, 1 gate failure, 2 infra/config.
 
 ### Phase 2: Creation Workflow
 
 - Implement suite discovery using `playtest.yaml`.
-- Implement interactive `playtest new`.
+- Implement scripted `playtest new suite` and `playtest new case`.
 - Generate small suite and case YAML files.
 - Print created files and next commands.
-- Add `--suite`, `--yes`, and `--force`.
+- Add `--suite` and `--force`.
 
 ### Phase 3: Zero-Argument View
 
@@ -525,14 +463,15 @@ Implementation notes:
 ### Phase 4: Acceptance Workflow
 
 - Track outstanding changed journeys.
-- Implement `playtest view --changed` as a GUI review list.
-- Add reject/dismiss support.
+- Implement `playtest view --changed` as a read-only GUI review list that
+  shows the exact accept/reject commands.
+- Add `playtest reject <runDir>`.
 - Add end-of-run prompts for changed journeys in interactive sessions.
 
-### Phase 5: Interactive Run TUI
+### Phase 5: Live Run Progress
 
 - Add structured progress events from runner/session/actor.
-- Implement TTY-only TUI renderer.
+- Implement a TTY-only live status renderer.
 - Keep current plain reporter for CI and logs.
 - Add `--plain` / `--no-tui`.
 
@@ -546,11 +485,9 @@ Make `playtest list` useful without paths:
 playtest list
 ```
 
-Resolution should mirror no-arg `playtest`:
-
-1. If inside a suite, list that suite.
-2. Else list discovered suites and cases below the current directory.
-3. Else suggest `playtest new`.
+Resolution should mirror no-arg `playtest`: default paths to `.`, list
+discovered suites and cases below the current directory, else suggest
+`playtest new suite <name>`.
 
 This helps first-time users see what Playtest found before they run anything.
 
@@ -575,12 +512,11 @@ Add convenient selectors:
 ```txt
 playtest view --latest
 playtest view --latest --case todos/add-todo
-playtest accept --latest
 ```
 
 These should select based on manifest timestamps, not directory-name sorting
-alone. `accept --latest` should remain an advanced shortcut and require clear
-confirmation unless non-interactive confirmation is explicitly provided.
+alone. `accept` deliberately has no `--latest`: accepting rewrites a baseline,
+so it must always name the exact run directory.
 
 ### CI Mode
 
@@ -596,7 +532,9 @@ CI mode should:
 - Disable TUI.
 - Use stable plain output.
 - Print artifact paths.
-- Optionally fail if there are unaccepted changed journeys.
+- Optionally fail if there are unaccepted changed journeys (exit code 1).
+- Preserve the existing exit-code contract: 0 pass, 1 gate failure,
+  2 infra/config.
 
 ### Better Help Text
 
@@ -604,10 +542,9 @@ The top-level help should teach the same workflow as the proposed CLI:
 
 ```txt
 Usage:
-  playtest new               create a suite or case
+  playtest [paths...]        run user journey tests (default: .)
   playtest new suite <name>  create a suite
   playtest new case <name>   create a case in a suite
-  playtest <paths...>        run user journey tests
   playtest view              open the GUI for runs and changed journeys
   playtest refresh <paths>   create fresh saved paths
   playtest list              list discovered suites and cases
@@ -687,19 +624,23 @@ Improve this into a first-class feature:
 - Add hover/click affordances to the sparkline so a developer can jump to older
   runs.
 - Add a clear "regression" or "improved" badge when movement crosses thresholds.
-- Show trend context in the CLI after each case:
+- Show trend context in the CLI after each case. Checking (act) runs are not
+  graded by default, so their trends use duration/steps/LCP/status; score
+  deltas appear only on graded runs (recording, healing, refresh):
 
 ```txt
-PASS  todos/add-todo  checking  4 steps  score 92 (+3)  duration 3.2s (-0.4s)
-FAIL  checkout/guest  checking  score 61 (-24)  regression vs recent runs
+PASS  todos/add-todo   checking  4 steps  3.2s (-0.4s)
+FAIL  checkout/guest   checking  9.8s (+4.1s)  first fail after 5 passes
+PASS  todos/add-todo   healing   6 steps  score 88 (-4 vs last graded run)
 ```
 
-- In the run TUI, include a compact trend column:
+- In the live progress output, include a compact trend column (score cells
+  only when the run was graded):
 
 ```txt
 Case                 Status  Score      Duration    Trend
-todos/add-todo       PASS    92 +3      3.2s -0.4s  improving
-checkout/guest       FAIL    61 -24     9.8s +4.1s  regression
+todos/add-todo       PASS    -          3.2s -0.4s  improving
+checkout/guest       FAIL    -          9.8s +4.1s  regression
 ```
 
 Implementation notes:
@@ -708,9 +649,17 @@ Implementation notes:
   root.
 - Use manifest timestamps for ordering, not directory-name sorting alone.
 - Compare only the same case id.
+- Compare scores only between graded runs; checking (act) runs are ungraded by
+  default, so their movement signal is status, duration, steps, and LCP.
 - Prefer recent successful non-infra runs for baseline trend comparisons.
 - Keep raw history available via JSON for future dashboards.
 - Consider persisting an index later if scanning `runs/` becomes slow.
+- There is no stored history structure: the runs root itself is the history,
+  scanned on demand per `/history.json` request. `runs/` is gitignored, so
+  history is local to each developer's machine and sparklines only show that
+  developer's runs. If trends become a core product surface, decide where
+  durable shared history lives (CI artifact retention, a shared runs root)
+  before building more on top of local scans.
 
 ### Actor Context Window And Prompt Caching
 
@@ -722,46 +671,23 @@ user: rendered log of all prior steps
 user: current page snapshot
 ```
 
-The stable system prefix is cache-friendly, but `renderLog(history)` rebuilds
-the whole history into one changing user message every turn. That means a large
-chunk of otherwise old context can appear as a new block to the model gateway on
-each step.
+Past snapshots are dropped entirely; only the current page is sent. The log
+is append-only except for `renderLog`'s batch folding: steps older than the
+last 15-24 lose their thoughts, folded in batches of 10 so the prefix stays
+byte-stable between rewrites.
 
-The desired shape is closer to:
+Proposed simplification: remove the folding, and raise the default
+`max_steps` from 30 to 50 at the same time. A journey is bounded by
+`max_steps`; even a fully verbose 50-step log is a few thousand tokens (a
+step line plus thought is a few dozen), and the per-turn page snapshot dwarfs
+the log anyway — the savings never justify periodically rewriting the prefix. Without folding the log is permanently
+append-only and byte-stable, the best possible shape for prefix caching, and
+`VERBOSE_STEPS`, `FOLD_BATCH`, and the fold logic in `actor.js` are deleted.
 
-```txt
-system/tail: stable instructions, persona, story
-log chain: append-only prior steps
-head: current fully observed page state
-```
-
-Only the newest observation and the newest appended step should change each
-turn. Older steps should remain byte-identical and position-stable where the
-model/provider can cache them.
-
-Proposed direction:
-
-- Represent prior steps as an append-only chain of messages instead of one
-  regenerated log block.
-- Keep the current page snapshot as the final head message.
-- On each turn, append only the previous step summary to the read-only log
-  chain, then replace the current snapshot head.
-- Keep compaction deterministic:
-  - no compaction for short runs,
-  - once long, compact older steps into stable checkpoint messages,
-  - avoid rewriting the whole log every turn.
-- Preserve enough detail for the actor:
-  - action,
-  - result,
-  - error,
-  - expectation,
-  - confusion signal,
-  - useful URL/state changes.
-- Consider provider-specific prompt cache controls later, but first fix the
-  message shape so it is naturally cacheable.
-
-This should reduce repeated input tokens and improve latency on long recorded
-or healed runs.
+Revisit compaction only if journeys ever grow to hundreds of steps. If cache
+hit rates still look poor afterwards (check `cache_read`, already returned by
+`llm.js`), the remaining lever is provider-side cache breakpoints (e.g.
+native Anthropic `cache_control`), not reshaping the log.
 
 ### Persona Ergonomics
 
@@ -781,15 +707,8 @@ Improve the UX:
   built-in and custom personas.
 - Do not add a `--persona` CLI override. Persona selection should live in suite
   or case config so the run contract is visible in versioned test files.
-- In `playtest new case`, let the user pick a persona:
-
-```txt
-Persona:
-> tester
-  exploratory
-  curious-newcomer
-```
-
+- A persona picker in `playtest new case` is deferred with the other
+  interactive flows (see NICE_TO_HAVE.md).
 - If a persona is not found, include the searched locations and suggest:
 
 ```txt
@@ -829,14 +748,8 @@ Current state:
 
 Improve the UX:
 
-- In `playtest new suite`, ask whether Playtest should manage the app:
-
-```txt
-How should Playtest reach your app?
-> Already running at a URL
-  Start with Docker Compose
-```
-
+- `playtest new suite` writes external mode by default; `--compose <file>`
+  writes managed mode (the interactive chooser is deferred to NICE_TO_HAVE.md).
 - For external mode, write:
 
 ```yaml
@@ -925,8 +838,6 @@ Example envelope shape:
         "path": "/api/todos",
         "status": 201,
         "mime_type": "application/json",
-        "body_size": 84,
-        "duration_ms": 42,
         "failed": false
       }
     ]
@@ -940,10 +851,20 @@ Keep the embedded form intentionally compact:
 - full URL
 - pathname/search or normalized path
 - status
-- duration
 - failed flag
 - response mime type
-- response size when known
+
+Timing and sizes stay in `har.json`, which lives only in the (gitignored)
+run directory. The file where churn matters is different: accepting a run
+copies its `trajectory.jsonl` — including these embedded `network.requests` —
+to `<case>.baseline.jsonl` next to the case file (the small
+`<case>.baseline.json` sidecar holds only bless metadata), and those
+baselines are tracked in git and replaced wholesale on every accept or
+refresh. Their diff is how a reviewer sees what changed about the
+saved path. Fields that differ between two behaviorally identical runs
+(`duration_ms: 42` vs `38` on every request) would fill that diff with jitter
+and bury the real deviations — a new endpoint, a changed status. Embed only
+fields that are identical when behavior is identical.
 
 Do not embed full request/response bodies by default. They are noisy, sensitive,
 and can make trajectory files hard to review. If payload capture is added later,

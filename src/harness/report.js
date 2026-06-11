@@ -20,22 +20,47 @@ function fmtMs(ms) {
   return `${Math.floor(ms / 60000)}m ${Math.round((ms % 60000) / 1000)}s`;
 }
 
+const signedMs = (ms) => (ms < 0 ? "-" : "+") + fmtMs(Math.abs(ms));
+
 function failedChecks(manifest) {
   return (manifest?.result?.gate?.checks ?? []).filter((c) => !c.pass);
 }
 
-/** One console line (plus indented gate failures) for one run. */
-export function caseLine(result) {
+// Internal mode words stay 'record'|'act'|'heal'; only display changes
+// (IMPROVEMENTS "Status Terms"). The viewer keeps an inline copy of this map.
+const MODE_LABEL = { record: "recording", act: "checking", heal: "healing" };
+
+/** User-facing label for a run's mode; a healed pass is a "changed" journey. */
+export function modeLabel(mode, { healed = false, status } = {}) {
+  if (healed && status === "pass") return "changed";
+  return MODE_LABEL[mode] ?? mode;
+}
+
+/**
+ * One console line (plus indented gate failures) for one run. `trend` is the
+ * case's movement vs prior runs (IMPROVEMENTS "Historical Trends", computed in
+ * cli.js); zero deltas are suppressed — they read as no movement.
+ * @param {{ duration_delta_ms?: number|null, score_delta?: number|null,
+ *           status_streak?: string|null }|null} [trend]
+ */
+export function caseLine(result, trend = null) {
   const m = result.manifest ?? {};
   const status = result.status ?? "infra";
   const label = STATUS_LABEL[status]?.() ?? status;
   const id = m.case?.id ?? "?";
 
   const bits = [];
-  if (m.mode) bits.push(m.healed ? `${m.mode} (healed)` : m.mode);
+  if (m.mode) bits.push(modeLabel(m.mode, { healed: m.healed, status }));
   if (m.totals?.steps != null) bits.push(`${m.totals.steps} steps`);
-  if (m.duration_ms != null) bits.push(fmtMs(m.duration_ms));
+  if (m.duration_ms != null) {
+    bits.push(fmtMs(m.duration_ms) + (trend?.duration_delta_ms ? ` (${signedMs(trend.duration_delta_ms)})` : ""));
+  }
+  if (result.score != null) {
+    const d = trend?.score_delta;
+    bits.push(`score ${Math.round(result.score)}${d ? ` (${d > 0 ? "+" : ""}${Math.round(d)} vs last graded run)` : ""}`);
+  }
   if (m.totals?.cost_usd) bits.push(`$${m.totals.cost_usd.toFixed(2)}`);
+  if (trend?.status_streak) bits.push(trend.status_streak);
 
   let line = `${label} ${id}${bits.length ? dim(`  ${bits.join(" · ")}`) : ""}`;
   if (status === "fail") {

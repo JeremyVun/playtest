@@ -1,12 +1,12 @@
-# Dummy
+# Playtest
 
-**Agentic regression testing for web apps.** Dummy performs *dummy runs* of your
+**Agentic regression testing for web apps.** Playtest performs play-tests of your
 application: an AI agent role-plays a user, attempts real tasks in a real browser
 against your app, and the harness scores whether the app let it succeed. Think
 of it as an AI mystery shopper that files a report after every visit.
 
 > We no longer have dedicated testers. Developers are responsible for testing,
-> and selector-based E2E suites rot faster than anyone maintains them. Dummy
+> and selector-based E2E suites rot faster than anyone maintains them. Playtest
 > exists so that "did the core user journeys break?" gets answered automatically,
 > every night and on every release candidate — without anyone hand-maintaining
 > brittle scripts.
@@ -18,7 +18,7 @@ of it as an AI mystery shopper that files a report after every visit.
 ```
  test case (YAML)                      ┌──────────────────────────────┐
  "buy shoes as a guest"          ┌────►│ App under test               │
-        │                        │     │ (a compose stack Dummy boots,│
+        │                        │     │ (a compose stack it boots,   │
         ▼                        │     │  or any deployed URL)        │
  ┌─────────────┐   acts via CDP  │     └──────────────┬───────────────┘
  │ Actor agent │─────────────────┘                    │ a11y snapshot,
@@ -89,13 +89,14 @@ selector-based E2E suites.
 
 There is no suite manifest. A suite is a directory tree; every `*.yaml` file
 under it is a test case, discovered automatically. The one reserved filename is
-`dummy.yaml`, which holds defaults for its subtree:
+`playtest.yaml`, which holds defaults for its subtree (the deprecated old name
+`dummy.yaml` is still read, with a warning):
 
 ```
 tests/
-  dummy.yaml              # root defaults: models, timeouts, environment
+  playtest.yaml           # root defaults: models, timeouts, environment
   checkout/
-    dummy.yaml            # subtree overrides: seed script, storage state
+    playtest.yaml         # subtree overrides: seed script, storage state
     guest-checkout.yaml   # a case — discovered, no registration anywhere
     saved-cards.yaml
   onboarding/
@@ -105,7 +106,7 @@ personas/
 ```
 
 ```yaml
-# tests/dummy.yaml — inherited by every case below it
+# tests/playtest.yaml — inherited by every case below it
 actor_model: claude-haiku-4-5
 grader_model: claude-sonnet-4-6
 max_steps: 30
@@ -117,7 +118,7 @@ env:
 ```
 
 ```yaml
-# tests/checkout/dummy.yaml — nearest file wins, like .gitignore
+# tests/checkout/playtest.yaml — nearest file wins, like .gitignore
 env:
   init: ./seed/checkout.sh
   storage_state: ./seed/anon.json
@@ -125,32 +126,32 @@ env:
 
 Selection is by **path** and by **tag**:
 
-- Directories express *ownership and area*: `dummy run tests/checkout/` runs
+- Directories express *ownership and area*: `playtest tests/checkout/` runs
   one subtree.
 - Tags express *selection sets that cross areas*: a case declares
-  `tags: [smoke]` and CI runs `dummy run tests/ --tag smoke`. Membership lives
+  `tags: [smoke]` and CI runs `playtest tests/ --tag smoke`. Membership lives
   in the case file itself, visible in code review, instead of going stale in a
-  central manifest. `dummy list --tag smoke` answers "what's in the smoke set?"
+  central manifest. `playtest list --tag smoke` answers "what's in the smoke set?"
 
 Adding a test to the suite is: drop a file in the tree. That's the whole
 workflow.
 
-### Environments: bring your own, or let Dummy boot one
+### Environments: bring your own, or let Playtest boot one
 
 `env.base_url` is the only required field — it says where the app is. `compose`
-is optional and says **Dummy owns the app lifecycle**:
+is optional and says **Playtest owns the app lifecycle**:
 
 ```yaml
 env:
   base_url: http://app:3000               # required: where the app is
-  compose: ./docker-compose.test.yml      # optional: Dummy boots/tears down
+  compose: ./docker-compose.test.yml      # optional: Playtest boots/tears down
   init: ./seed/checkout.sh                # optional: runs before each case
   storage_state: ./seed/anon.json         # optional: pre-built browser session
 ```
 
 | Mode | When `compose` is | Behaviour |
 |---|---|---|
-| **Managed** | present | Dummy boots an isolated compose project per case, resolves `base_url` inside it, runs `init`, tears down after. Cases run in parallel safely. |
+| **Managed** | present | Playtest boots an isolated compose project per case, resolves `base_url` inside it, runs `init`, tears down after. Cases run in parallel safely. |
 | **External** | absent | `base_url` points at something already running: staging, a PR preview URL, a local dev server. `init` still runs, with `BASE_URL` and `RUN_ID` in its environment, so it can call a reset endpoint or create run-scoped test data. |
 
 Rules that keep external targets honest:
@@ -166,7 +167,7 @@ Rules that keep external targets honest:
   at staging with test rails, never at production.
 
 The motivating external-mode use case: run the smoke tag against an ephemeral
-**PR preview deployment** (`dummy run tests/ --tag smoke --base-url
+**PR preview deployment** (`playtest tests/ --tag smoke --base-url
 https://pr-417.preview.example.com`) — no compose boot on the CI box at all.
 
 ### Personas
@@ -179,7 +180,7 @@ A persona is a system-prompt overlay on the actor. Two are built in:
 | **exploratory** | A plausible real user: impatient, skims, follows visual prominence, gives up sooner. | Produces *findings* rather than pass/fail. Surfaces discoverability and UX problems. |
 
 Defining your own persona is zero-code — a small file with a name and a
-description of who the user is, referenced from a case or a `dummy.yaml`:
+description of who the user is, referenced from a case or a `playtest.yaml`:
 
 ```yaml
 # personas/first-time-admin.yaml
@@ -218,9 +219,9 @@ Each turn the harness:
 
 Context is engineered for prompt-cache efficiency: the stable prefix (system
 prompt, story, persona) and an append-only trajectory log come first; only the
-most recent snapshots vary at the tail. Older steps are folded into a summary
-in batches. The practical effect: long scenarios stay cheap and the agent can
-run 40+ steps without context bloat.
+current snapshot varies at the tail. The log is never rewritten, so the prefix
+stays byte-stable between turns. The practical effect: long scenarios stay
+cheap and the agent can run 40+ steps without context bloat.
 
 ### The step contract
 
@@ -249,7 +250,7 @@ referenced by pointer, keyed by step id.
   "resolution": { "ref": "e42", "locator": "role=button[name=\"Checkout\"]" },
   "result":     { "ok": true, "settle_ms": 480 },
   "perf":       { "input_to_paint_ms": 120, "long_tasks_ms": 90, "requests": 3, "js_errors": 0 },
-  "artifacts":  { "screenshot": "steps/007.png", "mhtml": "steps/007.mhtml", "a11y": "steps/007.a11y.json", "har_entries": [123, 131] },
+  "artifacts":  { "screenshot": "steps/007.png", "mhtml": "steps/007.mhtml", "a11y": "steps/007.a11y.txt", "har_entries": [123, 131] },
   "tokens":     { "in": 2100, "out": 95, "cache_read": 1840 }
 }
 ```
@@ -283,7 +284,7 @@ Gateway caveats that are part of the design, not afterthoughts:
 
 ### Execution modes: record → act → heal
 
-Selector-based suites rot because humans maintain the scripts. Dummy has no
+Selector-based suites rot because humans maintain the scripts. Playtest has no
 script at all: the agent's own recorded run is the executable path, and the
 agent re-records it when the UI changes. Pure agentic execution on every run
 would be slow, costly, and noisy; the baseline is what makes the steady state
@@ -291,9 +292,9 @@ fast and free:
 
 | Mode | What happens | LLM cost | When |
 |---|---|---|---|
-| **Record** | The agent improvises the task from scratch. On success, its trajectory is blessed as the case's **baseline**. | Full | First run of a case; after `rebaseline`. |
-| **Act** | The harness re-executes the baseline's action track step for step as a fresh run — no model calls. Deterministic, seconds-fast. Success criteria and perf assertions are still checked. | Zero | Default for every subsequent run. |
-| **Heal** | An acted step fails (element gone — the UI changed). The agent wakes up at the failure point with full context and completes the task. The healed run's trajectory becomes the candidate baseline, flagged `healed` so a human reviews the diff before blessing it. | Partial | Automatic when an acted step fails. |
+| **Record** | The agent improvises the task from scratch. On success, its trajectory is saved as the case's **baseline**. | Full | First run of a case; after `refresh`. |
+| **Act** | The harness re-executes the baseline's action track step for step as a fresh run — no actor model calls (an `assert:` success criterion still makes one model check at the gate). Deterministic, seconds-fast. Success criteria and perf assertions are still checked. | ~Zero | Default for every subsequent run. |
+| **Heal** | An acted step fails (element gone — the UI changed). The agent wakes up at the failure point with full context and completes the task. The healed run's trajectory becomes the candidate baseline — a **changed journey**, held for human review before it is accepted. | Partial | Automatic when an acted step fails. |
 
 There is no separate script artifact. The **baseline** is a pointer to a
 trajectory — the case's current known-good path — and acting it means walking
@@ -304,7 +305,7 @@ never the raw snapshot ref — ref ids are instance-specific to one snapshot
 and would not survive a week. Steps that never executed (validation failures)
 are skipped at act time; detours the agent took and backed out of are kept —
 deleting a "pointless" click risks deleting the one that dismissed the cookie
-banner. Clearing accumulated detours is what `rebaseline` is for.
+banner. Clearing accumulated detours is what `refresh` is for.
 
 Collapsing the script into the trajectory keeps the mechanics honest in two
 ways:
@@ -372,7 +373,7 @@ reporter trends them.
 One honest engineering note: the **settle heuristic** (when is an SPA "done"?)
 is the hard problem here, and it is doubly load-bearing — it closes each perf
 window *and* gates act-mode progression. It is pinned with the harness version;
-changing it requires a rebaseline, because it shifts every timing trend.
+changing it requires a refresh, because it shifts every timing trend.
 
 ### Artifacts & the trajectory
 
@@ -389,11 +390,11 @@ runs/2026-06-10T0300/guest-checkout/
   steps/
     007.png            # screenshot per step
     007.mhtml          # full serialized page per step
-    007.a11y.json      # the pruned snapshot the agent actually saw
+    007.a11y.txt       # the pruned snapshot the agent actually saw
   grade.json           # grader output
 ```
 
-One of these trajectories per case is blessed as the **baseline** — the
+One of these trajectories per case is saved as the **baseline** — the
 pointer acted runs follow. The trajectory file is self-sufficient for that
 job; where the pointer lives (committed next to the case, or in CI artifact
 storage) is an open question.
@@ -405,7 +406,7 @@ historical runs ("was the banner present at step 9 last Tuesday?").
 
 ### The trajectory viewer
 
-The viewer (`dummy view`) is a **standalone static app that consumes a run
+The viewer (`playtest view`) is a **standalone static app that consumes a run
 directory** — it works from a CI artifact download, offline, with no app or
 backend. `manifest.json` tells it everything it needs. The primary surfaces:
 
@@ -438,7 +439,7 @@ make the call obvious in under a minute:
 | Verdict | Looks like | Response |
 |---|---|---|
 | App bug | Task genuinely impossible / assertion fails / errors thrown | File it. This is the product working. |
-| App changed | A heal succeeded, or the agent succeeded a new way | Review the heal diff, bless the new baseline. |
+| App changed | A heal succeeded, or the agent succeeded a new way | Review the heal diff, accept the changed journey. |
 | Agent flake | Agent confused on an unchanged, working page | Re-run; if persistent, tune the case story. |
 | Environment flake | Container/seed/network/health-probe failure | Distinct exit code; never counted as a test failure. |
 
@@ -449,27 +450,33 @@ make the call obvious in under a minute:
 ### Day-to-day commands
 
 ```
-dummy run tests/                       # everything discovered under tests/
-dummy run tests/ --tag smoke           # PR check: acts baselines, heals if needed
-dummy run tests/checkout/              # one subtree
-dummy run tests/checkout/guest-checkout.yaml   # single case
-dummy run ... --mode agent             # force fresh agentic run (ignore the baseline)
-dummy run ... --base-url https://pr-417.preview.example.com  # external target
-dummy list --tag smoke                 # show what a selection resolves to
-dummy view runs/<run>/<case>           # open the trajectory viewer
-dummy diff runs/<run>/<case>           # action-track diff against the baseline
-dummy rebaseline tests/                # re-record baselines + score baselines
-dummy grade runs/<run>/<case>          # re-grade an existing trajectory
+playtest tests/                        # everything discovered under tests/
+playtest tests/ --tag smoke            # PR check: checks saved paths, heals if needed
+playtest tests/checkout/               # one subtree
+playtest tests/checkout/guest-checkout.yaml    # single case
+playtest tests/ --mode agent           # force a fresh recording (ignore the baseline)
+playtest tests/ --base-url https://pr-417.preview.example.com  # external target
+playtest new suite checkout            # scaffold a suite (playtest.yaml)
+playtest new case guest-checkout ./checkout    # scaffold a case in a suite
+playtest list --tag smoke              # show what a selection resolves to
+playtest view                          # open the GUI: run picker + heal/act diffs
+playtest view --changed                # review changed journeys awaiting acceptance
+playtest refresh tests/                # re-record saved paths from scratch
 ```
+
+Advanced (hidden from help, stable): `playtest accept <runDir>` /
+`playtest reject <runDir>` approve or dismiss a changed journey from a script
+or after the fact; `playtest grade <runDir>` re-grades an existing trajectory.
 
 ### Writing your first test
 
-1. Copy an example case into the tree, write the story as you'd brief a human
-   tester, and give it the obvious success criteria (a URL, an element, an API
-   call). There is nothing to register — files in the tree are the suite.
-2. Point the nearest `dummy.yaml` at your app: just a `base_url` if it's
-   already running, plus your compose file if Dummy should boot it.
-3. `dummy run tests/my-case.yaml` — first run records; watch it in the viewer.
+1. Scaffold a case (`playtest new case my-case tests/`) or copy an example into
+   the tree, write the story as you'd brief a human tester, and give it the
+   obvious success criteria (a URL, an element, an API call). There is nothing
+   to register — files in the tree are the suite.
+2. Point the nearest `playtest.yaml` at your app: just a `base_url` if it's
+   already running, plus your compose file if Playtest should boot it.
+3. `playtest tests/my-case.yaml` — first run records; watch it in the viewer.
 4. Commit the case file (and optionally the baseline) to the repo.
 
 ### CI integration
@@ -487,7 +494,7 @@ dummy grade runs/<run>/<case>          # re-grade an existing trajectory
 - **Pinned and stamped into every run record:** actor/grader model versions,
   prompts and built-in personas, snapshot format, `step.schema.json` version,
   the settle heuristic, and the gateway (Portkey) config version. Upgrading
-  any of them is treated like a dependency upgrade: bump, `rebaseline`,
+  any of them is treated like a dependency upgrade: bump, `refresh`,
   review.
 - The harness refuses to compare scores or perf trends across baseline
   boundaries.
@@ -496,8 +503,9 @@ dummy grade runs/<run>/<case>          # re-grade an existing trajectory
 
 ## 4. Cost & speed expectations
 
-- **Acted runs** (the steady state): no model calls; seconds per case plus
-  app boot (zero boot in external mode).
+- **Acted runs** (the steady state): no actor model calls (one cheap model
+  check per `assert:` criterion at the gate); seconds per case plus app boot
+  (zero boot in external mode).
 - **Record/heal runs**: a 30-step scenario on Haiku with prompt caching lands
   at low single-digit **cents**; one Sonnet grading call adds roughly the
   same. A 100-case full record pass is a few dollars. (This assumes prompt
@@ -508,17 +516,17 @@ dummy grade runs/<run>/<case>          # re-grade an existing trajectory
 
 ---
 
-## 5. What Dummy is not
+## 5. What Playtest is not
 
 - **Not a unit/integration test replacement.** It covers user journeys, not
   logic branches.
 - **Not exhaustive.** It tests the journeys someone wrote stories for.
-  Coverage is a human responsibility; maintenance is what Dummy removes.
+  Coverage is a human responsibility; maintenance is what Playtest removes.
 - **Not a load-testing or security tool.**
 - **Not safe against real third parties.** Environments must be hermetic:
   seeded DB, mocked external services, test payment rails. The agent *will*
   press the buy button. This applies doubly to external mode — pointing
-  Dummy at a deployed URL is pointing an autonomous user at it. Staging with
+  Playtest at a deployed URL is pointing an autonomous user at it. Staging with
   test rails, never production.
 - **A11y caveat:** the agent navigates by accessibility tree. If a page is
   semantically empty (div soup, no labels), the agent struggles — that is
@@ -529,21 +537,44 @@ dummy grade runs/<run>/<case>          # re-grade an existing trajectory
 
 ## 6. Glossary
 
+User-facing terms (the words the CLI and docs lead with):
+
+| Term | Meaning |
+|---|---|
+| Suite | A directory with `playtest.yaml` defaults; every case YAML below it belongs to it. |
+| Case | A YAML user-journey file inside a suite: a story plus success criteria. |
+| Run | Execute the selected cases (`playtest [paths...]`): recording, checking, or healing as needed. |
+| View | Open the GUI (`playtest view`) to inspect runs and review changed journeys. |
+| Changed journey | A successful healed run awaiting review — the app changed, but the journey survived. Shown as status `changed`. |
+| Accept | Approve a changed journey (or any passing run) as the case's new saved path: `playtest accept <runDir>`. `reject` dismisses it. |
+| Refresh | Re-record saved paths from scratch (`playtest refresh <paths...>`); also clears accumulated detours. |
+| Saved path | The user-facing word for the baseline (below). |
+
+Display status terms: `recording` (fresh agentic run), `checking` (following the
+saved path), `healing` (recovering from a changed UI), `changed` (healed pass
+awaiting review), `accepted` (now the saved path). Internally the code keeps
+`record`, `act`, and `heal`.
+
+Mechanics and internal terms:
+
 | Term | Meaning |
 |---|---|
 | Actor | The pinned, cheap agent (Haiku) that performs the task. |
 | Grader | The smarter agent (Sonnet) that scores a finished trajectory. |
 | Step envelope | The versioned per-step record: agent output + resolution + result + perf + artifact pointers. One line of `trajectory.jsonl`. |
 | Trajectory | The complete recording of one run: the sequence of step envelopes. Every run produces one. |
-| Baseline | A pointer to the blessed trajectory a case acts from — the current known-good path. Heals and rebaselines move it. |
+| Baseline | A pointer to the saved trajectory a case acts from — the current known-good path (user-facing: the *saved path*). Accepted heals and refreshes move it. |
 | Action track | The actable projection of a trajectory: the steps that actually executed, with their resolved locators. Computed, never stored. |
 | Act | To re-execute the baseline's action track step for step as a fresh run against the live app (act mode). |
 | Replay | Reserved for the viewer: re-watching the recording of a past run. Never an execution mode. |
 | Tag | A label on a case used for cross-directory selection (`--tag smoke`). |
-| Managed / external environment | Whether Dummy boots the app (compose) or targets an already-running `base_url`. |
+| Managed / external environment | Whether Playtest boots the app (compose) or targets an already-running `base_url`. |
 | Gate | Deterministic assertions + perf thresholds; the only thing that fails CI. |
-| Heal | Agentic recovery from a failed acted step; the healed run's trajectory becomes the candidate baseline. |
-| Rebaseline | Re-record baseline trajectories and score baselines after an intentional change; also clears accumulated detours. |
+| Heal | Agentic recovery from a failed acted step; a healed run that passes is a changed journey (its trajectory becomes the candidate baseline). |
+| Bless | Internal/advanced name for accepting a trajectory as the baseline. The user-facing command is `playtest accept` (`bless` remains as a hidden alias). |
+| Rebaseline | Internal/advanced name for `playtest refresh`: re-record baseline trajectories after an intentional change (hidden command alias). |
+| Diff | The action-track diff between a run and its baseline — an implementation detail rendered inside the viewer's diff stage (there is no standalone diff command). |
+| Grade | Normally part of a run; the hidden `playtest grade <runDir>` re-grades an existing run as a repair/debug action. |
 | Confusion event | Harness-detected agent floundering: failed/repeated actions, backtracking, expectation-vs-outcome mismatches. |
 
 ---

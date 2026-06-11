@@ -1,6 +1,7 @@
 // Managed (compose) / external environments, health probe, init scripts. See docs/CONTRACTS.md §9.
 import { execFile as execFileCb } from "node:child_process";
 import { promisify } from "node:util";
+import fs from "node:fs";
 import path from "node:path";
 import { firstLine } from "./trajectory.js";
 
@@ -24,7 +25,7 @@ export async function prepareEnv(resolvedCase, runId) {
   if (env.compose) {
     managed = true;
     // compose project names must be lowercase [a-z0-9_-]
-    const project = `dummy-${runId}-${++bootCounter}`.toLowerCase().replace(/[^a-z0-9_-]/g, "");
+    const project = `playtest-${runId}-${++bootCounter}`.toLowerCase().replace(/[^a-z0-9_-]/g, "");
     const compose = (args, opts = {}) =>
       execFile("docker", ["compose", "-f", env.compose, "-p", project, ...args], opts);
     teardown = async () => {
@@ -42,7 +43,7 @@ export async function prepareEnv(resolvedCase, runId) {
   }
 
   try {
-    await probe(baseUrl);
+    await probe(baseUrl, managed ? null : { caseFile: resolvedCase.file });
     if (env.init) await runInit(env.init, baseUrl, runId);
   } catch (e) {
     await teardown();
@@ -66,8 +67,14 @@ async function resolveComposeUrl(compose, baseUrl) {
   return url.href;
 }
 
-/** GET base_url; ok when status < 500. 5 attempts, 1s apart. */
-async function probe(baseUrl) {
+/**
+ * GET base_url; ok when status < 500. 5 attempts, 1s apart.
+ * `external` ({ caseFile }) marks an unmanaged env: a localhost failure then
+ * gets the "start the app or add env.compose" hint instead of the raw probe
+ * error. Managed-mode failures keep the probe detail — compose is already
+ * configured there, so the hint would mislead.
+ */
+async function probe(baseUrl, external = null) {
   let last = "";
   for (let attempt = 0; attempt < 5; attempt++) {
     if (attempt > 0) await new Promise((r) => setTimeout(r, 1000));
@@ -79,7 +86,78 @@ async function probe(baseUrl) {
       last = e.cause?.code || firstLine(e.cause ?? e) || firstLine(e);
     }
   }
+  if (external && isLocalUrl(baseUrl)) {
+    throw new InfraError(externalProbeHint(baseUrl, external.caseFile));
+  }
   throw new InfraError(`health probe failed for ${baseUrl}: ${last}`);
+}
+
+function isLocalUrl(baseUrl) {
+  try {
+    return ["localhost", "127.0.0.1"].includes(new URL(baseUrl).hostname);
+  } catch {
+    return false;
+  }
+}
+
+const dotRel = (from, to) => {
+  const r = path.relative(from, to);
+  return r.startsWith(".") ? r : `./${r}`;
+};
+
+function externalProbeHint(baseUrl, caseFile) {
+  const lines = [
+    `Could not reach ${baseUrl}.`,
+    "Start the app yourself, or add env.compose to playtest.yaml so Playtest can manage it.",
+  ];
+  const compose = findComposeFile(caseFile);
+  if (compose) {
+    // The snippet gets pasted into a defaults file, and config.js resolves
+    // env.compose against the DECLARING file's dir — so name that file and
+    // compute the suggested path relative to it.
+    const target = defaultsFileFor(caseFile);
+    lines.push(
+      `Found ${dotRel(process.cwd(), compose)}; add to ${dotRel(process.cwd(), target)}:`,
+      "env:",
+      `  compose: ${dotRel(path.dirname(target), compose)}`,
+    );
+  }
+  return lines.join("\n");
+}
+
+/** First docker-compose*.yml/yaml next to the case file or in cwd, absolute. */
+function findComposeFile(caseFile) {
+  const dirs = [...(caseFile ? [path.dirname(caseFile)] : []), process.cwd()];
+  for (const dir of dirs) {
+    let names;
+    try {
+      names = fs.readdirSync(dir);
+    } catch {
+      continue;
+    }
+    const hit = names.find((n) => n.startsWith("docker-compose") && /\.ya?ml$/.test(n));
+    if (hit) return path.resolve(dir, hit);
+  }
+  return null;
+}
+
+/**
+ * Nearest existing playtest.yaml/dummy.yaml from the case file's dir upward
+ * (stopping at the repo root), else the playtest.yaml the user would create
+ * next to the case file.
+ */
+function defaultsFileFor(caseFile) {
+  const start = caseFile ? path.dirname(path.resolve(caseFile)) : process.cwd();
+  for (let dir = start; ; ) {
+    for (const name of ["playtest.yaml", "dummy.yaml"]) {
+      const file = path.join(dir, name);
+      if (fs.existsSync(file)) return file;
+    }
+    const parent = path.dirname(dir);
+    if (fs.existsSync(path.join(dir, ".git")) || parent === dir) break;
+    dir = parent;
+  }
+  return path.join(start, "playtest.yaml");
 }
 
 async function runInit(script, baseUrl, runId) {

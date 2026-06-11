@@ -1,6 +1,7 @@
-/* Dummy trajectory viewer. Loads /run/manifest.json (or /runs.json -> picker) and
-   renders the recording. Every artifact is optional: missing files degrade to
-   placeholders, never a blank app. */
+/* Playtest trajectory viewer. Loads /run/manifest.json (or /runs.json -> picker,
+   /changed.json -> review list) and renders the recording. Every artifact is
+   optional: missing files degrade to placeholders, never a blank app.
+   Strictly read-only: accepting/rejecting changed journeys happens in the CLI. */
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -13,6 +14,10 @@ const state = {
   har: [],
   grade: null,
   history: [],
+  movement: null,        // this run vs its history (computeMovement)
+  rootMode: false,       // serving a runs root (?run= used) — sibling links resolve
+  runPath: null,         // normalized ?run= value (root mode), null in single-run mode
+  acceptCmd: null,       // exact "playtest accept <dir>" for this run, when pending
   cur: 0,
   view: "stills",
   a11yCache: new Map(),
@@ -99,6 +104,29 @@ function fmtClock(seconds) {
   return `${m}:${s}`;
 }
 
+// Copy-paste safety for displayed commands: quote a path for POSIX shells
+// when it contains anything outside the safe set ('\'' escapes embedded
+// quotes). Inline copy of cli.js shellQuote (the viewer has no bundler).
+function shellQuote(s) {
+  return /^[A-Za-z0-9@%+=:,./_-]+$/.test(s) ? s : "'" + String(s).replace(/'/g, "'\\''") + "'";
+}
+
+// Internal run mode -> user-facing label (inline copy of report.js modeLabel —
+// the viewer has no bundler). A healed pass is a "changed" journey.
+function modeLabel(mode, healed, status) {
+  if (healed && status === "pass") return "changed";
+  return { record: "recording", act: "checking", heal: "healing" }[mode] ?? mode ?? "?";
+}
+
+// One chip carries both mode and healed-ness: healed runs keep the accent +
+// branch icon ("changed" when passing, "healing" when not).
+function modeChip(mode, healed, status) {
+  const label = modeLabel(mode, healed, status);
+  return healed
+    ? h("span", { class: "chip accent" }, icon("i-branch"), label)
+    : h("span", { class: "chip" }, label);
+}
+
 /* ---------- action helpers ---------- */
 
 // Acted envelopes carry no agent block; their action lives on the baseline step
@@ -157,17 +185,41 @@ function describe(env) {
 /* ---------- boot ---------- */
 
 async function boot() {
-  const runParam = new URLSearchParams(location.search).get("run");
-  if (runParam) state.base = "/run/" + runParam.replace(/^\/+|\/+$/g, "");
+  const params = new URLSearchParams(location.search);
+  const runParam = params.get("run");
+  if (runParam) {
+    state.runPath = runParam.replace(/^\/+|\/+$/g, "");
+    state.base = "/run/" + state.runPath;
+  }
+  state.rootMode = Boolean(runParam);
 
   state.manifest = await fetchJson(state.base + "/manifest.json");
   if (state.manifest) return loadRun();
 
   if (!runParam) {
-    const runs = await fetchJson("/runs.json");
-    if (Array.isArray(runs) && runs.length) return renderPicker(runs);
+    // ?filter=changed|failed and ?case=<id> come from `playtest view` flags.
+    if (params.get("filter") === "changed") {
+      const entries = await fetchJson("/changed.json");
+      if (Array.isArray(entries)) return renderChanged(entries);
+    } else {
+      let runs = await fetchJson("/runs.json");
+      if (Array.isArray(runs) && runs.length) {
+        const notes = [];
+        if (params.get("filter") === "failed") {
+          runs = runs.filter((r) => r.status === "fail" || r.status === "infra");
+          notes.push("failed runs only");
+        }
+        const caseId = params.get("case");
+        if (caseId) {
+          // picker case_id is dir-derived; repeat runs carry a -N suffix
+          runs = runs.filter((r) => r.case_id === caseId || r.case_id.replace(/-\d+$/, "") === caseId);
+          notes.push("case " + caseId);
+        }
+        return renderPicker(runs, notes.join(" · ") || null);
+      }
+    }
   }
-  renderFatal("No run found here. Point `dummy view` at a run directory (or a runs root), or check the ?run= parameter.");
+  renderFatal("No run found here. Point `playtest view` at a run directory (or a runs root), or check the ?run= parameter.");
 }
 
 async function loadRun() {
@@ -191,8 +243,23 @@ async function loadRun() {
   state.baseline = baseText ? parseJsonl(baseText) : null;
   if (state.baseline) for (const env of state.baseline) state.baselineByStep.set(env.step, env);
   state.history = Array.isArray(history) ? history : [];
+  state.movement = computeMovement();
 
-  document.title = `Dummy — ${caseId || "run"}`;
+  // a healed pass may be awaiting acceptance: the changed list knows this
+  // run's cwd-relative dir, which makes the accept command copy-pasteable.
+  // Match THIS run's entry — by root-relative path in root mode (repeat-run
+  // siblings share run_id), by run_id+case_id when serving a single run —
+  // and only offer the command while that entry is still pending.
+  if (m.healed && m.result?.status === "pass") {
+    const changed = await fetchJson("/changed.json");
+    const mine = Array.isArray(changed)
+      ? changed.find((e) =>
+          state.rootMode ? e.path === state.runPath : e.run_id === m.run_id && e.case_id === caseId)
+      : null;
+    if (mine?.pending) state.acceptCmd = "playtest accept " + shellQuote(mine.run_dir_rel);
+  }
+
+  document.title = `Playtest — ${caseId || "run"}`;
   $("#app").hidden = false;
 
   renderHeader();
@@ -222,29 +289,159 @@ function renderFatal(msg) {
   const el = $("#fatal");
   el.hidden = false;
   el.replaceChildren(
-    h("div", { class: "picker-brand" }, "Dummy"),
+    h("div", { class: "picker-brand" }, "Playtest"),
     h("p", {}, msg),
   );
 }
 
-function renderPicker(runs) {
+function renderPicker(runs, filterNote = null) {
   const el = $("#picker");
   el.hidden = false;
   const list = runs.map((r) =>
     h("a", { class: "run-link", href: "?run=" + encodeURIComponent(`${r.run_id}/${r.case_id}`) },
       statusChip(r.status),
-      h("span", { class: "chip" }, r.mode ?? "?"),
+      modeChip(r.mode, r.healed, r.status),
       h("span", { class: "r-case" }, r.case_id ?? "?"),
-      h("span", { class: "r-id" }, `${r.run_id ?? ""}  ·  ${r.started_at ?? ""}`),
+      h("span", { class: "r-id" }, `${r.run_id ?? ""}  ·  ${r.started_at ?? ""}  ·  ${fmtMs(r.duration_ms)}`),
     ),
   );
   el.replaceChildren(
     h("div", { class: "picker-inner" },
-      h("div", { class: "picker-brand" }, "Dummy"),
-      h("div", { class: "picker-sub" }, `${runs.length} recorded performance${runs.length === 1 ? "" : "s"} — choose one`),
+      h("div", { class: "picker-brand" }, "Playtest"),
+      h("div", { class: "picker-sub" },
+        `${runs.length} recorded performance${runs.length === 1 ? "" : "s"} — ${filterNote ?? "choose one"}`),
+      runs.length ? null : h("p", { class: "empty-note" }, "no runs match this filter"),
       ...list,
     ),
   );
+}
+
+/* Read-only changed-journey review list (?filter=changed). Pending rows show
+   the exact CLI commands; older healed passes stay listed, dimmed, as history. */
+function renderChanged(entries) {
+  const el = $("#picker");
+  el.hidden = false;
+  const pending = entries.filter((e) => e.pending);
+  const list = entries.flatMap((e) => {
+    const row = h("a", { class: "run-link" + (e.pending ? "" : " dim"), href: "?run=" + encodeURIComponent(e.path) },
+      statusChip("pass"),
+      e.pending
+        ? h("span", { class: "chip accent" }, icon("i-branch"), "changed")
+        : h("span", { class: "chip" }, "historical"),
+      h("span", { class: "r-case" }, e.case_id ?? "?"),
+      h("span", { class: "r-id" },
+        `${e.run_id ?? ""}  ·  ${e.started_at ?? ""}  ·  ${e.score != null ? "score " + e.score : "ungraded"}`),
+    );
+    if (!e.pending) return [row];
+    const dir = shellQuote(e.run_dir_rel);
+    return [row, h("pre", { class: "cmds" }, `playtest accept ${dir}\nplaytest reject ${dir}`)];
+  });
+  el.replaceChildren(
+    h("div", { class: "picker-inner" },
+      h("div", { class: "picker-brand" }, "Playtest"),
+      h("div", { class: "picker-sub" },
+        `${pending.length} changed journey${pending.length === 1 ? "" : "s"} awaiting review`),
+      entries.length ? null : h("p", { class: "empty-note" }, "no changed journeys — passing healed runs will appear here"),
+      ...list,
+    ),
+  );
+}
+
+/* ---------- run movement vs history ---------- */
+
+// Badge thresholds (product constants): a pass that turns into a fail, a
+// score drop of 5+ points, or a 30%+ duration increase is a regression; a
+// score gain of 5+ or a 30%+ duration drop is an improvement. Regression
+// wins when signals disagree.
+const SCORE_DELTA_BADGE = 5;
+const DURATION_RATIO_BADGE = 0.3;
+
+const signedMs = (ms) => (ms < 0 ? "-" : "+") + fmtMs(Math.abs(ms));
+const signedInt = (n) => (n < 0 ? "-" : "+") + Math.round(Math.abs(n));
+
+function median(vals) {
+  if (!vals.length) return null;
+  const s = [...vals].sort((a, b) => a - b);
+  return s.length % 2 ? s[s.length >> 1] : (s[(s.length >> 1) - 1] + s[s.length >> 1]) / 2;
+}
+
+/**
+ * Deltas of this run vs its history: vs the previous comparable entry and vs
+ * the median of the last 5 comparable entries. Comparable = started before
+ * this run, non-infra (all priors when every prior is infra), never a
+ * same-run_id sibling. Score deltas exist only between graded runs; LCP only
+ * when both runs measured one. Null when the case has no prior runs.
+ */
+function computeMovement() {
+  const m = state.manifest;
+  const before = state.history.filter(
+    (r) => r.run_id !== m.run_id && String(r.started_at) < String(m.started_at ?? ""));
+  const comparable = before.filter((r) => r.status !== "infra");
+  const prev = (comparable.length ? comparable : before).at(-1);
+  if (!prev) return null;
+  const recent = comparable.slice(-5);
+
+  const lcps = state.steps.map((s) => s.perf?.nav?.lcp_ms).filter((v) => typeof v === "number");
+  const cur = {
+    status: m.result?.status ?? null,
+    duration: m.duration_ms ?? null,
+    steps: m.totals?.steps ?? null,
+    lcp: lcps.length ? Math.max(...lcps) : null, // worst LCP, like the server's history entries
+    score: state.grade?.score ?? null,
+  };
+  const delta = (a, b) => (a != null && b != null ? a - b : null);
+  const medOf = (key) => median(recent.map((r) => r[key]).filter((v) => v != null));
+  const mv = {
+    prev,
+    duration: { prev: delta(cur.duration, prev.duration_ms), med: delta(cur.duration, medOf("duration_ms")) },
+    steps: { prev: delta(cur.steps, prev.steps), med: delta(cur.steps, medOf("steps")) },
+    lcp: { prev: delta(cur.lcp, prev.lcp_ms), med: delta(cur.lcp, medOf("lcp_ms")) },
+    score: { prev: delta(cur.score, prev.score), med: delta(cur.score, medOf("score")) },
+  };
+  mv.statusMove =
+    prev.status === "pass" && cur.status === "fail" ? "pass → fail"
+    : prev.status === "pass" && !prev.healed && m.healed && cur.status === "pass" ? "pass → healed"
+    : null;
+
+  const durRatio = mv.duration.prev != null && prev.duration_ms > 0 ? mv.duration.prev / prev.duration_ms : null;
+  mv.badge =
+    mv.statusMove === "pass → fail" ||
+    (mv.score.prev != null && mv.score.prev <= -SCORE_DELTA_BADGE) ||
+    (durRatio != null && durRatio >= DURATION_RATIO_BADGE)
+      ? "regression"
+      : (mv.score.prev != null && mv.score.prev >= SCORE_DELTA_BADGE) ||
+          (durRatio != null && durRatio <= -DURATION_RATIO_BADGE)
+        ? "improved"
+        : null;
+  return mv;
+}
+
+/* compact "<metric> <Δ vs prev> · med <Δ vs last-5 median>" chip, or null */
+function deltaChip(label, d, fmt) {
+  if (d.prev == null) return null;
+  return h("span", {
+    class: "chip",
+    title: `${label} vs previous comparable run (${state.movement.prev.run_id ?? "?"})` +
+      (d.med != null ? "; med = vs median of the last 5 runs" : ""),
+  }, `${label} ${fmt(d.prev)}${d.med != null ? ` · med ${fmt(d.med)}` : ""}`);
+}
+
+function movementChips() {
+  const mv = state.movement;
+  if (!mv) return [];
+  return [
+    mv.statusMove
+      ? h("span", { class: "chip " + (mv.statusMove === "pass → fail" ? "fail" : "accent") }, mv.statusMove)
+      : null,
+    mv.badge
+      ? h("span", { class: "chip " + (mv.badge === "regression" ? "fail" : "pass") },
+          icon(mv.badge === "regression" ? "i-warn" : "i-check"), mv.badge)
+      : null,
+    deltaChip("time", mv.duration, signedMs),
+    deltaChip("steps", mv.steps, signedInt),
+    deltaChip("lcp", mv.lcp, signedMs),
+    deltaChip("score", mv.score, signedInt),
+  ].filter(Boolean);
 }
 
 /* ---------- header ---------- */
@@ -263,14 +460,14 @@ function renderHeader() {
     h("span", { class: "run-id" }, `  ·  ${m.run_id ?? ""}`),
   );
 
-  const badges = [statusChip(m.result?.status), h("span", { class: "chip" }, m.mode ?? "?")];
-  if (m.healed) badges.push(h("span", { class: "chip accent" }, icon("i-branch"), "healed"));
+  const badges = [statusChip(m.result?.status), modeChip(m.mode, m.healed, m.result?.status)];
   const reason = m.result?.end_reason;
   if (reason && reason !== "done") badges.push(h("span", { class: "chip warn" }, reason.replace("_", " ")));
   badges.push(h("span", { class: "chip" }, `${state.steps.length} steps`));
   badges.push(h("span", { class: "chip" }, fmtMs(m.duration_ms)));
   const conf = m.totals?.confusion_events ?? 0;
   if (conf > 0) badges.push(h("span", { class: "chip warn" }, icon("i-warn"), `${conf} confusion`));
+  badges.push(...movementChips());
   $("#run-badges").replaceChildren(...badges);
 
   const t = m.totals?.tokens ?? {};
@@ -295,29 +492,36 @@ function renderHeader() {
 function renderSparkline() {
   const hist = state.history;
   if (!hist || hist.length < 2) return;
-  const W = 150, H = 30, PAD = 4;
-  const scores = hist.map((r) => r.score);
-  const useScore = scores.some((s) => s != null);
-  const vals = hist.map((r) => (useScore ? r.score : r.duration_ms));
+  // Score series over graded runs only — ungraded checking runs are skipped,
+  // not drawn as mid-height gaps. Fewer than 2 graded: duration over all runs.
+  const graded = hist.filter((r) => r.score != null);
+  const useScore = graded.length >= 2;
+  const series = useScore ? graded : hist;
+  const vals = series.map((r) => (useScore ? r.score : r.duration_ms));
   const known = vals.filter((v) => v != null);
-  if (!known.length) return;
+  if (series.length < 2 || !known.length) return;
+  const W = 150, H = 30, PAD = 4;
   const min = Math.min(...known), max = Math.max(...known);
   const span = max - min || 1;
-  const x = (i) => PAD + (i * (W - 2 * PAD)) / Math.max(1, hist.length - 1);
+  const x = (i) => PAD + (i * (W - 2 * PAD)) / Math.max(1, series.length - 1);
   const y = (v) => v == null ? H / 2 : H - PAD - ((v - min) / span) * (H - 2 * PAD);
 
   const pts = vals.map((v, i) => (v == null ? null : `${x(i).toFixed(1)},${y(v).toFixed(1)}`)).filter(Boolean);
   const color = { pass: "var(--pass)", fail: "var(--fail)", infra: "var(--warn)" };
-  const dots = hist.map((r, i) => {
+  const dots = series.map((r, i) => {
     const cur = r.run_id === state.manifest.run_id;
     const title = `${r.run_id} · ${r.status}${r.score != null ? " · score " + r.score : ""} · ${fmtMs(r.duration_ms)}`;
-    return `<circle cx="${x(i).toFixed(1)}" cy="${y(vals[i]).toFixed(1)}" r="${cur ? 3.4 : 2.2}" fill="${color[r.status] ?? "var(--dim)"}" ${cur ? 'stroke="var(--ink)" stroke-width="1"' : ""}><title>${title.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</title></circle>`;
+    const dot = `<circle cx="${x(i).toFixed(1)}" cy="${y(vals[i]).toFixed(1)}" r="${cur ? 3.4 : 2.2}" fill="${color[r.status] ?? "var(--dim)"}" ${cur ? 'stroke="var(--ink)" stroke-width="1"' : ""}><title>${title.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</title></circle>`;
+    // dots jump to older runs — sibling paths only resolve when serving a runs root
+    return state.rootMode && r.path ? `<a href="?run=${encodeURIComponent(r.path)}">${dot}</a>` : dot;
   }).join("");
 
   $("#spark-svg").innerHTML =
     `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">` +
     `<polyline points="${pts.join(" ")}" fill="none" stroke="var(--line2)" stroke-width="1.2"/>${dots}</svg>`;
-  $("#spark-label").textContent = `${hist.length} runs · ${useScore ? "grade" : "duration"}`;
+  $("#spark-label").textContent = useScore
+    ? `${series.length} graded runs · score`
+    : `${series.length} runs · duration`;
   $("#spark").hidden = false;
 }
 
@@ -679,10 +883,19 @@ function renderDiff() {
   if (frameEnv) {
     const img = h("img", { src: state.base + "/" + frameEnv.artifacts.screenshot, alt: "divergence frame" });
     img.addEventListener("error", () => img.remove());
+    // a healed pass with no acceptCmd is not the pending candidate (a sibling
+    // superseded it, or it was already accepted/rejected) — no command then
+    const resolvedHealedPass =
+      !state.acceptCmd && state.manifest.healed && state.manifest.result?.status === "pass";
     body.append(h("div", { class: "diff-frame" }, img,
       h("div", {},
         h("div", { class: "label" }, `first divergence — step ${frameEnv.step} of this run`),
-        h("p", {}, "The journey diverges here: the baseline action no longer matched, and the agent found a new path. If the run is green, the UI changed but the journey survived — review and bless."))));
+        resolvedHealedPass
+          ? h("p", {}, "The journey diverged here and survived: the baseline action no longer matched, and the agent found a new path. This run is no longer the pending changed journey — it was superseded by a later healed run or already resolved (accepted or rejected), so there is nothing to accept from here.")
+          : [
+              h("p", {}, "The journey diverges here: the baseline action no longer matched, and the agent found a new path. If the run is green, the UI changed but the journey survived — review it, then accept this run as the new saved path:"),
+              h("pre", { class: "cmds" }, state.acceptCmd ?? "playtest accept <run-dir>"),
+            ])));
   }
 }
 
@@ -765,12 +978,16 @@ function renderInspectorStep(env) {
   }
   $("#sec-tele").replaceChildren(sec("i-gauge", "telemetry", null, ...teleKids));
 
-  // network waterfall
+  // network: the rich waterfall needs har.json; when it is missing/empty fall
+  // back to the compact env.network.requests embedded in newer envelopes, so a
+  // bare trajectory still gets a useful panel (old runs keep the waterfall).
   const netEntries = (env.artifacts?.har_entries ?? []).map((i) => state.har[i]).filter(Boolean);
-  const netLabel = netEntries.length > MAX_WF_ROWS
-    ? `${MAX_WF_ROWS} of ${netEntries.length} req`
-    : `${netEntries.length} req`;
-  $("#sec-net").replaceChildren(sec("i-net", "network", netLabel, renderWaterfall(netEntries)));
+  const embedded = env.network?.requests ?? [];
+  const useEmbedded = !netEntries.length && embedded.length > 0;
+  const count = useEmbedded ? embedded.length : netEntries.length;
+  const netLabel = count > MAX_WF_ROWS ? `${MAX_WF_ROWS} of ${count} req` : `${count} req`;
+  $("#sec-net").replaceChildren(sec("i-net", "network", netLabel,
+    useEmbedded ? renderNetRequests(embedded) : renderWaterfall(netEntries)));
 
   // tokens
   $("#sec-tok").replaceChildren(renderTokens(env));
@@ -807,6 +1024,23 @@ function renderWaterfall(entries) {
         h("span", { class: "wf-time" }, `${fmtBytes(e.response?.bodySize)} · ${pending ? "—" : fmtMs(Math.max(0, e.time ?? 0))}`)),
       h("div", { class: "wf-lane" },
         h("div", { class: "wf-bar" + (bad ? " bad" : pending ? " pending" : slow ? " slow" : ""), style: `left:${left}%;width:${width}%` })));
+  });
+  return h("div", { class: "wf" }, ...rows);
+}
+
+// Compact list for embedded network.requests (stable fields only — no
+// timings/sizes by design, so no waterfall lane): method, status, path, mime.
+function renderNetRequests(requests) {
+  const rows = requests.slice(0, MAX_WF_ROWS).map((r) => {
+    const status = r.status ?? 0;
+    const bad = r.failed || status >= 400;
+    return h("div", { class: "wf-row" },
+      h("div", { class: "wf-top" },
+        h("span", { class: "wf-method" }, r.method ?? "GET"),
+        h("span", { class: "wf-status" + (bad ? " bad" : "") },
+          status > 0 ? String(status) : r.failed ? "✕ failed" : "… pending"),
+        h("span", { class: "wf-url", title: r.url ?? "" }, "‎" + (r.path ?? r.url ?? "?")),
+        h("span", { class: "wf-time" }, r.mime_type || "—")));
   });
   return h("div", { class: "wf" }, ...rows);
 }

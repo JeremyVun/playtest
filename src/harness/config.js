@@ -1,4 +1,4 @@
-// Case discovery and dummy.yaml inheritance. See docs/CONTRACTS.md §1-2.
+// Case discovery and playtest.yaml inheritance. See docs/CONTRACTS.md §1-2.
 import fs from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
@@ -6,10 +6,13 @@ import YAML from "yaml";
 
 export class DummyConfigError extends Error {}
 
+// Suite defaults live in playtest.yaml; dummy.yaml is the deprecated old name.
+const DEFAULTS_FILES = ["playtest.yaml", "dummy.yaml"];
+
 const DEFAULTS = {
   actor_model: "claude-haiku-4-5",
   grader_model: "claude-sonnet-4-6",
-  max_steps: 30,
+  max_steps: 50,
   timeout: "4m",
   runs_per_case: 1,
   persona: "tester",
@@ -49,7 +52,7 @@ export async function discoverCases(paths, { tags = [], baseUrl = null } = {}) {
     if (st.isDirectory()) {
       for (const f of await walkYaml(abs)) if (!found.has(f)) found.set(f, abs);
     } else {
-      if (path.basename(abs) === "dummy.yaml") {
+      if (DEFAULTS_FILES.includes(path.basename(abs))) {
         throw new DummyConfigError(`${p} is a defaults file, not a test case`);
       }
       if (!found.has(abs)) found.set(abs, path.dirname(abs));
@@ -76,7 +79,7 @@ async function walkYaml(dir) {
       out.push(...(await walkYaml(full)));
     } else if (
       name.endsWith(".yaml") &&
-      name !== "dummy.yaml" &&
+      !DEFAULTS_FILES.includes(name) &&
       !name.includes(".baseline.") &&
       !name.includes(".healed.")
     ) {
@@ -103,7 +106,7 @@ async function resolveCase(file, namedRoot, baseUrl) {
   }
   if (!merged.env.base_url) {
     throw new DummyConfigError(
-      `${file}: no env.base_url configured (set it in a dummy.yaml, the case file, or pass --base-url)`,
+      `${file}: no env.base_url configured (set it in a playtest.yaml, the case file, or pass --base-url)`,
     );
   }
 
@@ -161,17 +164,28 @@ function findRepoRoot(fromDir) {
   }
 }
 
+let warnedDeprecatedDefaults = false; // deprecation note prints once per process
+
 /**
- * Existing dummy.yaml files from `top` down to `caseDir`, top first. Walks UP
+ * Existing defaults files from `top` down to `caseDir`, top first. Walks UP
  * from the case dir so ancestor defaults are found even when the user named a
  * path below them; with no repo root (`top` null) it walks to the fs root.
+ * Each level contributes playtest.yaml, else dummy.yaml — never both.
  */
 function defaultsChain(top, caseDir) {
   const files = [];
   let dir = caseDir;
   for (;;) {
-    const f = path.join(dir, "dummy.yaml");
-    if (existsSync(f)) files.unshift(f);
+    const preferred = path.join(dir, "playtest.yaml");
+    const legacy = path.join(dir, "dummy.yaml");
+    if (existsSync(preferred)) files.unshift(preferred);
+    else if (existsSync(legacy)) {
+      files.unshift(legacy);
+      if (!warnedDeprecatedDefaults) {
+        warnedDeprecatedDefaults = true;
+        console.error(`note: ${path.relative(process.cwd(), legacy)} is deprecated; rename it to playtest.yaml`);
+      }
+    }
     if (dir === top) break;
     const parent = path.dirname(dir);
     if (parent === dir) break;

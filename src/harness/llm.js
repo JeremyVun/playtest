@@ -5,14 +5,17 @@
 export class LlmError extends Error {}
 
 export function llmConfig() {
-  const baseUrl = (process.env.DUMMY_LLM_BASE_URL || "https://api.anthropic.com/v1").replace(/\/+$/, "");
+  // PLAYTEST_* are the documented names; DUMMY_* remain as deprecated fallbacks.
+  const baseUrlOverride = process.env.PLAYTEST_LLM_BASE_URL || process.env.DUMMY_LLM_BASE_URL || null;
+  const baseUrl = (baseUrlOverride || "https://api.anthropic.com/v1").replace(/\/+$/, "");
   const apiKey =
+    process.env.PLAYTEST_LLM_API_KEY ||
     process.env.DUMMY_LLM_API_KEY ||
     process.env.ANTHROPIC_API_KEY ||
     process.env.OPENAI_API_KEY ||
     null;
   // Mock servers need no key: any explicit base URL override counts as available.
-  const available = Boolean(apiKey || process.env.DUMMY_LLM_BASE_URL);
+  const available = Boolean(apiKey || baseUrlOverride);
   return { baseUrl, apiKey, available };
 }
 
@@ -32,7 +35,7 @@ const ATTEMPT_TIMEOUT_MS = 60000;
 export async function chat({ model, messages, tools = null, toolChoice = null, maxTokens = 1024, signal = null }) {
   const { baseUrl, apiKey, available } = llmConfig();
   if (!available) {
-    throw new LlmError("no LLM configured: set DUMMY_LLM_API_KEY (or ANTHROPIC_API_KEY / OPENAI_API_KEY) or DUMMY_LLM_BASE_URL");
+    throw new LlmError("no LLM configured: set PLAYTEST_LLM_API_KEY (or ANTHROPIC_API_KEY / OPENAI_API_KEY) or PLAYTEST_LLM_BASE_URL");
   }
 
   const body = { model, messages, max_tokens: maxTokens };

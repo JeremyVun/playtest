@@ -1,10 +1,10 @@
 {
-  "name": "dummy",
+  "name": "@jeremyvun/playtest",
   "version": "0.1.0",
-  "description": "Agentic regression testing for web apps: an AI agent role-plays a user against your app and the harness scores whether the app let it succeed.",
+  "description": "User journey testing for web apps: an AI agent role-plays a user against your app and the harness scores whether the app let it succeed.",
   "type": "module",
   "bin": {
-    "dummy": "./src/harness/cli.js"
+    "playtest": "./src/harness/cli.js"
   },
   "scripts": {
     "todo-app": "node src/todo-app/server.js",

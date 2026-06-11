@@ -13,12 +13,12 @@ import {
   readBaseline,
 } from "./trajectory.js";
 import { Session } from "./browser.js";
-import { Actor, loadPersona } from "./actor.js";
+import { Actor, loadPersona, describeAction } from "./actor.js";
 import { evaluateGate } from "./gate.js";
 import { gradeRun, checkAssertion } from "./grader.js";
 import { llmConfig, estimateCost } from "./llm.js";
 import { prepareEnv, InfraError } from "./env.js";
-import { caseLine, summary, junitXml } from "./report.js";
+import { junitXml } from "./report.js";
 
 const HARD_TIMEOUT = Symbol("hard timeout");
 
@@ -42,16 +42,28 @@ function addTokens(total, t) {
 
 /**
  * Run one case end to end. Never throws; InfraError -> status "infra".
+ * `onEvent` receives progress events ({ type, caseId, runIndex, ...payload }):
+ * case_start, env_ready, step_start, step_result, heal_start, grading,
+ * gate_fail, warn, case_end (emitted on every exit path, infra included).
  * @param {object} rc ResolvedCase
  * @param {{ mode?: "auto"|"agent", runsRoot: string, runId: string, grade?: boolean,
- *           headed?: boolean, rebaseline?: boolean, runIndex?: number }} opts
- * @returns {Promise<{ status: "pass"|"fail"|"infra", runDir: string, manifest: object, error?: string }>}
+ *           headed?: boolean, rebaseline?: boolean, runIndex?: number,
+ *           onEvent?: (event: object) => void }} opts
+ * @returns {Promise<{ status: "pass"|"fail"|"infra", runDir: string, manifest: object,
+ *   score: number|null, error?: string }>} score is the grade when this run graded
  */
 export async function runCase(rc, opts) {
-  const { runsRoot, runId, mode = "auto", grade = true, headed = false, rebaseline = false, runIndex = 1 } = opts;
+  const { runsRoot, runId, mode = "auto", grade = true, headed = false, rebaseline = false, runIndex = 1, onEvent = () => {} } = opts;
   const writer = new RunWriter(runsRoot, runId, runIndex > 1 ? `${rc.id}-${runIndex}` : rc.id);
   const startedAt = new Date();
   const llm = llmConfig();
+  // A throwing progress listener must not break the case (contract §10:
+  // runCase never throws).
+  const emit = (type, payload = {}) => {
+    try {
+      onEvent({ type, caseId: rc.id, runIndex, ...payload });
+    } catch {}
+  };
 
   // A corrupt/unparseable committed baseline must fail this case as infra,
   // not throw out of runCase (contract §10: never throws).
@@ -65,6 +77,7 @@ export async function runCase(rc, opts) {
     }
   }
   const startMode = baseline && actionTrack(baseline.envelopes).length > 0 ? "act" : "record";
+  emit("case_start", { mode: startMode, maxSteps: rc.limits.max_steps, runDir: writer.dir });
 
   // Mutable run state shared with the loops.
   const abort = new AbortController();
@@ -88,13 +101,25 @@ export async function runCase(rc, opts) {
       consoleErrors: 0, baseline, willGrade: false,
     });
     writer.writeManifest(manifest);
-    return { status: "infra", runDir: writer.dir, manifest, error };
+    const result = { status: "infra", runDir: writer.dir, manifest, score: null, error };
+    emit("case_end", { status: "infra", result });
+    return result;
   };
 
   if (baselineError) return finishInfra(baselineError);
 
+  // Resolve the persona before any env/browser work: an unknown persona is a
+  // config error (infra, exit 2), surfaced loudly even on act-mode runs that
+  // would only need it to heal.
+  let persona;
+  try {
+    persona = loadPersona(rc.persona, rc.file);
+  } catch (e) {
+    return finishInfra(firstLine(e));
+  }
+
   if (startMode === "record" && !llm.available) {
-    return finishInfra("record mode needs a model: set DUMMY_LLM_BASE_URL or an API key");
+    return finishInfra("record mode needs a model: set PLAYTEST_LLM_BASE_URL or an API key");
   }
 
   let env;
@@ -103,6 +128,7 @@ export async function runCase(rc, opts) {
   } catch (e) {
     return finishInfra(e.message);
   }
+  emit("env_ready", { base_url: env.baseUrl, managed: env.managed });
 
   let session;
   try {
@@ -129,7 +155,7 @@ export async function runCase(rc, opts) {
 
     if (startMode === "act") {
       writer.copyBaseline(baselinePaths(rc.file).traj);
-      const failed = await actLoop({ session, writer, rc, deadline, r, baselineEnvelopes: baseline.envelopes });
+      const failed = await actLoop({ session, writer, rc, deadline, r, emit, baselineEnvelopes: baseline.envelopes });
       if (failed) {
         if (!llm.available) {
           // contract: an unhealable act failure is a gate failure
@@ -139,10 +165,11 @@ export async function runCase(rc, opts) {
           return;
         }
         actualMode = "heal";
-        await recordLoop({ session, writer, rc, deadline, r });
+        emit("heal_start", { failedStep: failed.step });
+        await recordLoop({ session, writer, rc, persona, deadline, r, emit });
       }
     } else {
-      await recordLoop({ session, writer, rc, deadline, r });
+      await recordLoop({ session, writer, rc, persona, deadline, r, emit });
     }
   };
 
@@ -187,8 +214,11 @@ export async function runCase(rc, opts) {
     harEntries: readHar(writer.dir),
     consoleErrorCount: session.consoleErrors(),
     // the harness-side initial page load isn't an envelope; include its nav
-    // vitals so perf.lcp_ms can gate single-page cases
-    trajectory: r.initialNav ? [{ perf: r.initialNav.perf }, ...r.envelopes] : r.envelopes,
+    // vitals (perf.lcp_ms gates single-page cases) and its network requests
+    // (api_called must see first-load calls like the app's bootstrap GET)
+    trajectory: r.initialNav
+      ? [{ perf: r.initialNav.perf, network: r.initialNav.network }, ...r.envelopes]
+      : r.envelopes,
     finalUrl,
     checkAssertion: llm.available
       ? (claim) =>
@@ -199,6 +229,7 @@ export async function runCase(rc, opts) {
           })
       : null,
   });
+  if (!gate.pass) emit("gate_fail", { checks: gate.checks.filter((c) => !c.pass) });
   const status = gate.pass && !actFailedUnhealed ? "pass" : "fail";
   const willGrade = grade && llm.available && actualMode !== "act";
 
@@ -210,11 +241,15 @@ export async function runCase(rc, opts) {
   await session.close().catch(() => {});
   await env.teardown();
 
+  // The score rides on the result so trend lines and --json need not re-read
+  // grade.json.
+  let score = null;
   if (willGrade) {
+    emit("grading");
     try {
-      await gradeRun(writer.dir, rc);
+      score = (await gradeRun(writer.dir, rc)).score ?? null;
     } catch (e) {
-      console.error(`warning: grading ${rc.id} failed: ${firstLine(e)}`);
+      emit("warn", { message: `warning: grading ${rc.id} failed: ${firstLine(e)}` });
       manifest.artifacts.grade = null;
       writer.writeManifest(manifest);
     }
@@ -225,17 +260,27 @@ export async function runCase(rc, opts) {
     // throw here, and must not be silently overwritten by a bless.
     if (actualMode === "record" && (rebaseline || !fs.existsSync(baselinePaths(rc.file).traj))) {
       blessBaseline(rc.file, writer.dir);
+      if (rebaseline) {
+        // A refreshed baseline invalidates any pending healed candidate: that
+        // candidate diffs against the baseline this bless just replaced.
+        const p = baselinePaths(rc.file);
+        fs.rmSync(p.healedTraj, { force: true });
+        fs.rmSync(p.healedMeta, { force: true });
+      }
     } else if (actualMode === "heal") {
       blessBaseline(rc.file, writer.dir, { healed: true });
     }
   }
 
-  return { status, runDir: writer.dir, manifest, ...(r.runError ? { error: r.runError } : {}) };
+  const result = { status, runDir: writer.dir, manifest, score, ...(r.runError ? { error: r.runError } : {}) };
+  emit("case_end", { status, result });
+  return result;
 }
 
 /** Agentic loop (record, and heal continuation). Budget is total max_steps. */
-async function recordLoop({ session, writer, rc, deadline, r }) {
-  const actor = new Actor(rc, loadPersona(rc.persona, rc.file));
+async function recordLoop({ session, writer, rc, persona, deadline, r, emit }) {
+  const actor = new Actor(rc, persona);
+  const costSoFar = () => estimateCost(rc.actor_model, r.tokens);
   while (r.envelopes.length < rc.limits.max_steps) {
     if (r.aborted) return;
     if (Date.now() >= deadline) {
@@ -254,6 +299,8 @@ async function recordLoop({ session, writer, rc, deadline, r }) {
     });
     if (r.aborted) return;
     addTokens(r.tokens, tokens);
+    // The summary only exists once the model has decided; one event per step.
+    emit("step_start", { step: stepNum, summary: describeAction(agentStep.action) });
 
     const envelope = {
       step: stepNum,
@@ -268,10 +315,12 @@ async function recordLoop({ session, writer, rc, deadline, r }) {
         result: { ok: true, error: null, settle_ms: 0, url: snap.url },
         perf: emptyPerf(),
         artifacts: artifactsFor(stepNum, []),
+        network: { requests: [] },
         tokens,
       });
       writer.appendEnvelope(envelope);
       r.envelopes.push(envelope);
+      emit("step_result", { step: stepNum, ok: true, error: null, settleMs: 0, costSoFar: costSoFar() });
       r.endReason = type;
       return;
     }
@@ -283,6 +332,7 @@ async function recordLoop({ session, writer, rc, deadline, r }) {
       result: { ok: exec.ok, error: exec.error, settle_ms: exec.settle_ms, url: exec.url ?? null },
       perf: exec.perf,
       artifacts: artifactsFor(stepNum, exec.har_entries),
+      network: exec.network,
       tokens,
     });
     const confusion = await detectConfusion(envelope, r.envelopes, exec, before, session);
@@ -290,6 +340,7 @@ async function recordLoop({ session, writer, rc, deadline, r }) {
     if (confusion) envelope.confusion = confusion;
     writer.appendEnvelope(envelope);
     r.envelopes.push(envelope);
+    emit("step_result", { step: stepNum, ok: exec.ok, error: exec.error, settleMs: exec.settle_ms, costSoFar: costSoFar() });
   }
   r.endReason = "max_steps";
 }
@@ -298,7 +349,7 @@ async function recordLoop({ session, writer, rc, deadline, r }) {
  * Walk the baseline's action track. Returns the failed baseline step (heal
  * point) or null when the track completed / deadline hit.
  */
-async function actLoop({ session, writer, rc, deadline, r, baselineEnvelopes }) {
+async function actLoop({ session, writer, rc, deadline, r, emit, baselineEnvelopes }) {
   for (const baseStep of actionTrack(baselineEnvelopes)) {
     if (r.aborted) return null;
     if (Date.now() >= deadline) {
@@ -306,6 +357,8 @@ async function actLoop({ session, writer, rc, deadline, r, baselineEnvelopes }) 
       return null;
     }
     const stepNum = r.envelopes.length + 1;
+    // Acted steps replay a known action: the summary is known up front.
+    emit("step_start", { step: stepNum, summary: describeAction(actionOf(baseStep)) });
     const snap = await session.captureSnapshot(stepNum);
     r.lastSnapshot = snap.text;
     const exec = await session.executeLocator(baseStep);
@@ -321,10 +374,15 @@ async function actLoop({ session, writer, rc, deadline, r, baselineEnvelopes }) 
       result: { ok: exec.ok, error: exec.error, settle_ms: exec.settle_ms, url: exec.url ?? null },
       perf: exec.perf,
       artifacts: artifactsFor(stepNum, exec.har_entries),
+      network: exec.network,
     };
     if (!exec.ok) envelope.confusion = { type: "action_failed", note: exec.error };
     writer.appendEnvelope(envelope);
     r.envelopes.push(envelope);
+    emit("step_result", {
+      step: stepNum, ok: exec.ok, error: exec.error, settleMs: exec.settle_ms,
+      costSoFar: estimateCost(rc.actor_model, r.tokens),
+    });
     if (!exec.ok) return baseStep;
   }
 
@@ -349,9 +407,12 @@ async function actLoop({ session, writer, rc, deadline, r, baselineEnvelopes }) 
     result: { ok: true, error: null, settle_ms: 0, url: finalUrl },
     perf: emptyPerf(),
     artifacts: artifactsFor(stepNum, []),
+    network: { requests: [] },
   };
   writer.appendEnvelope(envelope);
   r.envelopes.push(envelope);
+  emit("step_start", { step: stepNum, summary: describeAction(envelope.action) });
+  emit("step_result", { step: stepNum, ok: true, error: null, settleMs: 0, costSoFar: estimateCost(rc.actor_model, r.tokens) });
   r.endReason = "done";
   return null;
 }
@@ -455,12 +516,22 @@ function readHar(runDir) {
 }
 
 /**
- * Run every case (honoring runs_per_case), print report lines, write JUnit.
+ * Run every case (honoring runs_per_case), write JUnit. All console output
+ * goes through `opts.reporter` ({ onEvent(event), done(results) }) so the CLI
+ * chooses plain lines, a live TTY region, or silence (--json).
  * Serial for external envs; managed-only selections run parallel min(4, cores);
  * --parallel overrides.
  * @returns {Promise<{ exitCode: 0|1|2, results: object[] }>}
  */
 export async function runAll(resolvedCases, opts) {
+  const reporter = opts.reporter ?? { onEvent: () => {}, done: () => {} };
+  // One guard for every emission: a throwing reporter must not break the run.
+  const onEvent = (event) => {
+    try {
+      reporter.onEvent(event);
+    } catch {}
+  };
+
   const jobs = [];
   for (const rc of resolvedCases) {
     for (let i = 1; i <= (rc.runs_per_case ?? 1); i++) jobs.push({ rc, runIndex: i });
@@ -481,18 +552,25 @@ export async function runAll(resolvedCases, opts) {
       const { rc, runIndex } = jobs[i];
       // runCase never throws per contract, but stay defensive: one rejected
       // job must not reject Promise.all and suppress the report/JUnit output.
-      results[i] = await runCase(rc, { ...opts, runIndex }).catch((e) => ({
-        status: "infra",
-        runDir: null,
-        manifest: null,
-        error: `runner error for ${rc.id}: ${firstLine(e)}`,
-      }));
-      console.log(caseLine(results[i]));
+      // This catch is the one exit runCase cannot see, so emit its case_end.
+      results[i] = await runCase(rc, { ...opts, runIndex, onEvent }).catch((e) => {
+        const result = {
+          status: "infra",
+          runDir: null,
+          manifest: null,
+          score: null,
+          error: `runner error for ${rc.id}: ${firstLine(e)}`,
+        };
+        onEvent({ type: "case_end", caseId: rc.id, runIndex, status: "infra", result });
+        return result;
+      });
     }
   };
   await Promise.all(Array.from({ length: Math.min(concurrency, jobs.length) || 1 }, worker));
 
-  console.log(summary(results));
+  try {
+    reporter.done(results);
+  } catch {}
   if (opts.junit) fs.writeFileSync(opts.junit, junitXml(results));
 
   const anyFail = results.some((res) => res.status === "fail");

@@ -1,6 +1,6 @@
 // The actor loop's brain (CONTRACTS.md §6): persona resolution, cache-efficient
 // context assembly, forced-tool step extraction, schema validation.
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import YAML from "yaml";
@@ -16,34 +16,78 @@ const validateStep = ajv.compile(stepSchema);
 
 const BUILTIN_PERSONAS = ["tester", "exploratory"];
 
-/** @returns {{ name: string, description: string }} */
-export function loadPersona(name, caseFile) {
-  if (BUILTIN_PERSONAS.includes(name)) {
-    return { name, description: prompt(`persona-${name}.md`).trim() };
-  }
-  let dir = caseFile ? dirname(resolve(caseFile)) : process.cwd();
+/** Existing personas/ dirs from `fromDir` up to the repo root, nearest first. */
+function personaDirs(fromDir) {
+  const dirs = [];
+  let dir = fromDir;
   for (;;) {
-    const personasDir = join(dir, "personas");
-    if (existsSync(personasDir)) {
-      for (const file of readdirSync(personasDir)) {
-        if (!/\.ya?ml$/.test(file)) continue;
-        let parsed;
-        try {
-          parsed = YAML.parse(readFileSync(join(personasDir, file), "utf8"));
-        } catch {
-          continue;
-        }
-        if (parsed?.name === name || basename(file).replace(/\.ya?ml$/, "") === name) {
-          return { name, description: String(parsed?.description ?? "").trim() };
-        }
-      }
-    }
+    const d = join(dir, "personas");
+    if (existsSync(d)) dirs.push(d);
     const parent = dirname(dir);
     // The dir containing .git is the repo root: search it, then stop.
     if (existsSync(join(dir, ".git")) || parent === dir) break;
     dir = parent;
   }
-  throw new Error(`persona "${name}" not found: not a built-in, and no matching personas/*.yaml between ${caseFile ?? process.cwd()} and the repo root`);
+  return dirs;
+}
+
+/** Parseable personas/*.yaml entries, nearest dir first; loadPersona matches name or slug. */
+function customPersonas(fromDir) {
+  const out = [];
+  for (const personasDir of personaDirs(fromDir)) {
+    for (const file of readdirSync(personasDir)) {
+      if (!/\.ya?ml$/.test(file)) continue;
+      let parsed;
+      try {
+        parsed = YAML.parse(readFileSync(join(personasDir, file), "utf8"));
+      } catch {
+        continue;
+      }
+      const slug = basename(file).replace(/\.ya?ml$/, "");
+      out.push({
+        name: typeof parsed?.name === "string" ? parsed.name : slug,
+        slug,
+        description: String(parsed?.description ?? "").trim(),
+        file: join(personasDir, file),
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * Built-ins plus every custom persona visible from a case file or directory.
+ * @returns {{ name: string, file: string|null }[]} file null -> built-in
+ */
+export function listPersonas(fromDirOrCaseFile = process.cwd()) {
+  let start = resolve(fromDirOrCaseFile);
+  try {
+    if (!statSync(start).isDirectory()) start = dirname(start);
+  } catch {
+    start = dirname(start);
+  }
+  return [
+    ...BUILTIN_PERSONAS.map((name) => ({ name, file: null })),
+    ...customPersonas(start).map(({ name, file }) => ({ name, file })),
+  ];
+}
+
+/** @returns {{ name: string, description: string }} */
+export function loadPersona(name, caseFile) {
+  if (BUILTIN_PERSONAS.includes(name)) {
+    return { name, description: prompt(`persona-${name}.md`).trim() };
+  }
+  const start = caseFile ? dirname(resolve(caseFile)) : process.cwd();
+  const match = customPersonas(start).find((p) => p.name === name || p.slug === name);
+  if (match) return { name, description: match.description };
+  // Single line: runner truncates run errors with firstLine().
+  const dirs = personaDirs(start);
+  const searched = dirs.length
+    ? `searched ${dirs.join(", ")}`
+    : `no personas/ directory between ${start} and the repo root`;
+  throw new Error(
+    `persona "${name}" not found: not a built-in, and no matching personas/*.yaml (${searched}). Create one with: playtest new persona ${name}`,
+  );
 }
 
 /** Human-readable one-liner for a step action (also used by the grader digest). */
@@ -70,23 +114,14 @@ function stepLine(env) {
   return `step ${env.step}: ${what} -> ${outcome}${url ? ` | url now ${url}` : ""}`;
 }
 
-const VERBOSE_STEPS = 15;
-const FOLD_BATCH = 10;
-
-// Compact append-only log: recent steps verbose (with thoughts), older steps
-// folded to one line each with thoughts dropped. Folding happens in batches of
-// FOLD_BATCH so the folded prefix is byte-stable between turns (prompt
-// caching); the verbose tail holds the last 15-24 steps.
+// Append-only log: every step's line plus its thought, never rewritten, so
+// the prefix is byte-stable between turns (prompt caching). Bounded by
+// max_steps (50 by default), a few thousand tokens at worst — the per-turn
+// page snapshot dwarfs it.
 function renderLog(history) {
   if (!history.length) return "Steps so far: (none — this is your first step)";
   const lines = ["Steps so far:"];
-  const fold = Math.floor(Math.max(0, history.length - VERBOSE_STEPS) / FOLD_BATCH) * FOLD_BATCH;
-  if (fold > 0) {
-    lines.push(`steps 1-${fold} (thoughts dropped):`);
-    for (const env of history.slice(0, fold)) lines.push(stepLine(env));
-    lines.push(`steps ${fold + 1} onward:`);
-  }
-  for (const env of history.slice(fold)) {
+  for (const env of history) {
     lines.push(stepLine(env));
     if (env.agent?.thought) lines.push(`  thought: ${oneLine(env.agent.thought)}`);
   }

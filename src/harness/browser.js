@@ -11,6 +11,14 @@ const SETTLE_POLL_MS = 50;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+function pathnameOf(url) {
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return url;
+  }
+}
+
 /**
  * @typedef {object} ExecResult
  * @property {boolean} ok
@@ -21,6 +29,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  * @property {{input_to_paint_ms: number|null, long_tasks_ms: number, requests: number,
  *             js_errors: number, nav: object|null}} perf
  * @property {number[]} har_entries
+ * @property {{requests: {method: string, url: string, path: string, status: number,
+ *             mime_type: string, failed: boolean}[]}} network compact per-step
+ *           request list embedded into the envelope (portable without har.json)
  */
 
 // Init script, installed on every document: mutation timestamp for dom-quiet,
@@ -199,6 +210,7 @@ export class Session {
   #cdp = null;
   #runDir;
   #har = [];
+  #harCursor = 0; // end of the previous step's HAR window (see #run)
   #reqInfo = new Map(); // request -> { index, startMs }
   #inflight = new Set();
   #lastNetAt = 0;
@@ -371,7 +383,15 @@ export class Session {
 
   /** Perform one action inside a perf window; always returns an ExecResult. */
   async #run(action, locator, resolution) {
-    const harStart = this.#har.length;
+    // HAR/network windows are contiguous: each starts where the previous
+    // step's ended, so requests landing between steps (agent think time)
+    // attribute to the NEXT step. Tail requests after the final step stay
+    // only in har.json.
+    const harStart = this.#harCursor;
+    // perf.requests counts only requests started at/after action dispatch:
+    // think-time requests belong in the step's HAR/network window but must not
+    // mask the no_effect heuristic (perf.requests === 0) or skew perf data.
+    const perfStart = this.#har.length;
     const errStart = this.#errors;
     let longTasksStart = 0;
     try {
@@ -389,8 +409,28 @@ export class Session {
     const settle_ms = await this.#settle();
     const win = await this.#readWindow();
     const navigated = action.type === "navigate" || !win.sameDoc;
+    // Embedded network data carries stable fields only (no timings/sizes —
+    // they jitter committed baselines); har.json keeps the rich detail. Known
+    // freeze: a request still pending at settle embeds status 0 even if it
+    // completes later — har.json shows the real status.
     const harEntries = [];
-    for (let i = harStart; i < this.#har.length; i++) harEntries.push(i);
+    const requests = [];
+    const harEnd = this.#har.length;
+    for (let i = harStart; i < harEnd; i++) {
+      harEntries.push(i);
+      const e = this.#har[i];
+      requests.push({
+        method: e.request.method,
+        url: e.request.url,
+        // pathname only: api_called globs like "/api/todos*" match paths, not
+        // full URLs. Raw string fallback when the URL doesn't parse.
+        path: pathnameOf(e.request.url),
+        status: e.response.status,
+        mime_type: e.response.mimeType,
+        failed: e._failed,
+      });
+    }
+    this.#harCursor = harEnd;
     this.#flushHar();
 
     return {
@@ -402,7 +442,7 @@ export class Session {
       perf: {
         input_to_paint_ms: navigated || win.paint == null ? null : Math.round(win.paint),
         long_tasks_ms: Math.round(navigated ? win.longTasksMs : Math.max(0, win.longTasksMs - longTasksStart)),
-        requests: harEntries.length,
+        requests: Math.max(0, harEnd - perfStart),
         js_errors: this.#errors - errStart,
         nav: navigated
           ? {
@@ -413,6 +453,7 @@ export class Session {
           : null,
       },
       har_entries: harEntries,
+      network: { requests },
     };
   }
 
@@ -558,6 +599,7 @@ export class Session {
       url: this.#pageUrl(),
       perf: { input_to_paint_ms: null, long_tasks_ms: 0, requests: 0, js_errors: 0, nav: null },
       har_entries: [],
+      network: { requests: [] },
     };
   }
 }

@@ -27,7 +27,7 @@ function parseSnapshot(text) {
 }
 
 // Prior-step log lines per actor.js: `step 1: type "buy milk" into e2 -> ok`
-// plus `  thought: ...` lines on the verbose (last 15) steps.
+// plus a `  thought: ...` line on every agent step (the log is unfolded).
 function parseHistory(logText) {
   const typed = new Set();
   const thoughts = [];

@@ -8,7 +8,7 @@ import {
   newRunId,
   readBaseline,
   baselinePaths,
-  blessBaseline,
+  acceptBaseline,
   promoteHealed,
   rejectHealed,
   HARNESS_VERSION,
@@ -41,7 +41,7 @@ Workflow:
   playtest refresh <paths>   create fresh saved paths
   playtest list              list discovered suites and cases
 
-Advanced hidden commands also exist: run, accept, reject, grade, bless, rebaseline — each supports --help.`,
+Advanced hidden commands also exist: run, accept, reject, grade — each supports --help.`,
 );
 
 const collect = (v, all) => [...all, v];
@@ -89,7 +89,7 @@ const shellQuote = (s) => (/^[A-Za-z0-9@%+=:,./_-]+$/.test(s) ? s : `'${String(s
 
 const parseParallel = (v) => (v === undefined ? null : v === true ? true : Number(v));
 
-// Trend context (IMPROVEMENTS "Historical Trends"): the runs root is scanned
+// Trend context: the runs root is scanned
 // once before runAll; each finished case is compared against its prior runs.
 const makeTrendFor = (history) => (result) =>
   computeTrend(history.get(result.manifest?.case?.id) ?? [], result);
@@ -127,7 +127,7 @@ function computeTrend(prior, result) {
   return { duration_delta_ms, score_delta, status_streak };
 }
 
-// Reporter seam (IMPROVEMENTS "Live Progress During Runs"): live region on an
+// Reporter seam: live region on an
 // interactive terminal, today's plain lines otherwise, silence under --json
 // (warnings still reach stderr there). Trend text is content, not decoration —
 // the plain reporter carries it too.
@@ -163,7 +163,7 @@ function environmentLine(cases) {
   return `Environment: external ${env.base_url}`;
 }
 
-// End-of-run next actions (IMPROVEMENTS "End-Of-Run Prompts"). Deliberately
+// End-of-run next actions. Deliberately
 // dumb lines; promptChanged below is the interactive layer.
 function printNextActions(results, runsDir) {
   const changed = results.some((res) => res.status === "pass" && res.manifest?.healed);
@@ -321,7 +321,7 @@ program
       headed: opts.headed,
       parallel: parseParallel(opts.parallel),
       junit: opts.junit ?? null,
-      rebaseline: false,
+      refresh: false,
       reporter: makeReporter(opts, trendFor),
     });
     const pending = pendingChanged(results);
@@ -417,43 +417,40 @@ program
     await serveRun(root, { port: Number(opts.port), open: opts.open, query: q.size ? `?${q}` : "" });
   }));
 
-// `refresh` (old name: rebaseline) re-records and accepts passing runs.
-const refreshAction = run(async (paths, opts) => {
-  const cases = await discoverCases(paths, { tags: opts.tag, baseUrl: opts.baseUrl ?? null });
-  if (!cases.length) die("no cases matched");
-  const runId = newRunId();
-  console.log(`refresh ${runId} — ${cases.length} case(s)`);
-  const envLine = environmentLine(cases);
-  if (envLine) console.log(envLine);
-  console.log("");
-  const { exitCode } = await runAll(cases, {
-    mode: "agent",
-    runsRoot: opts.runsRoot,
-    runId,
-    grade: true,
-    headed: opts.headed,
-    parallel: parseParallel(opts.parallel),
-    junit: null,
-    rebaseline: true,
-    reporter: makeReporter(opts, makeTrendFor(scanHistory(opts.runsRoot))),
-  });
-  process.exitCode = exitCode;
-});
-const refreshCommand = (name, opts) =>
-  program
-    .command(name, opts)
-    .argument("<paths...>", "case files and/or directories")
-    .option("--tag <tag>", "only cases with this tag (repeatable)", collect, [])
-    .option("--base-url <url>", "override env.base_url (forces external mode)")
-    .option("--parallel [n]", "run cases in parallel (default pool when n omitted)")
-    .option("--headed", "show the browser", false)
-    .option("--runs-root <dir>", "where run directories are written", "runs")
-    .option("--ci", "non-interactive CI mode: plain output", false)
-    .option("--plain", "plain line-per-case output (no live status region)", false)
-    .option("--no-tui", "same as --plain")
-    .action(refreshAction);
-refreshCommand("refresh").description("create fresh saved paths from scratch (re-record and save passing runs)");
-refreshCommand("rebaseline", { hidden: true }).description("old name for refresh");
+// `refresh` re-records and accepts passing runs.
+program
+  .command("refresh")
+  .description("create fresh saved paths from scratch (re-record and save passing runs)")
+  .argument("<paths...>", "case files and/or directories")
+  .option("--tag <tag>", "only cases with this tag (repeatable)", collect, [])
+  .option("--base-url <url>", "override env.base_url (forces external mode)")
+  .option("--parallel [n]", "run cases in parallel (default pool when n omitted)")
+  .option("--headed", "show the browser", false)
+  .option("--runs-root <dir>", "where run directories are written", "runs")
+  .option("--ci", "non-interactive CI mode: plain output", false)
+  .option("--plain", "plain line-per-case output (no live status region)", false)
+  .option("--no-tui", "same as --plain")
+  .action(run(async (paths, opts) => {
+    const cases = await discoverCases(paths, { tags: opts.tag, baseUrl: opts.baseUrl ?? null });
+    if (!cases.length) die("no cases matched");
+    const runId = newRunId();
+    console.log(`refresh ${runId} — ${cases.length} case(s)`);
+    const envLine = environmentLine(cases);
+    if (envLine) console.log(envLine);
+    console.log("");
+    const { exitCode } = await runAll(cases, {
+      mode: "agent",
+      runsRoot: opts.runsRoot,
+      runId,
+      grade: true,
+      headed: opts.headed,
+      parallel: parseParallel(opts.parallel),
+      junit: null,
+      refresh: true,
+      reporter: makeReporter(opts, makeTrendFor(scanHistory(opts.runsRoot))),
+    });
+    process.exitCode = exitCode;
+  }));
 
 program
   .command("list")
@@ -541,7 +538,7 @@ function acceptRun(runDir) {
           ` (${candidate.run_dir ?? "?"}) is superseded by this accept`,
       );
     }
-    meta = blessBaseline(caseFile, dir);
+    meta = acceptBaseline(caseFile, dir);
     fs.rmSync(p.healedTraj, { force: true });
     fs.rmSync(p.healedMeta, { force: true });
   }
@@ -550,7 +547,6 @@ function acceptRun(runDir) {
 
 program
   .command("accept", { hidden: true })
-  .alias("bless")
   .description("accept this run's trajectory as its case's new saved path (baseline)")
   .argument("<runDir>")
   .action(run(async (runDir) => acceptRun(runDir)));

@@ -136,14 +136,14 @@ export function readBaseline(caseFile) {
 }
 
 /** Copy the run's trajectory next to the case file; healed runs become review candidates. */
-export function blessBaseline(caseFile, runDir, { healed = false } = {}) {
+export function acceptBaseline(caseFile, runDir, { healed = false } = {}) {
   const manifest = JSON.parse(fs.readFileSync(path.join(runDir, "manifest.json"), "utf8"));
   const meta = {
-    blessed_at: new Date().toISOString(),
+    accepted_at: new Date().toISOString(),
     run_id: manifest.run_id,
     run_dir: path.resolve(runDir),
     // Provenance survives `playtest accept <healRunDir>` too: a heal run's
-    // manifest records which baseline it healed from even when blessed directly.
+    // manifest records which baseline it healed from even when accepted directly.
     healed_from_run_id: healed || manifest.healed ? (manifest.baseline?.run_id ?? null) : null,
     pins: manifest.pins,
     ...(healed ? { candidate: true } : {}),

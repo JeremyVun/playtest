@@ -1,4 +1,4 @@
-// Live TTY reporter (IMPROVEMENTS "Live Progress During Runs"): one updating
+// Live TTY reporter: one updating
 // line per active case at the bottom of the output; finished case lines,
 // heal transitions, gate failures and warnings print permanently above it, so
 // scrollback reads exactly like the plain reporter. TTY-only by construction —

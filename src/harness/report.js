@@ -26,8 +26,8 @@ function failedChecks(manifest) {
   return (manifest?.result?.gate?.checks ?? []).filter((c) => !c.pass);
 }
 
-// Internal mode words stay 'record'|'act'|'heal'; only display changes
-// (IMPROVEMENTS "Status Terms"). The viewer keeps an inline copy of this map.
+// Internal mode words stay 'record'|'act'|'heal'; only display changes.
+// The viewer keeps an inline copy of this map.
 const MODE_LABEL = { record: "recording", act: "checking", heal: "healing" };
 
 /** User-facing label for a run's mode; a healed pass is a "changed" journey. */
@@ -38,8 +38,8 @@ export function modeLabel(mode, { healed = false, status } = {}) {
 
 /**
  * One console line (plus indented gate failures) for one run. `trend` is the
- * case's movement vs prior runs (IMPROVEMENTS "Historical Trends", computed in
- * cli.js); zero deltas are suppressed — they read as no movement.
+ * case's movement vs prior runs (computed in cli.js); zero deltas are
+ * suppressed — they read as no movement.
  * @param {{ duration_delta_ms?: number|null, score_delta?: number|null,
  *           status_streak?: string|null }|null} [trend]
  */

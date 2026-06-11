@@ -8,7 +8,7 @@ import {
   actionOf,
   actionTrack,
   baselinePaths,
-  blessBaseline,
+  acceptBaseline,
   firstLine,
   readBaseline,
 } from "./trajectory.js";
@@ -47,13 +47,13 @@ function addTokens(total, t) {
  * gate_fail, warn, case_end (emitted on every exit path, infra included).
  * @param {object} rc ResolvedCase
  * @param {{ mode?: "auto"|"agent", runsRoot: string, runId: string, grade?: boolean,
- *           headed?: boolean, rebaseline?: boolean, runIndex?: number,
+ *           headed?: boolean, refresh?: boolean, runIndex?: number,
  *           onEvent?: (event: object) => void }} opts
  * @returns {Promise<{ status: "pass"|"fail"|"infra", runDir: string, manifest: object,
  *   score: number|null, error?: string }>} score is the grade when this run graded
  */
 export async function runCase(rc, opts) {
-  const { runsRoot, runId, mode = "auto", grade = true, headed = false, rebaseline = false, runIndex = 1, onEvent = () => {} } = opts;
+  const { runsRoot, runId, mode = "auto", grade = true, headed = false, refresh = false, runIndex = 1, onEvent = () => {} } = opts;
   const writer = new RunWriter(runsRoot, runId, runIndex > 1 ? `${rc.id}-${runIndex}` : rc.id);
   const startedAt = new Date();
   const llm = llmConfig();
@@ -69,7 +69,7 @@ export async function runCase(rc, opts) {
   // not throw out of runCase (contract §10: never throws).
   let baseline = null;
   let baselineError = null;
-  if (mode !== "agent" && !rebaseline) {
+  if (mode !== "agent" && !refresh) {
     try {
       baseline = readBaseline(rc.file);
     } catch (e) {
@@ -182,7 +182,7 @@ export async function runCase(rc, opts) {
     });
     const loop = body();
     if ((await Promise.race([loop, cap])) === HARD_TIMEOUT) {
-      // Stop the loop and wait for it to settle before the gate/manifest/bless
+      // Stop the loop and wait for it to settle before the gate/manifest/accept
       // below read shared state: the abort cancels any in-flight LLM call, the
       // aborted flag stops the loop at its next checkpoint, and Playwright ops
       // are bounded by their own timeouts.
@@ -257,18 +257,18 @@ export async function runCase(rc, opts) {
 
   if (status === "pass") {
     // existsSync, not readBaseline: a corrupt-but-present baseline must not
-    // throw here, and must not be silently overwritten by a bless.
-    if (actualMode === "record" && (rebaseline || !fs.existsSync(baselinePaths(rc.file).traj))) {
-      blessBaseline(rc.file, writer.dir);
-      if (rebaseline) {
+    // throw here, and must not be silently overwritten by an accept.
+    if (actualMode === "record" && (refresh || !fs.existsSync(baselinePaths(rc.file).traj))) {
+      acceptBaseline(rc.file, writer.dir);
+      if (refresh) {
         // A refreshed baseline invalidates any pending healed candidate: that
-        // candidate diffs against the baseline this bless just replaced.
+        // candidate diffs against the baseline this accept just replaced.
         const p = baselinePaths(rc.file);
         fs.rmSync(p.healedTraj, { force: true });
         fs.rmSync(p.healedMeta, { force: true });
       }
     } else if (actualMode === "heal") {
-      blessBaseline(rc.file, writer.dir, { healed: true });
+      acceptBaseline(rc.file, writer.dir, { healed: true });
     }
   }
 
@@ -494,7 +494,7 @@ function buildManifest({ rc, runId, mode, startedAt, videoStartedAt, llm, env, r
     healed: mode === "heal",
     baseline:
       mode !== "record" && baseline
-        ? { run_id: baseline.meta?.run_id ?? null, blessed_at: baseline.meta?.blessed_at ?? null }
+        ? { run_id: baseline.meta?.run_id ?? null, accepted_at: baseline.meta?.accepted_at ?? null }
         : null,
     artifacts: {
       trajectory: "trajectory.jsonl",

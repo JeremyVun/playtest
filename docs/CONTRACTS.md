@@ -202,7 +202,7 @@ runs/<run-id>/<case-id>/          # run-id: UTC "2026-06-10T0300-ab12" (timestam
   },
   totals: { steps, executed_steps, tokens: {in, out, cache_read}, cost_usd, console_errors, confusion_events },
   healed: false,
-  baseline: { run_id: "...", blessed_at: "..." } | null,   // what was acted from
+  baseline: { run_id: "...", accepted_at: "..." } | null,   // what was acted from
   artifacts: { trajectory: "trajectory.jsonl", har: "har.json", video: "video.webm",
                trace: "trace.zip", grade: "grade.json" | null, baseline_copy: "baseline.jsonl" | null }
 }
@@ -210,8 +210,8 @@ runs/<run-id>/<case-id>/          # run-id: UTC "2026-06-10T0300-ab12" (timestam
 
 ### Baseline files (live next to the case file, committable)
 
-- `<case>.baseline.jsonl` — the accepted (blessed) trajectory, verbatim copy.
-- `<case>.baseline.json` — `{ blessed_at, run_id, run_dir, healed_from_run_id|null, pins }`
+- `<case>.baseline.jsonl` — the accepted trajectory, verbatim copy.
+- `<case>.baseline.json` — `{ accepted_at, run_id, run_dir, healed_from_run_id|null, pins }`
 - Heal candidates: `<case>.healed.jsonl` + `<case>.healed.json` (same shape + `candidate: true`)
   — the pending "changed journey" awaiting review. `playtest accept` promotes candidate →
   baseline (removing the candidate files); `playtest reject` removes the candidate files
@@ -255,7 +255,7 @@ export function diffTracks(baselineTrack, newTrack)
   // -> { ops: [{ op: "same"|"del"|"add", a: env|null, b: env|null }], summary: { same, del, add } }
 export function baselinePaths(caseFile)   // -> { traj, meta, healedTraj, healedMeta }
 export function readBaseline(caseFile)    // -> { envelopes, meta } | null
-export function blessBaseline(caseFile, runDir, { healed = false } = {})
+export function acceptBaseline(caseFile, runDir, { healed = false } = {})
   // copy runDir/trajectory.jsonl + write meta; healed:true writes the .healed.* candidate instead
 export function promoteHealed(caseFile)   // healed candidate -> baseline; throws if none
 export function rejectHealed(caseFile)    // remove the healed candidate files (run artifacts
@@ -483,7 +483,7 @@ export class InfraError extends Error {}
 ```js
 export async function runCase(resolvedCase, opts)
   // opts: { mode: "auto"|"agent", runsRoot, runId, grade: bool, headed: bool,
-  //         rebaseline: bool, runIndex: int, onEvent: (event) => void }
+  //         refresh: bool, runIndex: int, onEvent: (event) => void }
   // auto: baseline exists -> act (heal on failure); else record.
   // The persona is resolved up front (loadPersona, before env boot / browser launch) and
   //   passed into the loops: an unknown persona is an infra/config failure (status "infra",
@@ -510,15 +510,15 @@ export async function runCase(resolvedCase, opts)
   //   teardown env, then grade (record/heal runs, when opts.grade and LLM available; never
   //   acted runs unless --grade forced; the grade's score rides on the returned result),
   //   then baseline bookkeeping:
-  //   record+pass+(no baseline||rebaseline) -> blessBaseline, and rebaseline also removes any
-  //   stale <case>.healed.* candidate (it diffed against the baseline this bless replaced);
-  //   heal+pass -> blessBaseline({healed:true}) (the pending changed-journey candidate).
+  //   record+pass+(no baseline||refresh) -> acceptBaseline, and refresh also removes any
+  //   stale <case>.healed.* candidate (it diffed against the baseline this accept replaced);
+  //   heal+pass -> acceptBaseline({healed:true}) (the pending changed-journey candidate).
   // Timeout enforcement: wall-clock deadline checked each loop turn; also wraps the whole case.
   // -> { status: "pass"|"fail"|"infra", runDir, manifest, score: number|null, error? }
   //    score = the grade's score when this run graded, else null (always null on infra).
   // Catches InfraError -> status "infra". Never throws.
 export async function runAll(resolvedCases, opts)
-  // opts += { parallel: int|null, junit: path|null, rebaseline: bool,
+  // opts += { parallel: int|null, junit: path|null, refresh: bool,
   //           reporter: { onEvent(event), done(results) } }
   // Serial by default for external envs; managed cases run parallel (min(4, cores)) unless
   // --parallel n overrides. runs_per_case honored (suffix run dirs -2, -3...).
@@ -584,9 +584,8 @@ playtest personas                                      # built-in + custom perso
 ```
 
 Hidden but stable commands: `run` (the explicit default-command spelling),
-`accept <runDir>` (alias `bless`), `reject <runDir>`, `grade <runDir>`, and
-`rebaseline` (old name for `refresh`, identical flags). The top-level help epilogue
-teaches the six-line workflow and names the hidden commands.
+`accept <runDir>`, `reject <runDir>`, and `grade <runDir>`. The top-level help
+epilogue teaches the six-line workflow and names the hidden commands.
 
 Behavior contracts:
 
@@ -667,7 +666,7 @@ Behavior contracts:
   the named run directory, falling back to run_id equality only for old metas lacking
   `run_dir` (run_id alone cannot tell runs_per_case siblings apart): `promoteHealed`.
   When a pending candidate from a DIFFERENT run dir exists: print a supersede note naming
-  its run_dir, then `blessBaseline` directly and remove the candidate files. accept
+  its run_dir, then `acceptBaseline` directly and remove the candidate files. accept
   deliberately has no `--latest`: it rewrites a versioned baseline, so it always names
   the exact run directory.
 - reject: the pending candidate must match the named run directory (same dir-aware match

@@ -1,6 +1,6 @@
-// Shared runs-root discovery and latest-run selection (IMPROVEMENTS "Runs
-// Root Discovery" / "Latest Run Helpers"). Used by `playtest view`; future
-// commands that take an optional run path should resolve through here too.
+// Shared runs-root discovery and latest-run selection. Used by `playtest
+// view`; future commands that take an optional run path should resolve
+// through here too.
 import fs from "node:fs";
 import path from "node:path";
 import { DummyConfigError } from "./config.js";
@@ -37,7 +37,7 @@ export function findRunsRoot(explicit = null, from = process.cwd()) {
 }
 
 /**
- * Pre-run trend scan (IMPROVEMENTS "Historical Trends"): every run under the
+ * Pre-run trend scan: every run under the
  * root, grouped by case id, sorted by manifest.started_at ascending. One scan
  * serves a whole runAll — there is no persistent index; runs/ is the history.
  * Score comes from the sibling grade.json (null when ungraded). Unparseable

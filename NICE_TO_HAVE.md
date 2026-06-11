@@ -1,7 +1,8 @@
 # Playtest Nice-To-Haves
 
-Ideas deliberately descoped from IMPROVEMENTS.md. Nothing here blocks the main
-plan; revisit once the core workflow has settled.
+Ideas deliberately descoped from the improvement planning (now
+IMPROVEMENTS_FOLLOWUP.md). Nothing here blocks the main plan; revisit once
+the core workflow has settled.
 
 ## Interactive `playtest new`
 
@@ -70,8 +71,8 @@ should make review easy, not hide the decision.
 
 ## Full-Screen Run TUI
 
-The live per-case status line in IMPROVEMENTS.md covers the "is it stuck?"
-problem. A richer multi-pane TUI could add a whole-run dashboard:
+The implemented live per-case status line (live.js) covers the "is it
+stuck?" problem. A richer multi-pane TUI could add a whole-run dashboard:
 
 ```txt
 Playtest

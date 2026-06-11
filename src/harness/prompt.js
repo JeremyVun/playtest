@@ -1,4 +1,4 @@
-// End-of-run review prompt (IMPROVEMENTS "End-Of-Run Prompts"). Pure I/O
+// End-of-run review prompt. Pure I/O
 // orchestration: streams and both actions are injected, so the flow is
 // testable with piped streams and cli.js keeps the actual accept/serve logic.
 import readline from "node:readline/promises";

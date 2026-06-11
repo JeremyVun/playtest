@@ -64,9 +64,9 @@ machine-readable summary object on stdout), `--plain`/`--no-tui` (disable the
 live status region), `--fail-on-changed` (exit 1 while changed journeys await
 review).
 
-Advanced commands, hidden from help but stable: `accept <runDir>` (alias
-`bless`), `reject <runDir>`, `grade <runDir>` (re-grade a run), `rebaseline`
-(old name for `refresh`), and `run` (explicit spelling of the default command).
+Advanced commands, hidden from help but stable: `accept <runDir>`,
+`reject <runDir>`, `grade <runDir>` (re-grade a run), and `run` (explicit
+spelling of the default command).
 Subcommand names win over path arguments: run a conflicting path as
 `playtest ./view` or `playtest run view`.
 

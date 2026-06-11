@@ -1,15 +1,19 @@
 # Playtest Follow-Up Improvements
 
-A second planning input, following IMPROVEMENTS.md. That file and
-docs/playtest-design.md are stable inputs used by other consumers — do not
-edit them; new planning goes here. NICE_TO_HAVE.md holds deliberate
-deferrals (including the hosted run service).
+A second planning input, following IMPROVEMENTS.md — now implemented and
+removed (recoverable from git history); its still-relevant material is
+folded in below. docs/playtest-design.md remains a stable input used by
+other consumers — do not edit it; new planning goes here. NICE_TO_HAVE.md
+holds deliberate deferrals (including the hosted run service).
 
-Status of IMPROVEMENTS.md at time of writing: phases 1–5 are implemented
-(CLI contract, creation workflow, zero-arg view, acceptance workflow, live
-progress). Still open from that doc: CLI trend context, viewer movement
-indicators, actor log-folding removal, portable network data, the
-compose-based example suite.
+Status of IMPROVEMENTS.md at removal: phases 1–5 implemented (CLI
+contract, creation workflow, zero-arg view, acceptance workflow, live
+progress), and of its leftovers, CLI trend context (`computeTrend` in
+cli.js), the actor log-folding removal, and portable network data
+(envelopes carry `network.requests`, written by browser.js and preferred
+by gate.js and the viewer) have landed since. Still open: viewer movement
+indicators (§5, now self-contained) and the compose-based example suite
+(deferred — see the leftovers note under Execution Order).
 
 ## Execution Order
 
@@ -25,6 +29,13 @@ follow-through; C and D deepen the product.
 
 ### Milestone A — the guild talk (talk assets + conversion path)
 
+0. **One creation command + `app:` block (§13)** — the surface-naming
+   pass: `playtest new <name>` with lazy `playtest.yaml` scaffolding
+   replaces `new suite`/`new case`, and the `env:` block becomes `app:`.
+   Goes first because it renames exactly what the rest of the milestone
+   freezes and publishes: 1's self-test pins the CLI/JSON contract, 2's
+   demo and 8's skill print the commands, 7's README documents them.
+   Cheapest now; public after the talk.
 1. **Harness self-test (§1)** — first, with a sharper reason: it is the
    insurance that nothing breaks the night before the talk, it freezes the
    contracts later items parse (exit codes, `--json`), and its
@@ -78,8 +89,8 @@ attempt it with the clip backup ready.
 ### Milestone B — post-talk follow-through (convert the interest)
 
 8. **Agent skill (§7)** — if not built as act five. Highest leverage per
-   unit cost in the list; needs the final CLI names (7) and the contract
-   frozen by 1.
+   unit cost in the list; needs the final CLI names (0, 7) and the
+   contract frozen by 1.
 9. **PR journey-diff bot v1 (§6)** — the first team that says "we want
    this on our PRs" after the talk is the pilot; this is what they adopt.
    Scope guard: v1 deltas compare against the baseline only (step count,
@@ -91,10 +102,11 @@ attempt it with the clip backup ready.
 Trend features cannot wow a fresh audience — a sparkline needs weeks of
 history to say anything. They are why users *stay*, not why they *look*.
 
-10. **CLI trend lines + shared comparability module** — IMPROVEMENTS.md
-    "Historical Trends" scope; the entry ticket for 11. Decide the
-    **comparability key** (full pin set + headed flag) here — 16's schema
-    inherits it unchanged.
+10. **Shared comparability module** (the CLI trend lines themselves have
+    landed) — extract cli.js's `computeTrend` into the shared module §5
+    specs and add the vs-recent-median comparison; the entry ticket
+    for 11. Decide the **comparability key** (full pin set + headed flag)
+    here — 16's schema inherits it unchanged.
 11. **Viewer deltas + badges (§5)** — presentation over 10's module.
 12. **`playtest check` (§8)** — completes the agent loop (probe → fix →
     promote); reuses `new`'s scaffolding for `--save`. Below 10/11 because
@@ -114,19 +126,19 @@ history to say anything. They are why users *stay*, not why they *look*.
     comparability key is decided at 10. Build the API/DB only when
     cross-run trends in CI or team dashboards are concretely demanded.
 
-IMPROVEMENTS.md leftovers, interleaved: the actor log-folding removal is
-tiny and protected by 1 — fold it into any early slot (it also slightly
-simplifies what the mock LLM must parse). Portable network data changes the
-envelope/baseline format, so land it before baselines accumulate widely and
-before 16 ever ingests trajectories — slot it inside milestone C. The
+IMPROVEMENTS.md leftovers: the actor log-folding removal and portable
+network data have both landed — envelopes embed compact `network.requests`
+(stable fields only, no timings or sizes, so committed-baseline diffs stay
+jitter-free; `har.json` remains the deep-debug fallback for old runs). The
 compose-based example suite is superseded by the demo as the first-run
-path; do it only if managed mode needs a living exercise.
+path; do it only if managed mode needs a living exercise (the change:
+point tests/playtest.yaml at docker-compose.test.yml via the app block).
 
 Swappable by appetite: 8↔9 (solo loop vs team visibility), 10+11↔12
-(regression trends vs agent-loop completion). Milestone A's chain 1→2→3→4
-is fixed (1 builds the hook 2 needs, 2 produces the runs 3 polishes, 3
-makes the footage 4 cuts); 5–7 are parallel-friendly and only need to land
-before the talk date.
+(regression trends vs agent-loop completion). Milestone A's chain
+0→1→2→3→4 is fixed (0 settles the names 1 freezes, 1 builds the hook 2
+needs, 2 produces the runs 3 polishes, 3 makes the footage 4 cuts); 5–7
+are parallel-friendly and only need to land before the talk date.
 
 ## 1. Harness Self-Test
 
@@ -246,15 +258,16 @@ Implementation notes:
   `src/demo/`; prefer relocating so published-package contents don't depend
   on the repo's working test tree.
 - README's first lines become: the npx demo command, then "point it at your
-  own app" with `playtest new suite`.
+  own app" with `playtest new <case-name>` (§13).
 
 ## 5. Viewer Movement Indicators (Deltas + Badges)
 
-IMPROVEMENTS.md "Historical Trends And Regression Signals" specs the CLI
-trend lines and the comparison rules. Build the comparability logic as a
-**shared module** (input: runs root + case id; output: deltas vs previous
-comparable run and vs recent median), use it first for the CLI lines, then
-surface it in the viewer:
+The CLI trend lines exist (`computeTrend` in cli.js encodes the comparison
+rules: order by manifest timestamps, compare only the same case id, scores
+only graded-to-graded, prefer non-infra runs, exclude same-run-id
+siblings). Extract that logic into a **shared module** (input: runs root +
+case id; output: deltas vs previous comparable run and vs recent median),
+then surface it in the viewer:
 
 - Per-case deltas: score (graded runs only), duration, LCP, step count —
   each vs previous comparable run and vs recent median (median resists
@@ -269,6 +282,9 @@ surface it in the viewer:
 - Comparisons respect the pin rule: never compare across baseline
   boundaries (different harness/model/prompt pins), and never mix headed
   and headless timings.
+- History stays scan-on-demand over the runs root (`/history.json` already
+  serves it raw for future dashboards); persist an index only if scanning
+  gets slow. Durable shared history is §12's problem.
 
 ## 6. PR Journey-Diff Bot
 
@@ -554,6 +570,98 @@ Design rules:
   POST step can come later; the PR bot (§6) works from artifacts alone.
 - This backend is also the read side of the hosted run service deferred in
   NICE_TO_HAVE.md — design the schema with that in mind.
+
+## 13. One Creation Command + `app:` Config Block
+
+Settled design (June 2026 discussion); supersedes the `new suite` /
+`new case` split. Three coupled decisions, the first two net deletions.
+Lands at the top of the order: §1's self-test freezes the CLI/JSON
+contract, and §2/§4/§7 print these names in the README, the demo's call
+to action, and the skill — every one gets more expensive once the
+surface is public.
+
+### `playtest new <name> [dir]` is the only creation entry point
+
+`playtest.yaml` is optional shared config, not a registration. `DEFAULTS`
+in config.js covers everything except `base_url`, and a case file or
+`--base-url` can supply that (the config error already names all three
+sources — case files run through the same load/merge path as defaults
+files, including relative-path resolution). Creating a suite is therefore
+not a user intent; adding a case is. Consolidate:
+
+- `case` becomes the default subcommand of `new` (the same `isDefault`
+  routing the top-level `run` command uses), so
+  `playtest new guest-checkout ./checkout` just works. `new persona <name>`
+  keeps its explicit form; a case literally named "persona" needs
+  `new case persona` — acceptable.
+- **Lazy defaults scaffolding, ancestor-aware.** If no directory from the
+  target up to the repo root contains a `playtest.yaml` (the upward walk
+  `findSuiteDir` already implements), write one next to the new case. The
+  ancestor check is the load-bearing rule: without it, running `new`
+  inside a subtree would sprinkle defaults files that shadow ancestors via
+  nearest-wins.
+- The scaffolded `playtest.yaml` is the documentation — active `base_url`,
+  everything else present but commented:
+
+```yaml
+app:
+  base_url: http://localhost:3000
+  # compose: ./docker-compose.test.yml   # Playtest boots/tears down the app
+  # init: ./seed/reset.sh                # runs before each case
+  # storage_state: ./seed/anon.json      # pre-built browser session
+# actor_model: claude-haiku-4-5
+# grader_model: claude-sonnet-4-6
+```
+
+- `[dir]` omitted: nearest ancestor suite, else the existing
+  unique-suite-below-cwd search, else (greenfield) `./tests/` — matches
+  every example in the docs and keeps a repo-root invocation from
+  littering the root.
+- Deleted outright: `newSuite`, `validateSuiteDir`, the `--suite` flag,
+  the "multiple suites found — pass --suite" error path, `new suite`'s
+  `--compose` flag (now a commented template line), and the dead `name:`
+  key the suite scaffold writes (`resolveCase` derives names from
+  filenames and ignores it).
+- Touchpoints: `NO_SUITES_HINT` and the workflow help epilogue in cli.js,
+  README, docs/CONTRACTS.md §12, the §4 demo's closing-slide command.
+  docs/playtest-design.md documents `new suite` and is a stable input —
+  flag the divergence to its owners rather than edit it.
+
+### `env:` → `app:`
+
+The block describes the app under test — where it is (`base_url`), how to
+boot it (`compose`), how to seed it (`init`) — and `env:` collides with
+the strongest convention in YAML-config land (compose `environment:`,
+GitHub Actions `env:`: environment *variables*). Users will try to put
+vars there; and if Playtest ever passes real env vars to `init`/compose,
+it will want the `env:` key free. Renaming the key does not rename the
+concept: "managed/external environment", "environment flake", and exit
+code 2 stay as they are.
+
+- Surface-only rename: config.js reads `app:`; the resolved-case `.env`
+  field and env.js internals can follow in a later pass or never.
+- Pre-1.0, no read shim (per §2's philosophy). A file using `env:` gets a
+  config error naming the rename —
+  `env: was renamed to app: (update tests/playtest.yaml)` — clear beats
+  compatible while there are no external users.
+- `storage_state` is the one awkward resident (a browser-session artifact,
+  not app config). Keep it under `app:` anyway; a third top-level section
+  costs more than the impurity.
+
+### The noun stays "case"
+
+Considered: **scenario** (best metaphor fit — commedia dell'arte actors
+improvising from a scenario is literally record mode — and
+Gherkin-familiar), **story** (rejected: collides with the `story:` field
+inside the file — "the story's story"), **journey** (rejected: reserved
+for the in-app concept; a case *checks* a journey, and "changed journey"
+must keep meaning the path changed, not the YAML file). Decision: keep
+**case**. The glossary deliberately runs two registers — theatrical words
+where they explain mechanics (actor, act, heal), conventional words on the
+CI-facing surface (suite, case, run, tag) — and `runs_per_case`,
+`case_id`, and `--case` make a rename expensive for marginal gain. If the
+appetite for "scenario" ever firms up, this pre-1.0 window is the only
+cheap time.
 
 ## Out Of Scope / Deferred
 

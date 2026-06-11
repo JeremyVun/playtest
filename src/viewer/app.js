@@ -20,9 +20,14 @@ const state = {
   acceptCmd: null,       // exact "playtest accept <dir>" for this run, when pending
   cur: 0,
   view: "stills",
+  itab: "step",          // inspector tab: "step" | "run"
   a11yCache: new Map(),
   videoOk: false,
 };
+
+let wired = false; // one-time listeners (tabs, keys, run links); loadRun re-runs on run switches
+let loadSeq = 0;   // bails a stale loadRun when rapid pager clicks overlap mid-fetch
+let navSeq = 0;
 
 /* ---------- tiny DOM + fetch helpers ---------- */
 
@@ -103,6 +108,28 @@ function fmtClock(seconds) {
   const s = (seconds % 60).toFixed(1).padStart(4, "0");
   return `${m}:${s}`;
 }
+
+// Readable local datetime for run lists: "today 14:23", "yesterday 09:01",
+// "Jun 10, 14:23" (year appended when it isn't this year). Callers put the
+// full ISO string in the title attribute for hover.
+function fmtDate(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d)) return String(iso);
+  const now = new Date();
+  const hm = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  const sameDay = (a, b) =>
+    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  if (sameDay(d, now)) return `today ${hm}`;
+  if (sameDay(d, new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1))) return `yesterday ${hm}`;
+  const month = d.toLocaleString(undefined, { month: "short" });
+  const year = d.getFullYear() === now.getFullYear() ? "" : ` ${d.getFullYear()}`;
+  return `${month} ${d.getDate()}${year}, ${hm}`;
+}
+
+// "2026-06-11T0422-d926" → "d926": the random suffix is the readable part;
+// the timestamp half duplicates the started column (and is UTC besides).
+const shortRunId = (id) => (id == null ? "—" : String(id).split("-").at(-1));
 
 // Copy-paste safety for displayed commands: quote a path for POSIX shells
 // when it contains anything outside the safe set ('\'' escapes embedded
@@ -223,6 +250,7 @@ async function boot() {
 }
 
 async function loadRun() {
+  const seq = ++loadSeq;
   const m = state.manifest;
   const caseId = m.case?.id ?? "";
 
@@ -236,6 +264,7 @@ async function loadRun() {
     baseRel ? fetchText(state.base + "/" + baseRel) : null,
     fetchJson("/history.json?case=" + encodeURIComponent(caseId)),
   ]);
+  if (seq !== loadSeq) return; // superseded by a newer run switch
 
   state.steps = parseJsonl(trajText);
   state.har = har?.log?.entries ?? [];
@@ -252,6 +281,7 @@ async function loadRun() {
   // and only offer the command while that entry is still pending.
   if (m.healed && m.result?.status === "pass") {
     const changed = await fetchJson("/changed.json");
+    if (seq !== loadSeq) return;
     const mine = Array.isArray(changed)
       ? changed.find((e) =>
           state.rootMode ? e.path === state.runPath : e.run_id === m.run_id && e.case_id === caseId)
@@ -261,16 +291,28 @@ async function loadRun() {
 
   document.title = `Playtest — ${caseId || "run"}`;
   $("#app").hidden = false;
+  $("#back").hidden = !state.rootMode; // the picker only exists when serving a runs root
+
+  // The chosen inspector tab survives moving between runs (run-nav pager,
+  // history dots). Fresh sessions: a failed run opens on the verdict.
+  let stored = null;
+  try { stored = sessionStorage.getItem("playtest.itab"); } catch {}
+  state.itab = !state.steps.length ? "run" : (stored ?? (m.result?.status === "fail" ? "run" : "step"));
 
   renderHeader();
-  initCaption();
-  renderSparkline();
+  renderRunNav();
+  renderBrief();
   renderStrip();
   renderInspectorStatic();
+  renderSparkline();
   renderDiff();
   initVideo();
-  initTabs();
-  initKeys();
+  if (!wired) {
+    wired = true;
+    initTabs();
+    initKeys();
+    initRunLinks();
+  }
 
   if (state.steps.length) {
     // open on the first failed/confused step when the run went wrong, else step 1
@@ -285,6 +327,48 @@ async function loadRun() {
   }
 }
 
+/* In-place switch to a sibling run (pager, history dots). A full page
+   navigation tears the document down, and the browser drops mouse input on
+   the new document until the pointer moves again — so paging through runs by
+   repeatedly clicking a stationary mouse needs the document to survive. */
+async function navigate(path, { push = true } = {}) {
+  const seq = ++navSeq;
+  const base = "/run/" + path;
+  const manifest = await fetchJson(base + "/manifest.json");
+  if (seq !== navSeq) return; // a newer click superseded this navigation
+  if (!manifest) { location.href = "?run=" + encodeURIComponent(path); return; }
+  if (push) history.pushState(null, "", "?run=" + encodeURIComponent(path));
+  state.runPath = path;
+  state.base = base;
+  state.manifest = manifest;
+  // reset run-scoped state; rootMode and the chosen view/itab survive
+  Object.assign(state, {
+    steps: [], baseline: null, har: [], grade: null, history: [],
+    movement: null, acceptCmd: null, cur: 0, videoOk: false,
+  });
+  state.baselineByStep.clear();
+  state.a11yCache.clear();
+  await loadRun();
+}
+
+// Plain left-clicks on ?run= links (pager, history dots, expanded picker rows
+// never get here — the picker isn't the app view) switch runs in place;
+// modified clicks (new tab, etc.) keep native navigation.
+function initRunLinks() {
+  document.addEventListener("click", (e) => {
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const href = e.target.closest?.("a")?.getAttribute("href");
+    if (!href?.startsWith("?run=") || !state.manifest) return;
+    e.preventDefault();
+    navigate(new URLSearchParams(href).get("run").replace(/^\/+|\/+$/g, ""));
+  });
+  window.addEventListener("popstate", () => {
+    const p = new URLSearchParams(location.search).get("run");
+    if (p && state.manifest) navigate(p.replace(/^\/+|\/+$/g, ""), { push: false });
+    else location.reload(); // leaving the run view (e.g. back to the picker): boot fresh
+  });
+}
+
 function renderFatal(msg) {
   const el = $("#fatal");
   el.hidden = false;
@@ -294,24 +378,119 @@ function renderFatal(msg) {
   );
 }
 
+/* ---------- run tables (picker + changed list) ---------- */
+
+// Sortable table over run-list items. cols: { key, label, num?, desc? } —
+// desc marks columns whose first click sorts descending (dates, numbers).
+// rowsFor(item, redraw) returns that item's <tr>(s); rebuilt on every re-sort,
+// and rows may call redraw() themselves (the picker's expand/collapse does).
+function runsTable(items, cols, rowsFor, initKey) {
+  const sort = { key: initKey, dir: cols.find((c) => c.key === initKey)?.desc ? -1 : 1 };
+  const table = h("table", { class: "runs-table" });
+  const cmp = (a, b) => {
+    const va = a[sort.key], vb = b[sort.key];
+    if (va == null || vb == null) return (va == null) - (vb == null); // nulls last either way
+    const c = typeof va === "number" && typeof vb === "number" ? va - vb : String(va).localeCompare(String(vb));
+    return c * sort.dir;
+  };
+  const draw = () => {
+    table.replaceChildren(
+      h("thead", {}, h("tr", {}, ...cols.map((c) =>
+        h("th", {
+          class: c.num ? "num" : null,
+          "aria-sort": sort.key === c.key ? (sort.dir > 0 ? "ascending" : "descending") : null,
+        }, h("button", {
+          class: "th-btn" + (sort.key === c.key ? " on" : ""),
+          onclick: () => {
+            sort.dir = sort.key === c.key ? -sort.dir : c.desc ? -1 : 1;
+            sort.key = c.key;
+            draw();
+          },
+        }, c.label, h("span", { class: "th-arrow" }, sort.key !== c.key ? "" : sort.dir > 0 ? "↑" : "↓"))),
+      ))),
+      h("tbody", {}, ...[...items].sort(cmp).flatMap((it) => rowsFor(it, draw))),
+    );
+  };
+  draw();
+  return h("div", { class: "table-card" }, table);
+}
+
+// whole row navigates; the case cell stays a real link for middle-click / a11y
+function runRow(href, cls, ...cells) {
+  return h("tr", {
+    class: "run-row" + (cls ? " " + cls : ""),
+    onclick: (e) => { if (!e.target.closest("a")) location.href = href; },
+  }, ...cells);
+}
+
+/* One row per story (latest run), older runs expandable beneath it. The
+   story key strips the repeat-run -N suffix, matching boot()'s ?case= filter. */
 function renderPicker(runs, filterNote = null) {
   const el = $("#picker");
   el.hidden = false;
-  const list = runs.map((r) =>
-    h("a", { class: "run-link", href: "?run=" + encodeURIComponent(`${r.run_id}/${r.case_id}`) },
-      statusChip(r.status),
-      modeChip(r.mode, r.healed, r.status),
-      h("span", { class: "r-case" }, r.case_id ?? "?"),
-      h("span", { class: "r-id" }, `${r.run_id ?? ""}  ·  ${r.started_at ?? ""}  ·  ${fmtMs(r.duration_ms)}`),
-    ),
-  );
+  const storyKey = (r) => (r.case_id ?? "?").replace(/-\d+$/, "");
+  const byStory = new Map();
+  for (const r of runs) {
+    const k = storyKey(r);
+    if (!byStory.has(k)) byStory.set(k, []);
+    byStory.get(k).push(r);
+  }
+  // groups sort on the latest run's values; mode_label sorts by what's shown
+  const groups = [...byStory.entries()].map(([story, list]) => {
+    list.sort((a, b) => String(b.started_at).localeCompare(String(a.started_at)));
+    return { story, runs: list, ...list[0], mode_label: modeLabel(list[0].mode, list[0].healed, list[0].status) };
+  });
+  const expanded = new Set();
+
+  // story first (what you scan for), then outcome, then recency; run id last —
+  // it's a random suffix, useful only for cross-referencing.
+  const cols = [
+    { key: "story", label: "story" },
+    { key: "status", label: "status" },
+    { key: "mode_label", label: "mode" },
+    { key: "started_at", label: "started", desc: true },
+    { key: "duration_ms", label: "duration", num: true, desc: true },
+    { key: "run_id", label: "run id" },
+  ];
+  const href = (r) => "?run=" + encodeURIComponent(r.path ?? `${r.run_id}/${r.case_id}`);
+  const cells = (r, caseCell) => [
+    caseCell,
+    h("td", {}, statusChip(r.status)),
+    h("td", {}, modeChip(r.mode, r.healed, r.status)),
+    h("td", { class: "td-date", title: r.started_at ?? "" }, fmtDate(r.started_at)),
+    h("td", { class: "num" }, fmtMs(r.duration_ms)),
+    h("td", { class: "td-id", title: r.run_id ?? "" }, shortRunId(r.run_id)),
+  ];
+  const rowsFor = (g, redraw) => {
+    const older = g.runs.length - 1;
+    const open = expanded.has(g.story);
+    const main = runRow(href(g), null, ...cells(g,
+      h("td", { class: "td-case" },
+        h("a", { class: "case-link", href: href(g) }, g.story),
+        older > 0
+          ? h("button", {
+              class: "expand" + (open ? " on" : ""),
+              title: (open ? "hide" : "show") + " this story's older runs",
+              onclick: (e) => {
+                e.stopPropagation();
+                open ? expanded.delete(g.story) : expanded.add(g.story);
+                redraw();
+              },
+            }, `${open ? "▾" : "▸"} ${older} older`)
+          : null,
+      )));
+    if (!open) return [main];
+    return [main, ...g.runs.slice(1).map((r) => runRow(href(r), "sub", ...cells(r,
+      h("td", { class: "td-case" }, h("a", { class: "case-link", href: href(r) }, "↳ " + (r.case_id ?? "?"))))))];
+  };
   el.replaceChildren(
     h("div", { class: "picker-inner" },
       h("div", { class: "picker-brand" }, "Playtest"),
       h("div", { class: "picker-sub" },
-        `${runs.length} recorded performance${runs.length === 1 ? "" : "s"} — ${filterNote ?? "choose one"}`),
-      runs.length ? null : h("p", { class: "empty-note" }, "no runs match this filter"),
-      ...list,
+        `${groups.length} stor${groups.length === 1 ? "y" : "ies"} · ${runs.length} run${runs.length === 1 ? "" : "s"}${filterNote ? " · " + filterNote : ""}`),
+      runs.length
+        ? runsTable(groups, cols, rowsFor, "started_at")
+        : h("p", { class: "empty-note" }, "no runs match this filter"),
     ),
   );
 }
@@ -322,27 +501,39 @@ function renderChanged(entries) {
   const el = $("#picker");
   el.hidden = false;
   const pending = entries.filter((e) => e.pending);
-  const list = entries.flatMap((e) => {
-    const row = h("a", { class: "run-link" + (e.pending ? "" : " dim"), href: "?run=" + encodeURIComponent(e.path) },
-      statusChip("pass"),
-      e.pending
+  const items = entries.map((e) => ({ ...e, state: e.pending ? "changed" : "historical" }));
+  // column order mirrors the picker: identity first, run id last
+  const cols = [
+    { key: "case_id", label: "case" },
+    { key: "state", label: "state" },
+    { key: "score", label: "score", num: true, desc: true },
+    { key: "started_at", label: "started", desc: true },
+    { key: "run_id", label: "run id" },
+  ];
+  const rowsFor = (e) => {
+    const href = "?run=" + encodeURIComponent(e.path);
+    const row = runRow(href, e.pending ? null : "dim",
+      h("td", { class: "td-case" }, h("a", { class: "case-link", href }, e.case_id ?? "?")),
+      h("td", {}, e.pending
         ? h("span", { class: "chip accent" }, icon("i-branch"), "changed")
-        : h("span", { class: "chip" }, "historical"),
-      h("span", { class: "r-case" }, e.case_id ?? "?"),
-      h("span", { class: "r-id" },
-        `${e.run_id ?? ""}  ·  ${e.started_at ?? ""}  ·  ${e.score != null ? "score " + e.score : "ungraded"}`),
+        : h("span", { class: "chip" }, "historical")),
+      h("td", { class: "num", title: e.score == null ? "ungraded" : null }, e.score != null ? String(e.score) : "—"),
+      h("td", { class: "td-date", title: e.started_at ?? "" }, fmtDate(e.started_at)),
+      h("td", { class: "td-id", title: e.run_id ?? "" }, shortRunId(e.run_id)),
     );
     if (!e.pending) return [row];
     const dir = shellQuote(e.run_dir_rel);
-    return [row, h("pre", { class: "cmds" }, `playtest accept ${dir}\nplaytest reject ${dir}`)];
-  });
+    return [row, h("tr", { class: "cmds-row" },
+      h("td", { colspan: "5" }, h("pre", { class: "cmds" }, `playtest accept ${dir}\nplaytest reject ${dir}`)))];
+  };
   el.replaceChildren(
     h("div", { class: "picker-inner" },
       h("div", { class: "picker-brand" }, "Playtest"),
       h("div", { class: "picker-sub" },
         `${pending.length} changed journey${pending.length === 1 ? "" : "s"} awaiting review`),
-      entries.length ? null : h("p", { class: "empty-note" }, "no changed journeys — passing healed runs will appear here"),
-      ...list,
+      entries.length
+        ? runsTable(items, cols, rowsFor, "started_at")
+        : h("p", { class: "empty-note" }, "no changed journeys — passing healed runs will appear here"),
     ),
   );
 }
@@ -419,6 +610,7 @@ function computeMovement() {
 /* compact "<metric> <Δ vs prev> · med <Δ vs last-5 median>" chip, or null */
 function deltaChip(label, d, fmt) {
   if (d.prev == null) return null;
+  if (d.prev === 0 && !d.med) return null; // zero movement is noise, not signal
   return h("span", {
     class: "chip",
     title: `${label} vs previous comparable run (${state.movement.prev.run_id ?? "?"})` +
@@ -426,17 +618,21 @@ function deltaChip(label, d, fmt) {
   }, `${label} ${fmt(d.prev)}${d.med != null ? ` · med ${fmt(d.med)}` : ""}`);
 }
 
-function movementChips() {
+// Only the distilled regression/improved verdict goes in the topbar. No
+// statusMove chip either: "pass → healed" duplicates the "changed" mode chip
+// and "pass → fail" duplicates the fail status + regression badge.
+function movementBadge() {
+  const mv = state.movement;
+  if (!mv?.badge) return null;
+  return h("span", { class: "chip " + (mv.badge === "regression" ? "fail" : "pass") },
+    icon(mv.badge === "regression" ? "i-warn" : "i-check"), mv.badge);
+}
+
+// raw deltas vs history; rendered next to the history chart, where they have context
+function movementDeltas() {
   const mv = state.movement;
   if (!mv) return [];
   return [
-    mv.statusMove
-      ? h("span", { class: "chip " + (mv.statusMove === "pass → fail" ? "fail" : "accent") }, mv.statusMove)
-      : null,
-    mv.badge
-      ? h("span", { class: "chip " + (mv.badge === "regression" ? "fail" : "pass") },
-          icon(mv.badge === "regression" ? "i-warn" : "i-check"), mv.badge)
-      : null,
     deltaChip("time", mv.duration, signedMs),
     deltaChip("steps", mv.steps, signedInt),
     deltaChip("lcp", mv.lcp, signedMs),
@@ -467,62 +663,138 @@ function renderHeader() {
   badges.push(h("span", { class: "chip" }, fmtMs(m.duration_ms)));
   const conf = m.totals?.confusion_events ?? 0;
   if (conf > 0) badges.push(h("span", { class: "chip warn" }, icon("i-warn"), `${conf} confusion`));
-  badges.push(...movementChips());
+  const move = movementBadge();
+  if (move) badges.push(move);
   $("#run-badges").replaceChildren(...badges);
 
   const t = m.totals?.tokens ?? {};
   const cost = m.totals?.cost_usd;
   const el = $("#cost-strip");
-  if (!t.in && !t.out && !cost) {
-    el.replaceChildren(
-      h("div", { class: "cost-usd" }, h("b", {}, "$0.00")),
-      h("div", {}, "no model calls"),
-    );
-  } else {
-    const cachePct = t.in ? Math.round(((t.cache_read ?? 0) / t.in) * 100) : 0;
-    el.replaceChildren(
-      h("div", { class: "cost-usd" }, "this run ", h("b", {}, "$" + (cost ?? 0).toFixed(4))),
-      h("div", {}, `${fmtTokens(t.in)} in · ${fmtTokens(t.out)} out · ${cachePct}% cached`),
-    );
-  }
+  const cachePct = t.in ? Math.round(((t.cache_read ?? 0) / t.in) * 100) : 0;
+  el.replaceChildren(
+    h("div", { class: "cost-label" }, "run cost"),
+    h("div", { class: "cost-usd" }, "$" + (cost ?? 0).toFixed(4)),
+    h("div", { class: "cost-sub" },
+      !t.in && !t.out && !cost
+        ? "no model calls"
+        : `${fmtTokens(t.in)} in · ${fmtTokens(t.out)} out · ${cachePct}% cached`),
+  );
 }
 
-/* ---------- cross-run sparkline ---------- */
+/* ---------- run pager: ‹ 3 / 6 › through this story's history ---------- */
+
+// Topbar pager over the case's runs, oldest → newest. Root mode only —
+// sibling run links don't resolve when serving a single run directory.
+// Repeat-run siblings share run_id, so the current run is matched by path.
+function renderRunNav() {
+  const el = $("#run-nav");
+  const hist = state.history;
+  const idx = hist.findIndex((r) =>
+    state.runPath ? r.path === state.runPath : r.run_id === state.manifest.run_id);
+  if (!state.rootMode || hist.length < 2 || idx < 0) { el.hidden = true; return; }
+  const btn = (r, glyph, label) => r?.path
+    ? h("a", { class: "rn-btn", href: "?run=" + encodeURIComponent(r.path),
+        title: `${label}: ${r.run_id} · ${fmtDate(r.started_at)}` }, glyph)
+    : h("span", { class: "rn-btn off" }, glyph);
+  el.hidden = false;
+  el.replaceChildren(
+    h("div", { class: "rn-label" }, "this story"),
+    h("div", { class: "rn-row" },
+      btn(hist[idx - 1], "‹", "older run"),
+      // space-pad the index to the total's width (mono + white-space:pre) so
+      // the pager doesn't change width while stepping through runs
+      h("span", { class: "rn-pos" }, `${String(idx + 1).padStart(String(hist.length).length)} / ${hist.length}`),
+      btn(hist[idx + 1], "›", "newer run"),
+    ),
+  );
+}
+
+/* ---------- cross-run history chart (Run tab) ---------- */
+
+const HIST_COLOR = { pass: "var(--pass)", fail: "var(--fail)", infra: "var(--warn)" };
 
 function renderSparkline() {
+  const el = $("#sec-history");
+  const note = (msg) =>
+    el.replaceChildren(sec("i-gauge", "history", null, h("div", { class: "empty-note" }, msg)));
   const hist = state.history;
-  if (!hist || hist.length < 2) return;
-  // Score series over graded runs only — ungraded checking runs are skipped,
-  // not drawn as mid-height gaps. Fewer than 2 graded: duration over all runs.
+  if (!hist || hist.length < 2) return note("first recorded run of this case — history will accrue here");
+  // Every run of the case sits on the trend line. Ungraded runs (checking runs
+  // have no grade.json) carry the last known score forward — drawn hollow so
+  // they read as "still at 90" rather than as a grade of their own. Score is
+  // charted when at least 2 runs are graded, else duration.
   const graded = hist.filter((r) => r.score != null);
   const useScore = graded.length >= 2;
-  const series = useScore ? graded : hist;
-  const vals = series.map((r) => (useScore ? r.score : r.duration_ms));
-  const known = vals.filter((v) => v != null);
-  if (series.length < 2 || !known.length) return;
-  const W = 150, H = 30, PAD = 4;
-  const min = Math.min(...known), max = Math.max(...known);
-  const span = max - min || 1;
-  const x = (i) => PAD + (i * (W - 2 * PAD)) / Math.max(1, series.length - 1);
-  const y = (v) => v == null ? H / 2 : H - PAD - ((v - min) / span) * (H - 2 * PAD);
+  const own = hist.map((r) => (useScore ? r.score : r.duration_ms));
+  const known = own.filter((v) => v != null);
+  if (!known.length) return note("not enough comparable runs to chart yet");
 
-  const pts = vals.map((v, i) => (v == null ? null : `${x(i).toFixed(1)},${y(v).toFixed(1)}`)).filter(Boolean);
-  const color = { pass: "var(--pass)", fail: "var(--fail)", infra: "var(--warn)" };
-  const dots = series.map((r, i) => {
+  // carry forward; leading ungraded runs inherit the first real value
+  const firstKnown = own.find((v) => v != null);
+  let carry = firstKnown;
+  const plotted = own.map((v) => (v != null ? (carry = v) : carry));
+
+  const W = 300, H = 76, L = 12, R = 12, T = 18, B = 14;
+  const min = Math.min(...known), max = Math.max(...known);
+  const span = max - min;
+  const x = (i) => L + (i * (W - L - R)) / Math.max(1, hist.length - 1);
+  // a flat series sits mid-chart, not pinned to the bottom edge
+  const y = (v) => (span === 0 ? (T + H - B) / 2 : H - B - ((v - min) / span) * (H - T - B));
+  const fmtVal = (v) => (useScore ? String(Math.round(v)) : fmtMs(v));
+  const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  const clampX = (px) => Math.min(Math.max(px, 16), W - 16);
+
+  const pts = plotted.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`);
+  const marks = hist.map((r, i) => {
+    const ghost = own[i] == null;
     const cur = r.run_id === state.manifest.run_id;
-    const title = `${r.run_id} · ${r.status}${r.score != null ? " · score " + r.score : ""} · ${fmtMs(r.duration_ms)}`;
-    const dot = `<circle cx="${x(i).toFixed(1)}" cy="${y(vals[i]).toFixed(1)}" r="${cur ? 3.4 : 2.2}" fill="${color[r.status] ?? "var(--dim)"}" ${cur ? 'stroke="var(--ink)" stroke-width="1"' : ""}><title>${title.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</title></circle>`;
-    // dots jump to older runs — sibling paths only resolve when serving a runs root
-    return state.rootMode && r.path ? `<a href="?run=${encodeURIComponent(r.path)}">${dot}</a>` : dot;
+    const color = HIST_COLOR[r.status] ?? "var(--dim)";
+    const title = `${r.run_id} · ${r.status}` +
+      (r.score != null ? ` · score ${r.score}` : useScore ? ` · ungraded (last score ${fmtVal(plotted[i])})` : "") +
+      ` · ${fmtMs(r.duration_ms)} · ${fmtDate(r.started_at)}`;
+    const cx = x(i).toFixed(1), cy = y(plotted[i]).toFixed(1);
+    const shape = ghost
+      ? `<circle class="hd" cx="${cx}" cy="${cy}" r="${cur ? 4 : 3}" fill="var(--bg1)" stroke="${cur ? "var(--ink)" : color}" stroke-width="1.4"/>`
+      : `<circle class="hd" cx="${cx}" cy="${cy}" r="${cur ? 4 : 3}" fill="${color}" ${cur ? 'stroke="var(--ink)" stroke-width="1.2"' : ""}/>`;
+    // invisible r=9 circle widens the hover/click target around the mark
+    const mark = `<g><circle cx="${cx}" cy="${cy}" r="9" fill="transparent"/>${shape}<title>${esc(title)}</title></g>`;
+    // marks jump to older runs — sibling paths only resolve when serving a runs root
+    return state.rootMode && r.path ? `<a href="?run=${encodeURIComponent(r.path)}">${mark}</a>` : mark;
   }).join("");
 
-  $("#spark-svg").innerHTML =
-    `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">` +
-    `<polyline points="${pts.join(" ")}" fill="none" stroke="var(--line2)" stroke-width="1.2"/>${dots}</svg>`;
-  $("#spark-label").textContent = useScore
-    ? `${series.length} graded runs · score`
-    : `${series.length} runs · duration`;
-  $("#spark").hidden = false;
+  // annotate the best real value, and the current run when its real value differs
+  const maxIdx = own.findIndex((v) => v === max);
+  const labels = [`<text class="hist-val" x="${clampX(x(maxIdx)).toFixed(1)}" y="${(y(max) - 8).toFixed(1)}" text-anchor="middle">${fmtVal(max)}</text>`];
+  const curIdx = hist.findIndex((r) => r.run_id === state.manifest.run_id);
+  const curVal = curIdx >= 0 ? own[curIdx] : null;
+  if (curVal != null && curVal !== max) {
+    labels.push(`<text class="hist-val cur" x="${clampX(x(curIdx)).toFixed(1)}" y="${Math.min(H - 2, y(curVal) + 14).toFixed(1)}" text-anchor="middle">${fmtVal(curVal)}</text>`);
+  }
+
+  const chart = h("div", { class: "hist-chart" });
+  chart.innerHTML =
+    `<svg viewBox="0 0 ${W} ${H}" class="hist-svg">` +
+    `<polyline points="${pts.join(" ")}" fill="none" stroke="var(--line2)" stroke-width="1.5"/>` +
+    marks + labels.join("") + `</svg>`;
+
+  const hasGhosts = own.some((v) => v == null);
+  const foot = h("div", { class: "hist-foot" },
+    h("span", { title: "oldest → newest" }, `${fmtDate(hist[0].started_at)} → ${fmtDate(hist.at(-1).started_at)}`),
+    h("span", { class: "hist-legend" },
+      ...[...new Set(hist.map((r) => r.status))].map((s) =>
+        h("span", { class: "lg" }, h("span", { class: "lg-dot", style: `background:${HIST_COLOR[s] ?? "var(--dim)"}` }), s ?? "?")),
+      hasGhosts
+        ? h("span", { class: "lg", title: "hollow = ungraded run, shown at the last graded score" },
+            h("span", { class: "lg-ghost" }), "ungraded")
+        : null),
+  );
+  const deltas = movementDeltas();
+  const deltaRow = deltas.length
+    ? h("div", { class: "hist-deltas" }, h("span", { class: "label" }, "vs prev"), ...deltas)
+    : null;
+  el.replaceChildren(sec("i-gauge", "history",
+    useScore ? `${graded.length} of ${hist.length} graded · score` : `${hist.length} runs · duration`,
+    chart, foot, deltaRow));
 }
 
 /* ---------- film strip ---------- */
@@ -546,10 +818,11 @@ function renderStrip() {
     } else {
       thumb.append(h("div", { class: "nopic" }, icon("i-film")));
     }
-    const dots = [];
-    if (env.result?.ok === false) dots.push(h("span", { class: "dot fail", title: "step failed" }));
-    if (env.confusion) dots.push(h("span", { class: "dot warn", title: "confusion: " + env.confusion.type }));
-    if (dots.length) thumb.append(h("div", { class: "dots" }, ...dots));
+    const flags = [];
+    if (env.result?.ok === false) flags.push(h("span", { class: "flag fail", title: "step failed" }, icon("i-x")));
+    if (env.confusion) flags.push(h("span", { class: "flag warn", title: "confusion: " + env.confusion.type }, icon("i-warn")));
+    if (env.mode === "heal") flags.push(h("span", { class: "flag heal", title: "healed — the agent found a new path here" }, icon("i-branch")));
+    if (flags.length) thumb.append(h("div", { class: "flags" }, ...flags));
 
     const settle = env.result?.settle_ms ?? 0;
     const tele = h("div", { class: "cell-tele" },
@@ -559,7 +832,10 @@ function renderStrip() {
       (env.perf?.js_errors ?? 0) > 0 ? icon("i-warn") : null,
     );
 
-    strip.append(h("button", { class: "cell", "data-i": i, onclick: () => select(i) },
+    // border tint mirrors the flags so trouble spots read from across the room
+    const cellCls = "cell" +
+      (env.result?.ok === false ? " c-fail" : env.confusion ? " c-warn" : env.mode === "heal" ? " c-heal" : "");
+    strip.append(h("button", { class: cellCls, "data-i": i, onclick: () => select(i) },
       thumb,
       h("div", { class: "cell-cap" },
         h("div", { class: "cell-line" },
@@ -590,36 +866,24 @@ function select(i, { instant = false } = {}) {
   renderInspectorStep(env);
 }
 
-// the thought is clamped to 2 lines by CSS; click / Enter / Space toggles the full text
-function initCaption() {
-  const thought = $("#cap-thought");
-  const toggle = () =>
-    thought.setAttribute("aria-expanded", String(thought.classList.toggle("expanded")));
-  thought.addEventListener("click", toggle);
-  thought.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); }
-  });
-}
-
 function updateCaption(env, instant) {
   const fade = $("#cap-fade");
   const apply = () => {
     const meta = [h("span", { class: "cap-step" }, `step ${env.step} / ${state.steps.length}`)];
-    meta.push(h("span", { class: "chip" }, env.mode === "act" ? `acted · baseline ${env.acted_from ?? "?"}` : "agent"));
+    meta.push(h("span", { class: "chip" }, env.mode === "act" ? `replayed · step ${env.acted_from ?? "?"}` : "agent"));
     if (env.result?.ok === false) meta.push(h("span", { class: "chip fail" }, icon("i-x"), "failed"));
     if (env.confusion) meta.push(h("span", { class: "chip warn" }, icon("i-warn"), "confusion · " + env.confusion.type.replace("_", " ")));
     $("#cap-meta").replaceChildren(...meta);
 
     const thought = $("#cap-thought");
     if (env.agent?.thought) {
-      thought.textContent = `“${env.agent.thought}”`;
+      thought.textContent = env.agent.thought;
       thought.className = "cap-thought";
     } else {
       const d = describe(env);
-      thought.textContent = `Acted from the baseline — ${d.verb} ${d.arg ?? ""}. No narration on acted steps.`;
+      thought.textContent = `Replayed from the saved recording — ${d.verb} ${d.arg ?? ""}. The agent doesn't narrate replayed steps.`;
       thought.className = "cap-thought quiet";
     }
-    thought.setAttribute("aria-expanded", "false"); // className reset re-collapses
 
     const exp = $("#cap-expect");
     if (env.agent?.expectation) {
@@ -749,24 +1013,38 @@ function renderA11yText(pre, text, env) {
 
 /* ---------- stage: video ---------- */
 
+let videoWired = false;
+
 function initVideo() {
   const video = $("#video");
-  const missing = () => {
-    $(".video-box").hidden = true;
-    const el = $("#video-missing");
-    el.hidden = false;
-    el.replaceChildren(icon("i-play", ""), "no video recorded for this run");
-  };
+  // re-entrant: undo a previous run's missing-state before loading this one
+  $(".video-box").hidden = false;
+  $("#video-missing").hidden = true;
+  $("#vmarks").replaceChildren();
+  if (!videoWired) {
+    videoWired = true;
+    video.addEventListener("error", videoMissing);
+    video.addEventListener("loadedmetadata", () => {
+      state.videoOk = true;
+      renderVideoMarks(video.duration);
+      // the user may have opened the tab (and picked a step) before metadata arrived
+      if (state.view === "video" && state.steps.length) seekVideo(state.steps[state.cur]);
+    });
+  }
   const rel = state.manifest.artifacts?.video === null ? null : (state.manifest.artifacts?.video ?? "video.webm");
-  if (!rel) return missing();
-  video.addEventListener("error", missing);
-  video.addEventListener("loadedmetadata", () => {
-    state.videoOk = true;
-    renderVideoMarks(video.duration);
-    // the user may have opened the tab (and picked a step) before metadata arrived
-    if (state.view === "video" && state.steps.length) seekVideo(state.steps[state.cur]);
-  });
+  if (!rel) {
+    video.removeAttribute("src");
+    video.load(); // release the previous run's video; fires error -> videoMissing
+    return videoMissing();
+  }
   video.src = state.base + "/" + rel;
+}
+
+function videoMissing() {
+  $(".video-box").hidden = true;
+  const el = $("#video-missing");
+  el.hidden = false;
+  el.replaceChildren(icon("i-play", ""), "no video recorded for this run");
 }
 
 function renderVideoMarks(duration) {
@@ -852,8 +1130,12 @@ function diffCell(env, op) {
 }
 
 function renderDiff() {
-  if (!state.baseline) return; // tab stays hidden
-  $("#tab-diff").hidden = false;
+  $("#tab-diff").hidden = !state.baseline;
+  if (!state.baseline) {
+    $("#diff-body").replaceChildren();
+    if (state.view === "diff") setView("stills"); // run switched under an open diff tab
+    return;
+  }
 
   const A = state.baseline.filter(isExecutable);
   const B = state.steps.filter(isExecutable);
@@ -873,7 +1155,7 @@ function renderDiff() {
     ),
     h("div", { class: "diff-cols" },
       h("div", { class: "diff-colhead" }, "baseline recording"),
-      h("div", { class: "diff-colhead" }, "this performance"),
+      h("div", { class: "diff-colhead" }, "this run"),
       ...ops.flatMap((o) => [diffCell(o.a, o.op === "add" ? "empty" : o.op), diffCell(o.b, o.op === "del" ? "empty" : o.op)]),
     ),
   );
@@ -913,22 +1195,41 @@ function stat(label, value, unit, cls = "") {
     h("div", { class: "k" }, label));
 }
 
+/* Two panes: what this step did, and how the run as a whole went. Step-level
+   sections re-render on every select(); run-level sections render once. */
 function renderInspectorStatic() {
   const insp = $("#inspector");
   insp.replaceChildren(
-    h("div", { id: "sec-step" }),
-    h("div", { id: "sec-tele" }),
-    h("div", { id: "sec-net" }),
-    h("div", { id: "sec-tok" }),
-    renderGate(),
-    renderGrade(),
-    renderBrief(),
+    h("div", { class: "insp-tabs" },
+      h("button", { class: "itab", "data-itab": "step", onclick: () => setInspTab("step") }, "This step"),
+      h("button", { class: "itab", "data-itab": "run", onclick: () => setInspTab("run") }, "Run"),
+    ),
+    h("div", { id: "ipane-step" },
+      h("div", { id: "sec-step" }),
+      h("div", { id: "sec-tele" }),
+      h("div", { id: "sec-net" }),
+      h("div", { id: "sec-tok" }),
+    ),
+    h("div", { id: "ipane-run" },
+      renderGate(),
+      renderGrade(),
+      h("div", { id: "sec-history" }),
+    ),
   );
+  setInspTab(state.itab);
+}
+
+function setInspTab(name) {
+  state.itab = name;
+  try { sessionStorage.setItem("playtest.itab", name); } catch {}
+  document.querySelectorAll(".itab").forEach((t) => t.classList.toggle("on", t.dataset.itab === name));
+  $("#ipane-step").hidden = name !== "step";
+  $("#ipane-run").hidden = name !== "run";
 }
 
 function renderEmptyRun() {
   $("#sec-step").replaceChildren(sec("i-film", "steps", null,
-    h("div", { class: "empty-note" }, "trajectory.jsonl is missing or empty — run-level panels below still apply")));
+    h("div", { class: "empty-note" }, "trajectory.jsonl is missing or empty — run-level results are under the Run tab")));
   $("#cap-thought").textContent = "No steps were recorded for this run.";
   $("#cap-thought").className = "cap-thought quiet";
   $("#a11y-pre").textContent = "no steps — nothing was seen";
@@ -941,42 +1242,34 @@ function renderEmptyRun() {
 function renderInspectorStep(env) {
   const d = describe(env);
   const a = actionOf(env);
+  const replayed = env.acted_from != null || env.mode === "act";
+  const failed = env.result?.ok === false;
 
-  // step section
+  // What happened: the action, where it came from, whether it worked, and on
+  // what element — in that order, in words rather than field names.
+  const status = h("div", { class: "step-status" },
+    failed
+      ? h("span", { class: "chip fail" }, icon("i-x"), "failed")
+      : h("span", { class: "chip pass" }, icon("i-check"), "succeeded"),
+    env.result?.error ? h("div", { class: "step-err" }, env.result.error) : null);
+
   const kv = h("dl", { class: "kv" });
   const put = (k, v, cls) => { if (v != null && v !== "") kv.append(h("dt", {}, k), h("dd", { class: cls ?? "" }, v)); };
-  put("result", env.result?.ok === false ? "failed" : "ok", env.result?.ok === false ? "err" : "ok");
-  if (env.result?.error) put("error", env.result.error, "err");
-  put("locator", env.resolution?.locator);
-  if (env.agent?.action?.ref) put("ref", env.agent.action.ref);
-  if (env.acted_from != null) put("acted from", "baseline step " + env.acted_from);
+  put("element", env.resolution?.locator);
   if (a?.type === "done") put("summary", a.summary);
   if (a?.type === "give_up") put("reason", a.reason);
   if (env.confusion) put("confusion", `${env.confusion.type}${env.confusion.note ? " — " + env.confusion.note : ""}`, "err");
 
-  $("#sec-step").replaceChildren(sec("i-film", `step ${env.step}`, env.mode === "act" ? "acted" : "agent",
+  $("#sec-step").replaceChildren(sec("i-film", `step ${env.step}`, replayed ? "replayed" : "agent",
     h("div", { class: "act-line" }, icon(d.icon), h("span", { class: "verb" }, d.verb), h("span", { class: "act-arg", title: d.arg ?? "" }, d.arg ?? "")),
-    kv));
+    replayed
+      ? h("div", { class: "step-src" }, `re-running step ${env.acted_from ?? "?"} of the saved recording`)
+      : h("div", { class: "step-src" }, "the agent chose this action itself"),
+    status,
+    kv.childElementCount ? kv : null));
 
-  // telemetry
-  const p = env.perf ?? {};
-  const grid = h("div", { class: "stat-grid" },
-    stat("settle", fmtMs(env.result?.settle_ms)),
-    stat("in → paint", p.input_to_paint_ms != null ? fmtMs(p.input_to_paint_ms) : "—", null, p.input_to_paint_ms == null ? "dim" : ""),
-    stat("long tasks", p.long_tasks_ms != null ? fmtMs(p.long_tasks_ms) : "—", null, p.long_tasks_ms ? "" : "dim"),
-    stat("requests", p.requests ?? 0, null, p.requests ? "" : "dim"),
-    stat("js errors", p.js_errors ?? 0, null, (p.js_errors ?? 0) > 0 ? "bad" : "dim"),
-    stat("mode", env.mode ?? "—", null, "dim"),
-  );
-  const teleKids = [grid];
-  if (p.nav) {
-    teleKids.push(h("div", { class: "nav-vitals" },
-      h("span", { class: "chip accent" }, "navigation"),
-      h("span", { class: "chip" }, `LCP ${fmtMs(p.nav.lcp_ms)}`),
-      h("span", { class: "chip" }, `CLS ${p.nav.cls ?? "—"}`),
-      h("span", { class: "chip" }, `TTFB ${fmtMs(p.nav.ttfb_ms)}`)));
-  }
-  $("#sec-tele").replaceChildren(sec("i-gauge", "telemetry", null, ...teleKids));
+  // performance
+  $("#sec-tele").replaceChildren(renderPerf(env));
 
   // network: the rich waterfall needs har.json; when it is missing/empty fall
   // back to the compact env.network.requests embedded in newer envelopes, so a
@@ -991,6 +1284,44 @@ function renderInspectorStep(env) {
 
   // tokens
   $("#sec-tok").replaceChildren(renderTokens(env));
+}
+
+/* Performance of the app under test, in plain language. Four cells, no
+   disclosure — each metric makes sense on sight, with a tooltip for depth.
+   Navigation steps show Lighthouse's heavyweights (LCP, CLS); interaction
+   steps show responsiveness (INP-style) and time-to-idle. "UI blocked"
+   (long tasks) is the Total Blocking Time idea. Bands follow web vitals. */
+function renderPerf(env) {
+  const p = env.perf ?? {};
+  const band = (v, good, poor) => (v == null ? "dim" : v < good ? "" : v < poor ? "warn" : "bad");
+  const cell = (label, value, cls, title) =>
+    h("div", { class: "stat " + cls, title },
+      h("div", { class: "v" }, value),
+      h("div", { class: "k" }, label));
+
+  const cells = p.nav
+    ? [
+        cell("page load · lcp", fmtMs(p.nav.lcp_ms), band(p.nav.lcp_ms, 2500, 4000),
+          "Largest Contentful Paint — when the new page showed its main content. Lighthouse's headline load metric (good < 2.5s)."),
+        cell("layout shift · cls", p.nav.cls == null ? "—" : Number(p.nav.cls).toFixed(2), band(p.nav.cls, 0.1, 0.25),
+          "Cumulative Layout Shift — how much the page jumped around while loading (good < 0.1)."),
+      ]
+    : [
+        cell("reacted in", fmtMs(p.input_to_paint_ms), band(p.input_to_paint_ms, 100, 300),
+          "How long before the app visibly reacted to the click or keystroke — anything on screen changing (good < 100ms)."),
+        cell("finished in", fmtMs(env.result?.settle_ms), "",
+          "How long until the page finished updating after this action — network and content went quiet, ready for the next thing."),
+      ];
+  const errs = p.js_errors ?? 0;
+  cells.push(
+    cell("ui frozen for", p.long_tasks_ms != null ? fmtMs(p.long_tasks_ms) : "—",
+      p.long_tasks_ms ? band(p.long_tasks_ms, 200, 600) : "dim",
+      "Total time the page couldn't respond because JavaScript was busy — the Total Blocking Time idea (good < 200ms)."),
+    cell("js errors", errs, errs > 0 ? "bad" : "dim",
+      "Uncaught exceptions and console errors during this step."),
+  );
+  return sec("i-gauge", "performance", p.nav ? "page navigation" : null,
+    h("div", { class: "stat-grid two" }, ...cells));
 }
 
 const MAX_WF_ROWS = 24;
@@ -1045,20 +1376,21 @@ function renderNetRequests(requests) {
   return h("div", { class: "wf" }, ...rows);
 }
 
+// what this step cost in model tokens ("tokens" alone read as jargon)
 function renderTokens(env) {
   if (!env.tokens) {
-    return sec("i-token", "tokens", null,
-      h("div", { class: "empty-note" }, env.mode === "act" ? "acted step — no model call" : "no token usage recorded"));
+    return sec("i-token", "model usage", null,
+      h("div", { class: "empty-note" }, env.mode === "act" ? "replayed step — no model call" : "no model usage recorded"));
   }
   // cumulative through the current step
   const upto = state.steps.slice(0, state.cur + 1).reduce((acc, s) => {
     if (s.tokens) { acc.in += s.tokens.in ?? 0; acc.out += s.tokens.out ?? 0; acc.cache += s.tokens.cache_read ?? 0; }
     return acc;
   }, { in: 0, out: 0, cache: 0 });
-  return sec("i-token", "tokens", `Σ ${fmtTokens(upto.in)} in / ${fmtTokens(upto.out)} out`,
+  return sec("i-token", "model usage", `Σ ${fmtTokens(upto.in)} in / ${fmtTokens(upto.out)} out`,
     h("div", { class: "stat-grid" },
-      stat("in", fmtTokens(env.tokens.in)),
-      stat("out", fmtTokens(env.tokens.out)),
+      stat("tokens in", fmtTokens(env.tokens.in)),
+      stat("tokens out", fmtTokens(env.tokens.out)),
       stat("cache read", fmtTokens(env.tokens.cache_read))));
 }
 
@@ -1101,12 +1433,23 @@ function renderGrade() {
     g.summary ? h("p", { class: "grade-summary" }, "“" + g.summary + "”") : null);
 }
 
+/* The brief sits pinned to the bottom of the left panel, below the step
+   thought — the "what the user was trying to do" context belongs next to
+   "what the agent was thinking", but the live thought reads first. */
 function renderBrief() {
   const c = state.manifest.case ?? {};
-  return sec("i-eye", "the brief", c.persona ?? null,
+  $("#cap-brief").replaceChildren(
+    h("div", { class: "label" }, "the brief"),
     h("p", { class: "brief-story" }, (c.story ?? "").trim()),
-    h("div", { class: "nav-vitals" },
-      ...(c.tags ?? []).map((t) => h("span", { class: "chip" }, "#" + t))));
+    c.persona
+      ? h("div", { class: "brief-persona" },
+          h("b", {}, "persona"),
+          h("span", { class: "bp-name" }, icon("i-persona"), c.persona))
+      : null,
+    (c.tags ?? []).length
+      ? h("div", { class: "nav-vitals" }, ...(c.tags ?? []).map((t) => h("span", { class: "chip" }, "#" + t)))
+      : null,
+  );
 }
 
 /* ---------- tabs + keys ---------- */
@@ -1119,6 +1462,7 @@ function setView(view) {
   $("#pane-a11y").hidden = view !== "a11y";
   $("#pane-video").hidden = view !== "video";
   $("#pane-diff").hidden = view !== "diff";
+  $("#caption").hidden = view === "diff"; // diff is run-level; the step thought panel would mislead
   if (state.steps.length) updateStage(state.steps[state.cur]);
 }
 
@@ -1131,7 +1475,11 @@ function initKeys() {
     if (e.target.tagName === "VIDEO" || e.metaKey || e.ctrlKey || e.altKey) return;
     if (e.key === "ArrowLeft") { select(state.cur - 1); e.preventDefault(); }
     else if (e.key === "ArrowRight") { select(state.cur + 1); e.preventDefault(); }
-    else if (e.key === "v" || e.key === "V") setView(state.view === "a11y" ? "stills" : "a11y");
+    else if (e.key === "v" || e.key === "V") {
+      // cycle every visible stage tab (diff only exists with a baseline)
+      const views = ["stills", "a11y", "video", "diff"].filter((v) => v !== "diff" || !$("#tab-diff").hidden);
+      setView(views[(views.indexOf(state.view) + 1) % views.length]);
+    }
   });
 }
 

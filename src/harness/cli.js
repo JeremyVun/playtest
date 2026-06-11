@@ -474,7 +474,7 @@ program
         id: c.id,
         tags: c.tags,
         persona: c.persona,
-        next_run: readBaseline(c.file) ? "checking" : "recording",
+        next_run: readBaseline(c.file) ? "act" : "record",
       }))));
       return;
     }
@@ -486,7 +486,7 @@ program
       c.id,
       c.tags.join(",") || "-",
       c.persona,
-      readBaseline(c.file) ? "checking" : "recording",
+      readBaseline(c.file) ? "act" : "record",
     ]);
     const widths = [0, 1, 2].map((i) => Math.max("ID TAGS PERSONA".split(" ")[i].length, ...rows.map((r) => r[i].length)));
     const line = (r) => r.map((cell, i) => (i < 3 ? cell.padEnd(widths[i]) : cell)).join("  ");

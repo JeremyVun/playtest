@@ -15,6 +15,7 @@
   <symbol id="i-select" viewBox="0 0 16 16"><path d="M5 6.2 8 3.2l3 3M5 9.8l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-scroll" viewBox="0 0 16 16"><path d="M8 2.5v11M5 5.2 8 2.2l3 3M5 10.8l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-nav" viewBox="0 0 16 16"><path d="M4 12 12 4M6 4h6v6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-back" viewBox="0 0 16 16"><path d="M10.5 3 5.5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-wait" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 5v3.2l2.2 1.6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
   <symbol id="i-done" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="m5.4 8.2 1.9 1.9 3.4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-giveup" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M4.5 11.5l7-7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
@@ -24,27 +25,25 @@
   <symbol id="i-branch" viewBox="0 0 16 16"><circle cx="4.5" cy="3.6" r="1.7" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="4.5" cy="12.4" r="1.7" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="11.5" cy="5.6" r="1.7" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M4.5 5.3v5.4M11.5 7.3c0 2.6-2.6 3.4-5 3.6" fill="none" stroke="currentColor" stroke-width="1.4"/></symbol>
   <symbol id="i-film" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5 3v10M11 3v10M2 6h3M2 10h3M11 6h3M11 10h3" fill="none" stroke="currentColor" stroke-width="1.2"/></symbol>
   <symbol id="i-play" viewBox="0 0 16 16"><path d="M5.2 3.2 12.4 8l-7.2 4.8Z" fill="currentColor"/></symbol>
+  <symbol id="i-persona" viewBox="0 0 16 16"><circle cx="8" cy="5.4" r="2.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M3.2 13.6a4.9 4.9 0 0 1 9.6 0" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
   <symbol id="i-eye" viewBox="0 0 16 16"><path d="M1.8 8S4.2 3.8 8 3.8 14.2 8 14.2 8 11.8 12.2 8 12.2 1.8 8 1.8 8Z" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="1.9" fill="currentColor"/></symbol>
   <symbol id="i-net" viewBox="0 0 16 16"><path d="M2 4.5h7M2 8h11M2 11.5h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
   <symbol id="i-token" viewBox="0 0 16 16"><path d="M8 2.2 13.4 8 8 13.8 2.6 8Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
-  <symbol id="i-gauge" viewBox="0 0 16 16"><path d="M2.4 12.4a6 6 0 0 1 11.2 0" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="m8 12 2.6-3.6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-gauge" viewBox="0 0 16 16"><path d="M3.4 12.6a6.5 6.5 0 1 1 9.2 0" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="m8 9.3 2.7-2.7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
   <symbol id="i-cursor" viewBox="0 0 24 24"><path d="M5 3 19 11.2 12.6 12.8 9.8 19Z" fill="#f4f2ec" stroke="#0b0c0e" stroke-width="1.6" stroke-linejoin="round"/></symbol>
 </svg>
 
 <div id="app" hidden>
   <header id="topbar">
     <div class="brand">
+      <a id="back" class="back" href="/" title="all runs" hidden><svg class="ic"><use href="#i-back"/></svg></a>
       <span class="brand-name">Playtest</span>
-      <span class="brand-sub">trajectory<br>viewer</span>
     </div>
     <div class="case-block">
       <div class="case-id" id="case-id"></div>
       <div class="badges" id="run-badges"></div>
     </div>
-    <div class="spark" id="spark" hidden>
-      <div class="spark-label" id="spark-label"></div>
-      <div id="spark-svg"></div>
-    </div>
+    <nav class="run-nav" id="run-nav" hidden></nav>
     <div class="cost" id="cost-strip"></div>
   </header>
 
@@ -55,33 +54,36 @@
         <button data-view="a11y" class="tab"><svg class="ic"><use href="#i-eye"/></svg>Agent view</button>
         <button data-view="video" class="tab"><svg class="ic"><use href="#i-play"/></svg>Video</button>
         <button data-view="diff" class="tab" id="tab-diff" hidden><svg class="ic"><use href="#i-branch"/></svg>Diff</button>
-        <span class="tabs-hint">←/→ steps · V agent view</span>
+        <span class="tabs-hint">←/→ steps · V cycle view</span>
       </nav>
 
-      <div id="stage">
-        <div class="pane" id="pane-stills">
-          <div class="shot-wrap" id="shot-wrap">
-            <img id="shot" alt="step screenshot">
-            <div id="ghost"><svg class="ghost-arrow" width="22" height="22"><use href="#i-cursor"/></svg><span class="ring" id="ghost-ring"></span></div>
+      <div id="stage-row">
+        <aside id="caption">
+          <div id="cap-fade">
+            <div class="cap-meta" id="cap-meta"></div>
+            <p class="cap-thought" id="cap-thought"></p>
+            <p class="cap-expect" id="cap-expect"></p>
           </div>
-          <div class="placeholder" id="shot-missing" hidden></div>
-        </div>
-        <div class="pane" id="pane-a11y" hidden><pre id="a11y-pre"></pre></div>
-        <div class="pane" id="pane-video" hidden>
-          <div class="video-box">
-            <video id="video" controls preload="metadata"></video>
-            <div class="vmarks" id="vmarks"></div>
-          </div>
-          <div class="placeholder" id="video-missing" hidden></div>
-        </div>
-        <div class="pane" id="pane-diff" hidden><div id="diff-body"></div></div>
-      </div>
+          <div id="cap-brief"></div>
+        </aside>
 
-      <div id="caption">
-        <div id="cap-fade">
-          <div class="cap-meta" id="cap-meta"></div>
-          <p class="cap-thought" id="cap-thought" tabindex="0" role="button" aria-expanded="false" title="toggle full text"></p>
-          <p class="cap-expect" id="cap-expect"></p>
+        <div id="stage">
+          <div class="pane" id="pane-stills">
+            <div class="shot-wrap" id="shot-wrap">
+              <img id="shot" alt="step screenshot">
+              <div id="ghost"><svg class="ghost-arrow" width="22" height="22"><use href="#i-cursor"/></svg><span class="ring" id="ghost-ring"></span></div>
+            </div>
+            <div class="placeholder" id="shot-missing" hidden></div>
+          </div>
+          <div class="pane" id="pane-a11y" hidden><pre id="a11y-pre"></pre></div>
+          <div class="pane" id="pane-video" hidden>
+            <div class="video-box">
+              <video id="video" controls preload="metadata"></video>
+              <div class="vmarks" id="vmarks"></div>
+            </div>
+            <div class="placeholder" id="video-missing" hidden></div>
+          </div>
+          <div class="pane" id="pane-diff" hidden><div id="diff-body"></div></div>
         </div>
       </div>
     </section>
@@ -90,9 +92,7 @@
   </main>
 
   <footer id="strip-zone">
-    <div class="perfo"></div>
     <div id="strip"></div>
-    <div class="perfo"></div>
   </footer>
 </div>
 

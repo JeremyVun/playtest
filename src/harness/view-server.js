@@ -23,6 +23,7 @@ const MIME = {
   ".zip": "application/zip",
   ".txt": "text/plain; charset=utf-8",
   ".svg": "image/svg+xml",
+  ".woff2": "font/woff2",
 };
 
 /**
@@ -96,11 +97,19 @@ function sendFile(req, res, base, rel) {
   }
   if (!st.isFile()) return notFound(res);
 
+  // no-cache = revalidate each use; Last-Modified lets that revalidation be a
+  // bodyless 304 instead of a full re-download (run dirs are mostly immutable,
+  // but a live run's files still grow — mtime catches that).
+  const lastModified = st.mtime.toUTCString();
   const headers = {
     "content-type": MIME[path.extname(abs).toLowerCase()] ?? "application/octet-stream",
     "accept-ranges": "bytes",
     "cache-control": "no-cache",
+    "last-modified": lastModified,
   };
+  if (!req.headers.range && req.headers["if-modified-since"] === lastModified) {
+    return res.writeHead(304, headers).end();
+  }
 
   const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range ?? "");
   if (range && (range[1] || range[2]) && st.size > 0) {

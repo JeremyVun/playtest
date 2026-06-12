@@ -381,9 +381,11 @@ a.rn-btn:hover { color: var(--accent); border-color: var(--accent); background: 
 .dcell .d-loc { font-family: var(--mono); font-size: 10.5px; color: var(--faint); margin-top: 2px; word-break: break-all; }
 .dcell.clickable { cursor: pointer; }
 .dcell.clickable:hover { outline: 1px solid var(--accent); outline-offset: -1px; }
+.dcell.fail-note { background: var(--bg0); color: var(--fail); font-size: 12px; }
 
 .diff-frame { margin-top: 16px; border: 1px solid var(--line2); border-radius: 8px; background: var(--bg1); padding: 12px; display: flex; gap: 14px; align-items: center; }
-.diff-frame img { width: 300px; display: block; border: 1px solid var(--line); border-radius: 4px; }
+/* the finale's money shot: big enough to read from the back row, click to zoom */
+.diff-frame img { width: min(480px, 46%); display: block; border: 1px solid var(--line); border-radius: 4px; cursor: zoom-in; }
 .diff-frame .label { margin-bottom: 6px; }
 .diff-frame p { font-size: 12.5px; color: var(--dim); max-width: 400px; }
 
@@ -473,7 +475,8 @@ a.rn-btn:hover { color: var(--accent); border-color: var(--accent); background: 
 
 .kv { display: grid; grid-template-columns: 86px 1fr; gap: 3px 10px; margin-top: 9px; font-size: 12px; }
 .kv dt { color: var(--faint); font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; padding-top: 2px; }
-.kv dd { color: var(--dim); font-family: var(--mono); word-break: break-all; }
+/* anywhere = word boundaries first, mid-token only when a locator forces it */
+.kv dd { color: var(--dim); font-family: var(--mono); overflow-wrap: anywhere; }
 .kv dd.ok { color: var(--pass); }
 .kv dd.err { color: var(--fail); word-break: break-word; }
 

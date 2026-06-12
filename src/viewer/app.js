@@ -924,7 +924,13 @@ function updateCaption(env) {
     thought.className = "cap-thought";
   } else {
     const d = describe(env);
-    thought.textContent = `Replayed from the saved recording — ${d.verb} ${d.arg ?? ""}. The agent doesn't narrate replayed steps.`;
+    // done/give_up args are full sentences: quote them instead of splicing
+    // them after the verb (avoids "— done I added x.." double-period reads).
+    const what =
+      d.verb === "done" || d.verb === "gave up"
+        ? `${d.verb === "done" ? "finished" : "gave up"}: “${String(d.arg ?? "").replace(/[.\s]+$/, "")}”`
+        : `${d.verb} ${d.arg ?? ""}`.trim();
+    thought.textContent = `Replayed from the saved recording — ${what}. The agent doesn't narrate replayed steps.`;
     thought.className = "cap-thought quiet";
   }
 
@@ -1168,6 +1174,18 @@ function diffCell(env, op) {
   );
 }
 
+// The failed replay attempt behind a removed baseline row: not part of the
+// LCS track (it executed nothing), but it is the heal point — name it.
+function failedReplayCell(env) {
+  const idx = state.steps.indexOf(env);
+  return h("button", { class: "dcell fail-note clickable", onclick: () => select(idx) },
+    h("div", { class: "d-act" },
+      h("span", { class: "d-num" }, String(env.step).padStart(2, "0")),
+      icon("i-x"),
+      h("span", {}, "replay attempt failed — agent took over")),
+  );
+}
+
 function renderDiff() {
   $("#tab-diff").hidden = !state.baseline;
   if (!state.baseline) {
@@ -1182,6 +1200,15 @@ function renderDiff() {
   const sum = { same: 0, del: 0, add: 0 };
   for (const o of ops) sum[o.op]++;
 
+  // A removed baseline row usually has a story: this run *tried* it and the
+  // replay failed (the heal point). Show that attempt in the empty cell so
+  // the strip's step numbers stay accountable in the track.
+  const failedReplayBy = new Map(
+    state.steps
+      .filter((e) => e.mode === "act" && e.result?.ok === false && e.acted_from != null)
+      .map((e) => [e.acted_from, e]),
+  );
+
   const body = $("#diff-body");
   body.replaceChildren(
     h("div", { class: "diff-head" },
@@ -1190,19 +1217,30 @@ function renderDiff() {
         h("span", { class: "d-same" }, `${sum.same} same`), " · ",
         h("span", { class: "d-del" }, `${sum.del} removed`), " · ",
         h("span", { class: "d-add" }, `${sum.add} added`),
+        "  ·  executed UI actions only",
         state.manifest.baseline?.run_id ? `  ·  baseline ${state.manifest.baseline.run_id}` : ""),
     ),
     h("div", { class: "diff-cols" },
       h("div", { class: "diff-colhead" }, "baseline recording"),
       h("div", { class: "diff-colhead" }, "this run"),
-      ...ops.flatMap((o) => [diffCell(o.a, o.op === "add" ? "empty" : o.op), diffCell(o.b, o.op === "del" ? "empty" : o.op)]),
+      ...ops.flatMap((o) => [
+        diffCell(o.a, o.op === "add" ? "empty" : o.op),
+        o.op === "del" && failedReplayBy.has(o.a?.step)
+          ? failedReplayCell(failedReplayBy.get(o.a.step))
+          : diffCell(o.b, o.op === "del" ? "empty" : o.op),
+      ]),
     ),
   );
 
   // divergence frame: first changed op that has a step in this run with a screenshot
   const frameEnv = ops.find((o) => o.op !== "same" && o.b?.artifacts?.screenshot)?.b;
   if (frameEnv) {
-    const img = h("img", { src: state.base + "/" + frameEnv.artifacts.screenshot, alt: "divergence frame" });
+    const img = h("img", {
+      src: state.base + "/" + frameEnv.artifacts.screenshot,
+      alt: "divergence frame",
+      title: "open this step in Stills",
+      onclick: () => { setView("stills"); select(state.steps.indexOf(frameEnv)); },
+    });
     img.addEventListener("error", () => img.remove());
     // a healed pass with no acceptCmd is not the pending candidate (a sibling
     // superseded it, or it was already accepted/rejected) — no command then
@@ -1491,9 +1529,13 @@ function renderGrade() {
    "what the agent was thinking", but the live thought reads first. */
 function renderBrief() {
   const c = state.manifest.case ?? {};
-  $("#cap-brief").replaceChildren(
+  // YAML block scalars arrive hard-wrapped: collapse single newlines to spaces
+  // (blank lines stay paragraph breaks) so the story reads as prose.
+  const story = (c.story ?? "").trim().replace(/([^\n])\n(?!\n)/g, "$1 ");
+  // replaceChildren stringifies null to a literal "null" text node (unlike h())
+  $("#cap-brief").replaceChildren(...[
     h("div", { class: "label" }, "the brief"),
-    h("p", { class: "brief-story" }, (c.story ?? "").trim()),
+    h("p", { class: "brief-story" }, story),
     c.persona
       ? h("div", { class: "brief-persona" },
           h("b", {}, "persona"),
@@ -1502,7 +1544,7 @@ function renderBrief() {
     (c.tags ?? []).length
       ? h("div", { class: "nav-vitals" }, ...(c.tags ?? []).map((t) => h("span", { class: "chip" }, "#" + t)))
       : null,
-  );
+  ].filter(Boolean));
 }
 
 /* ---------- tabs + keys ---------- */

@@ -21,12 +21,29 @@ if [ -z "$ROOT" ]; then
   ROOT="$KEEP_DIR/runs"
 fi
 
-# Acts in started_at order: 1 record, 2 act/checked, 3 heal. Thought captions
-# narrate acts 1 and 3 (the agent's story); act 2's replay gets action captions.
+# Acts are selected by their manifest mode (record / act / heal), never by
+# run-id order: ids are minute-precision + random hex, so same-minute acts
+# sort arbitrarily. Thought captions narrate acts 1 and 3 (the agent's
+# story); act 2's replay gets action captions.
+act_run() { # <mode> -> run id under $ROOT whose add-todo manifest has that mode
+  node -e '
+    const fs = require("fs"), path = require("path");
+    const [root, mode] = process.argv.slice(1);
+    for (const id of fs.readdirSync(root)) {
+      try {
+        const m = JSON.parse(fs.readFileSync(path.join(root, id, "todos/add-todo/manifest.json"), "utf8"));
+        if (m.mode === mode) { console.log(id); process.exit(0); }
+      } catch {}
+    }
+    console.error(`no ${mode} run under ${root}`); process.exit(1);
+  ' "$ROOT" "$1"
+}
+
 i=0
-for STYLE in thought action thought; do
+for ACT in record:thought act:action heal:thought; do
   i=$((i + 1))
-  RUN=$(ls "$ROOT" | sort | sed -n "${i}p")
+  MODE="${ACT%%:*}" STYLE="${ACT##*:}"
+  RUN=$(act_run "$MODE")
   $PLAYTEST clip "$ROOT/$RUN/todos/add-todo" --captions "$STYLE" --burn \
     --out "$PWD/act$i-add-todo.webm"
 done

@@ -24,8 +24,9 @@ src/
   harness/
     cli.js                    # commander wiring, shebang #!/usr/bin/env node
     config.js                 # discovery, playtest.yaml inheritance, personas
-    new.js                    # `playtest new` scaffolding: cases, personas, lazy playtest.yaml
+    new.js                    # `playtest new` scaffolding: cases, personas, lazy playtest.yaml, install-skill
     demo.js                   # `playtest demo`: three-act record → act → heal tour over src/demo/
+    clip.js                   # `playtest clip`: webm + WebVTT sidecar, --burn, slideshow fallback
     runs-root.js              # shared runs-root discovery, latest-run + history scans
     prompt.js                 # end-of-run interactive changed-journey prompt (injected I/O)
     trajectory.js             # run dirs, envelopes, manifest, baselines, action track, diff
@@ -51,6 +52,8 @@ src/
       grader-discovery.md     # discovery rubric, selected by case mode (see §8)
     testing/
       mock-llm.js             # OpenAI-compatible rule-based mock server (self-test fixture)
+  shared/
+    movement.js               # comparability + movement rules, browser-safe ESM (cli + viewer via /shared/)
   viewer/                     # standalone static app: index.html, app.js, style.css
   todo-app/
     server.js                 # zero-dep test subject app
@@ -62,6 +65,7 @@ tests/                        # example suite targeting the todo app
   seed/reset.sh
 test/                         # offline harness self-tests (npm test = node --test test/*.test.js)
 skills/                       # agent skills shipped in the npm package
+  playtest/SKILL.md           # fix-loop skill (`playtest install-skill` copies it into a project)
   playtest-discovery/SKILL.md # run a discovery study end to end (preflight → synthesis)
   playtest-stories/SKILL.md   # interview a PM, author cases (discovery or journey)
 personas/
@@ -763,8 +767,11 @@ Behavior contracts:
   case id and per-step counter. Missing ffmpeg — or a slim build without the
   subtitles/drawtext filters — is a config error (exit 2) naming the install fix; the
   no-`--burn` sidecar path must keep working without ffmpeg. When the run has no usable
-  screencast, both clip paths assemble a slideshow from `steps/NNN.png` timed by the same
-  ts deltas (ffmpeg required, same exit-2 contract; sidecar lands in `clip.vtt`).
+  screencast, both clip paths assemble a slideshow from `steps/NNN.png` — frame durations
+  are the step ts gaps clamped to [800ms, 8000ms] (screenshot-less steps fold into the
+  previous frame), and the cues are timed to those same frame durations so captions track
+  frames, not wall-clock (ffmpeg required, same exit-2 contract; sidecar lands in
+  `clip.vtt`).
 - `--json` (run): exactly one JSON object on stdout:
   `{ run_id, runs_root (absolute), exit_code, cases: [{ id, status, mode (internal
   record|act|heal|explore), healed, changed (pending candidate from this run), run_dir,

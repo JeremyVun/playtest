@@ -160,16 +160,12 @@ function ffmpegBinary({ burnFilters = false } = {}) {
   return bin;
 }
 
-const ffmpeg = (bin, args) => {
-  const res = spawnSync(bin, ["-hide_banner", "-loglevel", "error", "-y", ...args], { encoding: "utf8" });
+const ffmpeg = (bin, args, cwd) => {
+  const res = spawnSync(bin, ["-hide_banner", "-loglevel", "error", "-y", ...args], { encoding: "utf8", cwd });
   if (res.error || res.status !== 0) {
     throw new DummyConfigError(`ffmpeg failed: ${(res.stderr || res.error?.message || "").trim().slice(0, 800)}`);
   }
 };
-
-// Escape a value for use inside an ffmpeg filtergraph (':' separates options,
-// '\' and ''' are meta). Wrapped in quotes by the call sites.
-const ffEscape = (s) => String(s).replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/:/g, "\\:");
 
 // green pass / amber changed / red fail; infra and explored stay neutral.
 function watermark(manifest) {
@@ -180,33 +176,41 @@ function watermark(manifest) {
   return { label: status, box: "0x5F6368", fg: "white" };
 }
 
-/** Hard subtitles + status watermark + case id and per-step counter. */
+/** Hard subtitles + status watermark + case id and per-step counter.
+ *  Paths and free text never enter the filtergraph — its quoting cannot
+ *  carry arbitrary strings (quotes can't be escaped inside quotes, and the
+ *  option parser re-splits on ':'): the returned work dir holds safe-named
+ *  copies (subs.vtt, head.txt, the filter script) and ffmpeg runs with cwd
+ *  there; real input/output paths travel as argv, which needs no escaping. */
 function burnArgs({ input, vttPath, manifest, cues, out }) {
   const { label, box, fg } = watermark(manifest);
   const caseId = manifest.case?.id ?? "run";
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), "playtest-clip-"));
+  fs.copyFileSync(vttPath, path.join(work, "subs.vtt"));
+  fs.writeFileSync(path.join(work, "head.txt"), `${label.toUpperCase()}  ${caseId}`);
   const drawCommon = `fontcolor=${fg}:fontsize=20:box=1:boxcolor=${box}@0.85:boxborderw=8`;
   const filters = [
-    `subtitles=filename='${ffEscape(vttPath)}':force_style='FontSize=18,Outline=1,Shadow=0'`,
-    `drawtext=text='${ffEscape(`${label.toUpperCase()}  ${caseId}`)}':x=16:y=14:${drawCommon}`,
+    `subtitles=filename=subs.vtt:force_style='FontSize=18,Outline=1,Shadow=0'`,
+    `drawtext=textfile=head.txt:x=16:y=14:${drawCommon}`,
     ...cues.map(
       (c, i) =>
         `drawtext=text='step ${i + 1}/${cues.length}':x=16:y=52:fontsize=16:${drawCommon}` +
         `:enable='between(t,${(c.start / 1000).toFixed(3)},${(c.end / 1000).toFixed(3)})'`,
     ),
   ].join(",");
-  // A filter script file sidesteps shell/arg-length escaping for long runs.
-  const script = path.join(os.tmpdir(), `playtest-clip-${process.pid}.filter`);
-  fs.writeFileSync(script, filters);
+  fs.writeFileSync(path.join(work, "filter"), filters);
   return {
-    script,
-    args: ["-i", input, "-filter_script:v", script, "-c:v", "libvpx-vp9", "-crf", "34", "-b:v", "0",
-      "-cpu-used", "5", "-row-mt", "1", "-an", out],
+    work,
+    args: ["-i", path.resolve(input), "-filter_script:v", "filter", "-c:v", "libvpx-vp9", "-crf", "34",
+      "-b:v", "0", "-cpu-used", "5", "-row-mt", "1", "-an", path.resolve(out)],
   };
 }
 
-/** Slideshow fallback: per-step screenshots become a video timed by the same
- *  ts deltas the cues use; steps with a missing screenshot fold their time
- *  into the previous frame. */
+/** Slideshow fallback: per-step screenshots become a video whose frame
+ *  durations are the step's ts gap clamped to [800ms, 8000ms] (raw gaps are
+ *  unwatchable: mock-paced runs flash, think-time gaps stall); steps with a
+ *  missing screenshot fold their time into the previous frame. Each frame
+ *  keeps its envelope so the caller can time cues to this same timeline. */
 function slideshowArgs(runDir, envelopes, out) {
   const frames = [];
   const steps = envelopes.filter((e) => typeof e.ts === "number");
@@ -214,7 +218,7 @@ function slideshowArgs(runDir, envelopes, out) {
     const next = steps[i + 1];
     const ms = next ? Math.min(8000, Math.max(800, next.ts - env.ts)) : 2500;
     const file = env.artifacts?.screenshot ? path.join(runDir, env.artifacts.screenshot) : null;
-    if (file && fs.existsSync(file)) frames.push({ file, ms });
+    if (file && fs.existsSync(file)) frames.push({ file, ms, env });
     else if (frames.length) frames[frames.length - 1].ms += ms;
   });
   if (!frames.length) {
@@ -224,14 +228,18 @@ function slideshowArgs(runDir, envelopes, out) {
     .map((f) => `file '${f.file.replace(/'/g, "'\\''")}'\nduration ${(f.ms / 1000).toFixed(3)}`)
     .join("\n");
   const listFile = path.join(os.tmpdir(), `playtest-clip-${process.pid}.frames`);
-  // concat-demuxer quirk: the last frame needs a trailing repeat to keep its duration
+  // concat-demuxer quirk: the last duration is honored only with a trailing
+  // repeat of the file — which then lingers for an extra beat of its own, so
+  // the output is trimmed (-t) to the cue timeline's exact length.
   fs.writeFileSync(listFile, `${list}\nfile '${frames.at(-1).file.replace(/'/g, "'\\''")}'\n`);
+  const totalSec = frames.reduce((n, f) => n + f.ms, 0) / 1000;
   return {
     listFile,
     frames,
     args: ["-f", "concat", "-safe", "0", "-i", listFile,
       "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2,fps=24",
-      "-c:v", "libvpx-vp9", "-crf", "34", "-b:v", "0", "-cpu-used", "5", "-row-mt", "1", "-an", out],
+      "-c:v", "libvpx-vp9", "-crf", "34", "-b:v", "0", "-cpu-used", "5", "-row-mt", "1", "-an",
+      "-t", totalSec.toFixed(3), out],
   };
 }
 
@@ -266,19 +274,17 @@ export async function clip(target, opts = {}) {
   const videoPath = path.join(runDir, manifest.artifacts?.video ?? "video.webm");
   const hasVideo = manifest.video_started_at != null && fs.existsSync(videoPath);
 
-  const firstTs = envelopes.find((e) => typeof e.ts === "number")?.ts ?? 0;
-  const t0 = hasVideo ? manifest.video_started_at : firstTs;
-  const runEnd = manifest.started_at && manifest.duration_ms != null
-    ? Date.parse(manifest.started_at) + manifest.duration_ms
-    : null;
-  const cues = buildCues(envelopes, {
-    t0,
-    endMs: runEnd != null ? Math.max(0, runEnd - t0) : 0,
-    style,
-    baselineByStep,
-  });
-
   if (hasVideo) {
+    const t0 = manifest.video_started_at;
+    const runEnd = manifest.started_at && manifest.duration_ms != null
+      ? Date.parse(manifest.started_at) + manifest.duration_ms
+      : null;
+    const cues = buildCues(envelopes, {
+      t0,
+      endMs: runEnd != null ? Math.max(0, runEnd - t0) : 0,
+      style,
+      baselineByStep,
+    });
     const vttPath = path.join(runDir, "video.vtt");
     fs.writeFileSync(vttPath, formatVtt(cues));
     if (!opts.burn) {
@@ -287,32 +293,40 @@ export async function clip(target, opts = {}) {
     }
     const bin = ffmpegBinary({ burnFilters: true });
     const out = path.resolve(opts.out ?? path.join(runDir, "clip.webm"));
-    const { script, args } = burnArgs({ input: videoPath, vttPath, manifest, cues, out });
+    const { work, args } = burnArgs({ input: videoPath, vttPath, manifest, cues, out });
     try {
-      ffmpeg(bin, args);
+      ffmpeg(bin, args, work);
     } finally {
-      fs.rmSync(script, { force: true });
+      fs.rmSync(work, { recursive: true, force: true });
     }
     console.log(`burned clip: ${out}`);
     return { video: out, vtt: vttPath };
   }
 
   // No screencast: assemble the slideshow (ffmpeg on both paths here), then
-  // burn on top of it when asked. Sidecar cues are re-timed from the first
-  // step since the slideshow timeline starts at frame zero.
+  // burn on top of it when asked. Cues are timed to the slideshow's own
+  // frame durations — not raw ts deltas, which the frames clamp — so each
+  // caption spans exactly its frame; folded (screenshot-less) steps lose
+  // their caption along with their frame.
   const bin = ffmpegBinary({ burnFilters: Boolean(opts.burn) });
   const out = path.resolve(opts.out ?? path.join(runDir, "clip.webm"));
   const vttPath = path.join(runDir, "clip.vtt");
-  fs.writeFileSync(vttPath, formatVtt(cues));
   const show = slideshowArgs(runDir, envelopes, opts.burn ? `${out}.base.webm` : out);
+  const cues = [];
+  let t = 0;
+  for (const f of show.frames) {
+    cues.push({ start: t, end: t + f.ms, text: captionFor(f.env, style, baselineByStep) });
+    t += f.ms;
+  }
+  fs.writeFileSync(vttPath, formatVtt(cues));
   try {
     ffmpeg(bin, show.args);
     if (opts.burn) {
-      const { script, args } = burnArgs({ input: `${out}.base.webm`, vttPath, manifest, cues, out });
+      const { work, args } = burnArgs({ input: `${out}.base.webm`, vttPath, manifest, cues, out });
       try {
-        ffmpeg(bin, args);
+        ffmpeg(bin, args, work);
       } finally {
-        fs.rmSync(script, { force: true });
+        fs.rmSync(work, { recursive: true, force: true });
         fs.rmSync(`${out}.base.webm`, { force: true });
       }
     }

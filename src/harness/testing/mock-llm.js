@@ -7,6 +7,15 @@ import { pathToFileURL } from "node:url";
 
 // ---------- parsing what the harness sends ----------
 
+// Message content may be a plain string or an OpenAI content-part array
+// (vision runs add image_url parts). Every reader here greps text, so
+// flatten: join the text parts, ignore images.
+function contentText(content) {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content.filter((p) => p?.type === "text").map((p) => p.text ?? "").join("\n");
+}
+
 // Snapshot lines per the a11y-text-v1 format (CONTRACTS.md §4):
 //   [e4] checkbox "buy milk" (unchecked)
 //   text: "1 item left"
@@ -132,18 +141,25 @@ function decide(dirs, els, hist) {
 }
 
 function actorStep(messages) {
-  const system = messages.find((m) => m.role === "system")?.content ?? "";
+  const system = contentText(messages.find((m) => m.role === "system")?.content);
   const story = system.includes("## Your task") ? system.split("## Your task").pop() : system;
-  const users = messages.filter((m) => m.role === "user").map((m) => m.content ?? "");
+  const users = messages.filter((m) => m.role === "user").map((m) => contentText(m.content));
   const snapMsg = users.find((c) => /^Current page snapshot \(step \d+\):/.test(c));
   if (!snapMsg) throw new Error('no user message starting with "Current page snapshot (step N):" — actor message layout drifted');
   const stepNum = Number(snapMsg.match(/\(step (\d+)\)/)[1]);
-  if (stepNum > 20) {
-    return giveUp("This is taking far too many steps.", "exceeded 20 steps without finishing the task");
+  const args = stepNum > 20
+    ? giveUp("This is taking far too many steps.", "exceeded 20 steps without finishing the task")
+    : decide(
+        parseDirectives(story),
+        parseSnapshot(snapMsg.slice(snapMsg.indexOf("\n") + 1)),
+        parseHistory(users.find((c) => c.startsWith("Steps so far:")) ?? ""),
+      );
+  // A vision-on turn carries an image part; emit a visual observation so
+  // offline envelopes exercise the field end to end.
+  if (messages.some((m) => Array.isArray(m.content) && m.content.some((p) => p?.type === "image_url"))) {
+    args.visual = "Mock visual observation: the page heading dominates; the primary action sits directly below the input.";
   }
-  const els = parseSnapshot(snapMsg.slice(snapMsg.indexOf("\n") + 1));
-  const hist = parseHistory(users.find((c) => c.startsWith("Steps so far:")) ?? "");
-  return decide(parseDirectives(story), els, hist);
+  return args;
 }
 
 // ---------- the rule-based grader & assertion checker ----------
@@ -164,7 +180,7 @@ const FIXED_GRADE = {
 function gradeArgs(messages) {
   const content = messages
     .filter((m) => m.role === "user")
-    .map((m) => (typeof m.content === "string" ? m.content : ""))
+    .map((m) => contentText(m.content))
     .join("\n");
   const section = content.split("## Report questions")[1];
   if (!section) return FIXED_GRADE;
@@ -187,7 +203,7 @@ const STOPWORDS = new Set(
 // Naive containment: quoted words from the claim (else significant words)
 // checked against the snapshot text in the prompt (grader.js checkAssertion layout).
 function verdict(messages) {
-  const content = messages.filter((m) => m.role === "user").map((m) => m.content ?? "").join("\n");
+  const content = messages.filter((m) => m.role === "user").map((m) => contentText(m.content)).join("\n");
   const claim = (content.match(/Claim:\s*([\s\S]*?)\n\s*\nFinal URL:/) ?? [, ""])[1].trim();
   const snapshot = content.split(/Final page snapshot:\s*\n/)[1] ?? "";
   const quoted = [...claim.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
@@ -205,11 +221,11 @@ function verdict(messages) {
 // ---------- the server ----------
 
 function usageFor(messages, argsJson) {
-  const promptChars = messages.reduce((n, m) => n + (typeof m.content === "string" ? m.content.length : 0), 0);
+  const promptChars = messages.reduce((n, m) => n + contentText(m.content).length, 0);
   const promptTokens = Math.max(1, Math.round(promptChars / 4));
   // Pretend the stable prefix is cached once a prior step exists in the log.
-  const log = messages.find((m) => m.role === "user" && m.content?.startsWith("Steps so far:"))?.content ?? "";
-  const sysChars = messages.find((m) => m.role === "system")?.content?.length ?? 0;
+  const log = messages.map((m) => (m.role === "user" ? contentText(m.content) : "")).find((c) => c.startsWith("Steps so far:")) ?? "";
+  const sysChars = contentText(messages.find((m) => m.role === "system")?.content).length;
   const cached = /\bstep \d+:/.test(log) ? Math.min(Math.round(sysChars / 4), promptTokens) : 0;
   const completionTokens = Math.max(1, Math.round(argsJson.length / 4));
   return {
@@ -257,13 +273,18 @@ function completion(body) {
  * chat/completions requests THIS instance has served; `requestCount(tool)`
  * narrows to one forced tool ("step" / "grade" / "verdict") — the self-test
  * uses it to prove act-mode runs make zero actor and zero grader calls.
+ * `requests()` returns the parsed request bodies in arrival order as
+ * { tool, body } — the self-test inspects them to prove vision runs send
+ * exactly one image per actor step (and that nothing else ever does).
  * @param {{ port?: number }} [opts] port 0 = ephemeral
  * @returns {Promise<{ url: string, port: number, close: () => Promise<void>,
- *                     requestCount: (tool?: string) => number }>}
+ *                     requestCount: (tool?: string) => number,
+ *                     requests: () => { tool: string, body: object }[] }>}
  */
 export async function start({ port = 0 } = {}) {
   let served = 0;
   const servedByTool = {};
+  const captured = [];
   const server = http.createServer((req, res) => {
     const send = (status, obj) => {
       res.writeHead(status, { "content-type": "application/json" });
@@ -280,6 +301,7 @@ export async function start({ port = 0 } = {}) {
         const body = JSON.parse(raw);
         const tool = body.tool_choice?.function?.name ?? "(none)";
         servedByTool[tool] = (servedByTool[tool] ?? 0) + 1;
+        captured.push({ tool, body });
         send(200, completion(body));
       } catch (err) {
         send(400, { error: { message: `mock-llm: ${err.message}` } });
@@ -301,6 +323,7 @@ export async function start({ port = 0 } = {}) {
         server.closeAllConnections();
       }),
     requestCount: (tool) => (tool == null ? served : (servedByTool[tool] ?? 0)),
+    requests: () => [...captured],
   };
 }
 

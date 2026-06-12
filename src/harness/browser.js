@@ -9,6 +9,10 @@ const ACTION_TIMEOUT_MS = 5000;
 const NAV_TIMEOUT_MS = 15000;
 const SETTLE_POLL_MS = 50;
 
+// Anthropic's vision sweet spot: images beyond this longest edge are
+// downscaled server-side anyway, so cap what a vision run sends.
+const VISION_MAX_EDGE = 1568;
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function pathnameOf(url) {
@@ -17,6 +21,12 @@ function pathnameOf(url) {
   } catch {
     return url;
   }
+}
+
+/** PNG IHDR dimensions (width/height at bytes 16-23, big-endian); null when not a PNG. */
+export function pngDimensions(buf) {
+  if (!buf || buf.length < 24 || buf.readUInt32BE(0) !== 0x89504e47) return null;
+  return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
 }
 
 /**
@@ -281,8 +291,11 @@ export class Session {
 
   /**
    * Inject the snapshot script (fresh data-dummy-ref numbering), write the
-   * step's a11y text + screenshot + MHTML.
-   * @returns {Promise<{text: string, url: string, title: string, refCount: number, truncated: boolean}>}
+   * step's a11y text + screenshot + MHTML. `screenshot` is the viewport PNG
+   * for vision runs (longest edge capped at 1568px; the on-disk artifact stays
+   * full size); null when capture failed — callers degrade to text-only.
+   * @returns {Promise<{text: string, url: string, title: string, refCount: number,
+   *                    truncated: boolean, screenshot: Buffer|null}>}
    */
   async captureSnapshot(stepNum) {
     const snap = await this.page.evaluate(SNAPSHOT_SOURCE);
@@ -290,12 +303,18 @@ export class Session {
     const title = await this.page.title().catch(() => "");
     const p = this.#stepPaths(stepNum);
     fs.writeFileSync(p.a11y, snap.text + "\n");
-    await this.page.screenshot({ path: p.screenshot }).catch(() => {});
+    let screenshot = await this.page.screenshot().catch(() => null);
+    if (screenshot) {
+      try {
+        fs.writeFileSync(p.screenshot, screenshot);
+      } catch {}
+      screenshot = await this.#capImage(screenshot);
+    }
     try {
       const { data } = await this.#cdp.send("Page.captureSnapshot", { format: "mhtml" });
       fs.writeFileSync(p.mhtml, data);
     } catch {}
-    return { text: snap.text, url, title, refCount: snap.refCount, truncated: snap.truncated };
+    return { text: snap.text, url, title, refCount: snap.refCount, truncated: snap.truncated, screenshot };
   }
 
   /**
@@ -567,6 +586,35 @@ export class Session {
       });
     } catch {
       return null;
+    }
+  }
+
+  /**
+   * Downscale a PNG whose longest edge exceeds VISION_MAX_EDGE, via the live
+   * page's canvas (no native image dependency). A no-op at the pinned
+   * 1280x800 viewport; falls back to the original bytes on any failure.
+   */
+  async #capImage(buf) {
+    const dim = pngDimensions(buf);
+    if (!dim || Math.max(dim.width, dim.height) <= VISION_MAX_EDGE) return buf;
+    try {
+      const dataUrl = await this.page.evaluate(async ({ src, cap }) => {
+        const img = new Image();
+        await new Promise((res, rej) => {
+          img.onload = res;
+          img.onerror = rej;
+          img.src = src;
+        });
+        const scale = cap / Math.max(img.width, img.height);
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+        return canvas.toDataURL("image/png");
+      }, { src: `data:image/png;base64,${buf.toString("base64")}`, cap: VISION_MAX_EDGE });
+      return Buffer.from(dataUrl.split(",")[1], "base64");
+    } catch {
+      return buf;
     }
   }
 

@@ -15,6 +15,10 @@
       "type": "string",
       "description": "Free-form prediction of what should happen after the action executes."
     },
+    "visual": {
+      "type": "string",
+      "description": "Only when a screenshot was provided: your visual read of the rendered page — what drew the eye first, what competed for attention, and what was missed or hard to find. Omit on text-only turns."
+    },
     "action": {
       "oneOf": [
         {

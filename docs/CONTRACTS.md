@@ -817,6 +817,12 @@ Behavior contracts:
 
 ## 13. view-server.js + viewer contract
 
+This section is frozen by `npm test`: test/view-server.test.js pins the JSON
+routes' shapes and /run/ file serving; test/viewer-smoke.test.js pins the
+viewer's render path (film strip, captions, diff tab, changed list, report
+answers — with no console errors beyond the deliberate optional-artifact
+probes) for recorded, healed, and discovery runs in pinned chromium.
+
 ```js
 export async function serveRun(dir, { port = 0, open = true, query = "" } = {})
   // query (e.g. "?filter=changed") is appended to the URL printed and opened;

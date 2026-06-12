@@ -319,7 +319,13 @@ test("a dead base-url is an infra failure (exit 2)", async () => {
     const out = JSON.parse(line);
     assertRunJsonShape(out);
     assert.equal(out.exit_code, 2);
-    assert.ok(out.cases.some((c) => c.status === "infra"), "expected an infra case");
+    const infraCase = out.cases.find((c) => c.status === "infra");
+    assert.ok(infraCase, "expected an infra case");
+    // The manifest is the durable record of the infra cause: the fix-loop
+    // skill (and the viewer) read result.error from it.
+    const manifest = JSON.parse(fs.readFileSync(path.join(infraCase.run_dir, "manifest.json"), "utf8"));
+    assert.equal(typeof manifest.result.error, "string", "infra manifest must carry result.error");
+    assert.ok(manifest.result.error.length > 0, "result.error must name the cause");
   }
 });
 

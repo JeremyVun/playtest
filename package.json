@@ -8,6 +8,7 @@
   },
   "files": [
     "src/harness",
+    "src/shared",
     "src/todo-app",
     "src/demo",
     "src/viewer",

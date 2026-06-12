@@ -207,6 +207,7 @@ test("/history.json?case=: per-case history shape, oldest first; [] without a ca
     for (const k of ["duration_ms", "steps", "score", "lcp_ms", "cost_usd"]) {
       assert.ok(isNumberOrNull(h[k]), `${k} must be number|null, got ${JSON.stringify(h[k])}`);
     }
+    assert.ok(h.pins === null || typeof h.pins === "object", "pins (the comparability key)");
     assert.equal(typeof h.path, "string", "path");
   }
   const starts = hist.map((h) => h.started_at);

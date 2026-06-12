@@ -97,10 +97,14 @@ export async function runCase(rc, opts) {
   const finishInfra = async (error, { session = null, env = null } = {}) => {
     if (session) await session.close().catch(() => {});
     if (env) await env.teardown();
+    // The manifest must carry the infra cause: result.error is the only place
+    // a later reader (viewer, fix-loop skill) can find it — the in-memory
+    // result doesn't survive the process, and --json/stderr stay silent here.
+    r.runError = r.runError ?? firstLine(error);
     const manifest = buildManifest({
       rc, runId, mode: startMode, startedAt, videoStartedAt: null, llm, env, r,
       status: "infra", gate: { pass: false, checks: [] },
-      consoleErrors: 0, baseline, willGrade: false,
+      consoleErrors: 0, baseline, willGrade: false, headed,
     });
     writer.writeManifest(manifest);
     const result = { status: "infra", runDir: writer.dir, manifest, score: null, error };
@@ -246,7 +250,7 @@ export async function runCase(rc, opts) {
 
   const manifest = buildManifest({
     rc, runId, mode: actualMode, startedAt, videoStartedAt, llm, env, r,
-    status, gate, consoleErrors: session.consoleErrors(), baseline, willGrade,
+    status, gate, consoleErrors: session.consoleErrors(), baseline, willGrade, headed,
   });
   writer.writeManifest(manifest);
   await session.close().catch(() => {});
@@ -471,7 +475,7 @@ async function effectToken(session) {
   }
 }
 
-function buildManifest({ rc, runId, mode, startedAt, videoStartedAt, llm, env, r, status, gate, consoleErrors, baseline, willGrade }) {
+function buildManifest({ rc, runId, mode, startedAt, videoStartedAt, llm, env, r, status, gate, consoleErrors, baseline, willGrade, headed = false }) {
   const finishedAt = new Date();
   return {
     schema_version: 1,
@@ -499,6 +503,7 @@ function buildManifest({ rc, runId, mode, startedAt, videoStartedAt, llm, env, r
       actor_model: rc.actor_model,
       grader_model: rc.grader_model,
       gateway: llm.baseUrl,
+      headed, // part of the comparability key (shared/movement.js)
     },
     env: { base_url: env?.baseUrl ?? rc.env.base_url, managed: env?.managed ?? false },
     result: { status, end_reason: r.endReason, error: r.runError, gate },

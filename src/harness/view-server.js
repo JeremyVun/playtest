@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import { baselinePaths } from "./trajectory.js";
 
 const VIEWER_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../viewer");
+const SHARED_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../shared");
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -81,6 +82,11 @@ function handle(req, res, root, singleRun) {
   }
   if (pathname.startsWith("/run/")) {
     return sendFile(req, res, root, pathname.slice("/run/".length));
+  }
+  if (pathname.startsWith("/shared/")) {
+    // src/shared/: browser-safe modules the viewer shares with the CLI
+    // (movement.js — comparability/trend, CONTRACTS §11/§13)
+    return sendFile(req, res, SHARED_DIR, pathname.slice("/shared/".length));
   }
   return sendFile(req, res, VIEWER_DIR, pathname === "/" ? "index.html" : pathname.slice(1));
 }
@@ -248,6 +254,7 @@ function history(root, singleRun, caseId) {
       score: readJson(path.join(dir, "grade.json"))?.score ?? null,
       lcp_ms: worstLcp(path.join(dir, "trajectory.jsonl")),
       cost_usd: m.totals?.cost_usd ?? 0,
+      pins: m.pins ?? null, // the comparability key (shared/movement.js)
       path: path.relative(runsRoot, dir).split(path.sep).join("/"),
     });
   }

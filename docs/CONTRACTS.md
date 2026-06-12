@@ -222,7 +222,9 @@ early infra deaths produce videoless runs).
   video_started_at,                     // epoch ms; maps envelope ts -> video time
   pins: { harness_version, actor_model, grader_model, prompts_version,
           step_schema_version: 2, snapshot_format, settle: { name: "settle-v1",
-          dom_quiet_ms: 500, net_quiet_ms: 500, max_ms: 10000 }, gateway: <llm base URL> },
+          dom_quiet_ms: 500, net_quiet_ms: 500, max_ms: 10000 }, gateway: <llm base URL>,
+          headed: false },              // pins (minus gateway) key run comparability —
+                                        // see src/shared/movement.js; missing = wildcard
   env: { base_url, managed: false },
   result: {
     status: "pass" | "fail" | "infra" | "explored",   // explored: a discovery run that ended
@@ -687,9 +689,14 @@ Behavior contracts:
   `--plain`/`--no-tui`/`--ci`/`--json` apply; otherwise the plain reporter; `--json`
   silences everything except warn events (stderr).
 - Trend context: the runs root is scanned once (runs-root.js `scanHistory`) before runAll;
-  each finished case is compared against the most recent prior run of the same case id by
-  manifest `started_at` (non-infra preferred, same-run_id siblings excluded). Score deltas
-  compare only graded-to-graded; the streak counts over non-infra priors and prints only
+  each finished case is compared against its prior runs by the shared comparability module
+  (src/shared/movement.js — the one implementation, also serving the viewer): comparable =
+  same case id, earlier `started_at`, different run_id (repeat siblings share one),
+  non-infra, non-explored, and a matching pin set (manifest pins minus `gateway`, which
+  carries ephemeral ports; a pin missing on either side is a wildcard so legacy manifests
+  stay comparable). `prev` prefers fully comparable runs and falls back to a pin-matching
+  infra prior. Score deltas compare only graded-to-graded (--json `score_delta` reaches
+  back to the last graded prior); the streak counts over comparable priors and prints only
   on a status change. Infra results and first-ever runs get no trend. Explored runs have
   no regression-trend semantics and are excluded entirely — an explored result gets no
   trend, and explored priors never serve as the comparison run.
@@ -847,9 +854,11 @@ resolves to that run's directory (`run_dir` is the authoritative match; run_id e
 is only the fallback for old metas lacking `run_dir`); in single-run mode the runs root
 is resolved from the run's run_id ancestor. Always also serves
 `/history.json?case=<case_id>` → `[{run_id, started_at, status, mode, healed, duration_ms,
-steps, score|null, lcp_ms|null, cost_usd, path}]` across sibling runs of the same case,
-oldest first (empty array if unknown) — powers the sparkline and movement chips (`path`
-only resolves when serving a runs root). MIME types must cover
+steps, score|null, lcp_ms|null, cost_usd, pins|null, path}]` across sibling runs of the
+same case, oldest first (empty array if unknown) — powers the sparkline and movement chips
+(`path` only resolves when serving a runs root; `pins` feeds the comparability key).
+`/shared/*` serves the browser-safe modules under `src/shared/` (movement.js — the
+comparability/trend implementation cli.js also imports). MIME types must cover
 .json/.jsonl/.png/.webm/.mhtml/.zip/.txt. No directory traversal.
 
 **Viewer** (`src/viewer/` — vanilla JS, no build, must work from any static server that
@@ -888,7 +897,10 @@ runs exist, else duration; dots link to `?run=<path>` when serving a runs root) 
 header movement chips — deltas vs the previous comparable run and vs the median of the
 last 5 comparable runs (duration, steps; LCP/score only when both sides have them),
 `pass → fail` / `pass → healed` status chips, and a regression/improved badge (product
-thresholds: pass->fail, score ±5, duration ±30%; regression wins).
+thresholds: pass->fail, score ±5, duration ±30%; regression wins). Comparability and the
+badge are computed by the shared module (imported over HTTP from /shared/movement.js,
+same rules and pin key as the CLI trend — §12); infra and explored *current* runs get no
+movement.
 Keyboard: ←/→ steps, v toggles a11y view. Everything must degrade gracefully when an
 artifact is missing (acted runs have no tokens; ungraded runs no grade.json).
 

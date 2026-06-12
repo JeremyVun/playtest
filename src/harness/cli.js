@@ -20,6 +20,7 @@ import { gradeRun } from "./grader.js";
 import { llmConfig } from "./llm.js";
 import { serveRun, listRuns, changed as changedJourneys } from "./view-server.js";
 import { findRunsRoot, latestRun, scanHistory } from "./runs-root.js";
+import { movement } from "../shared/movement.js";
 import { promptChangedReview } from "./prompt.js";
 import { ensureBrowser } from "./preflight.js";
 import { demo } from "./demo.js";
@@ -101,37 +102,28 @@ const makeTrendFor = (history) => (result) =>
   computeTrend(history.get(result.manifest?.case?.id) ?? [], result);
 
 /**
- * Movement of one result vs the case's prior runs (scanHistory entries, oldest
- * first). Previous comparable run = most recent prior run by started_at,
- * preferring non-infra; same-run_id siblings are excluded. Scores compare
- * only graded-to-graded; the streak prints only on a status change and counts
- * over non-infra runs. Explored runs have no regression-trend semantics and
- * are excluded entirely, current and prior.
+ * Movement of one result vs the case's prior runs (scanHistory entries,
+ * oldest first). The comparability rules — pin set included — live in the
+ * shared module (src/shared/movement.js); this maps a runner result onto its
+ * inputs and keeps only the fields the CLI surfaces.
  * @returns {{ duration_delta_ms: number|null, score_delta: number|null,
- *             status_streak: string|null }|null} null when no prior runs
+ *             status_streak: string|null }|null} null when nothing compares
  */
 function computeTrend(prior, result) {
   const m = result.manifest;
-  if (!m || result.status === "infra" || result.status === "explored") return null;
-  const entries = prior.filter((e) => e.run_id !== m.run_id && e.status !== "explored");
-  if (!entries.length) return null;
-  const nonInfra = entries.filter((e) => e.status !== "infra");
-  const prev = (nonInfra.length ? nonInfra : entries).at(-1);
-  const duration_delta_ms =
-    m.duration_ms != null && prev.duration_ms != null ? m.duration_ms - prev.duration_ms : null;
-  let status_streak = null;
-  const last = nonInfra.at(-1);
-  if (last && last.status !== result.status) {
-    let n = 0;
-    while (n < nonInfra.length && nonInfra.at(-1 - n).status === last.status) n++;
-    status_streak = `first ${result.status} after ${n} ${last.status}${n === 1 ? "" : last.status === "pass" ? "es" : "s"}`;
-  }
-  let score_delta = null;
-  if (result.score != null) {
-    const graded = entries.findLast((e) => e.score != null);
-    if (graded) score_delta = result.score - graded.score;
-  }
-  return { duration_delta_ms, score_delta, status_streak };
+  if (!m) return null;
+  const mv = movement(prior, {
+    run_id: m.run_id,
+    started_at: m.started_at,
+    status: result.status,
+    healed: m.healed ?? false,
+    duration_ms: m.duration_ms ?? null,
+    steps: m.totals?.steps ?? null,
+    score: result.score ?? null,
+    pins: m.pins ?? null,
+  });
+  if (!mv) return null;
+  return { duration_delta_ms: mv.duration.prev, score_delta: mv.scoreVsLastGraded, status_streak: mv.statusStreak };
 }
 
 // Reporter seam: live region on an

@@ -44,7 +44,7 @@ export function findRunsRoot(explicit = null, from = process.cwd()) {
  * manifests and ones without case id / started_at are skipped.
  * @returns {Map<string, {run_id: string|null, started_at: string, status: string|null,
  *   mode: string|null, healed: boolean, duration_ms: number|null, steps: number|null,
- *   score: number|null}[]>}
+ *   score: number|null, pins: object|null}[]>}
  */
 export function scanHistory(root) {
   const byCase = new Map();
@@ -61,6 +61,7 @@ export function scanHistory(root) {
       duration_ms: m.duration_ms ?? null,
       steps: m.totals?.steps ?? null,
       score: readJson(path.join(dir, "grade.json"))?.score ?? null,
+      pins: m.pins ?? null, // the comparability key (shared/movement.js)
     });
   }
   for (const list of byCase.values()) list.sort((a, b) => a.started_at.localeCompare(b.started_at));

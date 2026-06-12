@@ -3,6 +3,8 @@
    optional: missing files degrade to placeholders, never a blank app.
    Strictly read-only: accepting/rejecting changed journeys happens in the CLI. */
 
+import { movement } from "./shared/movement.js";
+
 const $ = (sel) => document.querySelector(sel);
 
 const state = {
@@ -542,75 +544,30 @@ function renderChanged(entries) {
 
 /* ---------- run movement vs history ---------- */
 
-// Badge thresholds (product constants): a pass that turns into a fail, a
-// score drop of 5+ points, or a 30%+ duration increase is a regression; a
-// score gain of 5+ or a 30%+ duration drop is an improvement. Regression
-// wins when signals disagree.
-const SCORE_DELTA_BADGE = 5;
-const DURATION_RATIO_BADGE = 0.3;
-
 const signedMs = (ms) => (ms < 0 ? "-" : "+") + fmtMs(Math.abs(ms));
 const signedInt = (n) => (n < 0 ? "-" : "+") + Math.round(Math.abs(n));
 
-function median(vals) {
-  if (!vals.length) return null;
-  const s = [...vals].sort((a, b) => a - b);
-  return s.length % 2 ? s[s.length >> 1] : (s[(s.length >> 1) - 1] + s[s.length >> 1]) / 2;
-}
-
 /**
- * Deltas of this run vs its history: vs the previous comparable entry and vs
- * the median of the last 5 comparable entries. Comparable = started before
- * this run, non-infra and non-explored (all priors when none qualify), never
- * a same-run_id sibling. Score deltas exist only between graded runs; LCP only
- * when both runs measured one. Null when the case has no prior runs or when
- * this run is an explore run.
+ * Deltas of this run vs its history. The comparability rules — pin set
+ * included — and the badge thresholds live in the shared module (served at
+ * /shared/movement.js, same code cli.js uses); this maps the viewer's state
+ * onto its inputs. The current run's worst LCP comes from the step envelopes,
+ * like the server computes it for history entries.
  */
 function computeMovement() {
   const m = state.manifest;
-  // Discovery runs have no regression-trend semantics: no movement for an
-  // explore run, and explored priors are never comparable (mirrors cli.js trend).
-  if (m.mode === "explore") return null;
-  const before = state.history.filter(
-    (r) => r.run_id !== m.run_id && String(r.started_at) < String(m.started_at ?? ""));
-  const comparable = before.filter((r) => r.status !== "infra" && r.status !== "explored");
-  const prev = (comparable.length ? comparable : before).at(-1);
-  if (!prev) return null;
-  const recent = comparable.slice(-5);
-
   const lcps = state.steps.map((s) => s.perf?.nav?.lcp_ms).filter((v) => typeof v === "number");
-  const cur = {
-    status: m.result?.status ?? null,
-    duration: m.duration_ms ?? null,
+  return movement(state.history, {
+    run_id: m.run_id,
+    started_at: m.started_at,
+    status: m.mode === "explore" ? "explored" : (m.result?.status ?? null),
+    healed: m.healed ?? false,
+    duration_ms: m.duration_ms ?? null,
     steps: m.totals?.steps ?? null,
-    lcp: lcps.length ? Math.max(...lcps) : null, // worst LCP, like the server's history entries
+    lcp_ms: lcps.length ? Math.max(...lcps) : null,
     score: state.grade?.score ?? null,
-  };
-  const delta = (a, b) => (a != null && b != null ? a - b : null);
-  const medOf = (key) => median(recent.map((r) => r[key]).filter((v) => v != null));
-  const mv = {
-    prev,
-    duration: { prev: delta(cur.duration, prev.duration_ms), med: delta(cur.duration, medOf("duration_ms")) },
-    steps: { prev: delta(cur.steps, prev.steps), med: delta(cur.steps, medOf("steps")) },
-    lcp: { prev: delta(cur.lcp, prev.lcp_ms), med: delta(cur.lcp, medOf("lcp_ms")) },
-    score: { prev: delta(cur.score, prev.score), med: delta(cur.score, medOf("score")) },
-  };
-  mv.statusMove =
-    prev.status === "pass" && cur.status === "fail" ? "pass → fail"
-    : prev.status === "pass" && !prev.healed && m.healed && cur.status === "pass" ? "pass → healed"
-    : null;
-
-  const durRatio = mv.duration.prev != null && prev.duration_ms > 0 ? mv.duration.prev / prev.duration_ms : null;
-  mv.badge =
-    mv.statusMove === "pass → fail" ||
-    (mv.score.prev != null && mv.score.prev <= -SCORE_DELTA_BADGE) ||
-    (durRatio != null && durRatio >= DURATION_RATIO_BADGE)
-      ? "regression"
-      : (mv.score.prev != null && mv.score.prev >= SCORE_DELTA_BADGE) ||
-          (durRatio != null && durRatio <= -DURATION_RATIO_BADGE)
-        ? "improved"
-        : null;
-  return mv;
+    pins: m.pins ?? null,
+  });
 }
 
 /* compact "<metric> <Δ vs prev> · med <Δ vs last-5 median>" chip, or null */

@@ -1,20 +1,5 @@
 # Playtest Follow-Up Improvements
 
-A second planning input, following IMPROVEMENTS.md — now implemented and
-removed (recoverable from git history); its still-relevant material is
-folded in below. docs/playtest-design.md remains a stable input used by
-other consumers — do not edit it; new planning goes here. NICE_TO_HAVE.md
-holds deliberate deferrals (including the hosted run service).
-
-Status of IMPROVEMENTS.md at removal: phases 1–5 implemented (CLI
-contract, creation workflow, zero-arg view, acceptance workflow, live
-progress), and of its leftovers, CLI trend context (`computeTrend` in
-cli.js), the actor log-folding removal, and portable network data
-(envelopes carry `network.requests`, written by browser.js and preferred
-by gate.js and the viewer) have landed since. Still open: viewer movement
-indicators (§5, now self-contained) and the compose-based example suite
-(deferred — see the leftovers note under Execution Order).
-
 ## Execution Order
 
 Ranked for picking items up one at a time, dependencies included. §N refers
@@ -60,16 +45,11 @@ follow-through; C and D deepen the product.
    gateways fail mid-presentation; never present without the recording).
    Verify the per-step-timestamped screencast is actually implemented
    first; timebox — a hand-recorded screen capture is the acceptable
-   fallback for the first deck.
-5. **Showcase suite (talk asset, no product code)** — a small suite of
-   2–3 journeys against an app the audience knows: an internal tool or a
-   team's product in staging. The todo app reads "toy"; *their* checkout
-   healing live reads "real". This is pure preparation work, and it is
-   the single highest-impact hour of the talk prep.
-6. **Browser preflight (§3)** — the call to action triggers dozens of
+   fallback for the first deck. In particular, these journey clips will add direct value as part of PR review bots
+5. **Browser preflight (§3)** — the call to action triggers dozens of
    simultaneous first-runs; none of them may hit a raw Playwright stack
    trace.
-7. **Pre-1.0 cruft removal + README (§2)** — engineers browse the repo
+6. **Pre-1.0 cruft removal + README (§2)** — engineers browse the repo
    *during* the talk; a README documenting dead commands kills credibility
    faster than any bug.
 

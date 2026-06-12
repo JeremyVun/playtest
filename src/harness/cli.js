@@ -23,7 +23,8 @@ import { findRunsRoot, latestRun, scanHistory } from "./runs-root.js";
 import { promptChangedReview } from "./prompt.js";
 import { ensureBrowser } from "./preflight.js";
 import { demo } from "./demo.js";
-import { newCase, newPersona } from "./new.js";
+import { clip } from "./clip.js";
+import { newCase, newPersona, installSkill } from "./new.js";
 import { listPersonas } from "./actor.js";
 
 const program = new Command();
@@ -40,6 +41,7 @@ Workflow:
   playtest demo              watch record → act → heal on the bundled todo app
   playtest new <name>        add a test case (creates config on first use)
   playtest view              open the GUI for runs and changed journeys
+  playtest clip <run|case>   cut a subtitled clip from a run's screencast
   playtest refresh <paths>   create fresh saved paths
   playtest list              list discovered suites and cases
 
@@ -436,6 +438,25 @@ program
     if (opts.case) q.set("case", opts.case);
     await serveRun(root, { port: Number(opts.port), open: opts.open, query: q.size ? `?${q}` : "" });
   }));
+
+// `install-skill` (new.js): the packaged fix-loop skill, copied into the
+// project so it versions with the installed harness's --json contract.
+program
+  .command("install-skill")
+  .description("install the playtest fix-loop agent skill into this project's .claude/skills/")
+  .option("--force", "overwrite a locally modified skill file", false)
+  .action(run(async (opts) => installSkill(opts)));
+
+// `clip` (clip.js): webm + WebVTT sidecar from a run's screencast; --burn
+// makes the self-contained variant via system ffmpeg (optional dependency).
+program
+  .command("clip")
+  .description("cut a subtitled clip from a run's screencast (webm + WebVTT sidecar)")
+  .argument("<run_or_case>", "a run directory, or a case id (its latest run under the nearest runs/)")
+  .option("--captions <style>", "caption source: action (Click “Checkout”) | thought (agent narration)", "action")
+  .option("--burn", "burn captions + status watermark into a single webm (needs system ffmpeg)", false)
+  .option("--out <path>", "output path for the burned/slideshow clip (default <runDir>/clip.webm)")
+  .action(run(async (target, opts) => clip(target, opts)));
 
 // `refresh` re-records and accepts passing runs.
 program

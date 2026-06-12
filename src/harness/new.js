@@ -1,6 +1,8 @@
-// `playtest new` scaffolding: cases and personas. cli.js stays wiring.
+// `playtest new` scaffolding: cases, personas, and the agent skill. cli.js
+// stays wiring.
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { DummyConfigError } from "./config.js";
 
 const CASE_TEMPLATE = `tags: []
@@ -104,6 +106,38 @@ export function newPersona(name, { force = false } = {}) {
   writeGuarded(file, `name: ${slug}\ndescription: |\n  Describe how this user approaches the app.\n`, force);
   console.log(`Created persona: ${rel(file)}`);
   console.log(`Next: set "persona: ${slug}" in a case file or playtest.yaml`);
+}
+
+/**
+ * `playtest install-skill`: copy the packaged fix-loop skill into the
+ * project's `.claude/skills/playtest/SKILL.md`, so the skill versions in
+ * lockstep with the installed harness and its --json contract. Idempotent: a
+ * byte-identical install is a quiet success; differing content needs --force
+ * (the `new` guard wording), so local edits are never clobbered silently.
+ * @param {{ force?: boolean }} [opts]
+ */
+export function installSkill({ force = false } = {}) {
+  const src = fileURLToPath(new URL("../../skills/playtest/SKILL.md", import.meta.url));
+  const content = fs.readFileSync(src, "utf8");
+  const dest = path.join(findProjectRoot(), ".claude", "skills", "playtest", "SKILL.md");
+  if (fs.existsSync(dest) && fs.readFileSync(dest, "utf8") === content) {
+    console.log(`Skill already installed (up to date): ${rel(dest)}`);
+    return;
+  }
+  writeGuarded(dest, content, force);
+  console.log(`Installed skill: ${rel(dest)}`);
+  console.log("Agents with skill support pick it up from .claude/skills/ automatically.");
+}
+
+/** Nearest ancestor containing .git (the repo root), else cwd — the same walk
+ *  the scaffolders use, so "the project" means the same thing everywhere. */
+function findProjectRoot() {
+  for (let dir = process.cwd(); ; ) {
+    if (fs.existsSync(path.join(dir, ".git"))) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) return process.cwd();
+    dir = parent;
+  }
 }
 
 /** Does any dir from `start` up to the repo root (incl. both ends) hold a playtest.yaml? */

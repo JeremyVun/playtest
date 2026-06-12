@@ -1083,6 +1083,21 @@ function initVideo() {
     return videoMissing();
   }
   video.src = state.base + "/" + rel;
+  wireCaptionTrack(video);
+}
+
+// `playtest clip` leaves a video.vtt sidecar next to the webm; when present,
+// surface it as a native captions track (probed like the other optional
+// artifacts — most runs have none).
+async function wireCaptionTrack(video) {
+  video.querySelector("track")?.remove();
+  const base = state.base;
+  const text = await fetchText(base + "/video.vtt");
+  if (base !== state.base) return; // run switched while probing
+  if (!text || !text.startsWith("WEBVTT")) return;
+  const track = h("track", { kind: "captions", label: "captions", src: base + "/video.vtt", default: "" });
+  video.append(track);
+  track.track.mode = "showing";
 }
 
 function videoMissing() {

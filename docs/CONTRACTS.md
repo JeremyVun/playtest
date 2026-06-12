@@ -197,7 +197,14 @@ runs/<run-id>/<case-id>/          # run-id: UTC "2026-06-10T0300-ab12" (timestam
   baseline.jsonl                  # copy of the baseline acted from (act/heal runs only)
   grade.json                      # grader output (when graded)
   steps/NNN.{png,mhtml,a11y.txt}  # NNN zero-padded to 3
+  video.vtt                       # WebVTT sidecar, written by `playtest clip` (not the runner)
+  clip.webm / clip.vtt            # `playtest clip --burn` / slideshow-fallback outputs
 ```
+
+The runner writes everything above the vtt line. The manifest claims
+`artifacts.video` unconditionally — consumers must stat the file and check
+`video_started_at != null` before trusting it (system-Chrome fallback and
+early infra deaths produce videoless runs).
 
 ### Manifest (manifest.json — the viewer's entry point)
 
@@ -648,6 +655,8 @@ playtest new <name> [dir]             [--force]   # = playtest new case <name> [
 playtest new persona <name>           [--force]
 playtest view [run_or_root]  [--runs-root <dir>] [--latest] [--changed] [--failed]
                              [--case <id>] [--json] [--port 0] [--no-open]
+playtest clip <run_or_case>  [--captions action|thought] [--burn] [--out <path>]
+playtest install-skill                [--force]   # fix-loop skill -> <repo>/.claude/skills/playtest/
 playtest refresh <paths...>  [--tag <t>...] [--base-url <url>] [--parallel [n]] [--headed]
                              [--runs-root <dir>=runs] [--ci] [--plain|--no-tui]
 playtest list [paths...]     [--tag <t>...] [--json]   # table: id, tags, persona, next-run
@@ -656,7 +665,7 @@ playtest personas                                      # built-in + custom perso
 
 Hidden but stable commands: `run` (the explicit default-command spelling),
 `accept <runDir>`, `reject <runDir>`, and `grade <runDir>`. The top-level help
-epilogue teaches the six-line workflow (run, demo, new, view, refresh, list),
+epilogue teaches the workflow lines (run, demo, new, view, clip, refresh, list),
 adds one discovery sentence (a playtest.yaml setting `mode: discovery` runs as a
 study: cases end "explored" instead of pass/fail, `playtest view` shows the
 evidence), and names the hidden commands.
@@ -702,6 +711,28 @@ Behavior contracts:
   they contain characters outside `[A-Za-z0-9@%+=:,./_-]` (single quotes, `'\''` escaping).
 - `--fail-on-changed`: pending changed journeys promote the exit code to 1 (never
   downgrades a 2), listing the journeys and their accept commands (stderr under `--json`).
+- install-skill: copies the packaged `skills/playtest/SKILL.md` into
+  `<project>/.claude/skills/playtest/SKILL.md` (project = nearest ancestor with `.git`,
+  else cwd). Byte-identical reruns succeed quietly ("already installed"); differing
+  content is the `new`-style guard — `already exists (use --force to overwrite)`, exit 2.
+  The skill documents only the shipped CLI surface; when the `--json` contract or command
+  names change, the skill text changes in the same commit (the self-test freezes the
+  contract side).
+- clip: the argument is a run directory, else a case id resolved to its latest run under
+  the nearest runs root (runs-root.js). Default output is zero-dependency: the existing
+  `video.webm` plus a generated `video.vtt` sidecar in the run dir — cue N starts at
+  `(ts_N − video_started_at)` (cue 1 pulled back to 0), ends at the next cue's start (last
+  cue: run end from `started_at + duration_ms`). `--captions action` (default) derives
+  `Click "Checkout"`-style lines exactly like the viewer's describe(); `--captions thought`
+  uses the agent block's thought/expectation with the viewer's replayed-step fallback text.
+  `--burn` spawns a system ffmpeg (`PLAYTEST_FFMPEG` overrides the binary, else `ffmpeg`
+  on PATH) to produce a self-contained `clip.webm`: hard subtitles, top-left status
+  watermark (green pass / amber changed = healed pass / red fail / neutral otherwise),
+  case id and per-step counter. Missing ffmpeg — or a slim build without the
+  subtitles/drawtext filters — is a config error (exit 2) naming the install fix; the
+  no-`--burn` sidecar path must keep working without ffmpeg. When the run has no usable
+  screencast, both clip paths assemble a slideshow from `steps/NNN.png` timed by the same
+  ts deltas (ffmpeg required, same exit-2 contract; sidecar lands in `clip.vtt`).
 - `--json` (run): exactly one JSON object on stdout:
   `{ run_id, runs_root (absolute), exit_code, cases: [{ id, status, mode (internal
   record|act|heal|explore), healed, changed (pending candidate from this run), run_dir,
@@ -844,7 +875,8 @@ a pending healed pass (this run's `/changed.json` entry, selected by root-relati
 matching `?run=` in root mode, by run_id+case_id in single-run mode, and only when that
 entry is `pending`); a non-pending healed pass instead gets a note that it was superseded
 or already resolved, with no command; video tab (video.webm, seek to step via ts -
-video_started_at);
+video_started_at; when a `video.vtt` sidecar from `playtest clip` answers the probe, it is
+wired in as a default-on captions `<track>`);
 cross-run sparkline from /history.json when non-empty (graded-score series when 2+ graded
 runs exist, else duration; dots link to `?run=<path>` when serving a runs root) plus
 header movement chips — deltas vs the previous comparable run and vs the median of the

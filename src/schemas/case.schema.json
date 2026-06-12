@@ -1,0 +1,143 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "dummy/case.schema.json",
+  "title": "Playtest case file",
+  "description": "One test case (<name>.yaml): a journey (regression with a deterministic gate) or a discovery study (open-ended exploration, no gate). Any key left unset inherits from the nearest playtest.yaml up the directory chain (nearest wins). max_steps/timeout may also be spelled nested under limits.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["story"],
+  "properties": {
+    "story": {
+      "type": "string",
+      "description": "Required. The user's goal in natural language, addressed to the actor in the second person (\"You keep forgetting to buy milk...\"). Journey stories name concrete targets in double quotes; discovery stories state a goal without prescribing the path (\"Get your timesheet data out of the platform however seems natural\")."
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Free-form labels for --tag filtering, e.g. [smoke]. Case-only: not allowed in playtest.yaml. Default []."
+    },
+    "persona": {
+      "type": "string",
+      "description": "Persona the actor role-plays: built-in \"tester\" or \"exploratory\", or the name/slug of a personas/*.yaml file. Default \"tester\". Inheritable. Discovery cases usually use the plural \"personas\" instead."
+    },
+    "personas": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string" },
+      "description": "Discovery-only fan-out: the case expands into one run per persona listed (same name/slug resolution as \"persona\"), each with id <case-id>@<persona> and the singular \"persona\" overridden. Config error in a journey-mode case or in playtest.yaml."
+    },
+    "mode": {
+      "enum": ["journey", "discovery"],
+      "description": "Case kind, default \"journey\". journey: regression test — deterministic success gate, baseline record/act/heal, pass/fail exit codes. discovery: product-insight study — no success gate, always a fresh agentic run that ends \"explored\" (give_up is a valid, informative outcome), graded with the discoverability rubric. Inheritable: a study directory usually sets mode: discovery once in its playtest.yaml."
+    },
+    "success": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "maxProperties": 1,
+        "properties": {
+          "url_matches": {
+            "type": "string",
+            "description": "Glob (* and ?) matched against the final URL or its pathname, e.g. \"/done/*\"."
+          },
+          "element_exists": {
+            "type": "string",
+            "description": "CSS selector that must match on the final page, e.g. \"[data-testid=todo-item]\"."
+          },
+          "api_called": {
+            "type": "string",
+            "description": "\"METHOD /path/glob\" that must appear in the run's network traffic, e.g. \"POST /api/todos\" or \"PATCH /api/todos/*\"."
+          },
+          "assert": {
+            "type": "string",
+            "description": "Natural-language claim about the final page, checked by the grader model. Costs one model call per run, even on acted runs."
+          }
+        }
+      },
+      "description": "Journey-only deterministic gate: every criterion must pass, each entry exactly one of url_matches/element_exists/api_called/assert. Case-only: not allowed in playtest.yaml. Config error in a discovery case (ask report: questions instead). Default []."
+    },
+    "perf": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "lcp_ms": {
+          "type": ["string", "number"],
+          "description": "Threshold on the WORST navigation LCP in milliseconds: \"< 2500\" style (ops < <= > >=) or a bare number meaning <= n."
+        },
+        "input_to_paint_ms": {
+          "type": ["string", "number"],
+          "description": "Threshold on the WORST input-to-paint latency in milliseconds; same format as lcp_ms."
+        },
+        "console_errors": {
+          "type": "number",
+          "description": "Maximum allowed console error count, e.g. 0."
+        }
+      },
+      "description": "Perf thresholds checked with the journey gate. Inheritable. Silently irrelevant in discovery (the gate never runs)."
+    },
+    "report": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Discovery report questions the grader must answer from the trajectory, e.g. \"At which screen would this user have expected an export affordance?\". Questions, not assertions — findings have answers, not pass/fail. Case-only: not allowed in playtest.yaml. Default []."
+    },
+    "max_steps": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Maximum actor steps before the run ends with end_reason max_steps. Default 50. Inheritable. Equivalent nested spelling: limits.max_steps."
+    },
+    "timeout": {
+      "type": ["string", "number"],
+      "description": "Wall-clock limit per run: \"5m\", \"90s\", \"250ms\", or a number of milliseconds. Default \"4m\". Inheritable. Equivalent nested spelling: limits.timeout."
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_steps": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Same as top-level max_steps."
+        },
+        "timeout": {
+          "type": ["string", "number"],
+          "description": "Same as top-level timeout."
+        }
+      },
+      "description": "Nested spelling of max_steps/timeout; normalized to the top-level keys at load time."
+    },
+    "actor_model": {
+      "type": "string",
+      "description": "Model that role-plays the user. Default \"claude-haiku-4-5\" (pinned cheap — for journeys the app is the variable, not the agent). Discovery studies often choose a stronger model, e.g. \"claude-sonnet-4-6\". Inheritable."
+    },
+    "grader_model": {
+      "type": "string",
+      "description": "Model that grades finished runs and checks assert: criteria. Default \"claude-sonnet-4-6\". Inheritable."
+    },
+    "app": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "base_url": {
+          "type": "string",
+          "description": "Where the app under test runs, e.g. http://localhost:4173. Required somewhere in the chain (or pass --base-url). Agents really click buy/delete/submit — point at staging or test, never production."
+        },
+        "compose": {
+          "type": "string",
+          "description": "docker-compose file path, relative to this file: managed mode — the harness boots and tears down the app per run."
+        },
+        "init": {
+          "type": "string",
+          "description": "Executable script path, relative to this file, run before each case to reset app state."
+        },
+        "storage_state": {
+          "type": "string",
+          "description": "Playwright storage-state JSON path, relative to this file, for a pre-authenticated browser session."
+        }
+      },
+      "description": "App under test. Merges per-key down the defaults chain, so a case can override just base_url."
+    }
+  }
+}

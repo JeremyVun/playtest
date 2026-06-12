@@ -89,8 +89,7 @@ selector-based E2E suites.
 
 There is no suite manifest. A suite is a directory tree; every `*.yaml` file
 under it is a test case, discovered automatically. The one reserved filename is
-`playtest.yaml`, which holds defaults for its subtree (the deprecated old name
-`dummy.yaml` is still read, with a warning):
+`playtest.yaml`, which holds defaults for its subtree:
 
 ```
 tests/
@@ -111,15 +110,14 @@ actor_model: claude-haiku-4-5
 grader_model: claude-sonnet-4-6
 max_steps: 30
 timeout: 4m
-runs_per_case: 1
-env:
+app:
   base_url: http://app:3000
   compose: ./docker-compose.test.yml
 ```
 
 ```yaml
 # tests/checkout/playtest.yaml — nearest file wins, like .gitignore
-env:
+app:
   init: ./seed/checkout.sh
   storage_state: ./seed/anon.json
 ```
@@ -136,13 +134,18 @@ Selection is by **path** and by **tag**:
 Adding a test to the suite is: drop a file in the tree. That's the whole
 workflow.
 
+Case files and `playtest.yaml` are schema-validated as they load: an unknown or
+misplaced key is a config error (exit `2`) naming the file and the key. Earlier
+versions silently ignored unknown keys — a typo like `max_step` now fails
+loudly instead of quietly running with the default.
+
 ### Environments: bring your own, or let Playtest boot one
 
-`env.base_url` is the only required field — it says where the app is. `compose`
+`app.base_url` is the only required field — it says where the app is. `compose`
 is optional and says **Playtest owns the app lifecycle**:
 
 ```yaml
-env:
+app:
   base_url: http://app:3000               # required: where the app is
   compose: ./docker-compose.test.yml      # optional: Playtest boots/tears down
   init: ./seed/checkout.sh                # optional: runs before each case
@@ -194,14 +197,86 @@ description: |
 The delta between personas is itself a signal: if the tester completes a flow
 the exploratory user can't, the feature works but users won't find it.
 
+### Discovery studies
+
+Everything above treats the agent as a regression instrument. A **discovery
+study** turns the same machinery toward a different question — not "does this
+journey still work?" but "where do users expect a capability to live, and where
+do they get stuck today?" Instead of recruiting humans for user testing,
+goal-level stories run through several personas and the trajectories are mined
+for product insight. This is not pass/fail testing at all: a `give_up`
+trajectory is the primary data product — *here is where a competent, motivated
+user ran out of road* — and several personas attempting the same goal give
+convergent evidence on where the capability is expected.
+
+A study is just a suite whose `playtest.yaml` sets `mode: discovery`. There are
+no new commands; `playtest studies/timesheet-export/` runs it:
+
+```yaml
+# studies/timesheet-export/playtest.yaml
+mode: discovery
+actor_model: claude-sonnet-4-6     # discovery wants a stronger user, not a pinned cheap one
+grader_model: claude-opus-4-8
+max_steps: 60
+app:
+  base_url: https://staging.platform-x.example.com
+```
+
+```yaml
+# studies/timesheet-export/export-as-csv.yaml
+story: |
+  You need this month's timesheet data in a spreadsheet for your
+  finance team. Get it out of the platform however seems natural.
+personas: [first-time-admin, power-user, skeptical-evaluator]
+report:
+  - Where did the user look first, and what did they try before giving up?
+  - At which screen would this user have expected an export affordance?
+  - Did the attempt disturb or detour through any other flow?
+```
+
+Three keys differ from a journey case. `mode: discovery` (inheritable, usually
+set once in the study's `playtest.yaml`) switches the case kind. `personas:`
+fans the case out — one run per persona, each listed as `<case>@<persona>` —
+because the deltas between personas are the signal. `report:` lists the
+questions the team wants answered; they are deliberately questions, not
+assertions — discoverability findings have *answers*, not pass/fail. A
+discovery case declares no `success:` block at all (doing so is a config
+error): discovery explicitly opts out of the regression instrument. Principle
+#1 — pin the agent, vary the app — is the journey contract; a study inverts the
+economics on purpose, spending a stronger model per run to learn about the app
+rather than to guard it.
+
+The run semantics follow from that opt-out. Every discovery run is a fresh
+agentic exploration: no baseline is recorded or acted, nothing heals, the
+deterministic gate never runs, and the run finishes `explored` rather than
+pass/fail (exit code `0`, like a pass). Explored runs are excluded from trend
+lines — there is no regression to trend.
+
+Grading still runs, with a discovery-specific rubric: the score measures
+*discoverability of the goal* (a give-up scores low — a clear finding about the
+app, not a bad run), the findings quote where the user expected the capability
+to live, and each `report:` question is answered in `grade.json` with step
+numbers as evidence. `playtest view` renders the answers in the grade panel
+with deep links to the evidence steps; the film strip, thought captions, and
+confusion badges are the study's qualitative record.
+
+Two agent skills ship with the package for the workflow around the harness:
+`skills/playtest-stories` interviews a PM as an adversarial thought partner and
+authors the story/persona YAML; `skills/playtest-discovery` runs a study end to
+end, from preflight to synthesized findings.
+
+The external-target rules apply with extra force here: discovery personas
+genuinely click buy, delete, and submit (see *What Playtest is not*) — point a
+study at staging with test rails, never at production.
+
 ### The actor loop
 
 Each turn the harness:
 
 1. Captures a **pruned accessibility snapshot** of the page — visible and
    interactable elements only, each with a stable reference ID. Typically
-   1–4K tokens. (Screenshots are captured for the record but only fed to the
-   model as a fallback for pages the a11y tree can't represent, e.g. canvas.)
+   1–4K tokens. (Screenshots are captured per step for the record; the model
+   sees only the text snapshot.)
 2. Sends the agent its context: the user story and persona, a compacted log of
    everything it has done so far, and the latest snapshot(s).
 3. Receives exactly one **structured step object** (see *The step contract*):
@@ -261,9 +336,10 @@ extraction mechanism is an implementation detail behind this contract.
 
 #### Model access
 
-All model calls go through an LLM gateway (Portkey) speaking the de facto
-standard **OpenAI chat-completions contract**; the gateway translates to each
-provider's native API (Anthropic Messages, etc.) on the wire. Extraction of
+All model calls speak the de facto standard **OpenAI chat-completions
+contract** through a single fetch-based client; the default endpoint is
+Anthropic's OpenAI-compatible API, and `PLAYTEST_LLM_BASE_URL` points the same
+client at any compatible endpoint (a gateway, the bundled mock). Extraction of
 the step object is a **forced tool call**: the step schema is registered as a
 function and `tool_choice` pins it, so every actor turn is the structured
 object — no free-text parsing. The harness still validates the returned
@@ -278,9 +354,9 @@ Gateway caveats that are part of the design, not afterthoughts:
   `cache_read_input_tokens` in responses before trusting the economics. If the
   unified route is lossy, fall back to native passthrough (provider SDK
   pointed at the gateway's base URL) and keep the routing/observability.
-- **The gateway config is part of the pinned agent.** Retries, fallbacks, and
-  translation behaviour all change actor behaviour; the Portkey config version
-  is stamped into every run alongside model and prompt versions.
+- **The endpoint is part of the pinned agent.** Retries, fallbacks, and any
+  gateway translation behaviour all change actor behaviour; the gateway base
+  URL is stamped into every run alongside model and prompt versions.
 
 ### Execution modes: record → act → heal
 
@@ -380,7 +456,7 @@ changing it requires a refresh, because it shifts every timing trend.
 Every run writes a self-contained, self-describing directory:
 
 ```
-runs/2026-06-10T0300/guest-checkout/
+runs/2026-06-10T0300-ab12/guest-checkout/
   manifest.json        # schema versions, model/prompt/gateway/harness pins,
                        # per-step artifact index
   trajectory.jsonl     # one step envelope per line — the spine
@@ -396,8 +472,8 @@ runs/2026-06-10T0300/guest-checkout/
 
 One of these trajectories per case is saved as the **baseline** — the
 pointer acted runs follow. The trajectory file is self-sufficient for that
-job; where the pointer lives (committed next to the case, or in CI artifact
-storage) is an open question.
+job; it is committed next to the case as `<case>.baseline.jsonl`, with run
+provenance in `<case>.baseline.json`.
 
 The **MHTML page snapshots** mean every step can be opened in a browser later,
 exactly as the agent saw it — framework-irrelevant, no app needed. This makes
@@ -450,27 +526,29 @@ make the call obvious in under a minute:
 ### Day-to-day commands
 
 ```
+playtest demo                          # three-act tour on the bundled todo app
 playtest tests/                        # everything discovered under tests/
 playtest tests/ --tag smoke            # PR check: checks saved paths, heals if needed
 playtest tests/checkout/               # one subtree
 playtest tests/checkout/guest-checkout.yaml    # single case
 playtest tests/ --mode agent           # force a fresh recording (ignore the baseline)
 playtest tests/ --base-url https://pr-417.preview.example.com  # external target
-playtest new suite checkout            # scaffold a suite (playtest.yaml)
-playtest new case guest-checkout ./checkout    # scaffold a case in a suite
+playtest new guest-checkout ./checkout # scaffold a case (playtest.yaml on first use)
 playtest list --tag smoke              # show what a selection resolves to
+playtest personas                      # list built-in and repo personas
 playtest view                          # open the GUI: run picker + heal/act diffs
 playtest view --changed                # review changed journeys awaiting acceptance
 playtest refresh tests/                # re-record saved paths from scratch
 ```
 
-Advanced (hidden from help, stable): `playtest accept <runDir>` /
-`playtest reject <runDir>` approve or dismiss a changed journey from a script
-or after the fact; `playtest grade <runDir>` re-grades an existing trajectory.
+Advanced (hidden from help, stable): `playtest run` is the explicit spelling
+of the default command; `playtest accept <runDir>` / `playtest reject <runDir>`
+approve or dismiss a changed journey from a script or after the fact;
+`playtest grade <runDir>` re-grades an existing trajectory.
 
 ### Writing your first test
 
-1. Scaffold a case (`playtest new case my-case tests/`) or copy an example into
+1. Scaffold a case (`playtest new my-case tests/`) or copy an example into
    the tree, write the story as you'd brief a human tester, and give it the
    obvious success criteria (a URL, an element, an API call). There is nothing
    to register — files in the tree are the suite.
@@ -485,15 +563,15 @@ or after the fact; `playtest grade <runDir>` re-grades an existing trajectory.
 - JUnit XML output for CI test reporting; the run directory uploads as a build
   artifact so the viewer is one click from the failed build.
 - Recommended shape: **`--tag smoke` on PRs** (act mode, fast — ideally
-  against the PR's preview deployment), **the full tree nightly** (with
-  `runs_per_case` > 1 if you want flake statistics), grader trends reviewed
-  weekly.
+  against the PR's preview deployment), **the full tree nightly** (re-run the
+  suite for flake statistics — trend/streak aggregates across invocations),
+  grader trends reviewed weekly.
 
 ### Lifecycle rules
 
 - **Pinned and stamped into every run record:** actor/grader model versions,
   prompts and built-in personas, snapshot format, `step.schema.json` version,
-  the settle heuristic, and the gateway (Portkey) config version. Upgrading
+  the settle heuristic, and the gateway base URL. Upgrading
   any of them is treated like a dependency upgrade: bump, `refresh`,
   review.
 - The harness refuses to compare scores or perf trends across baseline
@@ -531,7 +609,7 @@ or after the fact; `playtest grade <runDir>` re-grades an existing trajectory.
 - **A11y caveat:** the agent navigates by accessibility tree. If a page is
   semantically empty (div soup, no labels), the agent struggles — that is
   reported as an accessibility finding, distinct from a functional failure,
-  but very poor markup may need the screenshot/vision fallback.
+  but very poor markup remains a hard limit (there is no vision fallback).
 
 ---
 
@@ -549,11 +627,16 @@ User-facing terms (the words the CLI and docs lead with):
 | Accept | Approve a changed journey (or any passing run) as the case's new saved path: `playtest accept <runDir>`. `reject` dismisses it. |
 | Refresh | Re-record saved paths from scratch (`playtest refresh <paths...>`); also clears accumulated detours. |
 | Saved path | The user-facing word for the baseline (below). |
+| Discovery study | A suite with `mode: discovery`: goal-level stories run fresh through personas for product insight instead of pass/fail. Runs end `explored`. |
 
-Display status terms: `recording` (fresh agentic run), `checking` (following the
-saved path), `healing` (recovering from a changed UI), `changed` (healed pass
-awaiting review), `accepted` (now the saved path). Internally the code keeps
-`record`, `act`, and `heal`.
+Display status terms are tense-matched to the surface. Finished runs read
+`recorded` (fresh agentic run), `checked` (followed the saved path), `tried to
+heal` (recovered from a changed UI but still failed), `changed` (healed pass
+awaiting review), `accepted` (now the saved path); a finished discovery run
+reads `explored`. The live display uses the in-progress forms `recording` /
+`checking` / `healing` / `exploring`, and `playtest list` says what the next
+run will do: `check` / `record` / `explore`. Internally the code keeps
+`record`, `act`, `heal`, and `explore`.
 
 Mechanics and internal terms:
 
@@ -566,13 +649,15 @@ Mechanics and internal terms:
 | Baseline | A pointer to the saved trajectory a case acts from — the current known-good path (user-facing: the *saved path*). Accepted heals and refreshes move it. |
 | Action track | The actable projection of a trajectory: the steps that actually executed, with their resolved locators. Computed, never stored. |
 | Act | To re-execute the baseline's action track step for step as a fresh run against the live app (act mode). |
+| Explore | The discovery run mode: always a fresh agentic run — no baseline read or written, no gate. The finished status is `explored`. |
+| Report questions | The `report:` list on a discovery case; the grader answers each in `grade.json`, citing the evidence steps. |
 | Replay | Reserved for the viewer: re-watching the recording of a past run. Never an execution mode. |
 | Tag | A label on a case used for cross-directory selection (`--tag smoke`). |
 | Managed / external environment | Whether Playtest boots the app (compose) or targets an already-running `base_url`. |
 | Gate | Deterministic assertions + perf thresholds; the only thing that fails CI. |
 | Heal | Agentic recovery from a failed acted step; a healed run that passes is a changed journey (its trajectory becomes the candidate baseline). |
-| Bless | Internal/advanced name for accepting a trajectory as the baseline. The user-facing command is `playtest accept` (`bless` remains as a hidden alias). |
-| Rebaseline | Internal/advanced name for `playtest refresh`: re-record baseline trajectories after an intentional change (hidden command alias). |
+| Bless | Historical name for accepting a trajectory as the baseline. The command is `playtest accept`. |
+| Rebaseline | Historical name for re-recording baseline trajectories after an intentional change. The command is `playtest refresh`. |
 | Diff | The action-track diff between a run and its baseline — an implementation detail rendered inside the viewer's diff stage (there is no standalone diff command). |
 | Grade | Normally part of a run; the hidden `playtest grade <runDir>` re-grades an existing run as a repair/debug action. |
 | Confusion event | Harness-detected agent floundering: failed/repeated actions, backtracking, expectation-vs-outcome mismatches. |

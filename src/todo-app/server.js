@@ -1,10 +1,6 @@
 // Dummy's test subject: a zero-dependency todo app. It is a fixture, not a product.
 import http from "node:http";
-
-const PORT = Number(process.env.PORT) || 4173;
-
-let todos = [];
-let nextId = 1;
+import { pathToFileURL } from "node:url";
 
 function json(res, status, body) {
   const data = JSON.stringify(body);
@@ -27,63 +23,15 @@ function readBody(req) {
   });
 }
 
-const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url, "http://localhost");
-  try {
-    if (req.method === "GET" && url.pathname === "/") {
-      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      res.end(PAGE);
-      return;
-    }
-
-    if (url.pathname === "/api/todos") {
-      if (req.method === "GET") return json(res, 200, todos);
-      if (req.method === "POST") {
-        const body = await readBody(req);
-        const title = typeof body.title === "string" ? body.title.trim() : "";
-        if (!title) return json(res, 400, { error: "title is required" });
-        const todo = { id: nextId++, title, completed: false };
-        todos.push(todo);
-        return json(res, 201, todo);
-      }
-      if (req.method === "DELETE") {
-        if (url.searchParams.get("completed") !== "true") {
-          return json(res, 400, { error: "expected ?completed=true" });
-        }
-        const before = todos.length;
-        todos = todos.filter((t) => !t.completed);
-        return json(res, 200, { deleted: before - todos.length });
-      }
-    }
-
-    const idMatch = url.pathname.match(/^\/api\/todos\/(\d+)$/);
-    if (idMatch) {
-      const todo = todos.find((t) => t.id === Number(idMatch[1]));
-      if (!todo) return json(res, 404, { error: "not found" });
-      if (req.method === "PATCH") {
-        const body = await readBody(req);
-        if (typeof body.completed === "boolean") todo.completed = body.completed;
-        return json(res, 200, todo);
-      }
-      if (req.method === "DELETE") {
-        todos = todos.filter((t) => t !== todo);
-        return json(res, 200, { deleted: 1 });
-      }
-    }
-
-    if (req.method === "POST" && url.pathname === "/api/reset") {
-      todos = [];
-      nextId = 1;
-      return json(res, 200, { ok: true });
-    }
-
-    json(res, 404, { error: "not found" });
-  } catch (err) {
-    json(res, 400, { error: err.message });
-  }
-});
-
-const PAGE = `<!doctype html>
+// UI-variant mutation hook (VERSION_1.md item 3): variant "b" renames the add
+// button's data-testid (and label), so a saved path recorded against the
+// default UI misses its locator and the harness must heal. The label "Save"
+// stays recognizable as a submit button to humans and agents alike.
+function pageHtml(variant) {
+  const addButton = variant === "b"
+    ? '<button type="submit" data-testid="submit-button">Save</button>'
+    : '<button type="submit" data-testid="add-button">Add</button>';
+  return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -131,7 +79,7 @@ const PAGE = `<!doctype html>
   <form id="add-form" class="card">
     <label for="new-todo">What needs doing?</label>
     <input id="new-todo" data-testid="todo-input" type="text" autocomplete="off">
-    <button type="submit" data-testid="add-button">Add</button>
+    ${addButton}
   </form>
   <ul id="todo-list" data-testid="todo-list" class="card"></ul>
   <footer>
@@ -241,7 +189,97 @@ const PAGE = `<!doctype html>
 </body>
 </html>
 `;
+}
 
-server.listen(PORT, () => {
-  console.log("todo-app listening on http://localhost:" + PORT);
-});
+/**
+ * Boot one todo-app instance. State (todos, ids) is per-instance: two
+ * concurrent starts never share anything.
+ * @param {{ port?: number, variant?: string|null }} [opts] port 0 = ephemeral
+ * @returns {Promise<{ url: string, port: number, close: () => Promise<void> }>}
+ */
+export async function start({ port = 0, variant = null } = {}) {
+  let todos = [];
+  let nextId = 1;
+  const page = pageHtml(variant);
+
+  const server = http.createServer(async (req, res) => {
+    const url = new URL(req.url, "http://localhost");
+    try {
+      if (req.method === "GET" && url.pathname === "/") {
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        res.end(page);
+        return;
+      }
+
+      if (url.pathname === "/api/todos") {
+        if (req.method === "GET") return json(res, 200, todos);
+        if (req.method === "POST") {
+          const body = await readBody(req);
+          const title = typeof body.title === "string" ? body.title.trim() : "";
+          if (!title) return json(res, 400, { error: "title is required" });
+          const todo = { id: nextId++, title, completed: false };
+          todos.push(todo);
+          return json(res, 201, todo);
+        }
+        if (req.method === "DELETE") {
+          if (url.searchParams.get("completed") !== "true") {
+            return json(res, 400, { error: "expected ?completed=true" });
+          }
+          const before = todos.length;
+          todos = todos.filter((t) => !t.completed);
+          return json(res, 200, { deleted: before - todos.length });
+        }
+      }
+
+      const idMatch = url.pathname.match(/^\/api\/todos\/(\d+)$/);
+      if (idMatch) {
+        const todo = todos.find((t) => t.id === Number(idMatch[1]));
+        if (!todo) return json(res, 404, { error: "not found" });
+        if (req.method === "PATCH") {
+          const body = await readBody(req);
+          if (typeof body.completed === "boolean") todo.completed = body.completed;
+          return json(res, 200, todo);
+        }
+        if (req.method === "DELETE") {
+          todos = todos.filter((t) => t !== todo);
+          return json(res, 200, { deleted: 1 });
+        }
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/reset") {
+        todos = [];
+        nextId = 1;
+        return json(res, 200, { ok: true });
+      }
+
+      json(res, 404, { error: "not found" });
+    } catch (err) {
+      json(res, 400, { error: err.message });
+    }
+  });
+
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(port, resolve);
+  });
+  const boundPort = server.address().port;
+  return {
+    url: `http://localhost:${boundPort}`,
+    port: boundPort,
+    close: () =>
+      new Promise((resolve, reject) => {
+        server.close((err) => (err ? reject(err) : resolve()));
+        server.closeAllConnections();
+      }),
+  };
+}
+
+// CLI: `npm run todo-app` / `node src/todo-app/server.js`. Importing this
+// module never binds a port.
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+  const { port } = await start({
+    port: Number(process.env.PORT) || 4173,
+    variant: process.env.TODO_APP_VARIANT || null,
+  });
+  console.log("todo-app listening on http://localhost:" + port);
+}

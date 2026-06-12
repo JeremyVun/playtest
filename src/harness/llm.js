@@ -5,12 +5,10 @@
 export class LlmError extends Error {}
 
 export function llmConfig() {
-  // PLAYTEST_* are the documented names; DUMMY_* remain as deprecated fallbacks.
-  const baseUrlOverride = process.env.PLAYTEST_LLM_BASE_URL || process.env.DUMMY_LLM_BASE_URL || null;
+  const baseUrlOverride = process.env.PLAYTEST_LLM_BASE_URL || null;
   const baseUrl = (baseUrlOverride || "https://api.anthropic.com/v1").replace(/\/+$/, "");
   const apiKey =
     process.env.PLAYTEST_LLM_API_KEY ||
-    process.env.DUMMY_LLM_API_KEY ||
     process.env.ANTHROPIC_API_KEY ||
     process.env.OPENAI_API_KEY ||
     null;
@@ -147,6 +145,7 @@ export async function forcedToolCall({ model, messages, tool, validate = () => n
 const PRICING = [
   { match: "haiku-4-5", in: 1, out: 5, cacheRead: 0.1 },
   { match: "sonnet-4-6", in: 3, out: 15, cacheRead: 0.3 },
+  { match: "opus-4-8", in: 5, out: 25, cacheRead: 0.5 },
 ];
 
 /** @returns {number} USD; unknown models cost 0. */

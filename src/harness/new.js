@@ -1,10 +1,7 @@
-// `playtest new` scaffolding: suites, cases, personas. cli.js stays wiring.
+// `playtest new` scaffolding: cases and personas. cli.js stays wiring.
 import fs from "node:fs";
 import path from "node:path";
 import { DummyConfigError } from "./config.js";
-
-// dummy.yaml still marks a suite during the playtest.yaml migration (config.js).
-const SUITE_FILES = ["playtest.yaml", "dummy.yaml"];
 
 const CASE_TEMPLATE = `tags: []
 story: |
@@ -15,6 +12,17 @@ success:
 
 perf:
   console_errors: 0
+`;
+
+// The scaffolded defaults file is the documentation: active base_url,
+// everything else present but commented.
+const DEFAULTS_TEMPLATE = `app:
+  base_url: http://localhost:3000
+  # compose: ./docker-compose.test.yml   # Playtest boots/tears down the app
+  # init: ./seed/reset.sh                # runs before each case
+  # storage_state: ./seed/anon.json      # pre-built browser session
+# actor_model: claude-haiku-4-5
+# grader_model: claude-sonnet-4-6
 `;
 
 /**
@@ -43,53 +51,49 @@ function rel(abs) {
   return r.startsWith(".") ? r : `./${r}`;
 }
 
-const isSuiteDir = (dir) => SUITE_FILES.some((f) => fs.existsSync(path.join(dir, f)));
+const isSuiteDir = (dir) => fs.existsSync(path.join(dir, "playtest.yaml"));
 
 function writeGuarded(file, content, force) {
   if (fs.existsSync(file) && !force) {
     throw new DummyConfigError(`${rel(file)} already exists (use --force to overwrite)`);
   }
-  fs.mkdirSync(path.dirname(file), { recursive: true });
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+  } catch (e) {
+    if (e.code === "EEXIST" || e.code === "ENOTDIR") {
+      throw new DummyConfigError(`cannot create ${rel(file)}: ${rel(path.dirname(file))} is not a directory`);
+    }
+    throw e;
+  }
   fs.writeFileSync(file, content);
 }
 
 /**
- * Create `<dir>/playtest.yaml` (dir defaults to ./<slug>).
- * @param {{ force?: boolean, compose?: string|null }} [opts] --compose writes a
- *   managed-mode suite; the compose path (cwd-relative as usual) is rebased to
- *   be relative to the suite dir, because config.js resolves env.compose
- *   against the declaring file's directory, not the cwd.
+ * Create `<dir>/<slug>.yaml`. The target dir is the positional `[dir]`, else
+ * the nearest ancestor suite, else a unique suite below cwd, else ./tests/.
+ * When no directory from the target up to the repo root has a playtest.yaml,
+ * one is scaffolded next to the case (ancestor-aware: a suite subtree never
+ * gets a shadowing defaults file).
+ * @param {{ force?: boolean }} [opts]
  */
-export function newSuite(name, dir, { force = false, compose = null } = {}) {
-  const slug = slugify("suite", name);
-  const target = path.resolve(dir ?? slug);
-  const file = path.join(target, "playtest.yaml");
-  let env = `env:\n  base_url: http://localhost:3000\n`;
-  if (compose) {
-    const composeAbs = path.resolve(compose);
-    const r = path.relative(target, composeAbs);
-    env = `env:\n  base_url: http://app:3000\n  compose: ${r.startsWith(".") ? r : `./${r}`}\n`;
-    if (!fs.existsSync(composeAbs)) {
-      console.error(`warning: compose file ${rel(composeAbs)} does not exist yet`);
-    }
-  }
-  writeGuarded(file, `name: ${slug}\n${env}`, force);
-  console.log(`Created suite: ${rel(file)}`);
-  console.log(`Next: playtest new case add-todo ${rel(target)}`);
-}
-
-/**
- * Create `<suite>/<slug>.yaml`. The suite is `--suite`, the positional
- * suite_dir, or discovered (nearest ancestor suite, else a unique suite below cwd).
- * @param {{ force?: boolean, suite?: string|null }} [opts]
- */
-export function newCase(name, suiteDirArg, { force = false, suite = null } = {}) {
+export function newCase(name, dirArg, { force = false } = {}) {
   const slug = slugify("case", name);
-  const given = suite ?? suiteDirArg ?? null;
-  const suiteDir = given ? validateSuiteDir(given) : findSuiteDir();
-  const file = path.join(suiteDir, `${slug}.yaml`);
+  // Reserved: <slug>.yaml would BE the defaults file, and discovery would
+  // forever treat it as config, never as a case.
+  if (slug === "playtest") {
+    throw new DummyConfigError(
+      `case name ${JSON.stringify(name)} collides with the playtest.yaml defaults file — pick a different name`,
+    );
+  }
+  const targetDir = dirArg ? path.resolve(dirArg) : findTargetDir();
+  const file = path.join(targetDir, `${slug}.yaml`);
   writeGuarded(file, CASE_TEMPLATE, force);
   console.log(`Created case: ${rel(file)}`);
+  if (!hasAncestorDefaults(targetDir)) {
+    const defaults = path.join(targetDir, "playtest.yaml");
+    writeGuarded(defaults, DEFAULTS_TEMPLATE, force);
+    console.log(`Created defaults: ${rel(defaults)}`);
+  }
   console.log(`Next: playtest ${rel(file)}`);
 }
 
@@ -102,24 +106,22 @@ export function newPersona(name, { force = false } = {}) {
   console.log(`Next: set "persona: ${slug}" in a case file or playtest.yaml`);
 }
 
-function validateSuiteDir(given) {
-  const abs = path.resolve(given);
-  let ok = false;
-  try {
-    ok = fs.statSync(abs).isDirectory() && isSuiteDir(abs);
-  } catch {}
-  if (!ok) {
-    throw new DummyConfigError(`${given} is not a Playtest suite. Expected ${path.join(given, "playtest.yaml")}.`);
+/** Does any dir from `start` up to the repo root (incl. both ends) hold a playtest.yaml? */
+function hasAncestorDefaults(start) {
+  for (let dir = start; ; ) {
+    if (isSuiteDir(dir)) return true;
+    const parent = path.dirname(dir);
+    // The dir containing .git is the repo root: check it, then stop.
+    if (fs.existsSync(path.join(dir, ".git")) || parent === dir) return false;
+    dir = parent;
   }
-  return abs;
 }
 
-/** Nearest ancestor suite (cwd upward to the repo root), else a unique suite below cwd. */
-function findSuiteDir() {
+/** Nearest ancestor suite (cwd upward to the repo root) > unique suite below cwd > ./tests/. */
+function findTargetDir() {
   for (let dir = process.cwd(); ; ) {
     if (isSuiteDir(dir)) return dir;
     const parent = path.dirname(dir);
-    // The dir containing .git is the repo root: check it, then stop.
     if (fs.existsSync(path.join(dir, ".git")) || parent === dir) break;
     dir = parent;
   }
@@ -128,10 +130,10 @@ function findSuiteDir() {
   if (found.length === 1) return found[0];
   if (found.length > 1) {
     throw new DummyConfigError(
-      `multiple suites found: ${found.map(rel).join(", ")} — pass --suite <dir> to pick one`,
+      `multiple suites found: ${found.map(rel).join(", ")} — pass a directory: playtest new <name> <dir>`,
     );
   }
-  throw new DummyConfigError("no Playtest suite found under the current directory. Create one with: playtest new suite <name>");
+  return path.resolve("tests"); // greenfield: scaffolding adds the defaults file
 }
 
 // Same skip rules as config.js walkYaml: dotdirs, node_modules, personas.

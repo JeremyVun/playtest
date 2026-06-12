@@ -5,7 +5,7 @@
 // the CLI falls back to the plain reporter for pipes, --plain, --ci, --json.
 // Every write during a run must go through this class: a console.* from
 // elsewhere would land inside the live region and corrupt the redraw math.
-import { caseLine, summary, modeLabel } from "./report.js";
+import { caseLine, summary, modeDoing } from "./report.js";
 
 const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const REDRAW_MS = 100;
@@ -17,16 +17,18 @@ const red = (s) => `\x1b[31m${s}\x1b[0m`;
 
 export class LiveReporter {
   #out = process.stdout;
-  #active = new Map(); // "caseId#runIndex" -> live line state
+  #active = new Map(); // caseId -> live line state
   #drawn = 0; // lines currently on screen below the permanent output
   #frame = 0;
   #lastDraw = 0;
   #timer;
   #onSigint;
   #trendFor; // result -> caseLine trend (cli.js computes it from the pre-run scan)
+  #labelWidth; // status-label column width (widened when the run has discovery cases)
 
-  constructor({ trendFor = () => null } = {}) {
+  constructor({ trendFor = () => null, labelWidth = 5 } = {}) {
     this.#trendFor = trendFor;
+    this.#labelWidth = labelWidth;
     this.#timer = setInterval(() => this.#draw(true), REDRAW_MS);
     this.#timer.unref(); // the renderer must never keep the process alive
     // Ctrl-C mid-run: clear the live region so the terminal is left clean,
@@ -39,13 +41,13 @@ export class LiveReporter {
   }
 
   onEvent(ev) {
-    const key = `${ev.caseId}#${ev.runIndex}`;
+    const key = ev.caseId;
     const c = this.#active.get(key);
     switch (ev.type) {
       case "case_start":
         this.#active.set(key, {
           id: ev.caseId,
-          mode: modeLabel(ev.mode),
+          mode: modeDoing(ev.mode),
           step: 0,
           maxSteps: ev.maxSteps,
           summary: null,
@@ -67,7 +69,7 @@ export class LiveReporter {
         this.#draw();
         break;
       case "heal_start":
-        if (c) c.mode = modeLabel("heal");
+        if (c) c.mode = modeDoing("heal");
         this.#print(dim(`healing ${ev.caseId} from step ${ev.failedStep}`));
         break;
       case "grading":
@@ -83,7 +85,7 @@ export class LiveReporter {
         break;
       case "case_end":
         this.#active.delete(key);
-        this.#print(caseLine(ev.result, this.#trendFor(ev.result)));
+        this.#print(caseLine(ev.result, this.#trendFor(ev.result), this.#labelWidth));
         break;
       case "warn":
         this.#print(ev.message, process.stderr);

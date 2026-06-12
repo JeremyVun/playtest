@@ -21,6 +21,7 @@ const state = {
   cur: 0,
   view: "stills",
   itab: "step",          // inspector tab: "step" | "run"
+  playing: false,        // stills autoplay (strip play button / space)
   a11yCache: new Map(),
   videoOk: false,
 };
@@ -139,14 +140,15 @@ function shellQuote(s) {
 }
 
 // Internal run mode -> user-facing label (inline copy of report.js modeLabel —
-// the viewer has no bundler). A healed pass is a "changed" journey.
+// the viewer has no bundler). Past tense: these surfaces describe finished
+// runs. A healed pass is a "changed" journey.
 function modeLabel(mode, healed, status) {
   if (healed && status === "pass") return "changed";
-  return { record: "recording", act: "checking", heal: "healing" }[mode] ?? mode ?? "?";
+  return { record: "recorded", act: "checked", heal: "tried to heal", explore: "explored" }[mode] ?? mode ?? "?";
 }
 
 // One chip carries both mode and healed-ness: healed runs keep the accent +
-// branch icon ("changed" when passing, "healing" when not).
+// branch icon ("changed" when passing, "tried to heal" when not).
 function modeChip(mode, healed, status) {
   const label = modeLabel(mode, healed, status);
   return healed
@@ -238,8 +240,7 @@ async function boot() {
         }
         const caseId = params.get("case");
         if (caseId) {
-          // picker case_id is dir-derived; repeat runs carry a -N suffix
-          runs = runs.filter((r) => r.case_id === caseId || r.case_id.replace(/-\d+$/, "") === caseId);
+          runs = runs.filter((r) => r.case_id === caseId);
           notes.push("case " + caseId);
         }
         return renderPicker(runs, notes.join(" · ") || null);
@@ -312,6 +313,7 @@ async function loadRun() {
     initTabs();
     initKeys();
     initRunLinks();
+    $("#play").addEventListener("click", () => setPlaying(!state.playing));
   }
 
   if (state.steps.length) {
@@ -338,6 +340,7 @@ async function navigate(path, { push = true } = {}) {
   if (seq !== navSeq) return; // a newer click superseded this navigation
   if (!manifest) { location.href = "?run=" + encodeURIComponent(path); return; }
   if (push) history.pushState(null, "", "?run=" + encodeURIComponent(path));
+  setPlaying(false);
   state.runPath = path;
   state.base = base;
   state.manifest = manifest;
@@ -423,12 +426,11 @@ function runRow(href, cls, ...cells) {
   }, ...cells);
 }
 
-/* One row per story (latest run), older runs expandable beneath it. The
-   story key strips the repeat-run -N suffix, matching boot()'s ?case= filter. */
+/* One row per story (latest run), older runs expandable beneath it. */
 function renderPicker(runs, filterNote = null) {
   const el = $("#picker");
   el.hidden = false;
-  const storyKey = (r) => (r.case_id ?? "?").replace(/-\d+$/, "");
+  const storyKey = (r) => r.case_id ?? "?";
   const byStory = new Map();
   for (const r of runs) {
     const k = storyKey(r);
@@ -447,7 +449,7 @@ function renderPicker(runs, filterNote = null) {
   const cols = [
     { key: "story", label: "story" },
     { key: "status", label: "status" },
-    { key: "mode_label", label: "mode" },
+    { key: "mode_label", label: "type" },
     { key: "started_at", label: "started", desc: true },
     { key: "duration_ms", label: "duration", num: true, desc: true },
     { key: "run_id", label: "run id" },
@@ -559,15 +561,19 @@ function median(vals) {
 /**
  * Deltas of this run vs its history: vs the previous comparable entry and vs
  * the median of the last 5 comparable entries. Comparable = started before
- * this run, non-infra (all priors when every prior is infra), never a
- * same-run_id sibling. Score deltas exist only between graded runs; LCP only
- * when both runs measured one. Null when the case has no prior runs.
+ * this run, non-infra and non-explored (all priors when none qualify), never
+ * a same-run_id sibling. Score deltas exist only between graded runs; LCP only
+ * when both runs measured one. Null when the case has no prior runs or when
+ * this run is an explore run.
  */
 function computeMovement() {
   const m = state.manifest;
+  // Discovery runs have no regression-trend semantics: no movement for an
+  // explore run, and explored priors are never comparable (mirrors cli.js trend).
+  if (m.mode === "explore") return null;
   const before = state.history.filter(
     (r) => r.run_id !== m.run_id && String(r.started_at) < String(m.started_at ?? ""));
-  const comparable = before.filter((r) => r.status !== "infra");
+  const comparable = before.filter((r) => r.status !== "infra" && r.status !== "explored");
   const prev = (comparable.length ? comparable : before).at(-1);
   if (!prev) return null;
   const recent = comparable.slice(-5);
@@ -646,6 +652,7 @@ function statusChip(status) {
   if (status === "pass") return h("span", { class: "chip pass" }, icon("i-check"), "pass");
   if (status === "fail") return h("span", { class: "chip fail" }, icon("i-x"), "fail");
   if (status === "infra") return h("span", { class: "chip warn" }, icon("i-warn"), "infra");
+  if (status === "explored") return h("span", { class: "chip accent" }, icon("i-eye"), "explored");
   return h("span", { class: "chip" }, status ?? "?");
 }
 
@@ -711,7 +718,7 @@ function renderRunNav() {
 
 /* ---------- cross-run history chart (Run tab) ---------- */
 
-const HIST_COLOR = { pass: "var(--pass)", fail: "var(--fail)", infra: "var(--warn)" };
+const HIST_COLOR = { pass: "var(--pass)", fail: "var(--fail)", infra: "var(--warn)", explored: "var(--accent)" };
 
 function renderSparkline() {
   const el = $("#sec-history");
@@ -844,14 +851,43 @@ function renderStrip() {
           h("span", { class: "t" }, `${d.verb} ${d.arg ?? ""}`)),
         tele,
       ),
+      h("div", { class: "cell-prog" }), // autoplay countdown bar; animates while #strip.playing
     ));
   });
 }
 
+/* ---------- autoplay: walk the steps like a slideshow ---------- */
+
+const AUTOPLAY_MS = 1200;
+let playTimer = null;
+
+function setPlaying(on) {
+  if (on && !state.steps.length) return;
+  state.playing = on;
+  clearInterval(playTimer);
+  playTimer = null;
+  const btn = $("#play");
+  btn.replaceChildren(icon(on ? "i-pause" : "i-play"), on ? "Pause" : "Play");
+  btn.title = on ? "pause (space)" : "play through the steps (space)";
+  btn.setAttribute("aria-label", on ? "pause" : "play through the steps");
+  btn.classList.toggle("on", on);
+  // the active cell's countdown bar animates only while this class is on
+  const strip = $("#strip");
+  strip.classList.toggle("playing", on);
+  strip.style.setProperty("--autoplay-ms", AUTOPLAY_MS + "ms");
+  if (!on) return;
+  if (state.cur >= state.steps.length - 1) select(0, { auto: true }); // play at the end restarts
+  playTimer = setInterval(() => {
+    if (state.cur >= state.steps.length - 1) setPlaying(false);
+    else select(state.cur + 1, { auto: true });
+  }, AUTOPLAY_MS);
+}
+
 /* ---------- selection ---------- */
 
-function select(i, { instant = false } = {}) {
+function select(i, { instant = false, auto = false } = {}) {
   if (!state.steps.length) return;
+  if (!auto && state.playing) setPlaying(false); // manual navigation pauses the slideshow
   state.cur = Math.max(0, Math.min(i, state.steps.length - 1));
   const env = state.steps[state.cur];
 
@@ -861,44 +897,38 @@ function select(i, { instant = false } = {}) {
     if (on) c.scrollIntoView({ block: "nearest", inline: "nearest", behavior: instant ? "auto" : "smooth" });
   });
 
-  updateCaption(env, instant);
+  updateCaption(env);
   updateStage(env);
   renderInspectorStep(env);
 }
 
-function updateCaption(env, instant) {
-  const fade = $("#cap-fade");
-  const apply = () => {
-    const meta = [h("span", { class: "cap-step" }, `step ${env.step} / ${state.steps.length}`)];
-    meta.push(h("span", { class: "chip" }, env.mode === "act" ? `replayed · step ${env.acted_from ?? "?"}` : "agent"));
-    if (env.result?.ok === false) meta.push(h("span", { class: "chip fail" }, icon("i-x"), "failed"));
-    if (env.confusion) meta.push(h("span", { class: "chip warn" }, icon("i-warn"), "confusion · " + env.confusion.type.replace("_", " ")));
-    $("#cap-meta").replaceChildren(...meta);
+function updateCaption(env) {
+  const meta = [h("span", { class: "cap-step" }, `step ${env.step} / ${state.steps.length}`)];
+  meta.push(h("span", { class: "chip" }, env.mode === "act" ? `replayed · step ${env.acted_from ?? "?"}` : "agent"));
+  if (env.result?.ok === false) meta.push(h("span", { class: "chip fail" }, icon("i-x"), "failed"));
+  if (env.confusion) meta.push(h("span", { class: "chip warn" }, icon("i-warn"), "confusion · " + env.confusion.type.replace("_", " ")));
+  $("#cap-meta").replaceChildren(...meta);
 
-    const thought = $("#cap-thought");
-    if (env.agent?.thought) {
-      thought.textContent = env.agent.thought;
-      thought.className = "cap-thought";
-    } else {
-      const d = describe(env);
-      thought.textContent = `Replayed from the saved recording — ${d.verb} ${d.arg ?? ""}. The agent doesn't narrate replayed steps.`;
-      thought.className = "cap-thought quiet";
-    }
+  const thought = $("#cap-thought");
+  if (env.agent?.thought) {
+    thought.textContent = env.agent.thought;
+    thought.className = "cap-thought";
+  } else {
+    const d = describe(env);
+    thought.textContent = `Replayed from the saved recording — ${d.verb} ${d.arg ?? ""}. The agent doesn't narrate replayed steps.`;
+    thought.className = "cap-thought quiet";
+  }
 
-    const exp = $("#cap-expect");
-    if (env.agent?.expectation) {
-      exp.replaceChildren(h("b", {}, "expects"), env.agent.expectation);
-      exp.hidden = false;
-    } else if (env.confusion?.note) {
-      exp.replaceChildren(h("b", {}, "note"), env.confusion.note);
-      exp.hidden = false;
-    } else {
-      exp.hidden = true;
-    }
-  };
-  if (instant) { apply(); return; }
-  fade.classList.add("fading");
-  setTimeout(() => { apply(); fade.classList.remove("fading"); }, 150);
+  const exp = $("#cap-expect");
+  if (env.agent?.expectation) {
+    exp.replaceChildren(h("b", {}, "expects"), env.agent.expectation);
+    exp.hidden = false;
+  } else if (env.confusion?.note) {
+    exp.replaceChildren(h("b", {}, "note"), env.confusion.note);
+    exp.hidden = false;
+  } else {
+    exp.hidden = true;
+  }
 }
 
 /* ---------- stage: stills + ghost cursor ---------- */
@@ -1410,6 +1440,14 @@ function renderGate() {
     ...rows);
 }
 
+// deep-link button into the step timeline (grade findings + report evidence)
+function stepLink(n) {
+  return h("button", { class: "f-step", onclick: () => {
+    const i = state.steps.findIndex((s) => s.step === n);
+    if (i >= 0) select(i);
+  } }, `→ step ${n}`);
+}
+
 function renderGrade() {
   const g = state.grade;
   if (!g) return sec("i-gauge", "grade", null, h("div", { class: "empty-note" }, "not graded — grade.json absent"));
@@ -1417,11 +1455,13 @@ function renderGrade() {
   const findings = (g.findings ?? []).map((f) =>
     h("div", { class: "finding" },
       h("span", { class: "chip " + (sevCls[f.severity] ?? "") }, f.severity),
-      h("p", {}, f.note + " ",
-        f.step != null ? h("button", { class: "f-step", onclick: () => {
-          const i = state.steps.findIndex((s) => s.step === f.step);
-          if (i >= 0) select(i);
-        } }, `→ step ${f.step}`) : null)));
+      h("p", {}, f.note + " ", f.step != null ? stepLink(f.step) : null)));
+  // discovery report answers (grade.json `report`) — the study's data product
+  const report = (g.report ?? []).map((r, i) =>
+    h("div", { class: "report-entry" },
+      h("div", { class: "report-q" }, `${i + 1}. ${r.question}`),
+      h("p", { class: "report-a" }, r.answer,
+        ...(r.evidence_steps ?? []).flatMap((n) => [" ", stepLink(n)]))));
   return sec("i-gauge", "grade", g.model ?? null,
     h("div", { class: "grade-top" },
       h("div", { class: "grade-score" }, String(Math.round(g.score)), h("small", {}, " / 100")),
@@ -1429,6 +1469,7 @@ function renderGrade() {
         h("div", { style: "margin-bottom:4px" }, h("span", { class: "chip " + (g.completion === "full" ? "pass" : g.completion === "none" ? "fail" : "warn") }, "completion · " + g.completion)),
         g.efficiency?.wasted_steps != null ? h("div", { class: "empty-note" }, `${g.efficiency.wasted_steps} wasted step${g.efficiency.wasted_steps === 1 ? "" : "s"}`) : null)),
     g.efficiency?.assessment ? h("div", { class: "gate-detail", style: "margin-bottom:6px" }, g.efficiency.assessment) : null,
+    ...(report.length ? [h("div", { class: "label", style: "margin-top:10px" }, "report"), ...report] : []),
     ...findings,
     g.summary ? h("p", { class: "grade-summary" }, "“" + g.summary + "”") : null);
 }
@@ -1457,6 +1498,11 @@ function renderBrief() {
 function setView(view) {
   if (view === "diff" && $("#tab-diff").hidden) return;
   state.view = view;
+  // stills autoplay belongs to the step-following views; video plays itself
+  // and diff is run-level, so the control hides (and stops) on both
+  const canPlay = view === "stills" || view === "a11y";
+  $("#play").hidden = !canPlay;
+  if (!canPlay) setPlaying(false);
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("on", t.dataset.view === view));
   $("#pane-stills").hidden = view !== "stills";
   $("#pane-a11y").hidden = view !== "a11y";
@@ -1475,10 +1521,19 @@ function initKeys() {
     if (e.target.tagName === "VIDEO" || e.metaKey || e.ctrlKey || e.altKey) return;
     if (e.key === "ArrowLeft") { select(state.cur - 1); e.preventDefault(); }
     else if (e.key === "ArrowRight") { select(state.cur + 1); e.preventDefault(); }
-    else if (e.key === "v" || e.key === "V") {
-      // cycle every visible stage tab (diff only exists with a baseline)
+    else if (e.key === "Tab") {
+      // cycle every visible stage tab (diff only exists with a baseline);
+      // shift+tab cycles backwards. This claims tab from focus traversal.
       const views = ["stills", "a11y", "video", "diff"].filter((v) => v !== "diff" || !$("#tab-diff").hidden);
-      setView(views[(views.indexOf(state.view) + 1) % views.length]);
+      const dir = e.shiftKey ? -1 : 1;
+      setView(views[(views.indexOf(state.view) + dir + views.length) % views.length]);
+      e.preventDefault();
+    }
+    // space toggles autoplay where the control is visible — except on focused
+    // controls, where it must stay a click
+    else if (e.key === " " && !$("#play").hidden && !e.target.closest("button, a, input, select, textarea")) {
+      setPlaying(!state.playing);
+      e.preventDefault();
     }
   });
 }

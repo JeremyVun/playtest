@@ -19,14 +19,18 @@ docs/CONTRACTS.md             # this file
 src/
   schemas/step.schema.json    # actor step contract, schema_version 2 (exists)
   schemas/grade.schema.json   # grader output contract (exists)
+  schemas/case.schema.json    # case-file YAML contract (journey | discovery), Ajv-checked at load
+  schemas/defaults.schema.json  # playtest.yaml contract: rejects case-only keys at load
   harness/
     cli.js                    # commander wiring, shebang #!/usr/bin/env node
-    config.js                 # discovery, playtest.yaml inheritance (dummy.yaml legacy), personas
-    new.js                    # `playtest new` scaffolding: suites, cases, personas
+    config.js                 # discovery, playtest.yaml inheritance, personas
+    new.js                    # `playtest new` scaffolding: cases, personas, lazy playtest.yaml
+    demo.js                   # `playtest demo`: three-act record → act → heal tour over src/demo/
     runs-root.js              # shared runs-root discovery, latest-run + history scans
     prompt.js                 # end-of-run interactive changed-journey prompt (injected I/O)
     trajectory.js             # run dirs, envelopes, manifest, baselines, action track, diff
     browser.js                # Playwright session: snapshot, execute, settle, telemetry, artifacts
+    preflight.js              # chromium preflight: ensureBrowser(), one-time install prompt
     snapshot-injected.js      # the injected DOM script (exports a JS source string)
     gate.js                   # deterministic pass/fail gate
     llm.js                    # OpenAI chat-completions client over fetch
@@ -39,19 +43,26 @@ src/
     view-server.js            # serves viewer + run dir for `playtest view`
     prompts/
       actor-system.md         # pinned actor system prompt
+      actor-discovery.md      # discovery overlay, inserted before "## Your task" (see §6)
       persona-tester.md       # built-in persona
       persona-exploratory.md  # built-in persona
-      grader-system.md        # pinned grader prompt
+      grader-system.md        # pinned grader prompt (journey rubric)
+      grader-discovery.md     # discovery rubric, selected by case mode (see §8)
     testing/
       mock-llm.js             # OpenAI-compatible rule-based mock server (self-test fixture)
   viewer/                     # standalone static app: index.html, app.js, style.css
   todo-app/
     server.js                 # zero-dep test subject app
     Dockerfile
+  demo/                       # bundled demo suite (no baselines) that `playtest demo` copies to a temp dir
 tests/                        # example suite targeting the todo app
   playtest.yaml
   todos/*.yaml
   seed/reset.sh
+test/                         # offline harness self-tests (npm test = node --test test/*.test.js)
+skills/                       # agent skills shipped in the npm package
+  playtest-discovery/SKILL.md # run a discovery study end to end (preflight → synthesis)
+  playtest-stories/SKILL.md   # interview a PM, author cases (discovery or journey)
 personas/
   curious-newcomer.yaml       # example custom persona
 docker-compose.test.yml       # managed-mode demo for the todo app
@@ -74,6 +85,7 @@ as `PINS_BASE` (see Manifest).
   file: "/abs/path/tests/todos/add-todo.yaml",
   name: "add-todo",
   story: "...",                    // required
+  mode: "journey" | "discovery",   // case kind; discovery = no gate, no baselines, always fresh
   persona: "tester",               // name; resolution happens in actor.js
   tags: ["smoke"],
   success: [                       // array of one-key objects, order preserved
@@ -83,10 +95,10 @@ as `PINS_BASE` (see Manifest).
     { assert: "natural language claim about the final page" }
   ],
   perf: { lcp_ms: "< 2500", console_errors: 0 },   // optional; keys: lcp_ms, console_errors, input_to_paint_ms
+  report: ["Where did the user look first?"],      // discovery report questions for the grader; default []
   limits: { max_steps: 50, timeout_ms: 240000 },
   actor_model: "claude-haiku-4-5",
   grader_model: "claude-sonnet-4-6",
-  runs_per_case: 1,
   env: {
     base_url: "http://localhost:4173",   // required (CLI --base-url overrides)
     compose: "/abs/path/docker-compose.test.yml" | null,  // managed mode if set
@@ -96,18 +108,25 @@ as `PINS_BASE` (see Manifest).
 }
 ```
 
+A discovery case may declare `personas: [name, ...]` instead of the singular `persona`.
+The key is transient: `discoverCases` fans the case out into one ResolvedCase per entry —
+id `<id>@<persona>`, singular `persona` overridden — and the key never appears on a final
+ResolvedCase.
+
 Suite-defaults inheritance: collect defaults files from the repo root (dir containing
 `.git`; when no `.git` ancestor exists, every ancestor directory of the case contributes)
-down to the case's directory. The defaults filename is `playtest.yaml`; the deprecated old
-name `dummy.yaml` is still read as a fallback — each directory contributes `playtest.yaml`,
-else `dummy.yaml`, never both, and the first `dummy.yaml` read prints a once-per-process
-stderr note (`note: <relpath> is deprecated; rename it to playtest.yaml`). Deep-merge top-down
-(nearest file wins per key; `env` merges per-key, `success`/`tags` are NOT inherited —
-they are case-only). Relative paths inside any YAML (`compose`, `init`, `storage_state`)
-resolve relative to the file that declared them. Durations accept `"5m"`, `"90s"`, `"250ms"`,
+down to the case's directory. The defaults filename is `playtest.yaml`. Deep-merge top-down
+(nearest file wins per key; the `app:` YAML block merges per-key into the resolved `env`
+field). `success`/`tags`/`report`/`personas` (and `story`) are case-only: declaring one in
+a defaults file is a hard config error — defaults.schema.json rejects the key at load
+(previously `success`/`tags` were silently skipped). A top-level `env:` key
+(the old name of `app:`) in any defaults or case file is rejected with
+`env: was renamed to app: (update <cwd-relative path>)`. Relative paths inside any YAML
+(`app.compose`, `app.init`, `app.storage_state`) resolve relative to the file that
+declared them. Durations accept `"5m"`, `"90s"`, `"250ms"`,
 or a number (ms). Defaults when nothing specifies them: `actor_model: "claude-haiku-4-5"`,
-`grader_model: "claude-sonnet-4-6"`, `max_steps: 50`, `timeout: "4m"`, `runs_per_case: 1`,
-`persona: "tester"`.
+`grader_model: "claude-sonnet-4-6"`, `max_steps: 50`, `timeout: "4m"`,
+`persona: "tester"`, `mode: "journey"`.
 
 ### Step envelope (one line of trajectory.jsonl)
 
@@ -185,8 +204,12 @@ runs/<run-id>/<case-id>/          # run-id: UTC "2026-06-10T0300-ab12" (timestam
 ```js
 {
   schema_version: 1,
-  run_id, case: { id, file, story, persona, tags, success, perf, limits },
-  mode: "record" | "act" | "heal",      // heal = act that escalated
+  run_id, case: { id, file, story, mode, persona, tags, success, perf, report, limits },
+                                        // case.mode ("journey"|"discovery") + case.report ride
+                                        // along so `playtest grade` re-grades with the right rubric
+  mode: "record" | "act" | "heal" | "explore",  // run strategy: heal = act that escalated;
+                                                // explore = discovery run (a different axis
+                                                // from case.mode, which names the case kind)
   started_at, finished_at,              // ISO strings
   duration_ms,
   video_started_at,                     // epoch ms; maps envelope ts -> video time
@@ -195,10 +218,12 @@ runs/<run-id>/<case-id>/          # run-id: UTC "2026-06-10T0300-ab12" (timestam
           dom_quiet_ms: 500, net_quiet_ms: 500, max_ms: 10000 }, gateway: <llm base URL> },
   env: { base_url, managed: false },
   result: {
-    status: "pass" | "fail" | "infra",
+    status: "pass" | "fail" | "infra" | "explored",   // explored: a discovery run that ended
+                                                      // done/give_up/max_steps/timeout
     end_reason: "done" | "give_up" | "max_steps" | "timeout" | "error",
     error: "first line of the run error" | null,
     gate: { pass: true, checks: [ { kind: "url_matches"|"element_exists"|"api_called"|"assert"|"perf", spec: "<human string>", pass: true, detail: "..." } ] }
+          | null                                      // explore runs skip the gate
   },
   totals: { steps, executed_steps, tokens: {in, out, cache_read}, cost_usd, console_errors, confusion_events },
   healed: false,
@@ -224,8 +249,20 @@ runs/<run-id>/<case-id>/          # run-id: UTC "2026-06-10T0300-ab12" (timestam
 ```js
 export async function discoverCases(paths, { tags = [], baseUrl = null } = {})
   // paths: array of dirs and/or .yaml case files. Walks dirs for *.yaml (skipping
-  // playtest.yaml/dummy.yaml, personas/ dirs, *.baseline.*, *.healed.*). Applies the
+  // playtest.yaml, personas/ dirs, *.baseline.*, *.healed.*). Applies the
   // defaults chain + CLI overrides. Defaults files are rejected as direct case arguments.
+  // Every YAML doc is Ajv-validated at load — case files against case.schema.json,
+  // playtest.yaml files against defaults.schema.json — and a violation is a
+  // DummyConfigError naming the file and each offending key ('unknown key "x"',
+  // 'missing required "story"', enum/minItems/uniqueItems spelled out). Unknown keys
+  // were previously ignored; they are config errors (exit 2) now, deliberately.
+  // A bare top-level key (`tags:` with no value) parses as null and is treated as
+  // absent — it resolves to its default, exactly as before validation existed.
+  // Cross-field rules the schemas cannot express: a discovery case declaring `success`,
+  // or a non-discovery case declaring `personas`, is a DummyConfigError.
+  // Discovery personas fan-out: a case's `personas: [a, b]` expands into one
+  // ResolvedCase per entry (id `<id>@<persona>`, singular persona overridden) before
+  // the sort.
   // tags: AND-of-ORs not needed — a case matches if it has ANY of the given tags.
   // Returns ResolvedCase[] sorted by id. Throws DummyConfigError (message lists the file) on bad YAML.
 export function parseDuration(v)        // "5m"|"90s"|"250ms"|number -> ms
@@ -267,7 +304,9 @@ export function rejectHealed(caseFile)    // remove the healed candidate files (
 ```js
 export class Session {
   static async launch({ baseUrl, runDir, storageState = null, headed = false })  // settle-v1 is pinned, not a knob
-  // Chromium. Context: viewport 1280x800, recordVideo into runDir (rename to video.webm on close),
+  // Chromium; PLAYTEST_BROWSER_CHANNEL (demo-child opt-in) switches the launch channel.
+  // Context: viewport 1280x800, recordVideo into runDir (rename to video.webm on close;
+  // skipped under a channel override — the bundled ffmpeg installs with pinned chromium),
   // tracing start (screenshots+snapshots) -> trace.zip on close.
   // Instruments from construction: console messages, pageerror, request/response/requestfailed
   // (builds har.json live, assigning entry indices in order of request start), CDP for MHTML.
@@ -355,12 +394,12 @@ Cap snapshot at ~200 elements / ~6000 chars; set `truncated: true` beyond.
 
 ```js
 export function llmConfig()
-  // { baseUrl, apiKey, available: bool } from env: PLAYTEST_LLM_BASE_URL (deprecated fallback
-  // DUMMY_LLM_BASE_URL; default "https://api.anthropic.com/v1" — Anthropic's OpenAI-compat
-  // endpoint), PLAYTEST_LLM_API_KEY (fallbacks DUMMY_LLM_API_KEY, ANTHROPIC_API_KEY, then
-  // OPENAI_API_KEY). available=false when no key AND no explicit base URL override (mock
-  // servers need no key: any base-url override counts as available). Error messages name
-  // the PLAYTEST_* variables.
+  // { baseUrl, apiKey, available: bool } from env: PLAYTEST_LLM_BASE_URL (default
+  // "https://api.anthropic.com/v1" — Anthropic's OpenAI-compat endpoint),
+  // PLAYTEST_LLM_API_KEY (fallbacks ANTHROPIC_API_KEY, then OPENAI_API_KEY).
+  // available=false when no key AND no explicit base URL override (mock servers need
+  // no key: any base-url override counts as available). Error messages name the
+  // PLAYTEST_* variables.
 export async function chat({ model, messages, tools = null, toolChoice = null, maxTokens = 1024 })
   // POST {baseUrl}/chat/completions, OpenAI contract. Forced tool call when toolChoice given.
   // -> { text, toolCall: { name, args /* parsed object; JSON parse errors -> throws LlmError */ } | null,
@@ -372,7 +411,8 @@ export async function forcedToolCall({ model, messages, tool, validate = () => n
   // tool call, retries ONCE with the validation error appended as a user message. -> { args, tokens }.
   // Throws LlmError after the retry fails. The actor's step and the grader's grade both go through this.
 export function estimateCost(model, usage)  // -> USD float; pricing table for haiku-4-5 ($1/$5 per MTok,
-                                            // cache read $0.10), sonnet-4-6 ($3/$15, $0.30); unknown -> 0.
+                                            // cache read $0.10), sonnet-4-6 ($3/$15, $0.30),
+                                            // opus-4-8 ($5/$25, $0.50); unknown -> 0.
 export class LlmError extends Error {}
 ```
 
@@ -395,9 +435,11 @@ export class Actor {
   constructor(resolvedCase, persona)
   async nextStep({ history, snapshotText, stepNum, signal })
   // history: prior envelopes (this run). Builds messages cache-efficiently:
-  //   system: actor-system.md + persona overlay + the story under a "## Your task" heading
+  //   system: actor-system.md + persona overlay + (discovery cases only) the
+  //     prompts/actor-discovery.md overlay + the story under a "## Your task" heading
   //     (stable prefix, never changes mid-run; the marker is load-bearing — mock-llm
-  //     extracts the story by it)
+  //     extracts the story by its LAST occurrence — and the heading stays last, so the
+  //     overlay must sit before it)
   //   then one user message: "Steps so far:" + an append-only verbatim log of prior steps —
   //     "step N: <action human-readable> -> ok|error <error> | url now <u>" plus the agent's
   //     thought, one line each. NO folding or compaction: the log is never rewritten, so the
@@ -444,10 +486,17 @@ export async function evaluateGate(resolvedCase, ctx)
 
 ```js
 export async function gradeRun(runDir, resolvedCase)
-  // Reads trajectory + manifest + final step's a11y text. Prompt = grader-system.md + case story +
-  // compact trajectory digest (per step: action, ok, settle_ms, url, confusion, thought) + gate result +
-  // totals + (if baseline exists) baseline step count. Forced tool call "grade" with
-  // grade.schema.json. Ajv-validate, retry once. Writes grade.json (adds {model, graded_at, tokens}).
+  // Reads trajectory + manifest + final step's a11y text. Rubric is selected by case
+  // mode: grader-system.md (journey) or grader-discovery.md (discovery). Prompt = rubric +
+  // case story + compact trajectory digest (per step: action, ok, settle_ms, url, confusion,
+  // thought) + gate result (journey only — discovery never gates, the section would be noise) +
+  // totals + (if baseline exists) baseline step count — discovery never reads a baseline,
+  // even a stray one next to the case + (when resolvedCase.report is non-empty) a
+  // "## Report questions" section, numbered, instructing the grader to answer each in
+  // grade.json's optional `report` array ({question (verbatim), answer, evidence_steps},
+  // one entry per question — see grade.schema.json). Forced tool call "grade" with
+  // grade.schema.json; maxTokens 4096 on discovery (report answers add length), 2048 on
+  // journey (pinned). Ajv-validate, retry once. Writes grade.json (adds {model, graded_at, tokens}).
   // -> grade object.
 export async function checkAssertion(claim, { snapshotText, finalUrl, model })
   // Single forced-tool-call yes/no: {pass: bool, detail: string}. Used by the gate for `assert:`.
@@ -463,16 +512,18 @@ export async function prepareEnv(resolvedCase, runId)
   // External: base_url used as-is.
   // Then health-probe: GET base_url, ok if status < 500; 5 attempts, 1s apart.
   //   An external-mode probe failure against localhost/127.0.0.1 throws the onboarding hint
-  //   ("Could not reach <url>." / "Start the app yourself, or add env.compose to
+  //   ("Could not reach <url>." / "Start the app yourself, or add app.compose to
   //   playtest.yaml so Playtest can manage it."), and when a docker-compose*.yml(/yaml)
   //   sits next to the case file or in cwd, appends "Found <rel>; add to
-  //   <defaults rel>:" with the env:/compose: YAML snippet — the named file is the
-  //   nearest existing playtest.yaml/dummy.yaml ancestor of the case file (else the
+  //   <defaults rel>:" with the app:/compose: YAML snippet — the named file is the
+  //   nearest existing playtest.yaml ancestor of the case file (else the
   //   playtest.yaml the user would create in the case file's dir), and the suggested
   //   compose path is relative to that file's dir, because config.js resolves
-  //   env.compose against the declaring file. Managed-mode probe failures keep the raw
+  //   app.compose against the declaring file. Managed-mode probe failures keep the raw
   //   "health probe failed for <url>: <reason>" — compose is already configured there.
   // Then run init script (if any): cwd = script's dir, env: BASE_URL, RUN_ID, PATH etc.
+  //   *.mjs/*.cjs/*.js inits run via the current Node binary (process.execPath) so they
+  //   need no execute bit and work on Windows; anything else execs directly.
   // -> { baseUrl, managed, teardown: async () => void }
   // Probe/boot/init failure -> throw InfraError (exit code 2 territory).
 export class InfraError extends Error {}
@@ -483,14 +534,17 @@ export class InfraError extends Error {}
 ```js
 export async function runCase(resolvedCase, opts)
   // opts: { mode: "auto"|"agent", runsRoot, runId, grade: bool, headed: bool,
-  //         refresh: bool, runIndex: int, onEvent: (event) => void }
+  //         refresh: bool, onEvent: (event) => void }
   // auto: baseline exists -> act (heal on failure); else record.
+  // Discovery carve-out: a discovery case is ALWAYS a fresh exploration (mode "explore").
+  //   opts.mode is ignored (a different axis), and no baseline is ever read — not even a
+  //   stray .baseline.jsonl next to the case.
   // The persona is resolved up front (loadPersona, before env boot / browser launch) and
   //   passed into the loops: an unknown persona is an infra/config failure (status "infra",
   //   exit 2) with loadPersona's hint as the visible error — deliberately also on act-mode
   //   runs, which would only need the persona to heal: config errors are loud.
-  // Progress events ({ type, caseId, runIndex, ...payload }), emission guarded so a throwing
-  //   listener never breaks the case: case_start {mode, maxSteps, runDir},
+  // Progress events ({ type, caseId, ...payload }), emission guarded so a throwing
+  //   listener never breaks the case: case_start {mode (record|act|explore), maxSteps, runDir},
   //   env_ready {base_url, managed}, step_start {step, summary (describeAction)},
   //   step_result {step, ok, error, settleMs, costSoFar}, heal_start {failedStep}, grading,
   //   gate_fail {checks: failed only}, warn {message}, and case_end {status, result} —
@@ -507,48 +561,65 @@ export async function runCase(resolvedCase, opts)
   //   assert criteria call the model even on acted runs; the gate ctx trajectory is prefixed
   //   with a synthetic initial-load element { perf, network } from the first goto so
   //   perf.lcp_ms and api_called see the first page load), write manifest, close browser,
-  //   teardown env, then grade (record/heal runs, when opts.grade and LLM available; never
-  //   acted runs unless --grade forced; the grade's score rides on the returned result),
+  //   teardown env, then grade (record/heal/explore runs, when opts.grade and LLM available;
+  //   never acted runs unless --grade forced; the grade's score rides on the returned result),
   //   then baseline bookkeeping:
   //   record+pass+(no baseline||refresh) -> acceptBaseline, and refresh also removes any
   //   stale <case>.healed.* candidate (it diffed against the baseline this accept replaced);
   //   heal+pass -> acceptBaseline({healed:true}) (the pending changed-journey candidate).
+  // Discovery skips evaluateGate entirely — keyed on the case mode, NOT the empty success
+  //   list, which gate.js would pass vacuously. Status: "explored" when the loop ended
+  //   done/give_up/max_steps/timeout, else "infra" (an errored run produced no exploration
+  //   data); result.gate stays null. Baseline bookkeeping never runs (status is never
+  //   "pass"), so discovery writes none of the four baseline/candidate files.
   // Timeout enforcement: wall-clock deadline checked each loop turn; also wraps the whole case.
-  // -> { status: "pass"|"fail"|"infra", runDir, manifest, score: number|null, error? }
+  // -> { status: "pass"|"fail"|"infra"|"explored", runDir, manifest, score: number|null, error? }
   //    score = the grade's score when this run graded, else null (always null on infra).
   // Catches InfraError -> status "infra". Never throws.
 export async function runAll(resolvedCases, opts)
   // opts += { parallel: int|null, junit: path|null, refresh: bool,
   //           reporter: { onEvent(event), done(results) } }
   // Serial by default for external envs; managed cases run parallel (min(4, cores)) unless
-  // --parallel n overrides. runs_per_case honored (suffix run dirs -2, -3...).
+  // --parallel n overrides. Each case id maps to exactly one run dir per run id.
   // Never prints: all console output flows through opts.reporter (default no-op, every call
   // guarded) — the CLI picks plain lines (report.js), the live TTY region (live.js), or
   // silence (--json). reporter.done(results) replaces the summary print. Writes JUnit if asked.
   // -> { exitCode: 0|1|2, results }
   //                         // any infra -> 2 beats 1? NO: 2 only if infra occurred AND no gate
   //                         // failures; gate failure (1) wins over infra (2) when both present.
+  //                         // explored contributes 0, exactly like pass.
 ```
 
 ## 11. report.js (+ live.js)
 
 ```js
 export function modeLabel(mode, { healed, status })
-  // internal mode -> display word: record "recording", act "checking", heal "healing";
-  // healed + status "pass" -> "changed". Internal identifiers never change; the viewer
-  // keeps an inline copy of this map (no bundler).
-export function caseLine(result, trend = null)
+  // internal mode -> finished-run word: record "recorded", act "checked", heal "tried
+  // to heal", explore "explored"; healed + status "pass" -> "changed". Internal
+  // identifiers never change; the viewer keeps an inline copy of this map (no bundler).
+export function modeDoing(mode)
+  // in-progress word for the live display: "recording" / "checking" / "healing" /
+  // "exploring".
+export function caseLine(result, trend = null, labelWidth = 5)
   // one-line colored status for the console (status label, case id, display mode, steps,
-  // duration, score, cost; indented gate failures / infra reason). `trend`
-  // ({ duration_delta_ms, score_delta, status_streak } | null) is the case's movement vs
-  // prior runs (computed in cli.js from a pre-run runs-root scan): a signed duration delta
-  // ("3.2s (-189ms)"), "score N (±M vs last graded run)" on graded runs, and a streak bit
-  // ("first fail after 2 passes"). Zero deltas are suppressed.
-export function summary(results)          // counts, duration, cost
-export function junitXml(results)         // -> XML string (testsuite per directory, testcase per run)
+  // duration, score, cost; indented gate failures / infra reason). The status label
+  // right-aligns to `labelWidth`: the default 5 spans the journey statuses, so
+  // journey-only output stays byte-identical; cli.js passes "EXPLORED".length when the
+  // selection includes discovery cases so mixed columns align. On a finished explore run
+  // the mode word would just repeat the EXPLORED status — the line says how the
+  // exploration ended instead: "finished" / "gave up" / "hit max steps" / "timed out".
+  // `trend` ({ duration_delta_ms, score_delta, status_streak } | null) is the case's
+  // movement vs prior runs (computed in cli.js from a pre-run runs-root scan): a signed
+  // duration delta ("3.2s (-189ms)"), "score N (±M vs last graded run)" on graded runs,
+  // and a streak bit ("first fail after 2 passes"). Zero deltas are suppressed.
+export function summary(results)          // counts (explored counted separately), duration, cost
+export function junitXml(results)         // -> XML string (testsuite per directory, testcase per
+                                          //    run; explored runs emit plain passing testcases)
 ```
 
-`live.js` exports `class LiveReporter` (zero-dep), the TTY renderer with the same
+`live.js` exports `class LiveReporter` (zero-dep; constructed with
+`{ trendFor, labelWidth }` — the same trend lookup and status-column width cli.js hands
+the plain reporter), the TTY renderer with the same
 `{ onEvent, done }` reporter shape: one updating line per active case (spinner, RUN,
 case id, display mode, step k/max, action summary, elapsed, cost when > 0), redrawn at
 ~100ms; permanent lines — `caseLine` on case_end in completion order, "healing <case>
@@ -572,8 +643,8 @@ playtest run [paths...]    [--tag <t>...] [--mode auto|agent] [--base-url <url>]
                            [--parallel [n]] [--junit <path>] [--no-grade] [--headed]
                            [--runs-root <dir>=runs] [--yes] [--ci] [--plain|--no-tui]
                            [--json] [--fail-on-changed]
-playtest new suite <name> [dir]       [--compose <file>] [--force]
-playtest new case <name> [suite_dir]  [--suite <dir>] [--force]
+playtest demo                [--keep] [--headed]    # record → act → heal tour, bundled todo app
+playtest new <name> [dir]             [--force]   # = playtest new case <name> [dir]
 playtest new persona <name>           [--force]
 playtest view [run_or_root]  [--runs-root <dir>] [--latest] [--changed] [--failed]
                              [--case <id>] [--json] [--port 0] [--no-open]
@@ -585,14 +656,17 @@ playtest personas                                      # built-in + custom perso
 
 Hidden but stable commands: `run` (the explicit default-command spelling),
 `accept <runDir>`, `reject <runDir>`, and `grade <runDir>`. The top-level help
-epilogue teaches the six-line workflow and names the hidden commands.
+epilogue teaches the six-line workflow (run, demo, new, view, refresh, list),
+adds one discovery sentence (a playtest.yaml setting `mode: discovery` runs as a
+study: cases end "explored" instead of pass/fail, `playtest view` shows the
+evidence), and names the hidden commands.
 
 Behavior contracts:
 
-- Exit codes: 0 pass, 1 gate failure, 2 infra/config. `die()` prints `playtest: <msg>`
-  and exits 2. `--base-url` forces external mode (ignores compose).
+- Exit codes: 0 pass (explored counts with pass), 1 gate failure, 2 infra/config. `die()`
+  prints `playtest: <msg>` and exits 2. `--base-url` forces external mode (ignores compose).
 - Empty discovery: run prints exactly `No Playtest suites found. Create one with:
-  playtest new suite <name>` on stderr and exits 2; `list` prints the same hint and exits
+  playtest new <case-name>` on stderr and exits 2; `list` prints the same hint and exits
   0 (under `list --json`, stdout stays `[]` and the hint goes to stderr). When `--tag`
   filters were given, the onboarding hint would mislead — the message is instead
   `playtest: no cases matched --tag <tags>` (run: stderr, exit 2; list: exit 0, stderr
@@ -607,7 +681,9 @@ Behavior contracts:
   each finished case is compared against the most recent prior run of the same case id by
   manifest `started_at` (non-infra preferred, same-run_id siblings excluded). Score deltas
   compare only graded-to-graded; the streak counts over non-infra priors and prints only
-  on a status change. Infra results and first-ever runs get no trend.
+  on a status change. Infra results and first-ever runs get no trend. Explored runs have
+  no regression-trend semantics and are excluded entirely — an explored result gets no
+  trend, and explored priors never serve as the comparison run.
 - After the run: a next-actions block (`View results: playtest view`; `Review changes:
   playtest view --changed` only when a passing healed run is among the results; `Open
   failed runs: playtest view --failed` only on failures; `CI artifacts: <runsRoot>/<runId>`).
@@ -628,7 +704,7 @@ Behavior contracts:
   downgrades a 2), listing the journeys and their accept commands (stderr under `--json`).
 - `--json` (run): exactly one JSON object on stdout:
   `{ run_id, runs_root (absolute), exit_code, cases: [{ id, status, mode (internal
-  record|act|heal), healed, changed (pending candidate from this run), run_dir,
+  record|act|heal|explore), healed, changed (pending candidate from this run), run_dir,
   duration_ms, steps, cost_usd, score|null, duration_delta_ms|null, score_delta|null,
   status_streak|null, gate_failures: [{spec, detail}] }] }`.
 - view: root resolution via runs-root.js `findRunsRoot` — explicit positional or
@@ -639,32 +715,62 @@ Behavior contracts:
   mutually exclusive and reject `--latest`; picker filters become viewer query params
   (`?filter=changed|failed`, `&case=<id>`). `view --json`: no server — prints one JSON
   array on stdout and exits 0, reusing the view-server scanners so entries match
-  `/runs.json` (default; `--failed` keeps status fail/infra, `--case` filters with picker
-  semantics incl. `-N` repeat suffixes, `--latest` narrows to the single newest entry) or
+  `/runs.json` (default; `--failed` keeps status fail/infra, `--case` filters by case id,
+  `--latest` narrows to the single newest entry) or
   `/changed.json` (`--changed`). `--port`/`--no-open` are ignored under `--json`.
-- list: NEXT-RUN column prints the user words `checking` (baseline exists) / `recording`.
-  `playtest list personas` routes to the personas listing when a `./personas` dir exists.
-  `--json` -> array of `{ id, tags, persona, next_run }`.
-- new (new.js): names are slugified to `[a-z0-9._-]` (lowercase; whitespace and any
-  other character run becomes `-`, leading/trailing `-` trimmed; an empty result dies
-  with a clear message); path separators rejected first; existing files refuse without
-  `--force`; all output paths are cwd-relative (`Created:` / `Next:` lines). Suite
-  template: `name:` + `env.base_url http://localhost:3000`; with `--compose <file>`:
-  `env.base_url http://app:3000` + `compose: <path rebased relative to the suite dir>`
-  (config.js resolves env.compose against the declaring file's dir, so the cwd-relative
-  flag value is rebased; a stderr warning prints when the resolved file does not exist,
-  creation still succeeds). Case template: tags / story / success-assert /
+- list: NEXT-RUN column says what the next run will do: `explore` (discovery — decided
+  first, so a stray baseline file cannot flip it) / `check` (baseline exists) / `record`.
+  `--json` -> array of `{ id, tags, persona, next_run }`, same words.
+- demo (demo.js): the three-act record → act → heal tour; never writes inside the
+  package or the cwd. Preflight accepts the system-Chrome fallback
+  (`ensureBrowser({ allowChromeFallback: true })`); a `"chrome"` channel reaches only
+  the child runs, as `PLAYTEST_BROWSER_CHANNEL` in their env — an inherited channel
+  satisfies ensureBrowser immediately, so the children pass preflight and browser.js
+  applies it at launch. The bundled `src/demo/`
+  suite (no baselines, no `assert:` criteria — so acted runs make zero model calls) is
+  copied to a fresh temp dir (its `seed/reset.mjs` init runs via Node — no execute bit,
+  works on Windows); runs land under `<tmp>/runs`. The todo app and the mock LLM start in-process on ephemeral ports.
+  Model selection: a real key (`PLAYTEST_LLM_API_KEY` / `ANTHROPIC_API_KEY` /
+  `OPENAI_API_KEY`) leaves the child's LLM env alone (the real model narrates);
+  otherwise the child gets `PLAYTEST_LLM_BASE_URL` pointed at the in-process mock — no
+  key is ever required. Each act is a child `node cli.js run <tmpSuite> --base-url
+  <app> --runs-root <tmp>/runs` with inherited stdio (`--headed` passes through):
+  act one records, act two re-runs and prints the measured punchline (`Second run
+  followed the saved paths: N model calls, M cases in S s.` — N is the mock's request
+  delta when the mock serves the run, else 0 by construction), act three restarts the
+  app as UI variant `b` on a new port and re-runs; the child's own end-of-run
+  changed-journey prompt is the finale (review-later hints on non-TTY). Each act must
+  exit 0, else the demo dies with a clear message. Cleanup — kill the live child,
+  close both fixture servers, remove the temp dir — runs on every exit including
+  SIGINT; `--keep` retains the temp dir and prints its path.
+- new (new.js): `case` is the default subcommand, so `playtest new <name> [dir]` creates
+  a case; exact subcommand names win, so a case literally named "persona" needs
+  `playtest new case persona`. "suite" is reserved the same way: a hidden stub dies
+  (exit 2) pointing at `playtest new <name> [dir]`, so the removed suite-creation form
+  is never silently reinterpreted as a case named "suite" (`playtest new case suite`
+  creates one). "playtest" is fully reserved: any case name slugifying to it dies
+  (exit 2) — `<slug>.yaml` would be the defaults file, and discovery would never treat
+  it as a case. Names are slugified to `[a-z0-9._-]` (lowercase;
+  whitespace and any other character run becomes `-`, leading/trailing `-` trimmed; an
+  empty result dies with a clear message); path separators rejected first; existing
+  files refuse without `--force`; all output paths are cwd-relative (`Created:` /
+  `Next:` lines). Target dir for a new case: explicit `[dir]` (resolved against cwd;
+  need not exist) > nearest ancestor suite (dir with a playtest.yaml) from cwd up to the
+  repo root > exactly one suite below cwd (multiple -> die listing relative paths and
+  asking for a directory argument) > greenfield `./tests/`. Lazy defaults scaffolding,
+  ancestor-aware: when no dir from the target up to the repo root has a playtest.yaml,
+  `<target>/playtest.yaml` is also written (active `app.base_url
+  http://localhost:3000`; compose/init/storage_state and the model pins present but
+  commented) with a `Created defaults:` line — inside an existing suite subtree only
+  the case file is written. Case template: tags / story / success-assert /
   perf console_errors 0. Persona template: name + description placeholder in
-  `./personas/`. Suite resolution for `new case`: `--suite`/positional (must contain a
-  defaults file, else `<dir> is not a Playtest suite. Expected <dir>/playtest.yaml.`) >
-  nearest ancestor suite from cwd > exactly one suite below cwd (multiple -> die listing
-  relative paths, require `--suite`; zero -> suggest `playtest new suite <name>`).
+  `./personas/`.
 - accept (acceptance safety — deliberately no `--force`, checked in order): manifest.json
   exists -> trajectory.jsonl exists -> `result.status === "pass"` (refusal names status and
   end_reason) -> `manifest.case.file` is a string that still exists on disk. When this run
-  produced the pending candidate — matched by the candidate meta's `run_dir` resolving to
-  the named run directory, falling back to run_id equality only for old metas lacking
-  `run_dir` (run_id alone cannot tell runs_per_case siblings apart): `promoteHealed`.
+  produced the pending candidate — `run_dir` is the authoritative match (resolved against
+  the named run directory); run_id is only the fallback for old candidate metas that lack
+  `run_dir`: `promoteHealed`.
   When a pending candidate from a DIFFERENT run dir exists: print a supersede note naming
   its run_dir, then `acceptBaseline` directly and remove the candidate files. accept
   deliberately has no `--latest`: it rewrites a versioned baseline, so it always names
@@ -700,9 +806,9 @@ a picker. `/changed.json` → healed passes across the runs root, newest first:
 `[{case_id, run_id, started_at, score|null, path (root-relative), run_dir_rel
 (cwd-relative, for copy-paste accept/reject commands), pending}]`, where `pending` means
 the `<case>.healed.*` candidate files still exist AND the candidate meta's `run_dir`
-resolves to that run's directory (run_id equality is only the fallback for old metas
-lacking `run_dir` — runs_per_case siblings share run_id, so at most ONE sibling is
-pending); in single-run mode the runs root is resolved from the run's run_id ancestor. Always also serves
+resolves to that run's directory (`run_dir` is the authoritative match; run_id equality
+is only the fallback for old metas lacking `run_dir`); in single-run mode the runs root
+is resolved from the run's run_id ancestor. Always also serves
 `/history.json?case=<case_id>` → `[{run_id, started_at, status, mode, healed, duration_ms,
 steps, score|null, lcp_ms|null, cost_usd, path}]` across sibling runs of the same case,
 oldest first (empty array if unknown) — powers the sparkline and movement chips (`path`
@@ -712,13 +818,15 @@ only resolves when serving a runs root). MIME types must cover
 **Viewer** (`src/viewer/` — vanilla JS, no build, must work from any static server that
 provides the same URL shape): loads `/run/manifest.json` first (or `/runs.json` → picker).
 Query params (set by `playtest view` flags): `?run=<path>` opens one run from a runs root;
-`?filter=failed` filters the picker to fail/infra; `?case=<id>` filters the picker (also
-matching `-N` repeat-run suffixes); `?filter=changed` renders the read-only changed-journey
+`?filter=failed` filters the picker to fail/infra; `?case=<id>` filters the picker;
+`?filter=changed` renders the read-only changed-journey
 review list (status, case, run, started, score) — pending rows show the exact
 `playtest accept <runDir>` / `playtest reject <runDir>` commands (run dirs shell-quoted
 when needed, like the CLI's printed commands), already-resolved healed passes are listed
 dimmed without commands. Run modes display through an inline copy of
-report.js `modeLabel` (recording/checking/healing/changed).
+report.js `modeLabel` (recorded/checked/tried to heal/changed/explored); the header
+status chip and the history sparkline likewise carry `explored` alongside
+pass/fail/infra.
 Surfaces, per the design: film strip of step screenshots with ghost cursor (animate a cursor
 dot to each step's `resolution.bbox` center over the screenshot); thought + expectation
 captions; screenshot ⇄ a11y-text toggle ("what the agent saw"); confusion/expectation badges
@@ -727,7 +835,9 @@ captions; screenshot ⇄ a11y-text toggle ("what the agent saw"); confusion/expe
 the envelope's embedded `network.requests` (method, status with failed/pending markers,
 path, mime type) so trajectory.jsonl alone still yields a useful panel; inline telemetry
 (settle_ms, input_to_paint_ms, js_errors, nav vitals) + running token/cost strip; gate
-panel (checks with pass/fail); grade panel (score, findings) when grade.json exists;
+panel (checks with pass/fail); grade panel (score, findings) when grade.json exists — when
+the grade carries a `report` array (discovery), each question renders with its answer and
+`→ step N` buttons deep-linking the `evidence_steps` into the step timeline;
 heal/act diff view when baseline.jsonl exists (LCS same as diffTracks, reimplemented
 standalone) — its divergence panel shows the exact `playtest accept <runDir>` command for
 a pending healed pass (this run's `/changed.json` entry, selected by root-relative path
@@ -758,7 +868,11 @@ OpenAI-compatible server: `POST /chat/completions` (also at `/v1/chat/completion
   against the snapshot, e.g. todo text visible) → `done`. After 20 steps → `give_up`. Returns
   a proper tool_call with JSON args + plausible usage numbers.
 - If it forces tool `grade`: return a deterministic grade (score 90, completion full, one
-  info finding) matching grade.schema.json.
+  info finding) matching grade.schema.json. When the user content carries a numbered list
+  under a "## Report questions" heading (gradeRun's discovery prompt), the grade also
+  answers each question in the `report` array (deterministic answers, evidence step 1) so
+  the offline e2e lands report entries in grade.json; without the section the journey
+  grade shape is unchanged.
 - If it forces an assertion-check tool: naive textual containment of quoted words from the
   claim against the snapshot text in the prompt → pass/fail. (grader.checkAssertion's tool is
   named "verdict" with {pass, detail} — keep that name.)
@@ -780,7 +894,7 @@ filter links All/Active/Completed; live counter "N items left" (aria-live). Must
 without errors in console. Keep it genuinely simple — it's a fixture, not a product.
 
 Example suite (`tests/`): `playtest.yaml` (models, max_steps 25, timeout 3m,
-env.base_url http://localhost:4173, init ./seed/reset.sh), three cases under `todos/`:
+app.base_url http://localhost:4173, init ./seed/reset.sh), three cases under `todos/`:
 `add-todo.yaml` (tags [smoke]; story: add "buy milk"; success: element_exists
 `[data-testid=todo-item]`, api_called `POST /api/todos`, assert "the list shows a todo
 called buy milk"; perf: console_errors 0), `complete-todo.yaml` (add two, complete one,

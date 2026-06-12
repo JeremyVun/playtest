@@ -638,8 +638,8 @@ for the in-app concept; a case *checks* a journey, and "changed journey"
 must keep meaning the path changed, not the YAML file). Decision: keep
 **case**. The glossary deliberately runs two registers — theatrical words
 where they explain mechanics (actor, act, heal), conventional words on the
-CI-facing surface (suite, case, run, tag) — and `runs_per_case`,
-`case_id`, and `--case` make a rename expensive for marginal gain. If the
+CI-facing surface (suite, case, run, tag) — and `case_id` and `--case`
+make a rename expensive for marginal gain. If the
 appetite for "scenario" ever firms up, this pre-1.0 window is the only
 cheap time.
 

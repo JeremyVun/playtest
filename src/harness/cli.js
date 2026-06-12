@@ -21,7 +21,9 @@ import { llmConfig } from "./llm.js";
 import { serveRun, listRuns, changed as changedJourneys } from "./view-server.js";
 import { findRunsRoot, latestRun, scanHistory } from "./runs-root.js";
 import { promptChangedReview } from "./prompt.js";
-import { newSuite, newCase, newPersona } from "./new.js";
+import { ensureBrowser } from "./preflight.js";
+import { demo } from "./demo.js";
+import { newCase, newPersona } from "./new.js";
 import { listPersonas } from "./actor.js";
 
 const program = new Command();
@@ -35,18 +37,20 @@ program.addHelpText(
   `
 Workflow:
   playtest [paths...]        run user journey tests (default: .)
-  playtest new suite <name>  create a suite
-  playtest new case <name>   create a case in a suite
+  playtest demo              watch record → act → heal on the bundled todo app
+  playtest new <name>        add a test case (creates config on first use)
   playtest view              open the GUI for runs and changed journeys
   playtest refresh <paths>   create fresh saved paths
   playtest list              list discovered suites and cases
+
+A suite whose playtest.yaml sets "mode: discovery" runs as a study: cases end "explored" instead of pass/fail, and playtest view shows the evidence.
 
 Advanced hidden commands also exist: run, accept, reject, grade — each supports --help.`,
 );
 
 const collect = (v, all) => [...all, v];
 
-const NO_SUITES_HINT = "No Playtest suites found. Create one with: playtest new suite <name>";
+const NO_SUITES_HINT = "No Playtest suites found. Create one with: playtest new <case-name>";
 
 // Exit codes: 0 pass, 1 gate failure, 2 infra/config (see docs/playtest-design.md).
 function die(message) {
@@ -75,8 +79,8 @@ function readCandidate(caseFile) {
 }
 
 // Does the pending candidate come from THIS run directory? run_dir is the
-// authoritative match — runs_per_case siblings share run_id, so run_id is
-// only the fallback for old candidate metas that lack run_dir.
+// authoritative match; run_id is only the fallback for old candidate metas
+// that lack run_dir.
 function candidateMatchesRun(candidate, runDir, runId) {
   if (!candidate) return false;
   return candidate.run_dir ? path.resolve(candidate.run_dir) === path.resolve(runDir) : candidate.run_id === runId;
@@ -99,14 +103,15 @@ const makeTrendFor = (history) => (result) =>
  * first). Previous comparable run = most recent prior run by started_at,
  * preferring non-infra; same-run_id siblings are excluded. Scores compare
  * only graded-to-graded; the streak prints only on a status change and counts
- * over non-infra runs.
+ * over non-infra runs. Explored runs have no regression-trend semantics and
+ * are excluded entirely, current and prior.
  * @returns {{ duration_delta_ms: number|null, score_delta: number|null,
  *             status_streak: string|null }|null} null when no prior runs
  */
 function computeTrend(prior, result) {
   const m = result.manifest;
-  if (!m || result.status === "infra") return null;
-  const entries = prior.filter((e) => e.run_id !== m.run_id);
+  if (!m || result.status === "infra" || result.status === "explored") return null;
+  const entries = prior.filter((e) => e.run_id !== m.run_id && e.status !== "explored");
   if (!entries.length) return null;
   const nonInfra = entries.filter((e) => e.status !== "infra");
   const prev = (nonInfra.length ? nonInfra : entries).at(-1);
@@ -131,7 +136,10 @@ function computeTrend(prior, result) {
 // interactive terminal, today's plain lines otherwise, silence under --json
 // (warnings still reach stderr there). Trend text is content, not decoration —
 // the plain reporter carries it too.
-function makeReporter(opts, trendFor = () => null) {
+function makeReporter(opts, trendFor = () => null, cases = []) {
+  // EXPLORED is wider than the journey labels: widen the status column up
+  // front when the selection includes discovery cases.
+  const labelWidth = cases.some((c) => c.mode === "discovery") ? "EXPLORED".length : 5;
   if (opts.json) {
     return {
       onEvent: (ev) => {
@@ -140,10 +148,10 @@ function makeReporter(opts, trendFor = () => null) {
       done: () => {},
     };
   }
-  if (process.stdout.isTTY && !opts.plain && opts.tui !== false && !opts.ci) return new LiveReporter({ trendFor });
+  if (process.stdout.isTTY && !opts.plain && opts.tui !== false && !opts.ci) return new LiveReporter({ trendFor, labelWidth });
   return {
     onEvent: (ev) => {
-      if (ev.type === "case_end") console.log(caseLine(ev.result, trendFor(ev.result)));
+      if (ev.type === "case_end") console.log(caseLine(ev.result, trendFor(ev.result), labelWidth));
       else if (ev.type === "warn") console.error(ev.message);
     },
     done: (results) => console.log(summary(results)),
@@ -188,8 +196,8 @@ function isPendingChanged(res) {
 const pendingChanged = (results) => results.filter(isPendingChanged);
 
 // The --json machine summary: one object on stdout, mirrors internal naming
-// (mode stays record/act/heal; `changed` marks a pending candidate). Trend
-// fields are null when the case has no prior runs in the runs root.
+// (mode stays record/act/heal/explore; `changed` marks a pending candidate).
+// Trend fields are null when the case has no prior runs in the runs root.
 function jsonSummary(results, { runId, runsRoot, exitCode, trendFor }) {
   return {
     run_id: runId,
@@ -282,7 +290,7 @@ program
   .argument("[paths...]", "case files and/or directories", ["."])
   .option("--tag <tag>", "only cases with this tag (repeatable)", collect, [])
   .option("--mode <mode>", "auto (follow saved paths, else record) | agent (force fresh record)", "auto")
-  .option("--base-url <url>", "override env.base_url (forces external mode)")
+  .option("--base-url <url>", "override app.base_url (forces external mode)")
   .option("--parallel [n]", "run cases in parallel (default pool when n omitted)")
   .option("--junit <path>", "write a JUnit XML report")
   .option("--no-grade", "skip the grader")
@@ -296,6 +304,7 @@ program
   .option("--fail-on-changed", "exit 1 when this run leaves changed journeys awaiting review", false)
   .action(run(async (paths, opts) => {
     if (!["auto", "agent"].includes(opts.mode)) die(`invalid --mode ${opts.mode} (auto|agent)`);
+    await ensureBrowser(opts); // pinned chromium only — no chrome fallback for measured runs
     const cases = await discoverCases(paths, { tags: opts.tag, baseUrl: opts.baseUrl ?? null });
     if (!cases.length) {
       // Suites were found but the tag filter excluded everything: the
@@ -322,11 +331,12 @@ program
       parallel: parseParallel(opts.parallel),
       junit: opts.junit ?? null,
       refresh: false,
-      reporter: makeReporter(opts, trendFor),
+      reporter: makeReporter(opts, trendFor, cases),
     });
     const pending = pendingChanged(results);
-    // exit-code contract: 0 pass, 1 gate failure, 2 infra. --fail-on-changed
-    // promotes unreviewed changed journeys to 1, but never downgrades a 2.
+    // exit-code contract: 0 pass/explored, 1 gate failure, 2 infra.
+    // --fail-on-changed promotes unreviewed changed journeys to 1, but never
+    // downgrades a 2.
     const gateChanged = opts.failOnChanged && pending.length > 0;
     process.exitCode = gateChanged && exitCode !== 2 ? 1 : exitCode;
     if (opts.json) {
@@ -339,39 +349,49 @@ program
     if (pending.length) await promptChanged(pending, opts);
   }));
 
+// `demo` (demo.js): the three-act tour against the bundled todo app. Runs on
+// a temp copy of src/demo/; nothing is written inside the package or the cwd.
+program
+  .command("demo")
+  .description("three-act demo against the bundled todo app: record → act → heal (no keys, no setup)")
+  .option("--keep", "keep the demo's temp directory (suite copy + runs) and print its path", false)
+  .option("--headed", "show the browser", false)
+  .action(run(async (opts) => demo(opts)));
+
 const create = program
   .command("new")
-  .description("create a suite, case, or persona")
-  .addHelpText("after", "\nExamples:\n  playtest new suite checkout\n  playtest new case add-item ./checkout\n  playtest new persona curious-newcomer");
+  .description("create a test case or persona")
+  .addHelpText("after", "\nExamples:\n  playtest new add-item ./checkout\n  playtest new case persona\n  playtest new persona curious-newcomer");
 create
-  .command("suite")
-  .description("create a suite: a directory with a playtest.yaml")
+  .command("case", { isDefault: true })
+  .description("create a case file (scaffolds a playtest.yaml when no ancestor has one)")
   .argument("<name>")
-  .argument("[dir]", "target directory (default: ./<slugified name>)")
-  .option("--compose <file>", "managed environment: point env.compose at this file")
-  .option("--force", "overwrite an existing playtest.yaml", false)
-  .action(run(async (name, dir, opts) => newSuite(name, dir, opts)));
-create
-  .command("case")
-  .description("create a case file inside a suite")
-  .argument("<name>")
-  .argument("[suite_dir]", "suite directory (default: the nearest suite)")
-  .option("--suite <dir>", "suite directory (same as the positional argument)")
+  .argument("[dir]", "target directory (default: the nearest suite, else ./tests)")
   .option("--force", "overwrite an existing case file", false)
-  .action(run(async (name, suiteDir, opts) => newCase(name, suiteDir, opts)));
+  .action(run(async (name, dir, opts) => newCase(name, dir, opts)));
 create
   .command("persona")
   .description("create a persona in ./personas/")
   .argument("<name>")
   .option("--force", "overwrite an existing persona", false)
   .action(run(async (name, opts) => newPersona(name, opts)));
+// Reserved name: without this stub, isDefault routing would reinterpret the
+// removed suite-creation form as a case named "suite" and silently scaffold it.
+create
+  .command("suite", { hidden: true })
+  .argument("[args...]")
+  .allowExcessArguments(true)
+  .action(run(async () => {
+    throw new DummyConfigError(
+      'suites are not created explicitly — playtest new <name> [dir] scaffolds playtest.yaml on first use (a case named "suite" needs: playtest new case suite)',
+    );
+  }));
 
 /**
  * `view --json`: the picker / review listing as a plain array — reuses the
  * view-server scanners so entries match /runs.json and /changed.json exactly.
  * --changed -> changed-journey entries; --failed -> fail/infra runs only;
- * --case filters (picker semantics: -N repeat-run suffixes match too);
- * --latest narrows to the single most recent run.
+ * --case filters by case id; --latest narrows to the single most recent run.
  */
 function viewJson(root, opts) {
   if (opts.changed) {
@@ -380,7 +400,7 @@ function viewJson(root, opts) {
   }
   let entries = listRuns(root);
   if (opts.failed) entries = entries.filter((e) => e.status === "fail" || e.status === "infra");
-  if (opts.case) entries = entries.filter((e) => e.case_id === opts.case || e.case_id.replace(/-\d+$/, "") === opts.case);
+  if (opts.case) entries = entries.filter((e) => e.case_id === opts.case);
   return opts.latest ? entries.slice(0, 1) : entries; // listRuns sorts newest first
 }
 
@@ -423,7 +443,7 @@ program
   .description("create fresh saved paths from scratch (re-record and save passing runs)")
   .argument("<paths...>", "case files and/or directories")
   .option("--tag <tag>", "only cases with this tag (repeatable)", collect, [])
-  .option("--base-url <url>", "override env.base_url (forces external mode)")
+  .option("--base-url <url>", "override app.base_url (forces external mode)")
   .option("--parallel [n]", "run cases in parallel (default pool when n omitted)")
   .option("--headed", "show the browser", false)
   .option("--runs-root <dir>", "where run directories are written", "runs")
@@ -431,6 +451,7 @@ program
   .option("--plain", "plain line-per-case output (no live status region)", false)
   .option("--no-tui", "same as --plain")
   .action(run(async (paths, opts) => {
+    await ensureBrowser(opts); // pinned chromium only — no chrome fallback for measured runs
     const cases = await discoverCases(paths, { tags: opts.tag, baseUrl: opts.baseUrl ?? null });
     if (!cases.length) die("no cases matched");
     const runId = newRunId();
@@ -447,7 +468,7 @@ program
       parallel: parseParallel(opts.parallel),
       junit: null,
       refresh: true,
-      reporter: makeReporter(opts, makeTrendFor(scanHistory(opts.runsRoot))),
+      reporter: makeReporter(opts, makeTrendFor(scanHistory(opts.runsRoot)), cases),
     });
     process.exitCode = exitCode;
   }));
@@ -459,11 +480,6 @@ program
   .option("--tag <tag>", "only cases with this tag (repeatable)", collect, [])
   .option("--json", "print the list as a JSON array", false)
   .action(run(async (paths, opts) => {
-    // `playtest list personas` means the personas listing, never a case dir:
-    // walkYaml skips personas/, so discovery there could only error.
-    if (paths.length === 1 && paths[0] === "personas" && fs.existsSync(path.resolve("personas"))) {
-      return printPersonas();
-    }
     const cases = await discoverCases(paths, { tags: opts.tag });
     // With a tag filter, an empty result means "nothing matched", not "no
     // suites" — the onboarding hint would mislead. list always exits 0.
@@ -474,7 +490,8 @@ program
         id: c.id,
         tags: c.tags,
         persona: c.persona,
-        next_run: readBaseline(c.file) ? "act" : "record",
+        // discovery decides first: a stray baseline file must not flip it
+        next_run: c.mode === "discovery" ? "explore" : readBaseline(c.file) ? "check" : "record",
       }))));
       return;
     }
@@ -486,7 +503,7 @@ program
       c.id,
       c.tags.join(",") || "-",
       c.persona,
-      readBaseline(c.file) ? "act" : "record",
+      c.mode === "discovery" ? "explore" : readBaseline(c.file) ? "check" : "record",
     ]);
     const widths = [0, 1, 2].map((i) => Math.max("ID TAGS PERSONA".split(" ")[i].length, ...rows.map((r) => r[i].length)));
     const line = (r) => r.map((cell, i) => (i < 3 ? cell.padEnd(widths[i]) : cell)).join("  ");

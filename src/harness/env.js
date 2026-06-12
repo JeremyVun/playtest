@@ -70,7 +70,7 @@ async function resolveComposeUrl(compose, baseUrl) {
 /**
  * GET base_url; ok when status < 500. 5 attempts, 1s apart.
  * `external` ({ caseFile }) marks an unmanaged env: a localhost failure then
- * gets the "start the app or add env.compose" hint instead of the raw probe
+ * gets the "start the app or add app.compose" hint instead of the raw probe
  * error. Managed-mode failures keep the probe detail — compose is already
  * configured there, so the hint would mislead.
  */
@@ -108,17 +108,17 @@ const dotRel = (from, to) => {
 function externalProbeHint(baseUrl, caseFile) {
   const lines = [
     `Could not reach ${baseUrl}.`,
-    "Start the app yourself, or add env.compose to playtest.yaml so Playtest can manage it.",
+    "Start the app yourself, or add app.compose to playtest.yaml so Playtest can manage it.",
   ];
   const compose = findComposeFile(caseFile);
   if (compose) {
     // The snippet gets pasted into a defaults file, and config.js resolves
-    // env.compose against the DECLARING file's dir — so name that file and
+    // app.compose against the DECLARING file's dir — so name that file and
     // compute the suggested path relative to it.
     const target = defaultsFileFor(caseFile);
     lines.push(
       `Found ${dotRel(process.cwd(), compose)}; add to ${dotRel(process.cwd(), target)}:`,
-      "env:",
+      "app:",
       `  compose: ${dotRel(path.dirname(target), compose)}`,
     );
   }
@@ -142,17 +142,15 @@ function findComposeFile(caseFile) {
 }
 
 /**
- * Nearest existing playtest.yaml/dummy.yaml from the case file's dir upward
- * (stopping at the repo root), else the playtest.yaml the user would create
- * next to the case file.
+ * Nearest existing playtest.yaml from the case file's dir upward (stopping at
+ * the repo root), else the playtest.yaml the user would create next to the
+ * case file.
  */
 function defaultsFileFor(caseFile) {
   const start = caseFile ? path.dirname(path.resolve(caseFile)) : process.cwd();
   for (let dir = start; ; ) {
-    for (const name of ["playtest.yaml", "dummy.yaml"]) {
-      const file = path.join(dir, name);
-      if (fs.existsSync(file)) return file;
-    }
+    const file = path.join(dir, "playtest.yaml");
+    if (fs.existsSync(file)) return file;
     const parent = path.dirname(dir);
     if (fs.existsSync(path.join(dir, ".git")) || parent === dir) break;
     dir = parent;
@@ -161,8 +159,11 @@ function defaultsFileFor(caseFile) {
 }
 
 async function runInit(script, baseUrl, runId) {
+  // JS inits run via the current Node binary — shebang scripts don't exec on
+  // Windows, and the bundled demo's reset.mjs relies on this.
+  const jsInit = /\.(mjs|cjs|js)$/.test(script);
   try {
-    await execFile(script, [], {
+    await execFile(jsInit ? process.execPath : script, jsInit ? [script] : [], {
       cwd: path.dirname(script),
       env: { ...process.env, BASE_URL: baseUrl, RUN_ID: runId },
       timeout: 60000,

@@ -183,11 +183,18 @@ export class Session {
   /** @returns {Promise<Session>} */
   static async launch({ baseUrl, runDir, storageState = null, headed = false }) {
     fs.mkdirSync(path.join(runDir, "steps"), { recursive: true });
-    const browser = await chromium.launch({ headless: !headed });
+    // PLAYTEST_BROWSER_CHANNEL: opt-in system-browser channel (e.g. "chrome")
+    // for unmeasured commands like the demo; unset = pinned chromium. Video
+    // needs Playwright's bundled ffmpeg, which installs alongside pinned
+    // chromium — the channel override exists precisely because that download
+    // is missing, so skip recording there (close() and the viewer both
+    // tolerate an absent video.webm).
+    const channel = process.env.PLAYTEST_BROWSER_CHANNEL;
+    const browser = await chromium.launch({ headless: !headed, ...(channel && { channel }) });
     try {
       const context = await browser.newContext({
         viewport: { width: 1280, height: 800 },
-        recordVideo: { dir: runDir, size: { width: 1280, height: 800 } },
+        ...(channel ? {} : { recordVideo: { dir: runDir, size: { width: 1280, height: 800 } } }),
         ...(storageState ? { storageState } : {}),
       });
       context.setDefaultTimeout(ACTION_TIMEOUT_MS);

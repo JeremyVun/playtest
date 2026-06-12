@@ -142,10 +142,12 @@ export class Actor {
     this.case = resolvedCase;
     this.persona = persona;
     // Stable prefix: never changes mid-run, so the gateway can prompt-cache it.
-    // The "## Your task" marker is load-bearing: mock-llm extracts the story by it.
+    // The "## Your task" marker is load-bearing: mock-llm extracts the story by
+    // its LAST occurrence, so the discovery overlay must stay before it.
     this.system = [
       prompt("actor-system.md").trim(),
       `## Persona\n\n${persona.description.trim()}`,
+      ...(resolvedCase.mode === "discovery" ? [prompt("actor-discovery.md").trim()] : []),
       `## Your task\n\n${resolvedCase.story.trim()}`,
     ].join("\n\n");
   }

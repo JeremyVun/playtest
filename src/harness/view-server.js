@@ -174,7 +174,7 @@ export function listRuns(root) {
     const rel = path.relative(root, dir).split(path.sep);
     runs.push({
       run_id: rel[0],
-      case_id: rel.slice(1).join("/"), // dir-derived so picker links resolve (repeat runs get -2 suffixes)
+      case_id: rel.slice(1).join("/"), // dir-derived so picker links resolve
       path: rel.join("/"),
       status: m.result?.status ?? null,
       mode: m.mode ?? null,
@@ -190,10 +190,10 @@ export function listRuns(root) {
  * Changed journeys (healed passes) across the runs root, newest first (also
  * `view --json --changed`). An entry is `pending` when its candidate files
  * (<case>.healed.jsonl/.json) still exist and the candidate's run_dir is that
- * run directory — run_id alone cannot tell runs_per_case siblings apart, so
- * it is only the fallback for old metas lacking run_dir. Older healed passes
- * stay listed as history. run_dir_rel is cwd-relative for copy-paste
- * accept/reject commands; the viewer itself stays read-only.
+ * run directory — run_dir is the authoritative match; run_id is only the
+ * fallback for old metas lacking run_dir. Older healed passes stay listed as
+ * history. run_dir_rel is cwd-relative for copy-paste accept/reject commands;
+ * the viewer itself stays read-only.
  */
 export function changed(root, singleRun) {
   const runsRoot = (singleRun ? runsRootOf(root) : root) ?? root;

@@ -1,0 +1,9 @@
+tags: [smoke]
+story: |
+  You like to keep your list tidy. Add a todo called "pay rent", then
+  mark "pay rent" as done, then clear completed todos so the list is
+  empty again.
+success:
+  - api_called: "DELETE /api/todos"
+perf:
+  console_errors: 0

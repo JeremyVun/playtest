@@ -1,16 +1,21 @@
 // Console reporter + JUnit XML. See docs/CONTRACTS.md §11.
-// `result` is runner.runCase's return: { status: "pass"|"fail"|"infra", runDir, manifest }.
+// `result` is runner.runCase's return: { status: "pass"|"fail"|"infra"|"explored", runDir, manifest }.
 
 const paint = (code, s) => (process.stdout.isTTY ? `\x1b[${code}m${s}\x1b[0m` : s);
 const green = (s) => paint(32, s);
 const red = (s) => paint(31, s);
 const yellow = (s) => paint(33, s);
+const cyan = (s) => paint(36, s);
 const dim = (s) => paint(2, s);
 
+// Right-aligned to the label column. Width 5 spans the journey statuses and
+// keeps journey-only output byte-identical; runs that include discovery cases
+// pass "EXPLORED".length so mixed output still aligns.
 const STATUS_LABEL = {
-  pass: () => green(" PASS"),
-  fail: () => red(" FAIL"),
-  infra: () => yellow("INFRA"),
+  pass: (w) => green("PASS".padStart(w)),
+  fail: (w) => red("FAIL".padStart(w)),
+  infra: (w) => yellow("INFRA".padStart(w)),
+  explored: (w) => cyan("EXPLORED".padStart(w)),
 };
 
 function fmtMs(ms) {
@@ -26,14 +31,25 @@ function failedChecks(manifest) {
   return (manifest?.result?.gate?.checks ?? []).filter((c) => !c.pass);
 }
 
-// Internal mode words stay 'record'|'act'|'heal'; only display changes.
-// The viewer keeps an inline copy of this map.
-const MODE_LABEL = { record: "recording", act: "checking", heal: "healing" };
+// Internal mode words stay 'record'|'act'|'heal'; only display changes, and the
+// tense matches the surface: the live spinner says what a run IS doing, finished
+// surfaces say what it DID. The viewer keeps an inline copy of MODE_DID.
+const MODE_DOING = { record: "recording", act: "checking", heal: "healing", explore: "exploring" };
+const MODE_DID = { record: "recorded", act: "checked", heal: "tried to heal", explore: "explored" };
 
-/** User-facing label for a run's mode; a healed pass is a "changed" journey. */
+// For finished explore runs the mode label would just repeat the EXPLORED
+// status; say how the exploration ended instead.
+const EXPLORE_END = { done: "finished", give_up: "gave up", max_steps: "hit max steps", timeout: "timed out", error: "errored" };
+
+/** In-progress label for the live display. */
+export function modeDoing(mode) {
+  return MODE_DOING[mode] ?? mode;
+}
+
+/** User-facing label for a finished run's mode; a healed pass is a "changed" journey. */
 export function modeLabel(mode, { healed = false, status } = {}) {
   if (healed && status === "pass") return "changed";
-  return MODE_LABEL[mode] ?? mode;
+  return MODE_DID[mode] ?? mode;
 }
 
 /**
@@ -43,14 +59,15 @@ export function modeLabel(mode, { healed = false, status } = {}) {
  * @param {{ duration_delta_ms?: number|null, score_delta?: number|null,
  *           status_streak?: string|null }|null} [trend]
  */
-export function caseLine(result, trend = null) {
+export function caseLine(result, trend = null, labelWidth = 5) {
   const m = result.manifest ?? {};
   const status = result.status ?? "infra";
-  const label = STATUS_LABEL[status]?.() ?? status;
+  const label = STATUS_LABEL[status]?.(labelWidth) ?? status;
   const id = m.case?.id ?? "?";
 
   const bits = [];
-  if (m.mode) bits.push(modeLabel(m.mode, { healed: m.healed, status }));
+  if (m.mode === "explore") bits.push(EXPLORE_END[m.result?.end_reason] ?? modeLabel(m.mode, { healed: m.healed, status }));
+  else if (m.mode) bits.push(modeLabel(m.mode, { healed: m.healed, status }));
   if (m.totals?.steps != null) bits.push(`${m.totals.steps} steps`);
   if (m.duration_ms != null) {
     bits.push(fmtMs(m.duration_ms) + (trend?.duration_delta_ms ? ` (${signedMs(trend.duration_delta_ms)})` : ""));
@@ -74,7 +91,7 @@ export function caseLine(result, trend = null) {
 
 /** Totals line for a set of runs. */
 export function summary(results) {
-  const counts = { pass: 0, fail: 0, infra: 0 };
+  const counts = { pass: 0, fail: 0, infra: 0, explored: 0 };
   let duration = 0;
   let cost = 0;
   for (const r of results) {
@@ -82,8 +99,11 @@ export function summary(results) {
     duration += r.manifest?.duration_ms ?? 0;
     cost += r.manifest?.totals?.cost_usd ?? 0;
   }
+  // "0 passed" anchors the line for journey runs; an all-discovery run reads
+  // "N explored" alone.
   const parts = [
-    counts.pass > 0 ? green(`${counts.pass} passed`) : "0 passed",
+    counts.pass > 0 ? green(`${counts.pass} passed`) : counts.explored > 0 ? null : "0 passed",
+    counts.explored > 0 ? cyan(`${counts.explored} explored`) : null,
     counts.fail > 0 ? red(`${counts.fail} failed`) : null,
     counts.infra > 0 ? yellow(`${counts.infra} infra`) : null,
   ].filter(Boolean);

@@ -6,7 +6,19 @@
   "bin": {
     "playtest": "./src/harness/cli.js"
   },
+  "files": [
+    "src/harness",
+    "src/todo-app",
+    "src/demo",
+    "src/viewer",
+    "src/schemas",
+    "personas",
+    "skills",
+    "docs/CONTRACTS.md",
+    "docs/playtest-design.md"
+  ],
   "scripts": {
+    "test": "node --test test/*.test.js",
     "todo-app": "node src/todo-app/server.js",
     "mock-llm": "node src/harness/testing/mock-llm.js"
   },

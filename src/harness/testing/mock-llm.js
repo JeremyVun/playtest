@@ -3,6 +3,7 @@
 // This file is also the contract test: it parses exactly the message layouts
 // actor.js and grader.js produce — if those drift, the offline e2e breaks.
 import http from "node:http";
+import { pathToFileURL } from "node:url";
 
 // ---------- parsing what the harness sends ----------
 
@@ -155,6 +156,30 @@ const FIXED_GRADE = {
   summary: "The task completed smoothly. This is a deterministic mock grade used for self-testing the harness.",
 };
 
+// Discovery report questions arrive as a numbered list under a
+// "## Report questions" heading in the USER message (grader.js gradeRun — the
+// system rubric also quotes the heading, so only user content is parsed);
+// answer each so an e2e discovery run lands report entries in grade.json.
+// Without the section the journey grade shape is unchanged.
+function gradeArgs(messages) {
+  const content = messages
+    .filter((m) => m.role === "user")
+    .map((m) => (typeof m.content === "string" ? m.content : ""))
+    .join("\n");
+  const section = content.split("## Report questions")[1];
+  if (!section) return FIXED_GRADE;
+  const body = section.split(/\n##\s/)[0];
+  const questions = [...body.matchAll(/^\s*\d+[.)]\s+(.+)$/gm)].map((m) => m[1].trim());
+  return {
+    ...FIXED_GRADE,
+    report: questions.map((q) => ({
+      question: q,
+      answer: `Deterministic mock answer: ${q}`,
+      evidence_steps: [1],
+    })),
+  };
+}
+
 const STOPWORDS = new Set(
   "the a an and or is are was were been it its this that of in on to with shows show showing list page counter todo todos item items called".split(" "),
 );
@@ -202,7 +227,7 @@ function completion(body) {
   const forced = body.tool_choice?.function?.name ?? null;
   let args = null;
   if (forced === "step") args = actorStep(messages);
-  else if (forced === "grade") args = FIXED_GRADE;
+  else if (forced === "grade") args = gradeArgs(messages);
   else if (forced === "verdict") args = verdict(messages);
 
   const message = args
@@ -227,26 +252,62 @@ function completion(body) {
   };
 }
 
-const portFlag = process.argv.indexOf("--port");
-const port = portFlag !== -1 ? Number(process.argv[portFlag + 1]) : 4175;
-
-http.createServer((req, res) => {
-  const send = (status, obj) => {
-    res.writeHead(status, { "content-type": "application/json" });
-    res.end(JSON.stringify(obj));
-  };
-  if (req.method !== "POST" || !/^\/(?:v1\/)?chat\/completions$/.test(req.url)) {
-    return send(404, { error: { message: `mock-llm: no route ${req.method} ${req.url}` } });
-  }
-  let raw = "";
-  req.on("data", (chunk) => (raw += chunk));
-  req.on("end", () => {
-    try {
-      send(200, completion(JSON.parse(raw)));
-    } catch (err) {
-      send(400, { error: { message: `mock-llm: ${err.message}` } });
+/**
+ * Boot one mock-LLM instance. `requestCount()` reports how many POST
+ * chat/completions requests THIS instance has served; `requestCount(tool)`
+ * narrows to one forced tool ("step" / "grade" / "verdict") — the self-test
+ * uses it to prove act-mode runs make zero actor and zero grader calls.
+ * @param {{ port?: number }} [opts] port 0 = ephemeral
+ * @returns {Promise<{ url: string, port: number, close: () => Promise<void>,
+ *                     requestCount: (tool?: string) => number }>}
+ */
+export async function start({ port = 0 } = {}) {
+  let served = 0;
+  const servedByTool = {};
+  const server = http.createServer((req, res) => {
+    const send = (status, obj) => {
+      res.writeHead(status, { "content-type": "application/json" });
+      res.end(JSON.stringify(obj));
+    };
+    if (req.method !== "POST" || !/^\/(?:v1\/)?chat\/completions$/.test(req.url)) {
+      return send(404, { error: { message: `mock-llm: no route ${req.method} ${req.url}` } });
     }
+    served++;
+    let raw = "";
+    req.on("data", (chunk) => (raw += chunk));
+    req.on("end", () => {
+      try {
+        const body = JSON.parse(raw);
+        const tool = body.tool_choice?.function?.name ?? "(none)";
+        servedByTool[tool] = (servedByTool[tool] ?? 0) + 1;
+        send(200, completion(body));
+      } catch (err) {
+        send(400, { error: { message: `mock-llm: ${err.message}` } });
+      }
+    });
   });
-}).listen(port, () => {
+
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(port, resolve);
+  });
+  const boundPort = server.address().port;
+  return {
+    url: `http://localhost:${boundPort}`,
+    port: boundPort,
+    close: () =>
+      new Promise((resolve, reject) => {
+        server.close((err) => (err ? reject(err) : resolve()));
+        server.closeAllConnections();
+      }),
+    requestCount: (tool) => (tool == null ? served : (servedByTool[tool] ?? 0)),
+  };
+}
+
+// CLI: `npm run mock-llm` / `node src/harness/testing/mock-llm.js [--port n]`.
+// Importing this module never binds a port.
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+  const portFlag = process.argv.indexOf("--port");
+  const { port } = await start({ port: portFlag !== -1 ? Number(process.argv[portFlag + 1]) : 4175 });
   console.log(`mock-llm listening on http://localhost:${port}`);
-});
+}

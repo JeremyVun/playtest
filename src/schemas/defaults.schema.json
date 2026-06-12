@@ -1,0 +1,93 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "dummy/defaults.schema.json",
+  "title": "Playtest defaults file (playtest.yaml)",
+  "description": "Shared defaults for every case at or below this directory; the nearest playtest.yaml wins per key. Case-only keys (story, tags, success, report, personas) are config errors here — put them in the case file. max_steps/timeout may also be spelled nested under limits.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "persona": {
+      "type": "string",
+      "description": "Default persona the actor role-plays: built-in \"tester\" or \"exploratory\", or the name/slug of a personas/*.yaml file. Default \"tester\". A case file can override it (or fan out with the case-only \"personas\")."
+    },
+    "mode": {
+      "enum": ["journey", "discovery"],
+      "description": "Case kind for every case below, default \"journey\". journey: regression test — deterministic success gate, baseline record/act/heal, pass/fail exit codes. discovery: product-insight study — no success gate, always a fresh agentic run that ends \"explored\" (give_up is a valid, informative outcome), graded with the discoverability rubric. A study directory sets mode: discovery here once."
+    },
+    "perf": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "lcp_ms": {
+          "type": ["string", "number"],
+          "description": "Threshold on the WORST navigation LCP in milliseconds: \"< 2500\" style (ops < <= > >=) or a bare number meaning <= n."
+        },
+        "input_to_paint_ms": {
+          "type": ["string", "number"],
+          "description": "Threshold on the WORST input-to-paint latency in milliseconds; same format as lcp_ms."
+        },
+        "console_errors": {
+          "type": "number",
+          "description": "Maximum allowed console error count, e.g. 0."
+        }
+      },
+      "description": "Perf thresholds checked with the journey gate. Silently irrelevant in discovery (the gate never runs)."
+    },
+    "max_steps": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Maximum actor steps before a run ends with end_reason max_steps. Default 50. Equivalent nested spelling: limits.max_steps."
+    },
+    "timeout": {
+      "type": ["string", "number"],
+      "description": "Wall-clock limit per run: \"5m\", \"90s\", \"250ms\", or a number of milliseconds. Default \"4m\". Equivalent nested spelling: limits.timeout."
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_steps": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Same as top-level max_steps."
+        },
+        "timeout": {
+          "type": ["string", "number"],
+          "description": "Same as top-level timeout."
+        }
+      },
+      "description": "Nested spelling of max_steps/timeout; normalized to the top-level keys at load time."
+    },
+    "actor_model": {
+      "type": "string",
+      "description": "Model that role-plays the user. Default \"claude-haiku-4-5\" (pinned cheap — for journeys the app is the variable, not the agent). Discovery studies often choose a stronger model, e.g. \"claude-sonnet-4-6\"."
+    },
+    "grader_model": {
+      "type": "string",
+      "description": "Model that grades finished runs and checks assert: criteria. Default \"claude-sonnet-4-6\"."
+    },
+    "app": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "base_url": {
+          "type": "string",
+          "description": "Where the app under test runs, e.g. http://localhost:4173. Required somewhere in the chain (or pass --base-url). Agents really click buy/delete/submit — point at staging or test, never production."
+        },
+        "compose": {
+          "type": "string",
+          "description": "docker-compose file path, relative to this file: managed mode — the harness boots and tears down the app per run."
+        },
+        "init": {
+          "type": "string",
+          "description": "Executable script path, relative to this file, run before each case to reset app state."
+        },
+        "storage_state": {
+          "type": "string",
+          "description": "Playwright storage-state JSON path, relative to this file, for a pre-authenticated browser session."
+        }
+      },
+      "description": "App under test. Merges per-key down the defaults chain, so deeper files or the case can override just base_url."
+    }
+  }
+}

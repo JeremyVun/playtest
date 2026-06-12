@@ -9,6 +9,7 @@ import { describeAction } from "./actor.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const graderSystem = readFileSync(join(here, "prompts/grader-system.md"), "utf8").trim();
+const graderDiscovery = readFileSync(join(here, "prompts/grader-discovery.md"), "utf8").trim();
 const gradeSchema = JSON.parse(readFileSync(join(here, "../schemas/grade.schema.json"), "utf8"));
 const ajv = new Ajv({ allErrors: true });
 const validateGrade = ajv.compile(gradeSchema);
@@ -50,26 +51,40 @@ export async function gradeRun(runDir, resolvedCase) {
   const finalSnapshot = lastA11y
     ? readFileSync(join(runDir, lastA11y.artifacts.a11y), "utf8")
     : "(no final snapshot recorded)";
-  const baseline = resolvedCase.file ? readBaseline(resolvedCase.file) : null;
+  const discovery = resolvedCase.mode === "discovery";
+  // Discovery never reads a baseline: a stray .baseline.jsonl next to the case
+  // must not leak into the prompt.
+  const baseline = !discovery && resolvedCase.file ? readBaseline(resolvedCase.file) : null;
 
   const sections = [
     `## Story\n\n${resolvedCase.story.trim()}`,
     `## Trajectory\n\n${digest(envelopes)}`,
-    `## Gate result\n\n${JSON.stringify(manifest?.result?.gate ?? null)}`,
-    `## Totals\n\n${JSON.stringify(manifest?.totals ?? null)}`,
   ];
+  // The gate never runs in discovery; the section would always be "null" noise.
+  if (!discovery) sections.push(`## Gate result\n\n${JSON.stringify(manifest?.result?.gate ?? null)}`);
+  sections.push(`## Totals\n\n${JSON.stringify(manifest?.totals ?? null)}`);
   if (baseline) sections.push(`## Baseline\n\nbaseline step count: ${baseline.envelopes.length}`);
+  if (resolvedCase.report?.length) {
+    sections.push([
+      "## Report questions",
+      "",
+      ...resolvedCase.report.map((q, i) => `${i + 1}. ${q}`),
+      "",
+      'Answer every question above in the grade\'s "report" array — one entry per question, quoting the question verbatim and citing the step numbers that evidence the answer in "evidence_steps".',
+    ].join("\n"));
+  }
   sections.push(`## Final page snapshot\n\n${finalSnapshot}`);
 
   const { args, tokens } = await forcedToolCall({
     model: resolvedCase.grader_model,
     messages: [
-      { role: "system", content: graderSystem },
+      { role: "system", content: discovery ? graderDiscovery : graderSystem },
       { role: "user", content: sections.join("\n\n") },
     ],
     tool: GRADE_TOOL,
     validate: (a) => (validateGrade(a) ? null : ajv.errorsText(validateGrade.errors)),
-    maxTokens: 2048,
+    // Report answers add length; the pinned journey budget stays 2048.
+    maxTokens: discovery ? 4096 : 2048,
   });
   const grade = {
     ...args,

@@ -25,6 +25,7 @@
   <symbol id="i-branch" viewBox="0 0 16 16"><circle cx="4.5" cy="3.6" r="1.7" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="4.5" cy="12.4" r="1.7" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="11.5" cy="5.6" r="1.7" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M4.5 5.3v5.4M11.5 7.3c0 2.6-2.6 3.4-5 3.6" fill="none" stroke="currentColor" stroke-width="1.4"/></symbol>
   <symbol id="i-film" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5 3v10M11 3v10M2 6h3M2 10h3M11 6h3M11 10h3" fill="none" stroke="currentColor" stroke-width="1.2"/></symbol>
   <symbol id="i-play" viewBox="0 0 16 16"><path d="M5.2 3.2 12.4 8l-7.2 4.8Z" fill="currentColor"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 16 16"><path d="M4.6 3.2h2.4v9.6H4.6Zm4.4 0h2.4v9.6H9Z" fill="currentColor"/></symbol>
   <symbol id="i-persona" viewBox="0 0 16 16"><circle cx="8" cy="5.4" r="2.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M3.2 13.6a4.9 4.9 0 0 1 9.6 0" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
   <symbol id="i-eye" viewBox="0 0 16 16"><path d="M1.8 8S4.2 3.8 8 3.8 14.2 8 14.2 8 11.8 12.2 8 12.2 1.8 8 1.8 8Z" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="1.9" fill="currentColor"/></symbol>
   <symbol id="i-net" viewBox="0 0 16 16"><path d="M2 4.5h7M2 8h11M2 11.5h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
@@ -54,12 +55,13 @@
         <button data-view="a11y" class="tab"><svg class="ic"><use href="#i-eye"/></svg>Agent view</button>
         <button data-view="video" class="tab"><svg class="ic"><use href="#i-play"/></svg>Video</button>
         <button data-view="diff" class="tab" id="tab-diff" hidden><svg class="ic"><use href="#i-branch"/></svg>Diff</button>
-        <span class="tabs-hint">←/→ steps · V cycle view</span>
+        <button id="play" title="play through the steps (space)" aria-label="play through the steps"><svg class="ic"><use href="#i-play"/></svg>Play</button>
+        <span class="tabs-hint">←/→ steps · space play · tab cycle view</span>
       </nav>
 
       <div id="stage-row">
         <aside id="caption">
-          <div id="cap-fade">
+          <div id="cap-body">
             <div class="cap-meta" id="cap-meta"></div>
             <p class="cap-thought" id="cap-thought"></p>
             <p class="cap-expect" id="cap-expect"></p>

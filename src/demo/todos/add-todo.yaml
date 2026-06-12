@@ -1,0 +1,9 @@
+tags: [smoke]
+story: |
+  You keep forgetting to buy milk on the way home. Use this todo app to
+  add a todo called "buy milk" so it shows up in your list.
+success:
+  - element_exists: "[data-testid=todo-item]"
+  - api_called: "POST /api/todos"
+perf:
+  console_errors: 0

@@ -1,4 +1,4 @@
-// Per-case orchestration: record / act / heal. See docs/CONTRACTS.md §10.
+// Per-case orchestration: record / act / heal, plus discovery's explore. See docs/CONTRACTS.md §10.
 import fs from "node:fs";
 import os from "node:os";
 import {
@@ -42,41 +42,43 @@ function addTokens(total, t) {
 
 /**
  * Run one case end to end. Never throws; InfraError -> status "infra".
- * `onEvent` receives progress events ({ type, caseId, runIndex, ...payload }):
+ * `onEvent` receives progress events ({ type, caseId, ...payload }):
  * case_start, env_ready, step_start, step_result, heal_start, grading,
  * gate_fail, warn, case_end (emitted on every exit path, infra included).
  * @param {object} rc ResolvedCase
  * @param {{ mode?: "auto"|"agent", runsRoot: string, runId: string, grade?: boolean,
- *           headed?: boolean, refresh?: boolean, runIndex?: number,
+ *           headed?: boolean, refresh?: boolean,
  *           onEvent?: (event: object) => void }} opts
- * @returns {Promise<{ status: "pass"|"fail"|"infra", runDir: string, manifest: object,
+ * @returns {Promise<{ status: "pass"|"fail"|"infra"|"explored", runDir: string, manifest: object,
  *   score: number|null, error?: string }>} score is the grade when this run graded
  */
 export async function runCase(rc, opts) {
-  const { runsRoot, runId, mode = "auto", grade = true, headed = false, refresh = false, runIndex = 1, onEvent = () => {} } = opts;
-  const writer = new RunWriter(runsRoot, runId, runIndex > 1 ? `${rc.id}-${runIndex}` : rc.id);
+  const { runsRoot, runId, mode = "auto", grade = true, headed = false, refresh = false, onEvent = () => {} } = opts;
+  const writer = new RunWriter(runsRoot, runId, rc.id);
   const startedAt = new Date();
   const llm = llmConfig();
   // A throwing progress listener must not break the case (contract §10:
   // runCase never throws).
   const emit = (type, payload = {}) => {
     try {
-      onEvent({ type, caseId: rc.id, runIndex, ...payload });
+      onEvent({ type, caseId: rc.id, ...payload });
     } catch {}
   };
 
   // A corrupt/unparseable committed baseline must fail this case as infra,
-  // not throw out of runCase (contract §10: never throws).
+  // not throw out of runCase (contract §10: never throws). Discovery is always
+  // a fresh exploration: never read a baseline, even a stray one next to the case.
+  const discovery = rc.mode === "discovery";
   let baseline = null;
   let baselineError = null;
-  if (mode !== "agent" && !refresh) {
+  if (!discovery && mode !== "agent" && !refresh) {
     try {
       baseline = readBaseline(rc.file);
     } catch (e) {
       baselineError = `unreadable baseline ${baselinePaths(rc.file).traj}: ${firstLine(e)}`;
     }
   }
-  const startMode = baseline && actionTrack(baseline.envelopes).length > 0 ? "act" : "record";
+  const startMode = discovery ? "explore" : baseline && actionTrack(baseline.envelopes).length > 0 ? "act" : "record";
   emit("case_start", { mode: startMode, maxSteps: rc.limits.max_steps, runDir: writer.dir });
 
   // Mutable run state shared with the loops.
@@ -118,8 +120,8 @@ export async function runCase(rc, opts) {
     return finishInfra(firstLine(e));
   }
 
-  if (startMode === "record" && !llm.available) {
-    return finishInfra("record mode needs a model: set PLAYTEST_LLM_BASE_URL or an API key");
+  if (startMode !== "act" && !llm.available) {
+    return finishInfra(`${startMode} mode needs a model: set PLAYTEST_LLM_BASE_URL or an API key`);
   }
 
   let env;
@@ -205,32 +207,41 @@ export async function runCase(rc, opts) {
   if (infra) return finishInfra(infra.message, { session, env });
 
   // Gate (assert wired to the grader model), then manifest, then teardown.
-  let finalUrl = "";
-  try {
-    finalUrl = session.page.url();
-  } catch {}
-  const gate = await evaluateGate(rc, {
-    session,
-    harEntries: readHar(writer.dir),
-    consoleErrorCount: session.consoleErrors(),
-    // the harness-side initial page load isn't an envelope; include its nav
-    // vitals (perf.lcp_ms gates single-page cases) and its network requests
-    // (api_called must see first-load calls like the app's bootstrap GET)
-    trajectory: r.initialNav
-      ? [{ perf: r.initialNav.perf, network: r.initialNav.network }, ...r.envelopes]
-      : r.envelopes,
-    finalUrl,
-    checkAssertion: llm.available
-      ? (claim) =>
-          checkAssertion(claim, {
-            snapshotText: r.lastSnapshot ?? "(no snapshot captured)",
-            finalUrl,
-            model: rc.grader_model,
-          })
-      : null,
-  });
-  if (!gate.pass) emit("gate_fail", { checks: gate.checks.filter((c) => !c.pass) });
-  const status = gate.pass && !actFailedUnhealed ? "pass" : "fail";
+  // Discovery skips the gate entirely, keyed on the case mode — not on the
+  // empty success list, which gate.js would pass vacuously. A run that errored
+  // produced no exploration data: it stays infra.
+  let gate = null;
+  let status;
+  if (discovery) {
+    status = ["done", "give_up", "max_steps", "timeout"].includes(r.endReason) ? "explored" : "infra";
+  } else {
+    let finalUrl = "";
+    try {
+      finalUrl = session.page.url();
+    } catch {}
+    gate = await evaluateGate(rc, {
+      session,
+      harEntries: readHar(writer.dir),
+      consoleErrorCount: session.consoleErrors(),
+      // the harness-side initial page load isn't an envelope; include its nav
+      // vitals (perf.lcp_ms gates single-page cases) and its network requests
+      // (api_called must see first-load calls like the app's bootstrap GET)
+      trajectory: r.initialNav
+        ? [{ perf: r.initialNav.perf, network: r.initialNav.network }, ...r.envelopes]
+        : r.envelopes,
+      finalUrl,
+      checkAssertion: llm.available
+        ? (claim) =>
+            checkAssertion(claim, {
+              snapshotText: r.lastSnapshot ?? "(no snapshot captured)",
+              finalUrl,
+              model: rc.grader_model,
+            })
+        : null,
+    });
+    if (!gate.pass) emit("gate_fail", { checks: gate.checks.filter((c) => !c.pass) });
+    status = gate.pass && !actFailedUnhealed ? "pass" : "fail";
+  }
   const willGrade = grade && llm.available && actualMode !== "act";
 
   const manifest = buildManifest({
@@ -255,7 +266,9 @@ export async function runCase(rc, opts) {
     }
   }
 
-  if (status === "pass") {
+  // Discovery never writes baselines or healed candidates, refresh included
+  // (its status above is never "pass"; the guard states the constraint).
+  if (status === "pass" && !discovery) {
     // existsSync, not readBaseline: a corrupt-but-present baseline must not
     // throw here, and must not be silently overwritten by an accept.
     if (actualMode === "record" && (refresh || !fs.existsSync(baselinePaths(rc.file).traj))) {
@@ -361,12 +374,15 @@ async function actLoop({ session, writer, rc, deadline, r, emit, baselineEnvelop
     emit("step_start", { step: stepNum, summary: describeAction(actionOf(baseStep)) });
     const snap = await session.captureSnapshot(stepNum);
     r.lastSnapshot = snap.text;
+    // ts is "at action dispatch" (CONTRACTS): stamped before execution, like the
+    // record loop, so the viewer's video seek lands on the frame the step acted on
+    const ts = Date.now();
     const exec = await session.executeLocator(baseStep);
     if (r.aborted) return null; // do not append past the hard-timeout cut
     const envelope = {
       step: stepNum,
       schema_version: STEP_SCHEMA_VERSION,
-      ts: Date.now(),
+      ts,
       mode: "act",
       acted_from: baseStep.step,
       action: actionOf(baseStep),
@@ -460,14 +476,17 @@ function buildManifest({ rc, runId, mode, startedAt, videoStartedAt, llm, env, r
   return {
     schema_version: 1,
     run_id: runId,
+    // mode/report ride along so `playtest grade` re-grades with the right rubric.
     case: {
       id: rc.id,
       file: rc.file,
       story: rc.story,
+      mode: rc.mode,
       persona: rc.persona,
       tags: rc.tags,
       success: rc.success,
       perf: rc.perf,
+      report: rc.report,
       limits: rc.limits,
     },
     mode,
@@ -516,7 +535,7 @@ function readHar(runDir) {
 }
 
 /**
- * Run every case (honoring runs_per_case), write JUnit. All console output
+ * Run every case, write JUnit. All console output
  * goes through `opts.reporter` ({ onEvent(event), done(results) }) so the CLI
  * chooses plain lines, a live TTY region, or silence (--json).
  * Serial for external envs; managed-only selections run parallel min(4, cores);
@@ -532,28 +551,23 @@ export async function runAll(resolvedCases, opts) {
     } catch {}
   };
 
-  const jobs = [];
-  for (const rc of resolvedCases) {
-    for (let i = 1; i <= (rc.runs_per_case ?? 1); i++) jobs.push({ rc, runIndex: i });
-  }
-
   const defaultPool = Math.min(4, os.availableParallelism());
   let concurrency = 1;
   if (typeof opts.parallel === "number") concurrency = Math.max(1, opts.parallel);
   else if (opts.parallel === true) concurrency = defaultPool;
-  else if (jobs.length && jobs.every(({ rc }) => rc.env.compose)) concurrency = defaultPool;
+  else if (resolvedCases.length && resolvedCases.every((rc) => rc.env.compose)) concurrency = defaultPool;
 
-  const results = new Array(jobs.length);
+  const results = new Array(resolvedCases.length);
   let next = 0;
   const worker = async () => {
     for (;;) {
       const i = next++;
-      if (i >= jobs.length) return;
-      const { rc, runIndex } = jobs[i];
+      if (i >= resolvedCases.length) return;
+      const rc = resolvedCases[i];
       // runCase never throws per contract, but stay defensive: one rejected
-      // job must not reject Promise.all and suppress the report/JUnit output.
+      // case must not reject Promise.all and suppress the report/JUnit output.
       // This catch is the one exit runCase cannot see, so emit its case_end.
-      results[i] = await runCase(rc, { ...opts, runIndex, onEvent }).catch((e) => {
+      results[i] = await runCase(rc, { ...opts, onEvent }).catch((e) => {
         const result = {
           status: "infra",
           runDir: null,
@@ -561,12 +575,12 @@ export async function runAll(resolvedCases, opts) {
           score: null,
           error: `runner error for ${rc.id}: ${firstLine(e)}`,
         };
-        onEvent({ type: "case_end", caseId: rc.id, runIndex, status: "infra", result });
+        onEvent({ type: "case_end", caseId: rc.id, status: "infra", result });
         return result;
       });
     }
   };
-  await Promise.all(Array.from({ length: Math.min(concurrency, jobs.length) || 1 }, worker));
+  await Promise.all(Array.from({ length: Math.min(concurrency, resolvedCases.length) || 1 }, worker));
 
   try {
     reporter.done(results);

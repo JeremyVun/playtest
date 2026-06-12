@@ -1,0 +1,15 @@
+# Demo suite for `playtest demo`: a temp copy of this directory is run against
+# the bundled todo app. base_url is a placeholder — the demo always passes
+# --base-url with the in-process app's ephemeral port.
+#
+# Unlike the repo's example suite, these cases carry no `assert:` success
+# criteria: every assert costs one model verdict per case even on acted runs,
+# and dropping them keeps the demo's punchline honest — the act pass makes
+# literally zero model calls.
+actor_model: claude-haiku-4-5
+grader_model: claude-sonnet-4-6
+max_steps: 25
+timeout: 3m
+app:
+  base_url: http://localhost:4173
+  init: ./seed/reset.mjs

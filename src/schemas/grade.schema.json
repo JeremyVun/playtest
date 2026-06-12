@@ -39,6 +39,24 @@
       },
       "description": "Free-form UX/quality observations, e.g. 'the error message after an invalid card is blank'."
     },
-    "summary": { "type": "string", "description": "Two or three sentences a developer reads in the report." }
+    "summary": { "type": "string", "description": "Two or three sentences a developer reads in the report." },
+    "report": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["question", "answer"],
+        "properties": {
+          "question": { "type": "string", "description": "The report question, quoted verbatim from the case." },
+          "answer": { "type": "string", "description": "The answer, grounded in the trajectory." },
+          "evidence_steps": {
+            "type": "array",
+            "items": { "type": "integer" },
+            "description": "Step numbers that evidence the answer."
+          }
+        }
+      },
+      "description": "Answers to the case's report questions, one entry per question, in order. Present only when the case declares report questions."
+    }
   }
 }

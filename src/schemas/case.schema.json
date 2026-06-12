@@ -31,6 +31,10 @@
       "enum": ["journey", "discovery"],
       "description": "Case kind, default \"journey\". journey: regression test — deterministic success gate, baseline record/act/heal, pass/fail exit codes. discovery: product-insight study — no success gate, always a fresh agentic run that ends \"explored\" (give_up is a valid, informative outcome), graded with the discoverability rubric. Inheritable: a study directory usually sets mode: discovery once in its playtest.yaml."
     },
+    "vision": {
+      "type": "boolean",
+      "description": "Discovery capability: send each step's viewport screenshot to the actor alongside the a11y snapshot and ask for visual observations (the step's \"visual\" field). Defaults to true when the resolved mode is discovery, false otherwise. Inheritable. \"vision: true\" resolving on a journey case is a config error — the regression instrument stays a11y-only by construction; \"vision: false\" is always allowed."
+    },
     "success": {
       "type": "array",
       "items": {

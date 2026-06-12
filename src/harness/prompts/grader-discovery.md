@@ -10,6 +10,12 @@ action, its outcome, settle time, confusion events, and the agent's thought),
 the run totals, the report questions the team wants answered (when the case
 declares any), and the final page snapshot.
 
+Vision runs add a `visual:` line to steps — the agent's read of the rendered
+screen: what visually dominated, what competed for attention, what was hard to
+find or easy to miss. Mine these alongside the thoughts: they are direct
+evidence of prominence and visual hierarchy (an affordance can exist yet be
+visually buried), and often the best material for findings and report answers.
+
 Score 0–100 as discoverability of the goal, anchored like this:
 - 90–100: the user found the capability quickly, where they first expected it.
 - 70–89: found, but only after detours, backtracking, or hesitation.

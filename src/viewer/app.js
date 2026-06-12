@@ -928,6 +928,14 @@ function updateCaption(env) {
     thought.className = "cap-thought quiet";
   }
 
+  const vis = $("#cap-visual");
+  if (env.agent?.visual) {
+    vis.replaceChildren(h("b", {}, "saw"), env.agent.visual);
+    vis.hidden = false;
+  } else {
+    vis.hidden = true;
+  }
+
   const exp = $("#cap-expect");
   if (env.agent?.expectation) {
     exp.replaceChildren(h("b", {}, "expects"), env.agent.expectation);

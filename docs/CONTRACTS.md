@@ -44,6 +44,7 @@ src/
     prompts/
       actor-system.md         # pinned actor system prompt
       actor-discovery.md      # discovery overlay, inserted before "## Your task" (see §6)
+      actor-vision.md         # vision overlay, after actor-discovery, only when vision is on (see §6)
       persona-tester.md       # built-in persona
       persona-exploratory.md  # built-in persona
       grader-system.md        # pinned grader prompt (journey rubric)
@@ -96,6 +97,7 @@ as `PINS_BASE` (see Manifest).
   ],
   perf: { lcp_ms: "< 2500", console_errors: 0 },   // optional; keys: lcp_ms, console_errors, input_to_paint_ms
   report: ["Where did the user look first?"],      // discovery report questions for the grader; default []
+  vision: false,                   // discovery capability: per-step screenshots to the actor (see §2, §6)
   limits: { max_steps: 50, timeout_ms: 240000 },
   actor_model: "claude-haiku-4-5",
   grader_model: "claude-sonnet-4-6",
@@ -126,7 +128,8 @@ a defaults file is a hard config error — defaults.schema.json rejects the key 
 declared them. Durations accept `"5m"`, `"90s"`, `"250ms"`,
 or a number (ms). Defaults when nothing specifies them: `actor_model: "claude-haiku-4-5"`,
 `grader_model: "claude-sonnet-4-6"`, `max_steps: 50`, `timeout: "4m"`,
-`persona: "tester"`, `mode: "journey"`.
+`persona: "tester"`, `mode: "journey"`, `vision`: true when the resolved mode
+is discovery, false otherwise (see §2).
 
 ### Step envelope (one line of trajectory.jsonl)
 
@@ -137,8 +140,9 @@ or a number (ms). Defaults when nothing specifies them: `actor_model: "claude-ha
   ts: 1760000000000,                // epoch ms at action dispatch
   mode: "agent" | "act",            // who decided this step
   agent: {                          // absent on acted steps (they carry `acted_from`)
-    thought: "...", action: { type: "click", ref: "e42" }, expectation: "..."
-  },
+    thought: "...", action: { type: "click", ref: "e42" }, expectation: "...",
+    visual: "..."                   // optional, vision runs only: what drew the eye, what
+  },                                // competed for attention, what was missed/hard to find
   acted_from: 7,                    // acted steps: the baseline step number this re-executes
   resolution: {                     // absent if validation failed before resolution
     ref: "e42",
@@ -204,9 +208,9 @@ runs/<run-id>/<case-id>/          # run-id: UTC "2026-06-10T0300-ab12" (timestam
 ```js
 {
   schema_version: 1,
-  run_id, case: { id, file, story, mode, persona, tags, success, perf, report, limits },
-                                        // case.mode ("journey"|"discovery") + case.report ride
-                                        // along so `playtest grade` re-grades with the right rubric
+  run_id, case: { id, file, story, mode, persona, tags, success, perf, report, vision, limits },
+                                        // case.mode ("journey"|"discovery") + case.report + case.vision
+                                        // ride along so `playtest grade` re-grades with the right rubric
   mode: "record" | "act" | "heal" | "explore",  // run strategy: heal = act that escalated;
                                                 // explore = discovery run (a different axis
                                                 // from case.mode, which names the case kind)
@@ -215,7 +219,8 @@ runs/<run-id>/<case-id>/          # run-id: UTC "2026-06-10T0300-ab12" (timestam
   video_started_at,                     // epoch ms; maps envelope ts -> video time
   pins: { harness_version, actor_model, grader_model, prompts_version,
           step_schema_version: 2, snapshot_format, settle: { name: "settle-v1",
-          dom_quiet_ms: 500, net_quiet_ms: 500, max_ms: 10000 }, gateway: <llm base URL> },
+          dom_quiet_ms: 500, net_quiet_ms: 500, max_ms: 10000 }, gateway: <llm base URL>,
+          vision: bool },                       // the resolved vision flag (comparability key)
   env: { base_url, managed: false },
   result: {
     status: "pass" | "fail" | "infra" | "explored",   // explored: a discovery run that ended
@@ -260,6 +265,11 @@ export async function discoverCases(paths, { tags = [], baseUrl = null } = {})
   // absent — it resolves to its default, exactly as before validation existed.
   // Cross-field rules the schemas cannot express: a discovery case declaring `success`,
   // or a non-discovery case declaring `personas`, is a DummyConfigError.
+  // `vision: true|false` is valid in both file kinds (inheritable); the effective value
+  // resolves AFTER the merge: explicit value wins, default = true when mode is discovery,
+  // false otherwise. `vision: true` resolving on a non-discovery case is a DummyConfigError
+  // naming the case file — the rule IS the policy: no journey (measured) run can ever send
+  // images. `vision: false` is always allowed.
   // Discovery personas fan-out: a case's `personas: [a, b]` expands into one
   // ResolvedCase per entry (id `<id>@<persona>`, singular persona overridden) before
   // the sort.
@@ -316,7 +326,11 @@ export class Session {
   async captureSnapshot(stepNum)
   // Injects snapshot-injected.js source; assigns data-dummy-ref="eN" attributes (fresh numbering
   // each call); writes steps/NNN.a11y.txt + steps/NNN.png + steps/NNN.mhtml.
-  // -> { text, url, title, refCount, truncated }
+  // -> { text, url, title, refCount, truncated, screenshot }
+  // screenshot: the viewport PNG Buffer for vision runs — downscaled via the live page's
+  // canvas when the longest edge exceeds 1568px (IHDR-checked; a no-op at the pinned
+  // 1280x800 viewport; the on-disk steps/NNN.png stays full size) — or null when capture
+  // failed (callers degrade to text-only, never crash).
   async execute(action)                 // agent-mode: validate ref exists/visible/enabled first
   async executeLocator(actedStep)       // act-mode: drive from envelope.resolution.locator
   // Both -> ExecResult:
@@ -336,6 +350,8 @@ export class Session {
   async finalPageCheck(selector)        // element_exists gate support: locator.count() > 0
   async close()                         // stop tracing, finalize video.webm + har.json
 }
+export function pngDimensions(buf)      // PNG IHDR {width, height} (bytes 16-23, big-endian);
+                                        // null when not a PNG
 ```
 
 Action execution semantics: `click` → locator.click; `type` → fill, then optional Enter;
@@ -433,19 +449,27 @@ export function describeAction(action)
   // runner's step_start progress events.
 export class Actor {
   constructor(resolvedCase, persona)
-  async nextStep({ history, snapshotText, stepNum, signal })
+  async nextStep({ history, snapshotText, stepNum, screenshot, signal })
   // history: prior envelopes (this run). Builds messages cache-efficiently:
   //   system: actor-system.md + persona overlay + (discovery cases only) the
-  //     prompts/actor-discovery.md overlay + the story under a "## Your task" heading
+  //     prompts/actor-discovery.md overlay + (vision on only) the prompts/actor-vision.md
+  //     overlay + the story under a "## Your task" heading
   //     (stable prefix, never changes mid-run; the marker is load-bearing — mock-llm
   //     extracts the story by its LAST occurrence — and the heading stays last, so the
-  //     overlay must sit before it)
+  //     overlays must sit before it; vision-off prompts are byte-identical to pre-vision)
   //   then one user message: "Steps so far:" + an append-only verbatim log of prior steps —
   //     "step N: <action human-readable> -> ok|error <error> | url now <u>" plus the agent's
   //     thought, one line each. NO folding or compaction: the log is never rewritten, so the
   //     prefix stays byte-stable between turns for prompt caching; max_steps (default 50)
   //     bounds it to a few thousand tokens, dwarfed by the per-turn snapshot
-  //   then final user message: "Current page snapshot (step N):\n" + snapshotText
+  //   then final user message: "Current page snapshot (step N):\n" + snapshotText.
+  //     When the case has vision on AND `screenshot` (the step's PNG Buffer from
+  //     captureSnapshot) is present, this message's content is instead the content-part
+  //     ARRAY [{type:"text", text:<that same text>}, {type:"image_url", image_url:
+  //     {url:"data:image/png;base64,..."}}] — exactly one image per actor step, passed
+  //     verbatim by llm.js. A missing screenshot degrades to the plain string. The vision
+  //     path keys off the resolved `vision` flag only (config guarantees it implies
+  //     discovery), so journey/heal runs never send images.
   // Calls chat() with the step tool (schema = step.schema.json, name "step", forced via toolChoice).
   // Ajv-validates returned args; on failure retries ONCE with the validation error appended.
   // -> { agentStep: {thought, action, expectation}, tokens: {in, out, cache_read} }
@@ -489,7 +513,9 @@ export async function gradeRun(runDir, resolvedCase)
   // Reads trajectory + manifest + final step's a11y text. Rubric is selected by case
   // mode: grader-system.md (journey) or grader-discovery.md (discovery). Prompt = rubric +
   // case story + compact trajectory digest (per step: action, ok, settle_ms, url, confusion,
-  // thought) + gate result (journey only — discovery never gates, the section would be noise) +
+  // thought, and a "  visual: ..." line when envelope.agent.visual exists — vision runs;
+  // grader-discovery.md instructs mining those observations for findings and report
+  // answers) + gate result (journey only — discovery never gates, the section would be noise) +
   // totals + (if baseline exists) baseline step count — discovery never reads a baseline,
   // even a stray one next to the case + (when resolvedCase.report is non-empty) a
   // "## Report questions" section, numbered, instructing the grader to answer each in
@@ -829,7 +855,9 @@ status chip and the history sparkline likewise carry `explored` alongside
 pass/fail/infra.
 Surfaces, per the design: film strip of step screenshots with ghost cursor (animate a cursor
 dot to each step's `resolution.bbox` center over the screenshot); thought + expectation
-captions; screenshot ⇄ a11y-text toggle ("what the agent saw"); confusion/expectation badges
+captions — plus a "saw" caption line (`#cap-visual`, styled like `#cap-expect`) rendering
+`envelope.agent.visual` on vision-run steps, hidden when absent; screenshot ⇄ a11y-text
+toggle ("what the agent saw"); confusion/expectation badges
 (`envelope.confusion`); per-step network panel — the `har.json` waterfall sliced by
 `artifacts.har_entries` when har.json resolves, degrading to a compact list rendered from
 the envelope's embedded `network.requests` (method, status with failed/pending markers,
@@ -876,6 +904,14 @@ OpenAI-compatible server: `POST /chat/completions` (also at `/v1/chat/completion
 - If it forces an assertion-check tool: naive textual containment of quoted words from the
   claim against the snapshot text in the prompt → pass/fail. (grader.checkAssertion's tool is
   named "verdict" with {pass, detail} — keep that name.)
+- Message content may be a string or an OpenAI content-part array (vision runs add
+  image_url parts): every content read goes through a flatten helper that joins the text
+  parts and ignores images, so vision-on requests parse identically.
+- When any message carries an image_url part (a vision-on actor turn), the step args
+  include a plausible `visual` field, so offline envelopes exercise the field end to end.
+- `start()` also returns `requests()` — the parsed POST bodies in arrival order as
+  `{ tool, body }` — alongside `requestCount(tool?)`; the vision self-test inspects them
+  to prove exactly one image per actor step and none anywhere else.
 
 This file is also the contract test: if the real prompts drift from what the mock expects
 (snapshot format, message layout), the offline e2e breaks — by design.

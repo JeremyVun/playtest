@@ -139,6 +139,16 @@ async function resolveCase(file, namedRoot, baseUrl) {
     );
   }
 
+  // Effective vision, resolved after the merge: explicit value wins; discovery
+  // defaults to true. The validation rule IS the policy — no measured
+  // (journey) run can ever send images, by construction.
+  const vision = merged.vision ?? merged.mode === "discovery";
+  if (vision && merged.mode !== "discovery") {
+    throw new DummyConfigError(
+      `${file}: "vision: true" is discovery-only — journey runs stay a11y-only by construction (set mode: discovery, or remove "vision")`,
+    );
+  }
+
   const success = merged.success ?? [];
   if (!Array.isArray(success)) throw new DummyConfigError(`${file}: "success" must be an array`);
   for (const c of success) {
@@ -172,6 +182,7 @@ async function resolveCase(file, namedRoot, baseUrl) {
     success,
     perf: merged.perf ?? {},
     report: merged.report ?? [],
+    vision,
     limits: { max_steps: merged.max_steps, timeout_ms },
     actor_model: merged.actor_model,
     grader_model: merged.grader_model,

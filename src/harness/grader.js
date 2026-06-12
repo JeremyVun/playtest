@@ -25,7 +25,8 @@ const GRADE_TOOL = {
 
 const oneLine = (s) => String(s).replace(/\s*\n\s*/g, " ").trim();
 
-// Compact trajectory digest: per step — action, outcome, settle, url, confusion, thought.
+// Compact trajectory digest: per step — action, outcome, settle, url,
+// confusion, thought, and (vision runs) the visual observation.
 function digest(envelopes) {
   const lines = [];
   for (const env of envelopes) {
@@ -38,6 +39,7 @@ function digest(envelopes) {
       : "";
     lines.push(`step ${env.step}: ${what} -> ${outcome}${settle}${url}${confusion}`);
     if (env.agent?.thought) lines.push(`  thought: ${oneLine(env.agent.thought)}`);
+    if (env.agent?.visual) lines.push(`  visual: ${oneLine(env.agent.visual)}`);
   }
   return lines.join("\n") || "(empty trajectory)";
 }

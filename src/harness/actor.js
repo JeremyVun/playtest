@@ -148,22 +148,34 @@ export class Actor {
       prompt("actor-system.md").trim(),
       `## Persona\n\n${persona.description.trim()}`,
       ...(resolvedCase.mode === "discovery" ? [prompt("actor-discovery.md").trim()] : []),
+      // Keyed off vision only (config guarantees vision implies discovery);
+      // vision-off prompts stay byte-identical.
+      ...(resolvedCase.vision ? [prompt("actor-vision.md").trim()] : []),
       `## Your task\n\n${resolvedCase.story.trim()}`,
     ].join("\n\n");
   }
 
   /**
    * @param {{ history: object[], snapshotText: string, stepNum: number,
-   *           signal?: AbortSignal|null }} turn
+   *           screenshot?: Buffer|null, signal?: AbortSignal|null }} turn
+   *   screenshot: the step's viewport PNG; rides the snapshot message as an
+   *   image part when the case has vision on (null degrades to text-only).
    * @returns {Promise<{ agentStep: object, tokens: {in: number, out: number, cache_read: number} }>}
    */
-  async nextStep({ history, snapshotText, stepNum, signal = null }) {
+  async nextStep({ history, snapshotText, stepNum, screenshot = null, signal = null }) {
+    const snapText = `Current page snapshot (step ${stepNum}):\n${snapshotText}`;
+    const snapContent = this.case.vision && screenshot
+      ? [
+          { type: "text", text: snapText },
+          { type: "image_url", image_url: { url: `data:image/png;base64,${screenshot.toString("base64")}` } },
+        ]
+      : snapText;
     const { args, tokens } = await forcedToolCall({
       model: this.case.actor_model,
       messages: [
         { role: "system", content: this.system },
         { role: "user", content: renderLog(history) },
-        { role: "user", content: `Current page snapshot (step ${stepNum}):\n${snapshotText}` },
+        { role: "user", content: snapContent },
       ],
       tool: STEP_TOOL,
       validate: (a) => (validateStep(a) ? null : ajv.errorsText(validateStep.errors)),

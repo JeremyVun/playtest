@@ -308,6 +308,9 @@ async function recordLoop({ session, writer, rc, persona, deadline, r, emit }) {
       history: r.envelopes,
       snapshotText: snap.text,
       stepNum,
+      // Keyed off rc.vision only (false on every journey case by config rule),
+      // so heal runs sharing this loop never send images.
+      screenshot: rc.vision ? snap.screenshot : null,
       signal: r.signal,
     });
     if (r.aborted) return;
@@ -487,6 +490,7 @@ function buildManifest({ rc, runId, mode, startedAt, videoStartedAt, llm, env, r
       success: rc.success,
       perf: rc.perf,
       report: rc.report,
+      vision: rc.vision,
       limits: rc.limits,
     },
     mode,
@@ -499,6 +503,7 @@ function buildManifest({ rc, runId, mode, startedAt, videoStartedAt, llm, env, r
       actor_model: rc.actor_model,
       grader_model: rc.grader_model,
       gateway: llm.baseUrl,
+      vision: rc.vision,
     },
     env: { base_url: env?.baseUrl ?? rc.env.base_url, managed: env?.managed ?? false },
     result: { status, end_reason: r.endReason, error: r.runError, gate },

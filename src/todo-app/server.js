@@ -23,10 +23,11 @@ function readBody(req) {
   });
 }
 
-// UI-variant mutation hook (VERSION_1.md item 3): variant "b" renames the add
-// button's data-testid (and label), so a saved path recorded against the
-// default UI misses its locator and the harness must heal. The label "Save"
-// stays recognizable as a submit button to humans and agents alike.
+// UI-variant mutation hook (built for the self-test and demo act three):
+// variant "b" renames the add button's data-testid (and label), so a saved
+// path recorded against the default UI misses its locator and the harness
+// must heal. The label "Save" stays recognizable as a submit button to
+// humans and agents alike.
 function pageHtml(variant) {
   const addButton = variant === "b"
     ? '<button type="submit" data-testid="submit-button">Save</button>'

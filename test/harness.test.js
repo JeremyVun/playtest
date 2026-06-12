@@ -1,5 +1,5 @@
-// Offline end-to-end self-test of the playtest harness (VERSION_1.md item 3,
-// IMPROVEMENTS_FOLLOWUP.md §1). Boots the bundled todo app and the rule-based
+// Offline end-to-end self-test of the playtest harness
+// (IMPROVEMENTS_FOLLOWUP.md §1). Boots the bundled todo app and the rule-based
 // mock LLM in-process on ephemeral ports, then drives the real CLI as a child
 // process through record → act → heal → accept/reject, freezing the exit-code
 // contract (0 pass / 1 gate failure / 2 infra) and the --json shape.
@@ -182,7 +182,7 @@ test("pass 1: first run records and blesses a baseline for every case (exit 0)",
   }
 });
 
-// NOTE: VERSION_1.md item 3 says "zero requests hit the mock" on the act pass,
+// NOTE: the original self-test spec said "zero requests hit the mock" on the act pass,
 // but docs/playtest-design.md (the stable input, §"Run modes" and §"Cost")
 // is explicit that an `assert:` success criterion "still makes one model check
 // at the gate" even on acted runs — and runner.js/gate.js implement exactly

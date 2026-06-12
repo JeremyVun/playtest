@@ -806,6 +806,11 @@ function renderSparkline() {
 
 /* ---------- film strip ---------- */
 
+// Step envelopes never carry mode "heal" — the runner writes "agent" for the
+// heal continuation — so a step is a heal step when the agent was driving in a
+// run that healed: everything after the replayed track broke.
+const isHealStep = (env) => env.mode === "agent" && !!state.manifest?.healed;
+
 const MAX_SETTLE_BAR = 2000; // ms that fills the little settle lane
 
 function renderStrip() {
@@ -828,7 +833,7 @@ function renderStrip() {
     const flags = [];
     if (env.result?.ok === false) flags.push(h("span", { class: "flag fail", title: "step failed" }, icon("i-x")));
     if (env.confusion) flags.push(h("span", { class: "flag warn", title: "confusion: " + env.confusion.type }, icon("i-warn")));
-    if (env.mode === "heal") flags.push(h("span", { class: "flag heal", title: "healed — the agent found a new path here" }, icon("i-branch")));
+    if (isHealStep(env)) flags.push(h("span", { class: "flag heal", title: "healed — the agent found a new path here" }, icon("i-branch")));
     if (flags.length) thumb.append(h("div", { class: "flags" }, ...flags));
 
     const settle = env.result?.settle_ms ?? 0;
@@ -841,7 +846,7 @@ function renderStrip() {
 
     // border tint mirrors the flags so trouble spots read from across the room
     const cellCls = "cell" +
-      (env.result?.ok === false ? " c-fail" : env.confusion ? " c-warn" : env.mode === "heal" ? " c-heal" : "");
+      (env.result?.ok === false ? " c-fail" : env.confusion ? " c-warn" : isHealStep(env) ? " c-heal" : "");
     strip.append(h("button", { class: cellCls, "data-i": i, onclick: () => select(i) },
       thumb,
       h("div", { class: "cell-cap" },
@@ -904,7 +909,11 @@ function select(i, { instant = false, auto = false } = {}) {
 
 function updateCaption(env) {
   const meta = [h("span", { class: "cap-step" }, `step ${env.step} / ${state.steps.length}`)];
-  meta.push(h("span", { class: "chip" }, env.mode === "act" ? `replayed · step ${env.acted_from ?? "?"}` : "agent"));
+  meta.push(env.mode === "act"
+    ? h("span", { class: "chip" }, `replayed · step ${env.acted_from ?? "?"}`)
+    : isHealStep(env)
+      ? h("span", { class: "chip accent" }, icon("i-branch"), "healed · agent took over")
+      : h("span", { class: "chip" }, "agent"));
   if (env.result?.ok === false) meta.push(h("span", { class: "chip fail" }, icon("i-x"), "failed"));
   if (env.confusion) meta.push(h("span", { class: "chip warn" }, icon("i-warn"), "confusion · " + env.confusion.type.replace("_", " ")));
   $("#cap-meta").replaceChildren(...meta);
@@ -1290,11 +1299,14 @@ function renderInspectorStep(env) {
   if (a?.type === "give_up") put("reason", a.reason);
   if (env.confusion) put("confusion", `${env.confusion.type}${env.confusion.note ? " — " + env.confusion.note : ""}`, "err");
 
-  $("#sec-step").replaceChildren(sec("i-film", `step ${env.step}`, replayed ? "replayed" : "agent",
+  const heal = isHealStep(env);
+  $("#sec-step").replaceChildren(sec("i-film", `step ${env.step}`, replayed ? "replayed" : heal ? "healed" : "agent",
     h("div", { class: "act-line" }, icon(d.icon), h("span", { class: "verb" }, d.verb), h("span", { class: "act-arg", title: d.arg ?? "" }, d.arg ?? "")),
     replayed
       ? h("div", { class: "step-src" }, `re-running step ${env.acted_from ?? "?"} of the saved recording`)
-      : h("div", { class: "step-src" }, "the agent chose this action itself"),
+      : heal
+        ? h("div", { class: "step-src" }, "the saved recording broke — the agent took over and chose this action")
+        : h("div", { class: "step-src" }, "the agent chose this action itself"),
     status,
     kv.childElementCount ? kv : null));
 

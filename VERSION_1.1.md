@@ -1,19 +1,21 @@
 # VERSION_1.1.md — Talk Assets + Fix-Loop Package
 
-The package after `VERSION_1.md`. Source of truth for design detail:
-`IMPROVEMENTS_FOLLOWUP.md` (§N references point there). Same conventions as
-VERSION_1: this document selects the subset, fixes the order, records the
-verified current state (audited 2026-06-12), and sets acceptance criteria.
-The implementing agent should read the referenced § sections in full before
-planning each item.
+The package after VERSION_1, which has **fully landed** (verified
+2026-06-12; its doc has been deleted — this file is now the complete
+remaining spec). Source of truth for design detail:
+`IMPROVEMENTS_FOLLOWUP.md` (§N references point there). This document
+selects the subset, fixes the order, records the verified current state
+(re-audited against the post-V1 tree, 2026-06-12), and sets acceptance
+criteria. The implementing agent should read the referenced § sections in
+full before planning each item.
 
-**Hard prerequisite: VERSION_1 has fully landed.** Every item here consumes
-its output — the demo command produces the runs items 1–2 work on, the
-self-test froze the `--json`/exit-code contract item 3 encodes, the final
-CLI names (`playtest new`, `app:`) are what items 3–4 print, and the
-package.json `files` allowlist is where item 3's skill ships. The audit
-below describes today's pre-V1 tree; expect line numbers to have drifted
-once V1's edits land.
+**Every item here consumes VERSION_1's output**, all of which exists: the
+demo command (`playtest demo`, `src/harness/demo.js`) produces the runs
+items 1–2 work on; the self-test (`npm test` → `test/*.test.js`) froze the
+`--json`/exit-code contract item 3 encodes; the final CLI names
+(`playtest new`, `app:`) are what items 3–4 print; and the package.json
+`files` allowlist (which already includes `skills/`) is where item 3's
+skill ships.
 
 ## What this package is
 
@@ -46,46 +48,50 @@ becomes real. `playtest docs` (the other §11 renderer) is Milestone D item
 14 — explicitly the static-pages half, different audience, not pulled
 forward. Milestones C and D otherwise untouched.
 
-## Current state (verified against the pre-V1 tree, 2026-06-12)
+## Current state (verified against the post-V1 tree, 2026-06-12)
 
 **The §11 "verify first" question is answered — the per-step-timestamped
 screencast IS implemented.** Do not rebuild any of this:
 
-- Every step envelope carries `ts` (epoch ms, `runner.js:308`;
-  `step_schema_version: 2`). The manifest carries `video_started_at`
-  (epoch ms, `runner.js:144,477`) and `artifacts.video: "video.webm"`
-  (`runner.js:502`); the webm is saved per case (`browser.js:369-376`).
+- Every step envelope carries `ts` (epoch ms, `runner.js:321`;
+  `schema_version: 2`, `trajectory.js:7`). The manifest carries
+  `video_started_at` (epoch ms, `runner.js:496`) and
+  `artifacts.video: "video.webm"` (`runner.js:521`); the webm is saved per
+  case (`browser.js:383`).
 - The viewer already does the timestamp arithmetic the clip renderer
   needs: `seekVideo` sets `currentTime = (env.ts - video_started_at)/1000`
-  and `renderVideoMarks` places per-step marks on the timeline
-  (`src/viewer/app.js:1050-1083`).
+  (`src/viewer/app.js:950`) and `renderVideoMarks` places per-step marks
+  on the timeline (`app.js:1089`).
 
 **Viewer features that already exist** (item 1 is an audit, not a build):
 
-- Thought captions per step (`#cap-thought`, `app.js:878-884`), including
+- Thought captions per step (`#cap-thought`, `app.js:921-928`), including
   the acted-step fallback text ("Replayed from the saved recording — …").
-- A diff tab gated on baseline presence (`#tab-diff`, `app.js:1133`) with
-  `baselineByStep` mapping (`app.js:259-273`); acted envelopes resolve
-  their action/locator from the baseline step (`app.js:159-188`).
+- A diff tab gated on baseline presence (`#tab-diff`, `app.js:1172`) with
+  `baselineByStep` mapping (`app.js:274`); acted envelopes resolve
+  their action/locator from the baseline step (`app.js:165-190`).
 - Changed-journey review list (`/changed.json`), per-case history
   (`/history.json`), mode/status chips with healed semantics, accept
   command display. View-server routes: `/runs.json`, `/changed.json`,
-  `/history.json`, `/run/<path>` (`view-server.js:72-85`).
+  `/history.json`, `/run/<path>` (`src/harness/view-server.js:72-79`).
 
 **Not yet done — this package's work:**
 
 - No ffmpeg usage anywhere in the repo (clip `--burn` and the slideshow
   fallback introduce it as an *optional, system-installed* dependency).
 - No WebVTT anywhere; the viewer's `<video>` has no `<track>` wiring.
-- No `skills/` directory, no `install-skill` command.
+- No `clip` or `install-skill` command in cli.js. A `skills/` directory
+  exists but holds only the discovery-mode skills (`playtest-discovery`,
+  `playtest-stories`) — unrelated to this package; the fix-loop skill at
+  `skills/playtest/SKILL.md` does not exist. Do not modify the two
+  discovery skills.
 - The four-verdict triage table the skill must encode exists at
-  `docs/playtest-design.md:436` (verbatim source for the skill body).
+  `docs/playtest-design.md:512` (verbatim source for the skill body).
 - No talk/slide collateral anywhere.
 
-**Working-tree caveat:** the repo currently has uncommitted viewer changes
-(eight `src/viewer/fonts/*.woff2` deleted, `style.css` modified). Resolve
-or commit that in-flight work *before* starting item 1's audit, so polish
-fixes diff against a clean baseline.
+**Working-tree caveat:** the repo currently has an uncommitted change to
+`src/viewer/app.js`. Resolve or commit that in-flight work *before*
+starting item 1's audit, so polish fixes diff against a clean baseline.
 
 ## Work items
 
@@ -122,7 +128,7 @@ the default path.
 - `playtest clip <runDir|case>` produces the webm plus a WebVTT sidecar.
   Cue timing from step data: cue N starts at `(ts_N − video_started_at)`,
   ends at the next step's start (last cue: video end). Check the capture
-  point of `ts` (`runner.js:308` records it at envelope write — verify
+  point of `ts` (`runner.js:321` records it at envelope write — verify
   whether that is action-start or action-end and align cue edges so
   captions lead the action, not trail it).
 - Two caption styles: **action captions** (`Click "Checkout"` — derived
@@ -154,15 +160,16 @@ with an install hint while the default path still works.
 
 ### 3. Agent skill: close the fix loop (§7 — read it in full)
 
-- Ship `skills/playtest/SKILL.md` in the npm package (extend V1's `files`
-  allowlist). `playtest install-skill` copies it into the project's
+- Ship `skills/playtest/SKILL.md` in the npm package (the `files`
+  allowlist already includes `skills/`). `playtest install-skill` copies
+  it into the project's
   `.claude/skills/` so the skill versions in lockstep with the installed
   harness and its `--json` contract.
 - Skill body per §7's outline: triggers (changed UI code, "did I break any
   journeys?", red journey in CI); the loop (run `playtest <paths> --json`;
   per failure read `manifest.json`, trajectory tail, failing step's
   screenshot + a11y snapshot); classify with the four-verdict table from
-  `docs/playtest-design.md:436`; per-verdict actions (app bug → fix code,
+  `docs/playtest-design.md:512`; per-verdict actions (app bug → fix code,
   rerun that case file; app changed → summarize heal diff, print
   `playtest accept <runDir>` for the human; agent flake → rerun once, then
   suggest story tuning; env flake / exit 2 → report, don't touch code).

@@ -1,5 +1,5 @@
-// Offline end-to-end self-test of the playtest harness
-// (IMPROVEMENTS_FOLLOWUP.md §1). Boots the bundled todo app and the rule-based
+// Offline end-to-end self-test of the playtest harness. Boots the bundled
+// todo app and the rule-based
 // mock LLM in-process on ephemeral ports, then drives the real CLI as a child
 // process through record → act → heal → accept/reject, freezing the exit-code
 // contract (0 pass / 1 gate failure / 2 infra) and the --json shape.

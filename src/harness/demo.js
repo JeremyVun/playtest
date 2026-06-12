@@ -1,5 +1,5 @@
 // `playtest demo` — a three-act tour of record → act → heal against the
-// bundled todo app (IMPROVEMENTS_FOLLOWUP.md §4).
+// bundled todo app.
 // One command, zero keys, zero docker, zero second terminal.
 //
 // Everything runs on a temp copy of src/demo/ with runs under <tmp>/runs —

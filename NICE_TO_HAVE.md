@@ -1,14 +1,17 @@
 # Playtest Nice-To-Haves
 
-Ideas deliberately descoped from the improvement planning (now
-IMPROVEMENTS_FOLLOWUP.md). Nothing here blocks the main plan; revisit once
-the core workflow has settled.
+Ideas deliberately descoped from the improvement planning (formerly
+IMPROVEMENTS_FOLLOWUP.md, dismantled 2026-06-13 — the active package is
+`VERSION_1.1.md`, the CI track is `CI_INTEGRATION.md`, accessibility is
+parked in `ACCESSIBILITY.md`). Nothing here blocks the main plan; revisit
+once the core workflow has settled.
 
 ## Interactive `playtest new`
 
-The scripted forms (`playtest new suite <name> [dir]`,
-`playtest new case <name> --suite <dir>`) cover the workflow. The interactive
-layer on top of them:
+(Written pre-V1: the scripted surface is now `playtest new <name> [dir]` /
+`new persona <name>`, and suite creation no longer exists — the prompts
+below would need rethinking against that surface.) The interactive layer
+on top of the scripted forms:
 
 - Bare `playtest new` chooser:
 
@@ -113,10 +116,11 @@ structured findings come back (webhook or poll), the agent fixes, and a
 human accepts the journey diff at the end.
 
 Deferred because the v0 of this loop already exists on rented rails:
-GitHub Actions + the PR journey-diff bot + the agent skill + `playtest
-check` (see IMPROVEMENTS_FOLLOWUP.md §6–8) form the same loop with zero
-backend. A hosted service is a productization decision — multi-tenant,
-SaaS, non-GitHub users — not a prerequisite for the loop.
+GitHub Actions + the PR journey-diff bot (`CI_INTEGRATION.md` §6) + the
+agent skill (`VERSION_1.1.md` item 3) + `playtest check` (below) form the
+same loop with zero backend. A hosted service is a productization
+decision — multi-tenant, SaaS, non-GitHub users — not a prerequisite for
+the loop.
 
 Design constraints to honor when this is revisited:
 
@@ -126,7 +130,7 @@ Design constraints to honor when this is revisited:
   the schema clean and versioned and file-mode and API-mode stay the same
   engine.
 - **The read side already exists** as the durable history backend
-  (IMPROVEMENTS_FOLLOWUP.md §12): control plane in Postgres, artifacts in
+  (`CI_INTEGRATION.md` §12): control plane in Postgres, artifacts in
   object storage. The service adds the write side: a queue plus run
   workers.
 - **Workers are CI-runner-shaped, not lambda-shaped** — stateful,
@@ -136,3 +140,99 @@ Design constraints to honor when this is revisited:
   human action. The agent fixing the code never mutates the spec and never
   accepts its own work — otherwise the loop "closes" by weakening the
   assertions instead of fixing the app.
+
+## `playtest check`: Ephemeral Cases
+
+(Moved here 2026-06-13 from the improvement planning, where it ranked
+below the agent skill because the skill already closes the loop for
+existing case files.)
+
+A one-shot inline case for probing — no file, no baseline, always a fresh
+agentic run:
+
+```txt
+playtest check --base-url https://pr-417.preview.example.com \
+  --story "Add a todo called 'buy milk'" \
+  --assert "the list shows a todo called 'buy milk'"
+```
+
+- `--assert` is repeatable; `--json` and the exit-code contract apply as
+  usual; artifacts land in `runs/` like any run.
+- `--save tests/todos/add-todo.yaml` materializes a passing probe as a real
+  case file — the promotion path from exploration to regression. Reuses
+  `new`'s scaffolding.
+
+Design rule this feature must not erode — **the YAML is spec, not config**:
+the story and success criteria are the fixed point that makes a closed
+agent loop trustworthy. If the agent fixing the code can also weaken the
+assertions, the loop has a degenerate solution ("fix" the failure by
+gutting the spec). Ephemeral checks are for probing; durable regression
+requires a case file in git, reviewed by humans. `check` never writes
+baselines and `--save` never overwrites an existing case without `--force`.
+
+## `playtest docs`: Static Walkthrough Pages
+
+(Demoted 2026-06-13: rendering documentation is a different product with a
+different audience, and an open-ended maintenance surface — formats, index
+pages, wiki integrations. The likelier shape is a **separate toolchain
+that consumes playtest artifacts** — the run directory, plus the caption
+derivation `playtest clip` builds — alongside other sources.)
+
+Design ideas worth preserving if this is ever revisited, in playtest or in
+that separate tool:
+
+- **Act, then render:** for each case with a baseline, act it against the
+  app (zero LLM calls, seconds) capturing fresh screenshots, then render
+  the walkthrough from that just-verified run. Screenshots always match
+  the current UI, and a broken journey fails the docs build —
+  documentation that *refuses to lie*. An external tool gets this by
+  invoking `playtest run` (exit codes are the contract) before reading
+  artifacts.
+- Captions are user-facing instructions derived from action + resolved
+  locator (`Click "Checkout"`), not agent thoughts; an optional cheap LLM
+  pass can polish phrasing.
+- Page per case (story as intro, numbered steps, success criteria as
+  "what you should see"), index per suite; Markdown + images as the
+  portable format.
+- Heal diffs double as "what changed in this flow" release-note material.
+
+## Research-Mode Remainder: Persona Comparison + Findings Report
+
+Discovery mode (implemented) covers the core of the original research-mode
+idea; vision support is VERSION_1.1 item 7. What remains deferred:
+
+- `--compare`: run multiple personas over the same journeys and report the
+  delta — completed-by, steps taken, where each diverged or gave up.
+- A findings report artifact (`runs/<run>/findings.md`) synthesized by a
+  grader variant: per-journey narrative, hesitation/confusion moments with
+  step screenshots, expectation-vs-outcome mismatches, verbatim agent
+  thoughts as user quotes.
+- Research-style clips (thought captions — `playtest clip --captions
+  thought` once VERSION_1.1 item 2 lands) embedded in that report.
+
+Revisit when a research audience (designers, PMs) concretely asks.
+
+## Rename "case" To "scenario"
+
+Decided against, recorded so it isn't relitigated cheaply: **scenario**
+had the best metaphor fit (actors improvising from a scenario is literally
+record mode, and it's Gherkin-familiar); **story** collides with the
+`story:` field ("the story's story"); **journey** is reserved for the
+in-app concept a case *checks*. "Case" stays because the glossary
+deliberately runs two registers — theatrical where it explains mechanics
+(actor, act, heal), conventional on the CI-facing surface (suite, case,
+run, tag) — and `case_id`/`--case` make a rename expensive for marginal
+gain. If the appetite ever firms up, pre-1.0 is the only cheap window.
+
+## MCP Server
+
+Superseded by the agent skill (VERSION_1.1 item 3) for shell-capable
+agents. Revisit only if a no-shell surface (claude.ai web, restricted IDE
+sandboxes) demands Playtest access; it would be a thin wrapper over the
+CLI and the `CI_INTEGRATION.md` §12 API at that point.
+
+## Compose-Based Example Suite
+
+Superseded by `playtest demo` as the first-run path. Do it only if managed
+mode needs a living exercise: point `tests/playtest.yaml` at
+`docker-compose.test.yml` via the `app:` block.

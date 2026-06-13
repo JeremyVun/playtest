@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "run_id": "2026-06-11T0420-40e3",
+  "case": {
+    "id": "todos/add-todo",
+    "file": "tests/viewer/fixtures/todos/add-todo.yaml",
+    "story": "Add \"buy milk\" to the list and confirm it shows.\n",
+    "description": "Add a todo and confirm it appears.",
+    "mode": "journey",
+    "persona": "tester",
+    "tags": [
+      "smoke"
+    ],
+    "success": [],
+    "perf": {},
+    "report": [],
+    "vision": false,
+    "limits": {
+      "max_steps": 50,
+      "timeout_ms": 240000
+    }
+  },
+  "mode": "act",
+  "started_at": "2026-06-11T04:20:00.000Z",
+  "finished_at": "2026-06-11T04:20:02.092Z",
+  "duration_ms": 2092,
+  "video_started_at": 1781381038180,
+  "pins": {
+    "harness_version": "0.1.0",
+    "prompts_version": "prompts-v1",
+    "step_schema_version": 2,
+    "snapshot_format": "a11y-text-v1",
+    "settle": {
+      "name": "settle-v1",
+      "dom_quiet_ms": 500,
+      "net_quiet_ms": 500,
+      "max_ms": 10000
+    },
+    "driver": "web",
+    "actor_model": "claude-haiku-4-5",
+    "grader_model": "claude-sonnet-4-6",
+    "gateway": "http://localhost:4175",
+    "headed": false,
+    "vision": false
+  },
+  "env": {
+    "base_url": "http://localhost:63850",
+    "managed": false,
+    "driver": "web"
+  },
+  "result": {
+    "status": "pass",
+    "end_reason": "done",
+    "error": null,
+    "gate": {
+      "pass": true,
+      "checks": []
+    }
+  },
+  "totals": {
+    "steps": 3,
+    "executed_steps": 2,
+    "tokens": {
+      "in": 2843,
+      "out": 137,
+      "cache_read": 1674
+    },
+    "cost_usd": 0.0020214,
+    "console_errors": 0,
+    "confusion_events": 0
+  },
+  "healed": false,
+  "baseline": null,
+  "artifacts": {
+    "trajectory": "trajectory.jsonl",
+    "har": "har.json",
+    "video": null,
+    "trace": null,
+    "grade": "grade.json",
+    "baseline_copy": null
+  }
+}

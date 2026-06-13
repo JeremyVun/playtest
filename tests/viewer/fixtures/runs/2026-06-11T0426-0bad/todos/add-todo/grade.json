@@ -1,0 +1,17 @@
+{
+  "score": 25,
+  "completion": "partial",
+  "efficiency": {
+    "assessment": "Direct path with no wasted steps.",
+    "wasted_steps": 0
+  },
+  "findings": [],
+  "summary": "Todo missing on the final page.",
+  "model": "claude-sonnet-4-6",
+  "graded_at": "2026-06-13T20:04:00.091Z",
+  "tokens": {
+    "in": 772,
+    "out": 78,
+    "cache_read": 0
+  }
+}

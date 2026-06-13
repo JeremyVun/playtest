@@ -18,7 +18,11 @@ const MAX_WALK = 10;
 export function findRunsRoot(explicit = null, from = process.cwd()) {
   if (explicit) {
     const abs = path.resolve(explicit);
-    if (!isDir(abs)) throw new DummyConfigError(`not a directory: ${explicit}`);
+    // A missing path is tolerated — `playtest view` serves it as an empty picker
+    // rather than crashing (a runs root that doesn't exist yet just has no runs;
+    // and the compose self-test mounts the repo read-only, so it can't be created).
+    // A path that exists but is a *file* is still a real error.
+    if (fs.existsSync(abs) && !isDir(abs)) throw new DummyConfigError(`not a directory: ${explicit}`);
     return abs;
   }
   for (let dir = from, depth = 0; depth < MAX_WALK; depth++) {

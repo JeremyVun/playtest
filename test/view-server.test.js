@@ -188,6 +188,24 @@ test("/runs.json: entry shape, all three run kinds, newest first", async () => {
   }
 });
 
+// A runs root that doesn't exist must serve an empty picker, not crash: a fresh
+// project with no runs yet, or a read-only mount whose runs dir is unpopulated
+// (the compose self-test), still gets a working viewer. /runs.json -> [].
+test("/runs.json: missing runs root serves an empty picker (no crash)", async () => {
+  const missing = path.join(tmpRoot, "does-not-exist", "runs");
+  assert.ok(!fs.existsSync(missing), "precondition: the runs root is absent");
+  const srv = await serveRun(missing, { port: 0, open: false });
+  try {
+    const b = `http://127.0.0.1:${srv.address().port}`;
+    assert.deepEqual(await getJson(`${b}/runs.json`), [], "empty runs list");
+    const index = await fetch(`${b}/`);
+    assert.equal(index.status, 200, "viewer index still served");
+    assert.ok(!fs.existsSync(missing), "read-only: the viewer never created the dir");
+  } finally {
+    srv.close();
+  }
+});
+
 // ---------- /changed.json ----------
 
 test("/changed.json: the healed pass is listed as a pending changed journey", async () => {

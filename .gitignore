@@ -1,4 +1,8 @@
+.env
 node_modules/
-runs/
+# Anchored to the repo root: this ignores the top-level run-output dir only.
+# An unanchored "runs/" also matches nested fixtures (tests/viewer/fixtures/runs/),
+# which are tracked self-test data — git silently dropped them before.
+/runs/
 *.log
 .DS_Store

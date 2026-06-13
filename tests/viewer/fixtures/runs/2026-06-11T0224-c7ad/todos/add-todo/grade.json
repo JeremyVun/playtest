@@ -1,0 +1,22 @@
+{
+  "score": 90,
+  "completion": "full",
+  "efficiency": {
+    "assessment": "Direct path with no wasted steps.",
+    "wasted_steps": 0
+  },
+  "findings": [
+    {
+      "severity": "info",
+      "note": "Deterministic grade from the mock LLM fixture."
+    }
+  ],
+  "summary": "The task completed smoothly. This is a deterministic mock grade used for self-testing the harness.",
+  "model": "claude-sonnet-4-6",
+  "graded_at": "2026-06-13T20:04:00.091Z",
+  "tokens": {
+    "in": 772,
+    "out": 78,
+    "cache_read": 0
+  }
+}

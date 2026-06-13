@@ -35,7 +35,11 @@ const MIME = {
  */
 export async function serveRun(dir, { port = 0, open = true, query = "" } = {}) {
   const root = path.resolve(dir);
-  if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) {
+  // A missing runs root is not fatal: serve an empty picker (listRuns/findManifests
+  // already degrade to [] on an unreadable dir) so a fresh project with no runs yet,
+  // or a read-only mount whose runs dir hasn't been populated, gets a working viewer
+  // instead of a crash. Only a path that exists but is a *file* is a real error.
+  if (fs.existsSync(root) && !fs.statSync(root).isDirectory()) {
     throw new Error(`not a directory: ${dir}`);
   }
   const singleRun = fs.existsSync(path.join(root, "manifest.json"));

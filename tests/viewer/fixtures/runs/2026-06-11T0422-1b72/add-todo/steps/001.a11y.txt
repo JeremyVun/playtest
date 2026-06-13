@@ -1,0 +1,9 @@
+Page: Todos — http://localhost:63854/
+[e1] heading "Todos" (level 1)
+[e2] textbox "What needs doing?" value=""
+[e3] button "Save"
+text: "0 items left"
+[e4] link "All"
+[e5] link "Active"
+[e6] link "Completed"
+[e7] button "Clear completed"

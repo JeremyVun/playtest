@@ -1,0 +1,11 @@
+Page: Todos — http://localhost:63850/
+[e1] heading "Todos" (level 1)
+[e2] textbox "What needs doing?" value=""
+[e3] button "Add"
+[e4] checkbox "buy milk" (unchecked)
+[e5] button "Delete buy milk"
+text: "1 item left"
+[e6] link "All"
+[e7] link "Active"
+[e8] link "Completed"
+[e9] button "Clear completed"

@@ -80,10 +80,12 @@ knowing the loop; the loop is below.
    - **Agent flake** — rerun the case once (`playtest <path/to/case>.yaml
      --json`). If it passes, say so and move on. If it fails the same
      confused way on an unchanged page, propose a clearer `story:` wording
-     to the human — proposed, not applied; the spec stays theirs.
+     to the human — proposed, not applied; the spec stays theirs. The
+     **playtest-stories** skill owns story craft (goals not click-paths,
+     second person, 2-4 lines).
    - **Environment flake / exit 2** — report the infra error verbatim
-     (`result.error`, or the `playtest:` stderr line) and which rail broke.
-     Don't touch code.
+     (`result.error`, or the `playtest:` stderr line) and which rail broke,
+     then stop (hard rule above).
 
 5. **Report** when the loop ends: per case, the verdict, what you did, and
    any commands you left for the human (accepts, story proposals).

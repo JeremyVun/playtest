@@ -1,0 +1,9 @@
+# Diff tab: baseline-vs-healed comparison comprehension.
+description: Find where the healed recording diverges from its baseline.
+story: |
+  Before anyone blesses the healed "add-todo" recording, you want to see
+  where the new path deviates from the old baseline. Open the healed run's
+  comparison and get the first differing step on screen.
+success:
+  - url_matches: "*run=*1b72*"
+  - assert: 'the comparison against the baseline is on screen, including the "first divergence" marker'

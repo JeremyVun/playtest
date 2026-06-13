@@ -64,7 +64,10 @@ async function resolveComposeUrl(compose, baseUrl) {
   if (!published) throw new Error(`no published port for service ${url.hostname}:${containerPort}`);
   url.hostname = "localhost";
   url.port = published;
-  return url.href;
+  // Match the shape of YAML-authored base_urls: URL.href appends a trailing
+  // slash, and init scripts that concatenate "$BASE_URL/path" then hit
+  // "//path", which routers 404.
+  return url.pathname === "/" && !url.search ? url.origin : url.href;
 }
 
 /**

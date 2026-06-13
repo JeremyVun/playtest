@@ -11,6 +11,10 @@
       "type": "string",
       "description": "Required. The user's goal in natural language, addressed to the actor in the second person (\"You keep forgetting to buy milk...\"). Journey stories name concrete targets in double quotes; discovery stories state a goal without prescribing the path (\"Get your timesheet data out of the platform however seems natural\")."
     },
+    "description": {
+      "type": "string",
+      "description": "Optional one-line human-facing summary, e.g. \"Add a todo and see it in the list\". Shown in run lists (the viewer's picker) instead of the story prose; never sent to the actor, so it cannot change agent behavior. Case-only: not allowed in playtest.yaml."
+    },
     "tags": {
       "type": "array",
       "items": { "type": "string" },

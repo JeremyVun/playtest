@@ -48,6 +48,9 @@ before(async () => {
   fs.cpSync(SUITE_SRC, suiteDir, {
     recursive: true,
     filter: (src) => {
+      // The viewer self-test (tests/viewer) brings its own compose-managed
+      // environment — this e2e's subject is the todo suite only.
+      if (src === path.join(SUITE_SRC, "viewer")) return false;
       const base = path.basename(src);
       return !base.includes(".baseline.") && !base.includes(".healed.");
     },

@@ -1,0 +1,18 @@
+# Serves Playtest's own viewer over the frozen fixtures for the self-test
+# suite (tests/viewer). Named .yml, not .yaml, so case discovery ignores it.
+services:
+  viewer:
+    image: node:22-alpine
+    working_dir: /app # repo root: pending-candidate paths in fixture manifests resolve relative to the server cwd
+    volumes:
+      - ../..:/app:ro
+    environment:
+      PLAYTEST_VIEW_HOST: "0.0.0.0" # default loopback is unreachable through Docker port mapping
+    command: node src/harness/cli.js view tests/viewer/fixtures/runs --port 4317 --no-open
+    ports:
+      - "4317"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4317/runs.json"]
+      interval: 2s
+      timeout: 3s
+      retries: 20

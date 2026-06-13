@@ -1,4 +1,5 @@
 tags: [smoke]
+description: Add "buy milk" and see it appear in the list.
 story: |
   You keep forgetting to buy milk on the way home. Use this todo app to
   add a todo called "buy milk" so it shows up in your list.

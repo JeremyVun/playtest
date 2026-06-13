@@ -1,3 +1,4 @@
+description: Add two todos, mark one done, counter shows one left.
 story: |
   You are planning your evening. Add a todo called "buy milk" and add a
   todo called "walk the dog". You already bought milk on the way home,

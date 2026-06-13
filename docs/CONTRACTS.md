@@ -90,6 +90,7 @@ as `PINS_BASE` (see Manifest).
   file: "/abs/path/tests/todos/add-todo.yaml",
   name: "add-todo",
   story: "...",                    // required
+  description: "..." | null,       // optional one-line summary for run lists; never sent to the actor
   mode: "journey" | "discovery",   // case kind; discovery = no gate, no baselines, always fresh
   persona: "tester",               // name; resolution happens in actor.js
   tags: ["smoke"],
@@ -123,8 +124,8 @@ Suite-defaults inheritance: collect defaults files from the repo root (dir conta
 `.git`; when no `.git` ancestor exists, every ancestor directory of the case contributes)
 down to the case's directory. The defaults filename is `playtest.yaml`. Deep-merge top-down
 (nearest file wins per key; the `app:` YAML block merges per-key into the resolved `env`
-field). `success`/`tags`/`report`/`personas` (and `story`) are case-only: declaring one in
-a defaults file is a hard config error — defaults.schema.json rejects the key at load
+field). `success`/`tags`/`report`/`personas` (and `story`/`description`) are case-only:
+declaring one in a defaults file is a hard config error — defaults.schema.json rejects the key at load
 (previously `success`/`tags` were silently skipped). A top-level `env:` key
 (the old name of `app:`) in any defaults or case file is rejected with
 `env: was renamed to app: (update <cwd-relative path>)`. Relative paths inside any YAML
@@ -219,7 +220,7 @@ early infra deaths produce videoless runs).
 ```js
 {
   schema_version: 1,
-  run_id, case: { id, file, story, mode, persona, tags, success, perf, report, vision, limits },
+  run_id, case: { id, file, story, description, mode, persona, tags, success, perf, report, vision, limits },
                                         // case.mode ("journey"|"discovery") + case.report + case.vision
                                         // ride along so `playtest grade` re-grades with the right rubric
   mode: "record" | "act" | "heal" | "explore",  // run strategy: heal = act that escalated;
@@ -546,7 +547,9 @@ export async function checkAssertion(claim, { snapshotText, finalUrl, model })
 export async function prepareEnv(resolvedCase, runId)
   // Managed (env.compose set): `docker compose -f <file> -p playtest-<runId>-<n> up -d --wait`;
   //   resolve base_url: if its hostname matches a compose service, rewrite to
-  //   http://localhost:<published port> via `docker compose port`. Teardown: `down -v`.
+  //   http://localhost:<published port> via `docker compose port`, normalized WITHOUT a
+  //   trailing slash (the shape YAML base_urls have — init scripts concatenate
+  //   "$BASE_URL/path", and "//path" 404s). Teardown: `down -v`.
   // External: base_url used as-is.
   // Then health-probe: GET base_url, ok if status < 500; 5 attempts, 1s apart.
   //   An external-mode probe failure against localhost/127.0.0.1 throws the onboarding hint
@@ -559,7 +562,8 @@ export async function prepareEnv(resolvedCase, runId)
   //   compose path is relative to that file's dir, because config.js resolves
   //   app.compose against the declaring file. Managed-mode probe failures keep the raw
   //   "health probe failed for <url>: <reason>" — compose is already configured there.
-  // Then run init script (if any): cwd = script's dir, env: BASE_URL, RUN_ID, PATH etc.
+  // Then run init script (if any): cwd = script's dir, env: BASE_URL (no trailing
+  //   slash), RUN_ID, PATH etc.
   //   *.mjs/*.cjs/*.js inits run via the current Node binary (process.execPath) so they
   //   need no execute bit and work on Windows; anything else execs directly.
   // -> { baseUrl, managed, teardown: async () => void }
@@ -832,8 +836,8 @@ Behavior contracts:
   `<target>/playtest.yaml` is also written (active `app.base_url
   http://localhost:3000`; compose/init/storage_state and the model pins present but
   commented) with a `Created defaults:` line — inside an existing suite subtree only
-  the case file is written. Case template: tags / story / success-assert /
-  perf console_errors 0. Persona template: name + description placeholder in
+  the case file is written. Case template: tags / description / story /
+  success-assert / perf console_errors 0. Persona template: name + description placeholder in
   `./personas/`.
 - accept (acceptance safety — deliberately no `--force`, checked in order): manifest.json
   exists -> trajectory.jsonl exists -> `result.status === "pass"` (refusal names status and
@@ -866,6 +870,8 @@ probes) for recorded, healed, and discovery runs in pinned chromium.
 export async function serveRun(dir, { port = 0, open = true, query = "" } = {})
   // query (e.g. "?filter=changed") is appended to the URL printed and opened;
   // the viewer reads it. Startup line: "Playtest viewer: <url>".
+  // Binds 127.0.0.1; PLAYTEST_VIEW_HOST=0.0.0.0 opts into other interfaces
+  // (the viewer self-test serves through Docker port mapping this way).
 export function findManifests(root, maxDepth = 6)
   // every run dir (contains manifest.json) under root — the one manifest walk,
   // shared with runs-root.js (scanHistory / latestRun).
@@ -876,9 +882,13 @@ export function changed(root, singleRun)  // the /changed.json entries (also `vi
 GET/HEAD only (anything else → 405); strictly read-only — the viewer never writes
 baselines. Serves: `/` → `src/viewer/` static files; `/run/*` → files under the run dir
 (when `dir` is a single run). When `dir` is a **runs root**, `/runs.json` lists
-`[{run_id, case_id, path, status, mode, healed, started_at, duration_ms}]` (read from
-manifests, newest first) and `/run/<run_id>/<case_id>/*` serves each run; the viewer shows
-a picker. `/changed.json` → healed passes across the runs root, newest first:
+`[{run_id, case_id, path, status, mode, healed, started_at, duration_ms, story|null,
+description|null, tags}]` (read from manifests, newest first; `story`/`description`/`tags`
+echo `manifest.case` so the picker can say what each story is, not just its id) and
+`/run/<run_id>/<case_id>/*` serves each run; the viewer shows a picker — each story row
+carries its tag chips and, under the id, the case `description` (whole — it's a one-liner
+by contract) or, when none is authored, the story prose clamped to two lines with the full
+text on hover. `/changed.json` → healed passes across the runs root, newest first:
 `[{case_id, run_id, started_at, score|null, path (root-relative), run_dir_rel
 (cwd-relative, for copy-paste accept/reject commands), pending}]`, where `pending` means
 the `<case>.healed.*` candidate files still exist AND the candidate meta's `run_dir`
@@ -943,7 +953,11 @@ artifact is missing (acted runs have no tokens; ungraded runs no grade.json).
 OpenAI-compatible server: `POST /chat/completions` (also at `/v1/chat/completions`).
 `node src/harness/testing/mock-llm.js [--port 4175]`. No key required. Behavior:
 
-- If the request forces tool `step`: parse the LAST user message's snapshot text. Rule-based
+- If the request forces tool `step`: parse the LAST user message's snapshot text. Two rule
+  sets, dispatched on the story: testing/viewer-actor.js recognizes the viewer self-test
+  stories (tests/viewer) by their phrasing and walks the viewer's accessible names (run-row
+  links, tab buttons, the older-run pager, strip cells) to its scenario's end state — when
+  it returns null, the todo rules below take over. Rule-based
   actor sufficient to complete the example todo cases: extract quoted strings from the story
   (system message); if a textbox's value lacks the next pending quoted todo → `type` it
   (submit: false); then click the add button; story says "complete"/"mark ... done" → click the
@@ -985,8 +999,11 @@ with accessible name = the todo title; delete button per item named "Delete <tit
 filter links All/Active/Completed; live counter "N items left" (aria-live). Must work
 without errors in console. Keep it genuinely simple — it's a fixture, not a product.
 
-Example suite (`tests/`): `playtest.yaml` (models, max_steps 25, timeout 3m,
-app.base_url http://localhost:4173, init ./seed/reset.sh), three cases under `todos/`:
+Example suite (`tests/`): `playtest.yaml` (suite-agnostic defaults only: models,
+max_steps 25, timeout 3m — each suite under tests/ owns its `app` block, so the
+todo env lives in `tests/todos/playtest.yaml`: app.base_url http://localhost:4173,
+init ../seed/reset.sh; the viewer self-test in `tests/viewer/` composes its own
+app and the mock's viewer-actor.js rules drive it). Three cases under `todos/`:
 `add-todo.yaml` (tags [smoke]; story: add "buy milk"; success: element_exists
 `[data-testid=todo-item]`, api_called `POST /api/todos`, assert "the list shows a todo
 called buy milk"; perf: console_errors 0), `complete-todo.yaml` (add two, complete one,

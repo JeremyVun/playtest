@@ -488,6 +488,7 @@ function buildManifest({ rc, runId, mode, startedAt, videoStartedAt, llm, env, r
       id: rc.id,
       file: rc.file,
       story: rc.story,
+      description: rc.description,
       mode: rc.mode,
       persona: rc.persona,
       tags: rc.tags,

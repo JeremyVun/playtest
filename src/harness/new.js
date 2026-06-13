@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { DummyConfigError } from "./config.js";
 
 const CASE_TEMPLATE = `tags: []
+description: One-line summary for run lists.
 story: |
   Describe what the user should do.
 

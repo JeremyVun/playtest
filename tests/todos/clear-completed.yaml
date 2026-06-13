@@ -1,4 +1,5 @@
 tags: [smoke]
+description: Complete a todo, then clear completed to empty the list.
 story: |
   You like to keep your list tidy. Add a todo called "pay rent", then
   mark "pay rent" as done, then clear completed todos so the list is

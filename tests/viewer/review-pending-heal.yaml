@@ -1,0 +1,11 @@
+# Heal review, from cold: which journey awaits review and how to accept it.
+# The picker has no link to ?filter=changed, so the only in-UI path to the
+# accept command is the healed run's diff tab — the gate pins that run (1b72).
+description: Find the pending heal and surface its accept command.
+story: |
+  Playtest healed a journey while you were away and the new recording is
+  waiting for a human decision. Find which journey is awaiting review and
+  get the exact command for accepting its new recording on screen.
+success:
+  - url_matches: "*run=*1b72*"
+  - assert: 'a "playtest accept" command for blessing the changed recording is visible'

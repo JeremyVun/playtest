@@ -1,0 +1,12 @@
+description: Work out which journey failed and what broke, from the viewer alone.
+story: |
+  Overnight, one of your team's journey checks went red. The Playtest runs
+  viewer is open in front of you. Work out which journey failed and what
+  exactly went wrong — enough that you could tell the team what broke
+  without re-running anything.
+personas: [ci-triager, new-evaluator]
+report:
+  - Where did the user look first to find the failing run, and how many wrong turns did they take before opening it?
+  - Did they reach the failing success criteria themselves, or stop at the red status badge? What did they conclude broke?
+  - The failed run's screenshots contradict its failed criteria (they show the todo present) — did the user notice, and how did they resolve the contradiction?
+  - Which affordance that would have answered the question faster did they never discover?

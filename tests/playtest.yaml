@@ -1,8 +1,6 @@
-# Root defaults for the example suite. Start the app first: npm run todo-app
+# Root defaults for the test suites. App config lives with each suite
+# (tests/todos, tests/viewer) — only suite-agnostic defaults belong here.
 actor_model: claude-haiku-4-5
 grader_model: claude-sonnet-4-6
 max_steps: 25
 timeout: 3m
-app:
-  base_url: http://localhost:4173
-  init: ./seed/reset.sh

@@ -49,7 +49,9 @@ export async function serveRun(dir, { port = 0, open = true, query = "" } = {}) 
   });
   await new Promise((resolve, reject) => {
     server.once("error", reject);
-    server.listen(port, "127.0.0.1", resolve);
+    // Loopback-only by default; PLAYTEST_VIEW_HOST=0.0.0.0 makes the server
+    // reachable through Docker port mapping (the self-test compose needs this).
+    server.listen(port, process.env.PLAYTEST_VIEW_HOST || "127.0.0.1", resolve);
   });
 
   const url = `http://localhost:${server.address().port}/${query}`;
@@ -187,6 +189,11 @@ export function listRuns(root) {
       healed: m.healed ?? false,
       started_at: m.started_at ?? null,
       duration_ms: m.duration_ms ?? null,
+      // the picker's "which story is this?" context: the one-line description
+      // when authored, the story prose as fallback, plus tags
+      story: m.case?.story ?? null,
+      description: m.case?.description ?? null,
+      tags: m.case?.tags ?? [],
     });
   }
   return runs.sort((a, b) => String(b.started_at).localeCompare(String(a.started_at)));

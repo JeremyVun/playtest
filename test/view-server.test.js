@@ -49,7 +49,10 @@ before(async () => {
   fs.mkdirSync(suiteDir, { recursive: true });
   fs.writeFileSync(path.join(suiteDir, "playtest.yaml"), `app:\n  base_url: ${appA.url}\n`);
   // Quoted directive: the rule-based mock actor records it (type, click, done).
-  fs.writeFileSync(path.join(suiteDir, "add-todo.yaml"), 'story: |\n  Add "buy milk" to the list.\n');
+  fs.writeFileSync(
+    path.join(suiteDir, "add-todo.yaml"),
+    'description: Buy-milk smoke journey.\nstory: |\n  Add "buy milk" to the list.\n',
+  );
 
   const studyDir = path.join(tmpRoot, "study");
   fs.mkdirSync(studyDir, { recursive: true });
@@ -166,7 +169,15 @@ test("/runs.json: entry shape, all three run kinds, newest first", async () => {
     assert.equal(typeof r.healed, "boolean", "healed");
     assert.equal(typeof r.started_at, "string", "started_at");
     assert.ok(isNumberOrNull(r.duration_ms), "duration_ms");
+    // picker context: the case's story prose (null for pre-story manifests),
+    // optional one-line description, and tags
+    assert.match(r.story, /buy milk/, "story carries the case prose");
+    assert.ok(r.description === null || typeof r.description === "string", "description");
+    assert.ok(Array.isArray(r.tags), "tags is an array");
   }
+  const byMode = Object.fromEntries(runs.map((r) => [r.mode, r]));
+  assert.equal(byMode.record.description, "Buy-milk smoke journey.", "description round-trips");
+  assert.equal(byMode.explore.description, null, "study case has no description");
   assert.deepEqual(runs.map((r) => r.mode).sort(), ["explore", "heal", "record"]);
   const starts = runs.map((r) => r.started_at);
   assert.deepEqual(starts, [...starts].sort().reverse(), "newest first by started_at");

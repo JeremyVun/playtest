@@ -119,6 +119,7 @@ test("an unknown nested key names its dotted path", async () => {
 test("a defaults file rejects every case-only key", async () => {
   const caseOnly = {
     story: "story: |\n  Placeholder.\n",
+    description: "description: One-line summary.\n",
     tags: "tags: [smoke]\n",
     success: "success:\n  - assert: anything\n",
     personas: "personas: [power-user]\n",
@@ -131,6 +132,17 @@ test("a defaults file rejects every case-only key", async () => {
     });
     await expectConfigError(dir, /playtest\.yaml/, new RegExp(`unknown key "${key}"`));
   }
+});
+
+test("description: optional summary lands on the resolved case, null when absent", async () => {
+  const dir = writeSuite({
+    "playtest.yaml": BASE,
+    "summarized.yaml": "story: |\n  Placeholder journey.\ndescription: Adds a todo and sees it listed.\n",
+    "plain.yaml": "story: |\n  Placeholder journey.\n",
+  });
+  const byName = Object.fromEntries((await discoverCases([dir])).map((c) => [c.name, c]));
+  assert.equal(byName.summarized.description, "Adds a todo and sees it listed.");
+  assert.equal(byName.plain.description, null);
 });
 
 test("runs_per_case (removed) is rejected as unknown in both file kinds", async () => {
@@ -302,9 +314,10 @@ test("cli: list --json shows fan-out ids with per-instance personas", async () =
 // ---------- compatibility: the shipped suites stay valid ----------
 
 test("the repo's tests/ and src/demo suites still resolve, all journey", async () => {
-  for (const suite of [path.join(ROOT, "tests"), path.join(ROOT, "src", "demo")]) {
+  // tests/ = 3 todo cases + 7 viewer self-test cases; src/demo = 3 todo cases.
+  for (const [suite, count] of [[path.join(ROOT, "tests"), 10], [path.join(ROOT, "src", "demo"), 3]]) {
     const cases = await discoverCases([suite]);
-    assert.equal(cases.length, 3, suite);
+    assert.equal(cases.length, count, suite);
     for (const c of cases) {
       assert.equal(c.mode, "journey", `${suite} ${c.id}`);
       assert.deepEqual(c.report, []);

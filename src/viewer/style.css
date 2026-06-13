@@ -683,10 +683,44 @@ a.rn-btn:hover { color: var(--accent); border-color: var(--accent); background: 
 .run-row:hover td { background: var(--bg2); }
 .run-row.dim { opacity: 0.55; }
 .td-case { white-space: normal; word-break: break-word; width: 99%; font-weight: 500; }
+.case-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* case tags: context, not state — quieter than the status chips */
+.tag {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  padding: 1px 7px;
+  border: 1px solid var(--line2);
+  border-radius: 999px;
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+/* the full story prose, muted, under the case id. contain:inline-size keeps
+   the paragraph's single-line max-content out of the auto table layout's
+   intrinsic sizing (it would otherwise push the other columns off the card);
+   the text then wraps at the cell's resolved width. */
+.case-story {
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--dim);
+  white-space: normal; /* the td computes nowrap (.runs-table td outranks .td-case) */
+  contain: inline-size;
+}
+/* story-prose fallback (no authored description): stories can run long, so
+   clamp; the full prose rides the title attribute */
+.case-story.clamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 
 /* a story's older runs, expanded beneath its latest */
 .expand {
-  margin-left: 10px;
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.06em;

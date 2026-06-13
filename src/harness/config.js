@@ -175,6 +175,7 @@ async function resolveCase(file, namedRoot, baseUrl) {
     file,
     name: path.basename(file, ".yaml"),
     story: merged.story,
+    description: merged.description ?? null, // human-facing summary; never reaches the actor prompt
     mode: merged.mode,
     persona: merged.persona,
     personas: merged.personas, // consumed by the fan-out in discoverCases, never on a final ResolvedCase

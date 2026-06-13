@@ -432,24 +432,24 @@ function runRow(href, cls, ...cells) {
 function renderPicker(runs, filterNote = null) {
   const el = $("#picker");
   el.hidden = false;
-  const storyKey = (r) => r.case_id ?? "?";
-  const byStory = new Map();
+  const caseKey = (r) => r.case_id ?? "?";
+  const byCase = new Map();
   for (const r of runs) {
-    const k = storyKey(r);
-    if (!byStory.has(k)) byStory.set(k, []);
-    byStory.get(k).push(r);
+    const k = caseKey(r);
+    if (!byCase.has(k)) byCase.set(k, []);
+    byCase.get(k).push(r);
   }
   // groups sort on the latest run's values; mode_label sorts by what's shown
-  const groups = [...byStory.entries()].map(([story, list]) => {
+  const groups = [...byCase.values()].map((list) => {
     list.sort((a, b) => String(b.started_at).localeCompare(String(a.started_at)));
-    return { story, runs: list, ...list[0], mode_label: modeLabel(list[0].mode, list[0].healed, list[0].status) };
+    return { ...list[0], runs: list, mode_label: modeLabel(list[0].mode, list[0].healed, list[0].status) };
   });
   const expanded = new Set();
 
   // story first (what you scan for), then outcome, then recency; run id last —
   // it's a random suffix, useful only for cross-referencing.
   const cols = [
-    { key: "story", label: "story" },
+    { key: "case_id", label: "story" },
     { key: "status", label: "status" },
     { key: "mode_label", label: "type" },
     { key: "started_at", label: "started", desc: true },
@@ -465,23 +465,44 @@ function renderPicker(runs, filterNote = null) {
     h("td", { class: "num" }, fmtMs(r.duration_ms)),
     h("td", { class: "td-id", title: r.run_id ?? "" }, shortRunId(r.run_id)),
   ];
+  // The id alone stops meaning anything in a big suite: a line under the name
+  // says what each story does without leaving the picker. The authored
+  // description shows whole (it's a one-liner by contract); a case without one
+  // falls back to its story prose, clamped — stories can run long — with the
+  // full text on hover.
+  const storyLine = (r) => {
+    const description = typeof r.description === "string" ? r.description.trim() : "";
+    const story = typeof r.story === "string" ? r.story.trim() : "";
+    const text = description || story;
+    if (!text) return null;
+    return h("div", {
+      class: "case-story" + (description ? "" : " clamp"),
+      title: description ? null : story,
+    }, text.replace(/\s+/g, " "));
+  };
+  const tagChips = (r) => (Array.isArray(r.tags) ? r.tags : []).map((t) => h("span", { class: "tag" }, t));
   const rowsFor = (g, redraw) => {
+    const k = caseKey(g);
     const older = g.runs.length - 1;
-    const open = expanded.has(g.story);
+    const open = expanded.has(k);
     const main = runRow(href(g), null, ...cells(g,
       h("td", { class: "td-case" },
-        h("a", { class: "case-link", href: href(g) }, g.story),
-        older > 0
-          ? h("button", {
-              class: "expand" + (open ? " on" : ""),
-              title: (open ? "hide" : "show") + " this story's older runs",
-              onclick: (e) => {
-                e.stopPropagation();
-                open ? expanded.delete(g.story) : expanded.add(g.story);
-                redraw();
-              },
-            }, `${open ? "▾" : "▸"} ${older} older`)
-          : null,
+        h("div", { class: "case-line" },
+          h("a", { class: "case-link", href: href(g) }, k),
+          ...tagChips(g),
+          older > 0
+            ? h("button", {
+                class: "expand" + (open ? " on" : ""),
+                title: (open ? "hide" : "show") + " this story's older runs",
+                onclick: (e) => {
+                  e.stopPropagation();
+                  open ? expanded.delete(k) : expanded.add(k);
+                  redraw();
+                },
+              }, `${open ? "▾" : "▸"} ${older} older`)
+            : null,
+        ),
+        storyLine(g),
       )));
     if (!open) return [main];
     return [main, ...g.runs.slice(1).map((r) => runRow(href(r), "sub", ...cells(r,

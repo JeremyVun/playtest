@@ -1,0 +1,12 @@
+description: Judge from the viewer whether todos/add-todo has been stable lately.
+story: |
+  You are writing this week's quality note for the team. Using the runs
+  viewer, determine whether the "todos/add-todo" journey has been stable
+  lately: is it getting better, worse, or flaky — and does anything need a
+  closer look?
+personas: [reviewing-pm, new-evaluator]
+report:
+  - Did the user find any cross-run view of the journey (history, trend, grouping in the run list), or did they compare runs one at a time?
+  - Which signals did they treat as "health" — status colors, scores, durations, step counts — and which available signals did they ignore?
+  - What verdict did they reach, and does the fixture data (5 passes and 1 recent failure) actually support it?
+  - At what point, if any, did they stop trusting their answer or want data the viewer does not show?

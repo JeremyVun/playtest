@@ -4,6 +4,7 @@
 // actor.js and grader.js produce — if those drift, the offline e2e breaks.
 import http from "node:http";
 import { pathToFileURL } from "node:url";
+import { viewerStep } from "./viewer-actor.js";
 
 // ---------- parsing what the harness sends ----------
 
@@ -147,11 +148,13 @@ function actorStep(messages) {
   const snapMsg = users.find((c) => /^Current page snapshot \(step \d+\):/.test(c));
   if (!snapMsg) throw new Error('no user message starting with "Current page snapshot (step N):" — actor message layout drifted');
   const stepNum = Number(snapMsg.match(/\(step (\d+)\)/)[1]);
+  const snapshot = snapMsg.slice(snapMsg.indexOf("\n") + 1);
   const args = stepNum > 20
     ? giveUp("This is taking far too many steps.", "exceeded 20 steps without finishing the task")
-    : decide(
+    : viewerStep(story, snapshot) ?? // viewer self-test stories (tests/viewer), else the todo rules
+      decide(
         parseDirectives(story),
-        parseSnapshot(snapMsg.slice(snapMsg.indexOf("\n") + 1)),
+        parseSnapshot(snapshot),
         parseHistory(users.find((c) => c.startsWith("Steps so far:")) ?? ""),
       );
   // A vision-on turn carries an image part; emit a visual observation so

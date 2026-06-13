@@ -1,0 +1,13 @@
+# Self-test suite: the app under test is Playtest's own run viewer, serving
+# the frozen fixture runs in ./fixtures — never the live runs/ directory, so
+# the suite cannot observe its own output. Boot is managed via compose; the
+# harness rewrites base_url to the published port.
+#
+# Runs offline against the mock (testing/viewer-actor.js drives these stories):
+#   npm run mock-llm &
+#   PLAYTEST_LLM_BASE_URL=http://localhost:4175 playtest tests/viewer
+app:
+  compose: ./docker-compose.yml
+  base_url: http://viewer:4317
+max_steps: 25
+timeout: 3m

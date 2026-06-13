@@ -1,0 +1,9 @@
+# Discovery study over Playtest's own run viewer, served from the frozen
+# fixtures (same managed compose as the self-test suite — never live runs/).
+mode: discovery
+actor_model: claude-sonnet-4-6
+grader_model: claude-opus-4-8
+max_steps: 40
+app:
+  compose: ../../tests/viewer/docker-compose.yml
+  base_url: http://viewer:4317

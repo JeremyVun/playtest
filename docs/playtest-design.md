@@ -112,7 +112,7 @@ max_steps: 30
 timeout: 4m
 app:
   base_url: http://app:3000
-  compose: ./docker-compose.test.yml
+  compose: ./docker-compose.yml
 ```
 
 ```yaml
@@ -147,7 +147,7 @@ is optional and says **Playtest owns the app lifecycle**:
 ```yaml
 app:
   base_url: http://app:3000               # required: where the app is
-  compose: ./docker-compose.test.yml      # optional: Playtest boots/tears down
+  compose: ./docker-compose.yml           # optional: Playtest boots/tears down
   init: ./seed/checkout.sh                # optional: runs before each case
   storage_state: ./seed/anon.json         # optional: pre-built browser session
 ```
@@ -281,8 +281,8 @@ Each turn the harness:
    everything it has done so far, and the latest snapshot(s).
 3. Receives exactly one **structured step object** (see *The step contract*):
    a free-text `thought`, one `action` from a small fixed vocabulary
-   (`click`, `type`, `select`, `scroll`, `navigate`, `wait`, `done(summary)`,
-   `give_up(reason)`), and an `expectation` of what should happen next.
+   (`click`, `type`, `select`, `scroll`, `navigate`, `back`, `wait`,
+   `done(summary)`, `give_up(reason)`), and an `expectation` of what should happen next.
 4. **Validates** the action (does that ref still exist? is it interactable?),
    executes it inside a measurement window (see Telemetry), and waits for the
    page to settle. Invalid or failed actions are returned to the agent as
@@ -300,9 +300,11 @@ cheap and the agent can run 40+ steps without context bloat.
 
 ### The step contract
 
-The actor's entire turn is one schema-validated object. Only the action union
-is constrained; `thought` and `expectation` are deliberately free-form strings
-(over-structuring reasoning degrades it):
+The actor's entire turn is one schema-validated object. The `action` is a **flat
+object** — one `type` verb plus the flat parameters that verb uses, with per-verb
+requireds enforced by an `allOf` of if/then (schema_version 3; see CONTRACTS.md §16
+for the ship-vs-validate split). `thought` and `expectation` are deliberately
+free-form strings (over-structuring reasoning degrades it):
 
 ```json
 {
@@ -320,7 +322,7 @@ referenced by pointer, keyed by step id.
 ```json
 {
   "step": 7,
-  "schema_version": 2,
+  "schema_version": 3,
   "agent":      { "thought": "...", "action": { "type": "click", "ref": "e42" }, "expectation": "..." },
   "resolution": { "ref": "e42", "locator": "role=button[name=\"Checkout\"]" },
   "result":     { "ok": true, "settle_ms": 480 },
@@ -472,8 +474,9 @@ runs/2026-06-10T0300-ab12/guest-checkout/
 
 One of these trajectories per case is saved as the **baseline** — the
 pointer acted runs follow. The trajectory file is self-sufficient for that
-job; it is committed next to the case as `<case>.baseline.jsonl`, with run
-provenance in `<case>.baseline.json`.
+job; it is committed under the suite's `results/` dir as
+`results/<case>.baseline.jsonl`, with run provenance in
+`results/<case>.baseline.json`.
 
 The **MHTML page snapshots** mean every step can be opened in a browser later,
 exactly as the agent saw it — framework-irrelevant, no app needed. This makes

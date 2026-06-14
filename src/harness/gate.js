@@ -1,10 +1,11 @@
 // Deterministic pass/fail gate. See docs/CONTRACTS.md §7.
+import { pathnameOf } from "./drivers/har.js";
 
 /**
  * Evaluate every success criterion, then every perf threshold. Never throws;
  * a check that errors becomes a failed check.
  * @param {object} resolvedCase
- * @param {{ session: object, harEntries: object[], consoleErrorCount: number,
+ * @param {{ driver: object, harEntries: object[], consoleErrorCount: number,
  *           trajectory: object[], finalUrl: string,
  *           checkAssertion: ((claim: string) => Promise<{pass: boolean, detail: string}>) | null }} ctx
  * @returns {Promise<{ pass: boolean, checks: {kind, spec, pass, detail}[] }>}
@@ -43,8 +44,16 @@ async function checkSuccess(kind, value, ctx) {
     }
 
     case "element_exists": {
-      const found = await ctx.session.finalPageCheck(value);
+      const found = await ctx.driver.finalPageCheck(value);
       return { pass: Boolean(found), detail: found ? "element present" : `no element matches ${value}` };
+    }
+
+    case "screen_shows": {
+      // The mobile analog of element_exists: an accessibility id / predicate
+      // resolves on the final screen. Same Driver.finalPageCheck seam, the
+      // mobile driver's query language. (config.js scopes this to mobile.)
+      const found = await ctx.driver.finalPageCheck(value);
+      return { pass: Boolean(found), detail: found ? "screen element present" : `no screen element matches ${value}` };
     }
 
     case "api_called": {
@@ -73,6 +82,37 @@ async function checkSuccess(kind, value, ctx) {
             ? `${hits.length} matching request(s), e.g. ${hits[0].method} ${hits[0].url}`
             : `no matching request among ${requests.length} request(s)`,
       };
+    }
+
+    case "response_status": {
+      // api: a response with this status — exact ("201") or a class ("2xx").
+      // Matches ANY request in the run (design "last or any"), so a verification
+      // read-back after a mutation (POST 201 then GET 200) doesn't flip the gate.
+      const reqs = (ctx.trajectory ?? []).flatMap((e) => e.network?.requests ?? []);
+      const hits = reqs.filter((r) => statusMatches(value, String(r.status)));
+      return {
+        pass: hits.length > 0,
+        detail:
+          hits.length > 0
+            ? `${hits.length} response(s) with status ${value}, e.g. ${hits[0].method} ${hits[0].path} → ${hits[0].status}`
+            : reqs.length
+              ? `no response matched ${value} among ${reqs.length} request(s) (last: ${reqs[reqs.length - 1].status})`
+              : "no request recorded in the run",
+      };
+    }
+
+    case "response_matches": {
+      // api: a JSON-path/value over the LAST response body (from har.json, never
+      // the committed trajectory — bodies stay out of baselines). Deterministic.
+      const body = lastResponseBody(ctx);
+      if (body == null) return { pass: false, detail: "the last response had no body to match" };
+      let json;
+      try {
+        json = JSON.parse(body);
+      } catch {
+        return { pass: false, detail: "the last response body is not JSON" };
+      }
+      return matchJsonPath(value, json);
     }
 
     case "assert": {
@@ -146,10 +186,65 @@ function globToRegExp(glob) {
   return new RegExp(`^${re}$`);
 }
 
-function pathnameOf(url) {
-  try {
-    return new URL(url).pathname;
-  } catch {
-    return url;
+// ---- api response helpers (response_status / response_matches) ----
+
+/** The LAST request's response body (lives in har.json, not the trajectory).
+ *  Strictly the last entry — never scans back to an earlier (e.g. prime) body,
+ *  so a body-less final response (204) fails rather than matching the wrong one. */
+function lastResponseBody(ctx) {
+  const entries = ctx.harEntries ?? [];
+  return entries.length ? (entries[entries.length - 1]?.response?.body ?? null) : null;
+}
+
+/** "201" exact, or "2xx" class (first digit then any two digits). */
+function statusMatches(pattern, status) {
+  const p = String(pattern).trim();
+  if (/^[1-5]xx$/i.test(p)) return new RegExp(`^${p[0]}\\d\\d$`).test(status);
+  return p === status;
+}
+
+// Minimal JSON-path/value check: `<path> (==|!=|=) <literal>`. path is a dot/
+// bracket path with an optional leading $ (e.g. "$.title", "$[0].completed",
+// "deleted"); literal is a quoted string, number, boolean, or null.
+function matchJsonPath(expr, json) {
+  const m = String(expr).match(/^\s*(\$?[\w.[\]'"-]*?)\s*(==|!=|=)\s*(.+?)\s*$/);
+  if (!m) return { pass: false, detail: `cannot parse response_matches ${JSON.stringify(expr)} (expected: path == value)` };
+  const [, rawPath, op, rawVal] = m;
+  const actual = resolveJsonPath(json, rawPath);
+  const expected = parseLiteral(rawVal);
+  // Strict, type-aware equality (no String()-coercion fallback: it made 1 == "1"
+  // and true == "true" false-positive).
+  const eq = JSON.stringify(actual) === JSON.stringify(expected);
+  const pass = op === "!=" ? !eq : eq;
+  return {
+    pass,
+    detail: pass
+      ? `${rawPath || "$"} = ${JSON.stringify(actual)}`
+      : `${rawPath || "$"} = ${JSON.stringify(actual)}, expected ${op} ${JSON.stringify(expected)}`,
+  };
+}
+
+function resolveJsonPath(json, path) {
+  const p = String(path).replace(/^\$\.?/, "");
+  if (p === "") return json;
+  const segs = [];
+  const re = /\[(\d+)\]|\['([^']*)'\]|\["([^"]*)"\]|\.?([\w-]+)/g;
+  let m;
+  while ((m = re.exec(p))) segs.push(m[1] != null ? Number(m[1]) : (m[2] ?? m[3] ?? m[4]));
+  let cur = json;
+  for (const s of segs) {
+    if (cur == null) return undefined;
+    cur = cur[s];
   }
+  return cur;
+}
+
+function parseLiteral(raw) {
+  const t = String(raw).trim();
+  if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'"))) return t.slice(1, -1);
+  if (t === "true") return true;
+  if (t === "false") return false;
+  if (t === "null") return null;
+  if (/^-?\d+(?:\.\d+)?$/.test(t)) return Number(t);
+  return t;
 }

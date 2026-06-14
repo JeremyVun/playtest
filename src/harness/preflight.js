@@ -93,3 +93,43 @@ export async function ensureBrowser(opts = {}) {
   }
   return { channel: null };
 }
+
+/**
+ * Driver-aware preflight (docs/CONTRACTS.md §16): detect-and-install on demand,
+ * keyed on the resolved driver, exactly like ensureBrowser does for chromium.
+ * cli.js calls this AFTER case discovery (so only the drivers actually selected
+ * are checked — an api/mobile-only run never prompts for an unused Chromium).
+ * - web    → ensureBrowser (pinned chromium; today's flow, unchanged)
+ * - api    → nothing to install (no-op)
+ * - mobile → the Appium client + platform driver + a reachable device (P1)
+ * @param {"web"|"mobile"|"api"} driver
+ * @returns {Promise<{ channel: string|null }>}
+ */
+// webdriverio is an optionalDependency, lazy-imported by the mobile driver. A
+// missing client becomes a friendly, actionable error here (never a raw
+// MODULE_NOT_FOUND from deep inside a run). The Appium server, platform driver,
+// and a reachable device are checked when the driver creates its session —
+// failures there surface as InfraError with the Appium message.
+async function preflightMobile() {
+  try {
+    await import("webdriverio");
+  } catch {
+    throw new DummyConfigError(
+      "the mobile driver needs the Appium client. Run: npm i webdriverio (and ensure an Appium server + platform driver + a device/simulator are available)",
+    );
+  }
+  return { channel: null };
+}
+
+export async function preflightFor(driver, opts = {}) {
+  switch (driver ?? "web") {
+    case "web":
+      return ensureBrowser(opts);
+    case "api":
+      return { channel: null };
+    case "mobile":
+      return preflightMobile();
+    default:
+      return { channel: null };
+  }
+}

@@ -4,9 +4,9 @@ import path from "node:path";
 import crypto from "node:crypto";
 
 export const HARNESS_VERSION = "0.1.0";
-export const STEP_SCHEMA_VERSION = 2;
+export const STEP_SCHEMA_VERSION = 3;
 export const SNAPSHOT_FORMAT = "a11y-text-v1";
-export const PROMPTS_VERSION = "prompts-v1";
+export const PROMPTS_VERSION = "prompts-v2";
 export const SETTLE = { name: "settle-v1", dom_quiet_ms: 500, net_quiet_ms: 500, max_ms: 10000 };
 
 // Base of manifest.pins; runner adds actor_model, grader_model, gateway.
@@ -117,8 +117,37 @@ export function diffTracks(baselineTrack, newTrack) {
   return { ops, summary };
 }
 
+/**
+ * Suite root for a case file: the nearest ancestor holding a playtest.yaml
+ * (stopping at the repo root), else the case's own directory. Mirrors the
+ * defaults walk in config.js/env.js so baselines anchor to the same dir the
+ * suite's defaults do.
+ */
+function suiteRootFor(caseFile) {
+  const start = path.dirname(path.resolve(caseFile));
+  for (let dir = start; ; ) {
+    if (fs.existsSync(path.join(dir, "playtest.yaml"))) return dir;
+    const parent = path.dirname(dir);
+    if (fs.existsSync(path.join(dir, ".git")) || parent === dir) return start;
+    dir = parent;
+  }
+}
+
+/**
+ * Where a case's committed baseline/healed artifacts live: under the suite's
+ * `results/` directory, mirroring the case's path within the suite. A `stories/`
+ * grouping directory is structural (see config.js id derivation) and is dropped,
+ * so `<suite>/stories/foo.yaml` -> `<suite>/results/foo.baseline.jsonl`. Only the
+ * first (leftmost) `stories/` is dropped — matching the id derivation — so a
+ * deeper `stories/stories/` keeps its inner segment and doesn't collide.
+ */
 export function baselinePaths(caseFile) {
-  const base = caseFile.replace(/\.yaml$/, "");
+  const suiteRoot = suiteRootFor(caseFile);
+  const rel = path.relative(suiteRoot, path.resolve(caseFile)).replace(/\.yaml$/, "");
+  const segs = rel.split(path.sep);
+  const first = segs.indexOf("stories");
+  const parts = first === -1 ? segs : segs.slice(0, first).concat(segs.slice(first + 1));
+  const base = path.join(suiteRoot, "results", ...parts);
   return {
     traj: `${base}.baseline.jsonl`,
     meta: `${base}.baseline.json`,
@@ -135,7 +164,7 @@ export function readBaseline(caseFile) {
   return { envelopes: readTrajectory(p.traj), meta };
 }
 
-/** Copy the run's trajectory next to the case file; healed runs become review candidates. */
+/** Copy the run's trajectory into the suite's results/ dir; healed runs become review candidates. */
 export function acceptBaseline(caseFile, runDir, { healed = false } = {}) {
   const manifest = JSON.parse(fs.readFileSync(path.join(runDir, "manifest.json"), "utf8"));
   const meta = {
@@ -149,6 +178,7 @@ export function acceptBaseline(caseFile, runDir, { healed = false } = {}) {
     ...(healed ? { candidate: true } : {}),
   };
   const p = baselinePaths(caseFile);
+  fs.mkdirSync(path.dirname(p.traj), { recursive: true }); // <suite>/results/ may not exist yet
   fs.copyFileSync(path.join(runDir, "trajectory.jsonl"), healed ? p.healedTraj : p.traj);
   fs.writeFileSync(healed ? p.healedMeta : p.meta, JSON.stringify(meta, null, 2) + "\n");
   return meta;

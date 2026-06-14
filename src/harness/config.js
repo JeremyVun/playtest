@@ -25,7 +25,51 @@ const ajv = new Ajv({ allErrors: true, allowUnionTypes: true }); // timeout/perf
 const validateCase = ajv.compile(loadSchema("case.schema.json"));
 const validateDefaults = ajv.compile(loadSchema("defaults.schema.json"));
 
-const SUCCESS_KINDS = ["url_matches", "element_exists", "api_called", "assert"];
+// Per-driver success-criterion validity. The schemas accept every kind; this
+// table is the cross-field rule the schema cannot express — a kind used under
+// the wrong driver is a DummyConfigError naming the file (same shape as the
+// discovery/vision rules). api_called omits mobile on purpose: the mobile driver
+// has no network capture in v1 (driver-interface §10.1), so it would otherwise
+// FAIL the gate against an empty list — a config error is louder and truthful.
+const SUCCESS_KIND_DRIVERS = {
+  url_matches: ["web", "api"],
+  element_exists: ["web"],
+  screen_shows: ["mobile"],
+  api_called: ["web", "api"],
+  response_status: ["api"],
+  response_matches: ["api"],
+  assert: ["web", "mobile", "api"],
+};
+// Per-driver perf-key validity. Web vitals are web-only; mobile and api perf
+// (cold-start/jank, latency) are deferred — any perf key on them is a config
+// error, so no run silently lacks a threshold it declared (design §10.2).
+const PERF_KEY_DRIVERS = {
+  lcp_ms: ["web"],
+  input_to_paint_ms: ["web"],
+  console_errors: ["web"],
+};
+// Per-driver app.* key validity. The app schema is flat (every key allowed for
+// every driver), so this is the cross-field rule it cannot express: a key set
+// under the wrong driver is silently ignored at run time, which a config error
+// naming the file makes loud instead (same shape as the perf-key rule). Keyed
+// off the user-authored app.* keys only — derived keys (base_url/compose from
+// --base-url) are applied after this check.
+const APP_KEY_DRIVERS = {
+  // base_url is required for web/api and optional for mobile (it is not used to
+  // reach the device — that is appium_url — but it feeds the init script's
+  // BASE_URL, the mobile pre-auth/seed path the schemas document for any driver).
+  base_url: ["web", "mobile", "api"],
+  compose: ["web", "api"],
+  init: ["web", "mobile", "api"],
+  storage_state: ["web"],
+  driver: ["web", "mobile", "api"],
+  platform: ["mobile"],
+  app: ["mobile"],
+  device: ["mobile"],
+  appium_url: ["mobile"],
+  openapi: ["api"],
+};
+const DRIVERS = ["web", "mobile", "api"];
 const DURATION_UNITS = { ms: 1, s: 1000, m: 60000 };
 
 /** "5m" | "90s" | "250ms" | number -> milliseconds. */
@@ -48,6 +92,7 @@ export function parseDuration(v) {
  */
 export async function discoverCases(paths, { tags = [], baseUrl = null } = {}) {
   const found = new Map(); // abs case file -> suite root the user named
+  const strays = new Set(); // case-shaped yamls outside any suite root / stories/ dir
   for (const p of paths) {
     const abs = path.resolve(p);
     let st;
@@ -57,14 +102,18 @@ export async function discoverCases(paths, { tags = [], baseUrl = null } = {}) {
       throw new DummyConfigError(`no such path: ${p}`);
     }
     if (st.isDirectory()) {
-      for (const f of await walkYaml(abs)) if (!found.has(f)) found.set(f, abs);
+      const walked = await walkCases(abs, abs);
+      for (const f of walked.cases) if (!found.has(f)) found.set(f, abs);
+      for (const s of walked.strays) strays.add(s);
     } else {
+      // An explicitly named file is always a case, wherever it lives — naming it is intent.
       if (path.basename(abs) === DEFAULTS_FILE) {
         throw new DummyConfigError(`${p} is a defaults file, not a test case`);
       }
       if (!found.has(abs)) found.set(abs, path.dirname(abs));
     }
   }
+  await warnStrays(strays, found);
 
   const cases = [];
   for (const [file, root] of found) {
@@ -83,26 +132,88 @@ export async function discoverCases(paths, { tags = [], baseUrl = null } = {}) {
   return expanded.sort((a, b) => a.id.localeCompare(b.id));
 }
 
-async function walkYaml(dir) {
-  const out = [];
+/**
+ * Case files under a named directory, split into { cases, strays }. A *.yaml is
+ * a case only when it sits directly in a suite root (the named dir, or any
+ * descendant holding a playtest.yaml) or anywhere under a `stories/` directory.
+ * Other directories are still traversed — to find nested suites and their
+ * stories — but a case-shaped *.yaml found loose in one is a STRAY: reported by
+ * warnStrays, never run. personas/ and results/ are skipped entirely.
+ */
+async function walkCases(dir, namedRoot) {
+  const cases = [];
+  const strays = [];
+  // Naming a stories/ dir directly means "everything under here is a case".
+  if (path.basename(dir) === "stories") await collectStories(dir, cases);
+  else await collectFrom(dir, dir === namedRoot, cases, strays);
+  return { cases, strays };
+}
+
+async function collectFrom(dir, collectRoot, cases, strays) {
   for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
     const name = entry.name;
-    if (name.startsWith(".") || name === "node_modules") continue;
+    if (name.startsWith(".") || name === "node_modules" || name === "personas" || name === "results") continue;
     const full = path.join(dir, name);
     if (entry.isDirectory()) {
-      // personas/ holds persona definitions (actor.js loadPersona), not cases.
-      if (name === "personas") continue;
-      out.push(...(await walkYaml(full)));
-    } else if (
-      name.endsWith(".yaml") &&
-      name !== DEFAULTS_FILE &&
-      !name.includes(".baseline.") &&
-      !name.includes(".healed.")
-    ) {
-      out.push(full);
+      if (name === "stories") await collectStories(full, cases);
+      else await collectFrom(full, existsSync(path.join(full, DEFAULTS_FILE)), cases, strays);
+    } else if (isCaseFile(name)) {
+      (collectRoot ? cases : strays).push(full);
     }
   }
-  return out;
+}
+
+/** Every case file beneath a stories/ subtree, at any depth. */
+async function collectStories(dir, cases) {
+  for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
+    const name = entry.name;
+    if (name.startsWith(".") || name === "node_modules" || name === "personas" || name === "results") continue;
+    const full = path.join(dir, name);
+    if (entry.isDirectory()) await collectStories(full, cases);
+    else if (isCaseFile(name)) cases.push(full);
+  }
+}
+
+function isCaseFile(name) {
+  return (
+    name.endsWith(".yaml") &&
+    name !== DEFAULTS_FILE &&
+    !name.includes(".baseline.") &&
+    !name.includes(".healed.")
+  );
+}
+
+/**
+ * A misplaced case must be loud, never silently skipped: warn (don't throw) for
+ * each case-shaped yaml that sits outside a suite root / stories/ dir. Files
+ * that don't parse as a case (no string `story`) are left alone — they aren't ours.
+ */
+async function warnStrays(strays, found) {
+  for (const file of strays) {
+    if (found.has(file)) continue;
+    let doc;
+    try {
+      doc = YAML.parse(await fs.readFile(file, "utf8"));
+    } catch {
+      continue;
+    }
+    if (!doc || typeof doc !== "object" || typeof doc.story !== "string") continue;
+    console.warn(
+      `playtest: ${path.relative(process.cwd(), file)} looks like a case but is outside the suite root and stories/ — it will not run. Move it under <suite>/stories/ to include it.`,
+    );
+  }
+}
+
+/**
+ * Drop only the first (leftmost) `stories` segment from a split path. Migrated
+ * suites have exactly one, so this is identical to dropping all of them; but a
+ * deeper `stories/stories/` keeps its inner segment, so the two files stay
+ * distinct instead of colliding on one id/baseline. Returns a new array.
+ */
+function dropFirstStories(parts) {
+  const i = parts.indexOf("stories");
+  if (i === -1) return parts;
+  return parts.slice(0, i).concat(parts.slice(i + 1));
 }
 
 async function resolveCase(file, namedRoot, baseUrl) {
@@ -116,13 +227,35 @@ async function resolveCase(file, namedRoot, baseUrl) {
   if (typeof merged.story !== "string" || !merged.story.trim()) {
     throw new DummyConfigError(`${file}: missing required "story"`);
   }
+  // User-authored app.* keys, snapshotted before --base-url adds derived ones.
+  const authoredAppKeys = Object.keys(merged.env);
   if (baseUrl) {
     merged.env.base_url = baseUrl; // --base-url forces external mode
     merged.env.compose = null;
   }
-  if (!merged.env.base_url) {
+  const driver = merged.env.driver ?? "web";
+  // app.* keys are driver-scoped (like success kinds / perf keys): a key set
+  // under the wrong driver is otherwise ignored silently at run time, so it is
+  // a config error naming the file. Only the user-authored keys are checked.
+  for (const key of authoredAppKeys) {
+    if (merged.env[key] == null) continue; // bare key (null) -> treated as absent
+    const valid = APP_KEY_DRIVERS[key];
+    if (valid && !valid.includes(driver)) {
+      throw new DummyConfigError(
+        `${file}: app.${key} is not valid for the ${driver} driver (valid: ${valid.join("/")})`,
+      );
+    }
+  }
+  // base_url is required for web/api (they reach an HTTP origin); mobile reaches
+  // a device/Appium server and only needs the app binary.
+  if (driver !== "mobile" && !merged.env.base_url) {
     throw new DummyConfigError(
       `${file}: no app.base_url configured (set it in a playtest.yaml, the case file, or pass --base-url)`,
+    );
+  }
+  if (driver === "mobile" && !merged.env.app) {
+    throw new DummyConfigError(
+      `${file}: the mobile driver needs app.app — the path to the .app/.ipa/.apk to install`,
     );
   }
 
@@ -152,10 +285,27 @@ async function resolveCase(file, namedRoot, baseUrl) {
   const success = merged.success ?? [];
   if (!Array.isArray(success)) throw new DummyConfigError(`${file}: "success" must be an array`);
   for (const c of success) {
-    const keys = c && typeof c === "object" ? Object.keys(c) : [];
-    if (keys.length !== 1 || !SUCCESS_KINDS.includes(keys[0])) {
+    // The schema guarantees each entry is an object with exactly one key, and
+    // that key is a known success kind (minProperties/maxProperties +
+    // additionalProperties:false), so we key off it directly — no shape check.
+    const kind = Object.keys(c)[0];
+    // Driver-aware: a criterion used under the wrong transport is a config error
+    // naming the file, never a silent gate FAIL (cross-field, like vision above).
+    if (!SUCCESS_KIND_DRIVERS[kind].includes(driver)) {
+      const where = `the ${driver} driver`;
+      const hint =
+        kind === "api_called" && driver === "mobile"
+          ? `${file}: "api_called" needs network capture, which the mobile driver does not have yet — gate on screen_shows/assert instead`
+          : `${file}: "${kind}" is not valid for ${where} (valid: ${SUCCESS_KIND_DRIVERS[kind].join("/")})`;
+      throw new DummyConfigError(hint);
+    }
+  }
+
+  // Perf thresholds are likewise driver-scoped (web vitals are web-only).
+  for (const key of Object.keys(merged.perf ?? {})) {
+    if (!(PERF_KEY_DRIVERS[key] ?? []).includes(driver)) {
       throw new DummyConfigError(
-        `${file}: each success entry must have exactly one of ${SUCCESS_KINDS.join("/")} (got ${JSON.stringify(c)})`,
+        `${file}: perf.${key} is not valid for the ${driver} driver (valid: ${(PERF_KEY_DRIVERS[key] ?? []).join("/") || "none"})`,
       );
     }
   }
@@ -171,7 +321,12 @@ async function resolveCase(file, namedRoot, baseUrl) {
   }
 
   return {
-    id: path.relative(namedRoot, file).replace(/\.yaml$/, "").split(path.sep).join("/"),
+    // A `stories/` grouping directory is structural, not part of the id, so
+    // `<suite>/stories/foo.yaml` and `<suite>/foo.yaml` both id as "foo"
+    // (baselines mirror this — see trajectory.js baselinePaths). Only the first
+    // (leftmost) `stories/` is dropped: a deeper `stories/` segment stays, so
+    // nested cases keep distinct ids (and distinct baselines) rather than colliding.
+    id: dropFirstStories(path.relative(namedRoot, file).replace(/\.yaml$/, "").split(path.sep)).join("/"),
     file,
     name: path.basename(file, ".yaml"),
     story: merged.story,
@@ -188,10 +343,18 @@ async function resolveCase(file, namedRoot, baseUrl) {
     actor_model: merged.actor_model,
     grader_model: merged.grader_model,
     env: {
-      base_url: merged.env.base_url,
+      driver,
+      base_url: merged.env.base_url ?? null,
       compose: merged.env.compose ?? null,
       init: merged.env.init ?? null,
       storage_state: merged.env.storage_state ?? null,
+      // mobile (Appium) keys; null on web/api
+      platform: merged.env.platform ?? null,
+      app: merged.env.app ?? null,
+      device: merged.env.device ?? null,
+      appium_url: merged.env.appium_url ?? null,
+      // api key; null on web/mobile
+      openapi: merged.env.openapi ?? null,
     },
   };
 }
@@ -254,9 +417,10 @@ async function loadYaml(file) {
     if (doc.limits.timeout !== undefined) doc.timeout = doc.limits.timeout;
     delete doc.limits;
   }
-  // Relative paths resolve against the file that declared them.
+  // Relative paths resolve against the file that declared them. `app` is the
+  // mobile binary, `openapi` the api spec — both path-bearing like compose/init.
   if (doc.app && typeof doc.app === "object") {
-    for (const k of ["compose", "init", "storage_state"]) {
+    for (const k of ["compose", "init", "storage_state", "app", "openapi"]) {
       if (typeof doc.app[k] === "string") doc.app[k] = path.resolve(path.dirname(file), doc.app[k]);
     }
   }

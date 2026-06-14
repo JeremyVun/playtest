@@ -17,16 +17,64 @@ perf:
   console_errors: 0
 `;
 
-// The scaffolded defaults file is the documentation: active base_url,
-// everything else present but commented.
+// Per-driver case templates: success kinds + verbs that fit the transport, so a
+// mobile/api user's first case isn't web-shaped. Selected by `new --driver`.
+const CASE_TEMPLATES = {
+  web: CASE_TEMPLATE,
+  mobile: `tags: []
+description: One-line summary for run lists.
+story: |
+  Describe what the user should do in the app.
+
+success:
+  - screen_shows: "~some-accessibility-id"
+  - assert: Describe what should be true on the final screen.
+`,
+  api: `tags: []
+description: One-line summary for run lists.
+story: |
+  Describe what the integrator should do through the API.
+
+success:
+  - api_called: "POST /api/resource"
+  - response_status: "201"
+  - assert: Describe what should be true about the response.
+`,
+};
+
+// The scaffolded defaults file is the documentation: active config for the
+// driver, everything else present but commented.
 const DEFAULTS_TEMPLATE = `app:
   base_url: http://localhost:3000
-  # compose: ./docker-compose.test.yml   # Playtest boots/tears down the app
+  # compose: ./docker-compose.yml        # Playtest boots/tears down the app
   # init: ./seed/reset.sh                # runs before each case
   # storage_state: ./seed/anon.json      # pre-built browser session
 # actor_model: claude-haiku-4-5
 # grader_model: claude-sonnet-4-6
 `;
+
+const DEFAULTS_TEMPLATES = {
+  web: DEFAULTS_TEMPLATE,
+  mobile: `app:
+  driver: mobile
+  platform: ios                          # or android
+  app: ./build/MyApp.app                 # the .app/.ipa/.apk to install
+  # device: iPhone 15                    # target device/simulator (omit for a default)
+  # appium_url: http://localhost:4723    # a running Appium server (omit for the local default)
+  # init: ./seed/reset.mjs               # runs before each case (BASE_URL/RUN_ID)
+# actor_model: claude-haiku-4-5
+# grader_model: claude-sonnet-4-6
+`,
+  api: `app:
+  driver: api
+  base_url: http://localhost:3000
+  # openapi: ./openapi.yaml              # operations become the actor's "elements"
+  # compose: ./docker-compose.yml        # Playtest boots/tears down the backend
+  # init: ./seed/reset.mjs               # runs before each case (BASE_URL/RUN_ID)
+# actor_model: claude-haiku-4-5
+# grader_model: claude-sonnet-4-6
+`,
+};
 
 /**
  * "Login flow!" -> "login-flow". Sanitized to [a-z0-9._-] so the result is
@@ -72,14 +120,19 @@ function writeGuarded(file, content, force) {
 }
 
 /**
- * Create `<dir>/<slug>.yaml`. The target dir is the positional `[dir]`, else
- * the nearest ancestor suite, else a unique suite below cwd, else ./tests/.
- * When no directory from the target up to the repo root has a playtest.yaml,
- * one is scaffolded next to the case (ancestor-aware: a suite subtree never
+ * Create `<suite>/stories/<slug>.yaml` — cases live in the suite's stories/
+ * container (config.js discovery + id). The suite dir is the positional `[dir]`,
+ * else the nearest ancestor suite, else a unique suite below cwd, else ./tests/;
+ * a `[dir]` pointing straight at a stories/ dir is used as-is (never nested).
+ * When no directory from the suite root up to the repo root has a playtest.yaml,
+ * one is scaffolded at the suite root (ancestor-aware: a suite subtree never
  * gets a shadowing defaults file).
  * @param {{ force?: boolean }} [opts]
  */
-export function newCase(name, dirArg, { force = false } = {}) {
+export function newCase(name, dirArg, { force = false, driver = "web" } = {}) {
+  if (!CASE_TEMPLATES[driver]) {
+    throw new DummyConfigError(`unknown --driver ${JSON.stringify(driver)} (web | mobile | api)`);
+  }
   const slug = slugify("case", name);
   // Reserved: <slug>.yaml would BE the defaults file, and discovery would
   // forever treat it as config, never as a case.
@@ -88,13 +141,15 @@ export function newCase(name, dirArg, { force = false } = {}) {
       `case name ${JSON.stringify(name)} collides with the playtest.yaml defaults file — pick a different name`,
     );
   }
-  const targetDir = dirArg ? path.resolve(dirArg) : findTargetDir();
-  const file = path.join(targetDir, `${slug}.yaml`);
-  writeGuarded(file, CASE_TEMPLATE, force);
+  const suiteDir = dirArg ? path.resolve(dirArg) : findTargetDir();
+  const atStories = path.basename(suiteDir) === "stories";
+  const suiteRoot = atStories ? path.dirname(suiteDir) : suiteDir;
+  const file = path.join(atStories ? suiteDir : path.join(suiteDir, "stories"), `${slug}.yaml`);
+  writeGuarded(file, CASE_TEMPLATES[driver], force);
   console.log(`Created case: ${rel(file)}`);
-  if (!hasAncestorDefaults(targetDir)) {
-    const defaults = path.join(targetDir, "playtest.yaml");
-    writeGuarded(defaults, DEFAULTS_TEMPLATE, force);
+  if (!hasAncestorDefaults(suiteRoot)) {
+    const defaults = path.join(suiteRoot, "playtest.yaml");
+    writeGuarded(defaults, DEFAULTS_TEMPLATES[driver], force);
     console.log(`Created defaults: ${rel(defaults)}`);
   }
   console.log(`Next: playtest ${rel(file)}`);
@@ -110,24 +165,38 @@ export function newPersona(name, { force = false } = {}) {
 }
 
 /**
- * `playtest install-skill`: copy the packaged fix-loop skill into the
- * project's `.claude/skills/playtest/SKILL.md`, so the skill versions in
- * lockstep with the installed harness and its --json contract. Idempotent: a
- * byte-identical install is a quiet success; differing content needs --force
- * (the `new` guard wording), so local edits are never clobbered silently.
+ * `playtest install-skill`: copy EVERY packaged agent skill into the project's
+ * `.claude/skills/<name>/SKILL.md`, so a coding agent can author, run, and
+ * review Playtest end to end, and the skills version in lockstep with the
+ * installed harness and its --json contract. The set is discovered from the
+ * packaged `skills/` dir (currently playtest, playtest-discovery,
+ * playtest-stories) — no hardcoded list, so adding a skill needs no change here.
+ * Per-skill idempotency: a byte-identical install is a quiet success; differing
+ * content needs --force (the `new` guard wording), so local edits are never
+ * clobbered silently.
  * @param {{ force?: boolean }} [opts]
  */
 export function installSkill({ force = false } = {}) {
-  const src = fileURLToPath(new URL("../../skills/playtest/SKILL.md", import.meta.url));
-  const content = fs.readFileSync(src, "utf8");
-  const dest = path.join(findProjectRoot(), ".claude", "skills", "playtest", "SKILL.md");
-  if (fs.existsSync(dest) && fs.readFileSync(dest, "utf8") === content) {
-    console.log(`Skill already installed (up to date): ${rel(dest)}`);
-    return;
+  const skillsDir = fileURLToPath(new URL("../../skills", import.meta.url));
+  const names = fs
+    .readdirSync(skillsDir, { withFileTypes: true })
+    .filter((e) => e.isDirectory() && fs.existsSync(path.join(skillsDir, e.name, "SKILL.md")))
+    .map((e) => e.name)
+    .sort();
+  const root = findProjectRoot();
+  let installed = 0;
+  for (const name of names) {
+    const content = fs.readFileSync(path.join(skillsDir, name, "SKILL.md"), "utf8");
+    const dest = path.join(root, ".claude", "skills", name, "SKILL.md");
+    if (fs.existsSync(dest) && fs.readFileSync(dest, "utf8") === content) {
+      console.log(`Skill already installed (up to date): ${rel(dest)}`);
+      continue;
+    }
+    writeGuarded(dest, content, force); // throws the --force guard on a locally-modified skill
+    console.log(`Installed skill: ${rel(dest)}`);
+    installed++;
   }
-  writeGuarded(dest, content, force);
-  console.log(`Installed skill: ${rel(dest)}`);
-  console.log("Agents with skill support pick it up from .claude/skills/ automatically.");
+  if (installed) console.log("Agents with skill support pick them up from .claude/skills/ automatically.");
 }
 
 /** Nearest ancestor containing .git (the repo root), else cwd — the same walk
@@ -171,7 +240,7 @@ function findTargetDir() {
   return path.resolve("tests"); // greenfield: scaffolding adds the defaults file
 }
 
-// Same skip rules as config.js walkYaml: dotdirs, node_modules, personas.
+// Same skip rules as config.js collectFrom: dotdirs, node_modules, personas, results.
 // A suite dir is not descended into: nested defaults belong to that suite.
 function scanForSuites(dir, out) {
   if (isSuiteDir(dir)) {
@@ -186,7 +255,7 @@ function scanForSuites(dir, out) {
   }
   for (const entry of entries) {
     const n = entry.name;
-    if (!entry.isDirectory() || n.startsWith(".") || n === "node_modules" || n === "personas") continue;
+    if (!entry.isDirectory() || n.startsWith(".") || n === "node_modules" || n === "personas" || n === "results") continue;
     scanForSuites(path.join(dir, n), out);
   }
 }

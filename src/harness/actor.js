@@ -6,13 +6,47 @@ import { fileURLToPath } from "node:url";
 import YAML from "yaml";
 import Ajv from "ajv";
 import { forcedToolCall } from "./llm.js";
+import { overlayFor, toolParamsFor, stepSchemaFor } from "./drivers/overlay.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const prompt = (name) => readFileSync(join(here, "prompts", name), "utf8");
 
-const stepSchema = JSON.parse(readFileSync(join(here, "../schemas/step.schema.json"), "utf8"));
 const ajv = new Ajv({ allErrors: true });
-const validateStep = ajv.compile(stepSchema);
+// Per-driver forced-tool schema + validator. The actor is shown only its
+// driver's verbs and fields (toolParamsFor — the stripped, model-facing copy)
+// and validated against the strict per-driver schema (stepSchemaFor). Because
+// the OpenAI-compat endpoint does not constrain decoding, the shipped schema is
+// documentation and the validator is the real gate; the two are decoupled in
+// drivers/overlay.js. Cached by driver id; the $id-stripped validator lets
+// several driver schemas compile in one Ajv instance.
+
+// A worked example per driver, folded into the tool description — the single
+// highest-yield aid for a weak actor model: it anchors the flat action shape.
+const EXAMPLE = {
+  web: '{"thought":"…","action":{"type":"type","ref":"e2","text":"buy milk","submit":true},"expectation":"a todo \\"buy milk\\" appears in the list"}',
+  mobile: '{"thought":"…","action":{"type":"tap","ref":"e3"},"expectation":"the compose screen opens"}',
+  api: '{"thought":"…","action":{"type":"request","method":"GET","path":"/api/todos"},"expectation":"a 200 response listing the todos"}',
+};
+
+const stepToolCache = new Map();
+function stepToolFor(driverId) {
+  if (!stepToolCache.has(driverId)) {
+    const parameters = toolParamsFor(driverId);
+    const example = EXAMPLE[driverId] ?? EXAMPLE.web;
+    stepToolCache.set(driverId, {
+      tool: {
+        type: "function",
+        function: {
+          name: "step",
+          description: `Your next step: one thought, one action, one expectation. Example: ${example}`,
+          parameters,
+        },
+      },
+      validate: ajv.compile(stepSchemaFor(driverId)),
+    });
+  }
+  return stepToolCache.get(driverId);
+}
 
 const BUILTIN_PERSONAS = ["tester", "exploratory"];
 
@@ -101,6 +135,12 @@ export function describeAction(action) {
     case "wait": return `wait ${action.seconds}s`;
     case "done": return `done: ${action.summary}`;
     case "give_up": return `give_up: ${action.reason}`;
+    // mobile verbs:
+    case "tap": return `tap ${action.ref}`;
+    case "swipe": return `swipe ${action.direction}${action.ref ? ` on ${action.ref}` : ""}`;
+    case "back": return "back";
+    // api verb:
+    case "request": return `request ${action.method} ${action.path}`;
     default: return JSON.stringify(action);
   }
 }
@@ -128,24 +168,22 @@ function renderLog(history) {
   return lines.join("\n");
 }
 
-const STEP_TOOL = {
-  type: "function",
-  function: {
-    name: "step",
-    description: "Your next step: one thought, one action, one expectation.",
-    parameters: stepSchema,
-  },
-};
-
 export class Actor {
   constructor(resolvedCase, persona) {
     this.case = resolvedCase;
     this.persona = persona;
+    // The transport overlay (system + verb subset) for this case's driver. Web
+    // (or an absent driver) loads actor-system.md verbatim, so a web journey's
+    // assembled prompt is byte-identical to pre-driver-seam — the golden test.
+    this.driverId = resolvedCase.env?.driver ?? "web";
+    const { tool, validate } = stepToolFor(this.driverId);
+    this.stepTool = tool;
+    this.validateStep = validate;
     // Stable prefix: never changes mid-run, so the gateway can prompt-cache it.
     // The "## Your task" marker is load-bearing: mock-llm extracts the story by
     // its LAST occurrence, so the discovery overlay must stay before it.
     this.system = [
-      prompt("actor-system.md").trim(),
+      overlayFor(this.driverId).prompt,
       `## Persona\n\n${persona.description.trim()}`,
       ...(resolvedCase.mode === "discovery" ? [prompt("actor-discovery.md").trim()] : []),
       // Keyed off vision only (config guarantees vision implies discovery);
@@ -177,8 +215,8 @@ export class Actor {
         { role: "user", content: renderLog(history) },
         { role: "user", content: snapContent },
       ],
-      tool: STEP_TOOL,
-      validate: (a) => (validateStep(a) ? null : ajv.errorsText(validateStep.errors)),
+      tool: this.stepTool,
+      validate: (a) => (this.validateStep(a) ? null : ajv.errorsText(this.validateStep.errors)),
       signal,
     });
     return { agentStep: args, tokens };

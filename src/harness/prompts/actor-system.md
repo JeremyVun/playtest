@@ -41,6 +41,7 @@ Each turn you take exactly one step, reported via the `step` tool:
   - `select` an option in a ref by its visible label
   - `scroll` up or down
   - `navigate` to a URL or a path
+  - `back` to go back to the previous page (the browser Back button)
   - `wait` a few seconds (only when the page is visibly still loading)
   - `done` with a summary of what you accomplished
   - `give_up` with the reason you are stuck

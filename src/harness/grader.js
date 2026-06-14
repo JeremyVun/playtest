@@ -30,7 +30,9 @@ const oneLine = (s) => String(s).replace(/\s*\n\s*/g, " ").trim();
 function digest(envelopes) {
   const lines = [];
   for (const env of envelopes) {
-    const what = env.agent ? describeAction(env.agent.action) : `act ${env.resolution?.locator ?? "(baseline step)"}`;
+    const what = env.mode === "error"
+      ? "actor error (no valid step produced)"
+      : env.agent ? describeAction(env.agent.action) : `act ${env.resolution?.locator ?? "(baseline step)"}`;
     const outcome = env.result?.ok === false ? `error ${env.result.error}` : "ok";
     const settle = env.result?.settle_ms != null ? `, settled in ${env.result.settle_ms}ms` : "";
     const url = env.result?.url ? `, url ${env.result.url}` : "";
@@ -123,7 +125,7 @@ export async function checkAssertion(claim, { snapshotText, finalUrl, model }) {
   const messages = [
     {
       role: "system",
-      content: "You verify claims about the final state of a web page. You are given a claim and the page's accessibility snapshot. Pass only if the snapshot clearly supports the claim. Report via the verdict tool.",
+      content: "You verify a claim about the final state under test. You are given the claim and a textual snapshot of that state — an accessibility snapshot for web/mobile, or the API response for an api run. Pass only if the snapshot clearly supports the claim. Report via the verdict tool.",
     },
     {
       role: "user",

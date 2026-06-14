@@ -97,3 +97,9 @@ knowing the loop; the loop is below.
 `playtest new <name>` (scaffold; its `playtest.yaml` holds the `app:` block
 with `base_url`) · `--fail-on-changed` (CI gating knob). Anything else
 (accept/reject/refresh) is the human's.
+
+**Onboarding a new user is not `playtest demo`.** `playtest demo` is a tour of
+the bundled todo app for exploration only — never the first step for someone
+adopting Playtest for real. To set a real user up, scaffold *their* suite against
+*their* app: `playtest new <name>` (add `--driver mobile` or `--driver api` for a
+non-web surface). The demo never touches their app.

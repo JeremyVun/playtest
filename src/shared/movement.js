@@ -19,7 +19,7 @@ export const DURATION_RATIO_BADGE = 0.3;
 // from before a pin existed (headed, vision) stay comparable.
 const PIN_KEYS = [
   "harness_version", "prompts_version", "step_schema_version", "snapshot_format",
-  "settle", "actor_model", "grader_model", "headed", "vision",
+  "settle", "actor_model", "grader_model", "headed", "vision", "driver",
 ];
 
 /** Same pin set (PIN_KEYS subset, missing = wildcard)? */

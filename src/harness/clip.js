@@ -59,15 +59,20 @@ function targetName(env, baselineByStep) {
 }
 
 function describe(env, baselineByStep) {
+  if (env.mode === "error") return { verb: "actor error", arg: "" };
   const a = actionOf(env, baselineByStep);
   const type = a?.type ?? (env.acted_from != null ? "acted" : "step");
   const name = targetName(env, baselineByStep);
   switch (type) {
     case "click": return { verb: "click", arg: name ?? "?" };
+    case "tap": return { verb: "tap", arg: name ?? "?" };
     case "type": return { verb: "type", arg: `“${a.text}”${name ? " → " + name : ""}` };
     case "select": return { verb: "select", arg: `“${a.value}”${name ? " in " + name : ""}` };
     case "scroll": return { verb: "scroll", arg: a.direction };
+    case "swipe": return { verb: "swipe", arg: `${a.direction}${name ? " on " + name : ""}` };
     case "navigate": return { verb: "go to", arg: a.url };
+    case "back": return { verb: "back", arg: "" };
+    case "request": return { verb: a.method ?? "request", arg: a.path ?? "" };
     case "wait": return { verb: "wait", arg: `${a.seconds}s` };
     case "done": return { verb: "done", arg: a.summary };
     case "give_up": return { verb: "gave up", arg: a.reason };

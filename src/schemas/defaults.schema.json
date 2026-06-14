@@ -64,7 +64,7 @@
     },
     "actor_model": {
       "type": "string",
-      "description": "Model that role-plays the user. Default \"claude-haiku-4-5\" (pinned cheap — for journeys the app is the variable, not the agent). Discovery studies often choose a stronger model, e.g. \"claude-sonnet-4-6\"."
+      "description": "Model that role-plays the user. Default \"claude-haiku-4-5\" (pinned cheap — for journeys the app is the variable, not the agent; the flat action schema is tuned to parse on smaller models). Discovery studies often choose a stronger model, e.g. \"claude-sonnet-4-6\"."
     },
     "grader_model": {
       "type": "string",
@@ -74,24 +74,48 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "driver": {
+          "enum": ["web", "mobile", "api"],
+          "description": "Transport for the app under test. Default \"web\" (Playwright/Chromium). \"mobile\" drives a native iOS/Android app via Appium; \"api\" drives a REST API via fetch. A study/suite usually sets it once here. The other app.* keys, success kinds, and perf keys are validated per-driver."
+        },
         "base_url": {
           "type": "string",
-          "description": "Where the app under test runs, e.g. http://localhost:4173. Required somewhere in the chain (or pass --base-url). Agents really click buy/delete/submit — point at staging or test, never production."
+          "description": "Where the app under test runs, e.g. http://localhost:4173. Required for web and api (or pass --base-url); optional for mobile. Agents really click buy/delete/submit — point at staging or test, never production."
         },
         "compose": {
           "type": "string",
-          "description": "docker-compose file path, relative to this file: managed mode — the harness boots and tears down the app per run."
+          "description": "docker-compose file path, relative to this file: managed mode — the harness boots and tears down the app per run. web/api."
         },
         "init": {
           "type": "string",
-          "description": "Executable script path, relative to this file, run before each case to reset app state."
+          "description": "Executable script path, relative to this file, run before each case to reset app state. Receives BASE_URL/RUN_ID. Any driver — also the mobile/api pre-auth path."
         },
         "storage_state": {
           "type": "string",
-          "description": "Playwright storage-state JSON path, relative to this file, for a pre-authenticated browser session."
+          "description": "Playwright storage-state JSON path, relative to this file, for a pre-authenticated browser session. web only."
+        },
+        "platform": {
+          "enum": ["ios", "android"],
+          "description": "mobile only: the target platform (Appium XCUITest for ios, UiAutomator2 for android)."
+        },
+        "app": {
+          "type": "string",
+          "description": "mobile only: path (relative to this file) to the app binary to install — a .app/.ipa (ios) or .apk (android). Required for the mobile driver."
+        },
+        "device": {
+          "type": "string",
+          "description": "mobile only: the target device/emulator/simulator name or udid. Omit to let the driver pick a default available device."
+        },
+        "appium_url": {
+          "type": "string",
+          "description": "mobile only: URL of a running Appium server, e.g. http://localhost:4723. Omit to use the default local Appium endpoint."
+        },
+        "openapi": {
+          "type": "string",
+          "description": "api only: path (relative to this file) to an OpenAPI spec whose operations become the interactable \"elements\" the actor sees. Recommended for journey api cases."
         }
       },
-      "description": "App under test. Merges per-key down the defaults chain, so deeper files or the case can override just base_url."
+      "description": "App under test. Merges per-key down the defaults chain, so deeper files or the case can override just base_url. The app.driver key selects which subset applies; a key set for the wrong driver is a config error."
     }
   }
 }

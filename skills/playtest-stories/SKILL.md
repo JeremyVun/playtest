@@ -58,8 +58,15 @@ protection.
 
 ## 3. Author runnable YAMLs directly
 
-No intermediate stories document — write case files straight into a suite
-directory. Before writing any YAML, read the installed package's
+No intermediate stories document — write case files straight into a suite.
+Cases are only discovered in the suite root or a `stories/` subdir (a case-shaped
+yaml anywhere else is warned about and skipped, never run). Journey suites group
+their cases under `stories/` — the harness drops that segment from case ids
+(`stories/foo/bar.yaml` → `foo/bar`) and writes saved paths to a sibling
+`results/` dir, so the suite root stays browsable as baselines accumulate;
+`playtest new <name>` scaffolds into `stories/` automatically. Discovery studies
+have no saved paths, so their handful of cases can sit at the study root next to
+`personas/`. Before writing any YAML, read the installed package's
 `src/schemas/case.schema.json` and `src/schemas/defaults.schema.json`: they
 are the single source of truth for every key, with a description per
 property. Do not trust memorized key names. A complete worked example of a

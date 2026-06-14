@@ -77,6 +77,7 @@ before(async () => {
   delete process.env.PLAYTEST_LLM_API_KEY;
   delete process.env.ANTHROPIC_API_KEY;
   delete process.env.OPENAI_API_KEY;
+  delete process.env.PLAYTEST_LLM_CACHE; // these tests assert on the default prompt bytes (cache off)
 });
 
 after(async () => {
@@ -116,7 +117,11 @@ function makeFixture({ mode = "journey", report = [], baseline = false } = {}) {
   const caseFile = path.join(dir, "export-data.yaml");
   fs.writeFileSync(caseFile, `story: |\n  ${STORY}\n`);
   if (baseline) {
-    fs.writeFileSync(caseFile.replace(/\.yaml$/, ".baseline.jsonl"), JSON.stringify(ENVELOPES[0]) + "\n");
+    // readBaseline resolves to <suite>/results/ (trajectory.js baselinePaths);
+    // with no playtest.yaml here the suite root falls back to the case dir.
+    const resultsDir = path.join(dir, "results");
+    fs.mkdirSync(resultsDir, { recursive: true });
+    fs.writeFileSync(path.join(resultsDir, "export-data.baseline.jsonl"), JSON.stringify(ENVELOPES[0]) + "\n");
   }
   const runDir = path.join(dir, "run");
   fs.mkdirSync(runDir, { recursive: true });
@@ -266,7 +271,7 @@ test("discovery actor prompt has the overlay with ## Your task still last", () =
   );
 });
 
-test("journey actor prompt is byte-identical to the pre-change assembly", () => {
+test("journey actor prompt is the web overlay + persona + task, in that order", () => {
   const persona = loadPersona("tester");
   const expected = [
     promptFile("actor-system.md").trim(),

@@ -1,11 +1,11 @@
-# The example todo suite's app, managed: Playtest boots/tears down the root
-# docker-compose.test.yml (which builds src/todo-app) per case and rewrites
-# base_url to the published port — no manual app start, deterministic state.
+# The example todo suite's app, managed: Playtest boots/tears down this suite's
+# docker-compose.yml (which builds src/todo-app) per case and rewrites base_url
+# to the published port — no manual app start, deterministic state.
 # To test an app you started yourself (npm run todo-app), force external mode:
 #   playtest tests/todos --base-url http://localhost:4173
 # init still resets state per case there; under compose it's a harmless no-op
 # against the fresh container.
 app:
-  compose: ../../docker-compose.test.yml
+  compose: ./docker-compose.yml
   base_url: http://app:4173
   init: ../seed/reset.sh

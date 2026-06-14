@@ -22,7 +22,7 @@ import { serveRun, listRuns, changed as changedJourneys } from "./view-server.js
 import { findRunsRoot, latestRun, scanHistory } from "./runs-root.js";
 import { movement } from "../shared/movement.js";
 import { promptChangedReview } from "./prompt.js";
-import { ensureBrowser } from "./preflight.js";
+import { preflightFor } from "./preflight.js";
 import { demo } from "./demo.js";
 import { clip } from "./clip.js";
 import { newCase, newPersona, installSkill } from "./new.js";
@@ -154,10 +154,23 @@ function makeReporter(opts, trendFor = () => null, cases = []) {
 
 // "Environment: ..." header line — only when every selected case resolves to
 // the same env config; a mixed selection prints nothing.
+// Preflight each distinct driver the selection resolves to, once. Keyed off
+// the resolved cases (not a hardcoded "web") so a mobile/api-only run checks its
+// own toolchain and an unused Chromium is never installed. See preflight.js.
+async function preflightDrivers(cases, opts) {
+  for (const driver of [...new Set(cases.map((c) => c.env.driver ?? "web"))]) {
+    await preflightFor(driver, opts);
+  }
+}
+
 function environmentLine(cases) {
   const sig = (c) => JSON.stringify(c.env);
   if (!cases.length || !cases.every((c) => sig(c) === sig(cases[0]))) return null;
   const env = cases[0].env;
+  if (env.driver === "mobile") {
+    const app = env.app ? ` — ${path.relative(process.cwd(), env.app)}` : "";
+    return `Environment: mobile ${env.platform ?? "device"}${app}`;
+  }
   if (env.compose) {
     const rel = path.relative(process.cwd(), env.compose);
     return `Environment: managed compose ${rel.startsWith(".") ? rel : `./${rel}`}`;
@@ -298,7 +311,6 @@ program
   .option("--fail-on-changed", "exit 1 when this run leaves changed journeys awaiting review", false)
   .action(run(async (paths, opts) => {
     if (!["auto", "agent"].includes(opts.mode)) die(`invalid --mode ${opts.mode} (auto|agent)`);
-    await ensureBrowser(opts); // pinned chromium only — no chrome fallback for measured runs
     const cases = await discoverCases(paths, { tags: opts.tag, baseUrl: opts.baseUrl ?? null });
     if (!cases.length) {
       // Suites were found but the tag filter excluded everything: the
@@ -307,6 +319,10 @@ program
       console.error(NO_SUITES_HINT);
       process.exit(2);
     }
+    // Driver-aware preflight, AFTER discovery so only the drivers actually
+    // selected are checked (an api/mobile-only run never prompts for an unused
+    // Chromium). web → pinned chromium only, no fallback for measured runs.
+    await preflightDrivers(cases, opts);
     const runId = newRunId();
     const runsDir = path.join(opts.runsRoot, runId);
     if (!opts.json) {
@@ -362,6 +378,7 @@ create
   .argument("<name>")
   .argument("[dir]", "target directory (default: the nearest suite, else ./tests)")
   .option("--force", "overwrite an existing case file", false)
+  .option("--driver <driver>", "transport: web | mobile | api (scaffolds a matching case + defaults)", "web")
   .action(run(async (name, dir, opts) => newCase(name, dir, opts)));
 create
   .command("persona")
@@ -431,11 +448,11 @@ program
     await serveRun(root, { port: Number(opts.port), open: opts.open, query: q.size ? `?${q}` : "" });
   }));
 
-// `install-skill` (new.js): the packaged fix-loop skill, copied into the
-// project so it versions with the installed harness's --json contract.
+// `install-skill` (new.js): the packaged agent skills, copied into the project
+// so they version with the installed harness's --json contract.
 program
   .command("install-skill")
-  .description("install the playtest fix-loop agent skill into this project's .claude/skills/")
+  .description("install the playtest agent skills into this project's .claude/skills/")
   .option("--force", "overwrite a locally modified skill file", false)
   .action(run(async (opts) => installSkill(opts)));
 
@@ -464,9 +481,9 @@ program
   .option("--plain", "plain line-per-case output (no live status region)", false)
   .option("--no-tui", "same as --plain")
   .action(run(async (paths, opts) => {
-    await ensureBrowser(opts); // pinned chromium only — no chrome fallback for measured runs
     const cases = await discoverCases(paths, { tags: opts.tag, baseUrl: opts.baseUrl ?? null });
     if (!cases.length) die("no cases matched");
+    await preflightDrivers(cases, opts); // after discovery: only the selected drivers
     const runId = newRunId();
     console.log(`refresh ${runId} — ${cases.length} case(s)`);
     const envLine = environmentLine(cases);

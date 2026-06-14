@@ -158,7 +158,7 @@ playtest check --base-url https://pr-417.preview.example.com \
 
 - `--assert` is repeatable; `--json` and the exit-code contract apply as
   usual; artifacts land in `runs/` like any run.
-- `--save tests/todos/add-todo.yaml` materializes a passing probe as a real
+- `--save tests/todos/stories/add-todo.yaml` materializes a passing probe as a real
   case file — the promotion path from exploration to regression. Reuses
   `new`'s scaffolding.
 
@@ -212,18 +212,6 @@ idea; vision support is VERSION_1.1 item 7. What remains deferred:
 
 Revisit when a research audience (designers, PMs) concretely asks.
 
-## Rename "case" To "scenario"
-
-Decided against, recorded so it isn't relitigated cheaply: **scenario**
-had the best metaphor fit (actors improvising from a scenario is literally
-record mode, and it's Gherkin-familiar); **story** collides with the
-`story:` field ("the story's story"); **journey** is reserved for the
-in-app concept a case *checks*. "Case" stays because the glossary
-deliberately runs two registers — theatrical where it explains mechanics
-(actor, act, heal), conventional on the CI-facing surface (suite, case,
-run, tag) — and `case_id`/`--case` make a rename expensive for marginal
-gain. If the appetite ever firms up, pre-1.0 is the only cheap window.
-
 ## MCP Server
 
 Superseded by the agent skill (VERSION_1.1 item 3) for shell-capable
@@ -234,5 +222,5 @@ CLI and the `CI_INTEGRATION.md` §12 API at that point.
 ## Compose-Based Example Suite
 
 Superseded by `playtest demo` as the first-run path. Do it only if managed
-mode needs a living exercise: point `tests/playtest.yaml` at
-`docker-compose.test.yml` via the `app:` block.
+mode needs a living exercise: point a suite's `playtest.yaml` at
+`tests/todos/docker-compose.yml` via the `app:` block.

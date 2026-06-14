@@ -95,6 +95,7 @@ function childEnv() {
   delete env.PLAYTEST_LLM_API_KEY;
   delete env.ANTHROPIC_API_KEY;
   delete env.OPENAI_API_KEY;
+  delete env.PLAYTEST_LLM_CACHE; // opt-in caching off for offline tests — keeps the wire bytes golden
   delete env.PLAYTEST_BROWSER_CHANNEL; // measured runs must use pinned chromium
   delete env.TODO_APP_VARIANT; // fixtures get their variant as an explicit option
   env.PLAYTEST_LLM_BASE_URL = mock.url;
@@ -172,12 +173,15 @@ function assertRunJsonShape(out) {
   }
 }
 
+// These suites keep cases at the suite root (no stories/ dir), so baselines
+// land in the suite's results/ dir (trajectory.js baselinePaths).
 function candidatePaths(caseFile) {
+  const base = path.join(path.dirname(caseFile), "results", path.basename(caseFile, ".yaml"));
   return {
-    baseline: caseFile.replace(/\.yaml$/, ".baseline.jsonl"),
-    baselineMeta: caseFile.replace(/\.yaml$/, ".baseline.json"),
-    healed: caseFile.replace(/\.yaml$/, ".healed.jsonl"),
-    healedMeta: caseFile.replace(/\.yaml$/, ".healed.json"),
+    baseline: `${base}.baseline.jsonl`,
+    baselineMeta: `${base}.baseline.json`,
+    healed: `${base}.healed.jsonl`,
+    healedMeta: `${base}.healed.json`,
   };
 }
 

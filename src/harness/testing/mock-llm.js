@@ -141,6 +141,79 @@ function decide(dirs, els, hist) {
     "the run ends with the task complete");
 }
 
+// Mobile rule-set: the same todo directives, but over the AX-tree snapshot
+// (roles textfield/button/cell, header "Screen:") and emitting tap/type — the
+// mobile analog of decide(). Proves record→act→heal on the mobile driver.
+function decideMobile(dirs, els, hist) {
+  if (!dirs.length) {
+    return giveUp("The story gives me nothing concrete to do.", "no recognizable directive in the story");
+  }
+  const field = els.find((e) => e.role === "textfield" || e.role === "searchfield");
+  const cellFor = (t) => els.find((e) => e.role === "cell" && e.name === t);
+  for (const { op, title: t } of dirs) {
+    if (op === "add") {
+      if (cellFor(t)) continue;
+      if (!field) return giveUp(`I need to add "${t}" but I see no text field.`, "no text field to add a todo");
+      if (field.value !== t) {
+        return step(`I'll add "${t}" — typing it into the field.`,
+          { type: "type", ref: field.ref, text: t, submit: false }, `the field shows "${t}"`);
+      }
+      const add =
+        els.find((e) => e.role === "button" && /\b(add|save|create|submit)\b/i.test(e.name)) ??
+        els.find((e) => e.role === "button" && !/\b(delete|remove|clear)\b/i.test(e.name));
+      if (!add) return giveUp(`I typed "${t}" but I can't find a button to submit it.`, "no submit button on the screen");
+      return step(`The field holds "${t}" — tapping "${add.name}".`,
+        { type: "tap", ref: add.ref }, `a cell "${t}" appears in the list`);
+    }
+    if (op === "complete") {
+      const cell = cellFor(t);
+      if (!cell) return giveUp(`I can't find "${t}" to mark as done.`, `no cell called "${t}" on the screen`);
+      const crumb = `Tapping "${t}" to complete it`;
+      if (hist.thoughts.some((th) => th.includes(crumb))) continue;
+      return step(`${crumb}.`, { type: "tap", ref: cell.ref }, `"${t}" shows as complete`);
+    }
+    // delete/clear/filter aren't modeled for the mobile fixture.
+  }
+  const bits = dirs.map((d) => (d.op === "add" ? `added "${d.title}"` : d.op === "complete" ? `completed "${d.title}"` : d.op));
+  return step("Everything the task asked for is now on the screen.",
+    { type: "done", summary: `I ${bits.join(", ")}. The screen shows the result.` },
+    "the run ends with the task complete");
+}
+
+// API rule-set: the same todo directives, but as HTTP requests over the API
+// surface ("API:" header). Reads the rendered Last-response body to know when a
+// create already landed, so it stops instead of re-POSTing. Proves the api driver.
+function decideApi(dirs, snapshot, hist) {
+  if (!dirs.length) {
+    return giveUp("The story gives me no API operation to perform.", "no recognizable directive in the story");
+  }
+  const created = (t) => /Last response: 2\d\d/.test(snapshot) && snapshot.includes(`"title": "${t}"`);
+  for (const { op, title: t } of dirs) {
+    if (op === "add") {
+      if (created(t)) continue;
+      return step(`Creating "${t}" via the API.`,
+        { type: "request", method: "POST", path: "/api/todos", body: { title: t } },
+        "the response is 201 with the new todo");
+    }
+    // complete/delete/clear/filter need ids from a prior listing — out of scope
+    // for the offline fixture, which exercises create.
+  }
+  const added = dirs.filter((d) => d.op === "add").map((d) => `"${d.title}"`);
+  return step("The API calls the task asked for are done.",
+    { type: "done", summary: `Created ${added.join(", ") || "the requested resources"} via the API.` },
+    "the run ends with the task complete");
+}
+
+// Pick the rule-set by snapshot dialect: AX tree ("Screen:") → mobile, API
+// surface ("API:") → api, else the web a11y snapshot.
+function chooseRule(story, snapshot, users) {
+  const dirs = parseDirectives(story);
+  const hist = parseHistory(users.find((c) => c.startsWith("Steps so far:")) ?? "");
+  if (/^API:/.test(snapshot)) return decideApi(dirs, snapshot, hist);
+  if (/^Screen:/.test(snapshot)) return decideMobile(dirs, parseSnapshot(snapshot), hist);
+  return decide(dirs, parseSnapshot(snapshot), hist);
+}
+
 function actorStep(messages) {
   const system = contentText(messages.find((m) => m.role === "system")?.content);
   const story = system.includes("## Your task") ? system.split("## Your task").pop() : system;
@@ -151,12 +224,8 @@ function actorStep(messages) {
   const snapshot = snapMsg.slice(snapMsg.indexOf("\n") + 1);
   const args = stepNum > 20
     ? giveUp("This is taking far too many steps.", "exceeded 20 steps without finishing the task")
-    : viewerStep(story, snapshot) ?? // viewer self-test stories (tests/viewer), else the todo rules
-      decide(
-        parseDirectives(story),
-        parseSnapshot(snapshot),
-        parseHistory(users.find((c) => c.startsWith("Steps so far:")) ?? ""),
-      );
+    : viewerStep(story, snapshot) ?? // viewer self-test stories (tests/viewer), else the per-driver todo rules
+      chooseRule(story, snapshot, users);
   // A vision-on turn carries an image part; emit a visual observation so
   // offline envelopes exercise the field end to end.
   if (messages.some((m) => Array.isArray(m.content) && m.content.some((p) => p?.type === "image_url"))) {
@@ -241,6 +310,26 @@ function usageFor(messages, argsJson) {
 
 let counter = 0;
 
+// Opt-in reproductions of two real-gateway failure modes for the actor step,
+// both default OFF (so every existing fixture stays byte-identical):
+//  - PLAYTEST_MOCK_STRINGIFY_ARGS=1 emits the step's `action` JSON-encoded as a
+//    STRING (the shape smaller models like haiku produce, which broke schema
+//    validation until coerceStringifiedArgs un-stringifies it in forcedToolCall).
+//  - PLAYTEST_MOCK_BAD_STEP=1 emits an un-coercible `action` (a plain non-JSON
+//    string), so validation fails through the retry — exercising the actor-error
+//    envelope path (a model that cannot produce a valid step).
+function serializeArgs(forced, args) {
+  if (forced === "step" && args && typeof args.action === "object") {
+    if (process.env.PLAYTEST_MOCK_BAD_STEP === "1") {
+      return JSON.stringify({ ...args, action: "not-a-valid-action" });
+    }
+    if (process.env.PLAYTEST_MOCK_STRINGIFY_ARGS === "1") {
+      return JSON.stringify({ ...args, action: JSON.stringify(args.action) });
+    }
+  }
+  return JSON.stringify(args);
+}
+
 function completion(body) {
   const messages = body.messages ?? [];
   const forced = body.tool_choice?.function?.name ?? null;
@@ -256,7 +345,7 @@ function completion(body) {
         tool_calls: [{
           id: `call_${++counter}`,
           type: "function",
-          function: { name: forced, arguments: JSON.stringify(args) },
+          function: { name: forced, arguments: serializeArgs(forced, args) },
         }],
       }
     : { role: "assistant", content: "mock-llm: no forced tool; nothing to do." };

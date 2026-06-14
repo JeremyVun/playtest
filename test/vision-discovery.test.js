@@ -83,6 +83,7 @@ function childEnv() {
   delete env.PLAYTEST_LLM_API_KEY;
   delete env.ANTHROPIC_API_KEY;
   delete env.OPENAI_API_KEY;
+  delete env.PLAYTEST_LLM_CACHE; // opt-in caching off for offline tests — keeps the wire bytes golden
   delete env.PLAYTEST_BROWSER_CHANNEL; // measured runs must use pinned chromium
   delete env.TODO_APP_VARIANT;
   env.PLAYTEST_LLM_BASE_URL = mock.url;

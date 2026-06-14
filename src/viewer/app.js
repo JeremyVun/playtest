@@ -171,6 +171,8 @@ function actionOf(env) {
 const ACTION_ICONS = {
   click: "i-click", type: "i-type", select: "i-select", scroll: "i-scroll",
   navigate: "i-nav", wait: "i-wait", done: "i-done", give_up: "i-giveup",
+  // mobile + api verbs reuse existing glyphs (the ?? "i-film" fallback covers any gap)
+  tap: "i-click", swipe: "i-scroll", back: "i-back", request: "i-net",
 };
 
 // "Add" out of role=button[name="Add"], "todo-input" out of [data-testid="todo-input"], etc.
@@ -196,6 +198,7 @@ function targetName(env) {
 // -> { icon, verb, arg } for captions, strip cells and the inspector
 function describe(env) {
   const a = actionOf(env);
+  if (env.mode === "error") return { icon: "i-warn", verb: "actor error", arg: "" };
   const type = a?.type ?? (env.acted_from != null ? "acted" : "step");
   const ic = ACTION_ICONS[type] ?? "i-film";
   const name = targetName(env);
@@ -208,6 +211,12 @@ function describe(env) {
     case "wait": return { icon: ic, verb: "wait", arg: `${a.seconds}s` };
     case "done": return { icon: ic, verb: "done", arg: a.summary };
     case "give_up": return { icon: ic, verb: "gave up", arg: a.reason };
+    // mobile verbs:
+    case "tap": return { icon: ic, verb: "tap", arg: name ?? "?" };
+    case "swipe": return { icon: ic, verb: "swipe", arg: `${a.direction}${name ? " on " + name : ""}` };
+    case "back": return { icon: ic, verb: "back", arg: "" };
+    // api verb:
+    case "request": return { icon: ic, verb: a.method ?? "request", arg: a.path ?? "" };
     default:
       return { icon: ic, verb: "acted", arg: name ?? `baseline step ${env.acted_from ?? "?"}` };
   }
@@ -644,10 +653,10 @@ function renderHeader() {
   const badges = [statusChip(m.result?.status), modeChip(m.mode, m.healed, m.result?.status)];
   const reason = m.result?.end_reason;
   if (reason && reason !== "done") badges.push(h("span", { class: "chip warn" }, reason.replace("_", " ")));
-  badges.push(h("span", { class: "chip" }, `${state.steps.length} steps`));
-  badges.push(h("span", { class: "chip" }, fmtMs(m.duration_ms)));
+  badges.push(h("span", { class: "chip", title: "How many steps the agent took — one action (click, type, navigate, …) per step." }, `${state.steps.length} steps`));
+  badges.push(h("span", { class: "chip", title: "Wall-clock time for the whole run, start to finish." }, fmtMs(m.duration_ms)));
   const conf = m.totals?.confusion_events ?? 0;
-  if (conf > 0) badges.push(h("span", { class: "chip warn" }, icon("i-warn"), `${conf} confusion`));
+  if (conf > 0) badges.push(h("span", { class: "chip warn", title: "Confusion events — moments the harness flagged the agent as floundering: an action failed, repeated, or had no visible effect." }, icon("i-warn"), `${conf} confusion`));
   const move = movementBadge();
   if (move) badges.push(move);
   $("#run-badges").replaceChildren(...badges);
@@ -657,9 +666,9 @@ function renderHeader() {
   const el = $("#cost-strip");
   const cachePct = t.in ? Math.round(((t.cache_read ?? 0) / t.in) * 100) : 0;
   el.replaceChildren(
-    h("div", { class: "cost-label" }, "run cost"),
+    h("div", { class: "cost-label", title: "Estimated US-dollar cost of the model (LLM) API calls for this whole run. Checked/replayed runs make no model calls, so they cost about nothing." }, "run cost"),
     h("div", { class: "cost-usd" }, "$" + (cost ?? 0).toFixed(4)),
-    h("div", { class: "cost-sub" },
+    h("div", { class: "cost-sub", title: "Total input / output tokens for the run, and the share of input served from the prompt cache (higher means cheaper)." },
       !t.in && !t.out && !cost
         ? "no model calls"
         : `${fmtTokens(t.in)} in · ${fmtTokens(t.out)} out · ${cachePct}% cached`),
@@ -732,7 +741,7 @@ function renderSparkline() {
   const pts = plotted.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`);
   const marks = hist.map((r, i) => {
     const ghost = own[i] == null;
-    const cur = r.run_id === state.manifest.run_id;
+    const cur = state.runPath ? r.path === state.runPath : r.run_id === state.manifest.run_id;
     const color = HIST_COLOR[r.status] ?? "var(--dim)";
     const title = `${r.run_id} · ${r.status}` +
       (r.score != null ? ` · score ${r.score}` : useScore ? ` · ungraded (last score ${fmtVal(plotted[i])})` : "") +
@@ -750,7 +759,8 @@ function renderSparkline() {
   // annotate the best real value, and the current run when its real value differs
   const maxIdx = own.findIndex((v) => v === max);
   const labels = [`<text class="hist-val" x="${clampX(x(maxIdx)).toFixed(1)}" y="${(y(max) - 8).toFixed(1)}" text-anchor="middle">${fmtVal(max)}</text>`];
-  const curIdx = hist.findIndex((r) => r.run_id === state.manifest.run_id);
+  const curIdx = hist.findIndex((r) =>
+    state.runPath ? r.path === state.runPath : r.run_id === state.manifest.run_id);
   const curVal = curIdx >= 0 ? own[curIdx] : null;
   if (curVal != null && curVal !== max) {
     labels.push(`<text class="hist-val cur" x="${clampX(x(curIdx)).toFixed(1)}" y="${Math.min(H - 2, y(curVal) + 14).toFixed(1)}" text-anchor="middle">${fmtVal(curVal)}</text>`);
@@ -815,7 +825,7 @@ function renderStrip() {
     if (flags.length) thumb.append(h("div", { class: "flags" }, ...flags));
 
     const settle = env.result?.settle_ms ?? 0;
-    const tele = h("div", { class: "cell-tele" },
+    const tele = h("div", { class: "cell-tele", title: `settle ${fmtMs(settle)} — how long the app took to go quiet (network + page updates stopped) after this step's action` },
       h("div", { class: "settle-lane" },
         h("div", { class: "settle-bar", style: `width:${Math.min(100, (settle / MAX_SETTLE_BAR) * 100)}%` })),
       h("span", { class: "cell-ms" }, fmtMs(settle)),
@@ -900,6 +910,9 @@ function updateCaption(env) {
   if (env.agent?.thought) {
     thought.textContent = env.agent.thought;
     thought.className = "cap-thought";
+  } else if (env.mode === "error") {
+    thought.textContent = `The actor couldn't produce a valid step here, so the run stopped. ${env.error ?? env.result?.error ?? ""}`.trim();
+    thought.className = "cap-thought quiet";
   } else {
     const d = describe(env);
     // done/give_up args are full sentences: quote them instead of splicing
@@ -1267,8 +1280,8 @@ function sec(iconName, title, right, ...children) {
     ...children);
 }
 
-function stat(label, value, unit, cls = "") {
-  return h("div", { class: "stat " + cls },
+function stat(label, value, unit, cls = "", title = "") {
+  return h("div", { class: "stat " + cls, title },
     h("div", { class: "v" }, value, unit ? h("small", {}, unit) : null),
     h("div", { class: "k" }, label));
 }
@@ -1470,9 +1483,12 @@ function renderTokens(env) {
   }, { in: 0, out: 0, cache: 0 });
   return sec("i-token", "model usage", `Σ ${fmtTokens(upto.in)} in / ${fmtTokens(upto.out)} out`,
     h("div", { class: "stat-grid" },
-      stat("tokens in", fmtTokens(env.tokens.in)),
-      stat("tokens out", fmtTokens(env.tokens.out)),
-      stat("cache read", fmtTokens(env.tokens.cache_read))));
+      stat("tokens in", fmtTokens(env.tokens.in), null, "",
+        "Text sent to the model this step — the instructions, the running log of prior steps, and the current page snapshot. Billed per input token."),
+      stat("tokens out", fmtTokens(env.tokens.out), null, "",
+        "Text the model wrote this step — its thought, the action it chose, and what it expected to happen. Billed per output token (the pricier kind)."),
+      stat("cache read", fmtTokens(env.tokens.cache_read), null, "",
+        "Input tokens served from the prompt cache instead of re-charged — the unchanging prefix (instructions + log) is reused between steps, making most input ~10× cheaper.")));
 }
 
 function renderGate() {

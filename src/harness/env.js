@@ -18,6 +18,23 @@ let bootCounter = 0; // unique compose project per boot within this process
  */
 export async function prepareEnv(resolvedCase, runId) {
   const env = resolvedCase.env;
+
+  // Mobile: the driver creates the Appium session and the app launch IS the
+  // probe (driver.start()), so there is no HTTP origin to compose/probe here.
+  // v1 targets a running Appium server / connected device or booted simulator
+  // (external); emulator boot + app install are delegated to preflight and the
+  // driver. The init script still runs (the mobile pre-auth path) with
+  // BASE_URL = the Appium endpoint. teardown is the driver's (close()).
+  if (env.driver === "mobile") {
+    const baseUrl = env.appium_url || "appium://local";
+    try {
+      if (env.init) await runInit(env.init, baseUrl, runId);
+    } catch (e) {
+      throw e instanceof InfraError ? e : new InfraError(firstLine(e));
+    }
+    return { baseUrl, managed: false, teardown: async () => {} };
+  }
+
   let baseUrl = env.base_url;
   let managed = false;
   let teardown = async () => {};

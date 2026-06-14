@@ -58,6 +58,7 @@ function childEnv() {
   delete env.PLAYTEST_LLM_API_KEY;
   delete env.ANTHROPIC_API_KEY;
   delete env.OPENAI_API_KEY;
+  delete env.PLAYTEST_LLM_CACHE; // opt-in caching off for offline tests — keeps the wire bytes golden
   return env;
 }
 
@@ -97,6 +98,20 @@ function runCli(args, { timeoutMs = CHILD_TIMEOUT_MS } = {}) {
 }
 
 const dump = (res) => `\nstdout:\n${res.stdout}\nstderr:\n${res.stderr}`;
+
+// ---------- defaults ----------
+
+test("the default actor_model is the pinned cheap model (claude-haiku-4-5)", async () => {
+  // The cheap default is load-bearing: journeys pin a small actor on purpose
+  // (the app is the variable, not the agent). Catch a silent flip to a pricier model.
+  const dir = writeSuite({
+    "playtest.yaml": BASE,
+    "add-todo.yaml": 'story: |\n  Add a todo called "buy milk".\n',
+  });
+  const [rc] = await discoverCases([dir]);
+  assert.equal(rc.actor_model, "claude-haiku-4-5");
+  assert.equal(rc.grader_model, "claude-sonnet-4-6");
+});
 
 // ---------- schema validation ----------
 
@@ -240,6 +255,38 @@ test("an empty personas array is a config error", async () => {
   await expectConfigError(dir, /empty\.yaml/, /personas/);
 });
 
+test("a mobile case without app.app is a config error naming the file", async () => {
+  const dir = writeSuite({
+    "playtest.yaml": "app:\n  driver: mobile\n  platform: ios\n",
+    "tap.yaml": "story: |\n  Tap around the native app.\n",
+  });
+  await expectConfigError(dir, /tap\.yaml/, /needs app\.app/);
+});
+
+test("an api case without base_url is a config error", async () => {
+  const dir = writeSuite({
+    "playtest.yaml": "app:\n  driver: api\n",
+    "call.yaml": "story: |\n  Create a todo over the API.\n",
+  });
+  await expectConfigError(dir, /call\.yaml/, /base_url/);
+});
+
+test("a web case with a mobile-only app key (platform) is rejected naming the file", async () => {
+  const dir = writeSuite({
+    "playtest.yaml": "app:\n  base_url: http://localhost:9\n  platform: ios\n",
+    "leftover.yaml": "story: |\n  Placeholder journey.\n",
+  });
+  await expectConfigError(dir, /leftover\.yaml/, /app\.platform is not valid for the web driver/);
+});
+
+test("an api case with a web-only app key (storage_state) is rejected naming the file", async () => {
+  const dir = writeSuite({
+    "playtest.yaml": "app:\n  base_url: http://localhost:9\n  driver: api\n",
+    "auth.yaml": "story: |\n  Call the API.\napp:\n  storage_state: ./state.json\n",
+  });
+  await expectConfigError(dir, /auth\.yaml/, /app\.storage_state is not valid for the api driver/);
+});
+
 // ---------- personas fan-out ----------
 
 test("personas fan out into <id>@<ref> instances with persona overridden", async () => {
@@ -324,6 +371,18 @@ test("the repo's tests/ and src/demo suites still resolve, all journey", async (
       assert.ok(!("personas" in c));
     }
   }
+});
+
+test("nested stories/stories/ keeps a distinct id, doesn't collide with stories/", async () => {
+  // Only the first `stories/` segment is structural; a deeper one stays in the
+  // id so two distinct files don't both resolve to "a" (and one baseline path).
+  const dir = writeSuite({ "playtest.yaml": BASE });
+  fs.mkdirSync(path.join(dir, "stories", "stories"), { recursive: true });
+  const body = "story: |\n  Placeholder journey.\n";
+  fs.writeFileSync(path.join(dir, "stories", "a.yaml"), body);
+  fs.writeFileSync(path.join(dir, "stories", "stories", "a.yaml"), body);
+  const cases = await discoverCases([dir]);
+  assert.deepEqual(cases.map((c) => c.id).sort(), ["a", "stories/a"]);
 });
 
 test("a bare top-level key (null value) is treated as absent, not a type error", async () => {

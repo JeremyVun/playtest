@@ -283,9 +283,11 @@ Phase 0 of the plan maps.
   the case path relative to the user-named root, `/`-joined — **ids already contain
   `/`**, so run-dir naming must already cope with separators; check how before picking
   `@` for fan-out ids.
-- `discoverCases`/`walkYaml` (~lines 41–89): skips dotdirs, `node_modules`,
-  `personas/`, `playtest.yaml`, and `*.baseline.*`/`*.healed.*` files; tag filter and
-  id sort happen here — the natural place for persona fan-out.
+- `discoverCases`/`walkCases` (~lines 41–89): cases come only from suite roots
+  and `stories/` subtrees (a loose case-shaped yaml elsewhere is warned about, not
+  run); skips dotdirs, `node_modules`, `personas/`, `results/`, `playtest.yaml`, and
+  `*.baseline.*`/`*.healed.*`; tag filter and id sort happen here — the natural
+  place for persona fan-out.
 
 ### cli.js (read in full)
 

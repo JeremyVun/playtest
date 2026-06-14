@@ -2,7 +2,8 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "dummy/step.schema.json",
   "title": "Actor step",
-  "description": "The actor agent's entire turn: one thought, one action, one expectation. schema_version 2.",
+  "description": "The actor agent's entire turn: one thought, one action, one expectation. schema_version 3.",
+  "$comment": "The canonical VALIDATION contract — the real gate, compiled per driver by forcedToolCall. `action` is a FLAT object: one `type` verb plus the flat parameters that verb uses (NOT a oneOf union). Per-verb required parameters are enforced by the `allOf` if/then block. drivers/overlay.js projects this per driver: stepSchemaFor() scopes the `type` (and `direction`) enum to a driver's verbs and is what validates; toolParamsFor() derives a stripped, model-facing copy (no allOf/additionalProperties/min-max, only the driver's fields). The OpenAI-compat endpoint does NOT constrain decoding, so the shipped schema is documentation and THIS file is enforcement. Verbs — web: click/type/select/scroll/navigate/back/wait/done/give_up; mobile: tap/type/swipe/scroll/back/wait/done/give_up; api: request/wait/done/give_up (wait, done, give_up shared across all drivers; back is web+mobile).",
   "type": "object",
   "additionalProperties": false,
   "required": ["thought", "action", "expectation"],
@@ -20,83 +21,38 @@
       "description": "Only when a screenshot was provided: your visual read of the rendered page — what drew the eye first, what competed for attention, and what was missed or hard to find. Omit on text-only turns."
     },
     "action": {
-      "oneOf": [
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["type", "ref"],
-          "properties": {
-            "type": { "const": "click" },
-            "ref": { "type": "string", "description": "Element ref from the latest snapshot, e.g. \"e42\"." }
-          }
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "enum": ["click", "type", "select", "scroll", "navigate", "back", "wait", "done", "give_up", "tap", "swipe", "request"],
+          "description": "The single verb to perform this turn."
         },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["type", "ref", "text"],
-          "properties": {
-            "type": { "const": "type" },
-            "ref": { "type": "string" },
-            "text": { "type": "string", "description": "Text to type into the element (replaces current value)." },
-            "submit": { "type": "boolean", "description": "Press Enter after typing.", "default": false }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["type", "ref", "value"],
-          "properties": {
-            "type": { "const": "select" },
-            "ref": { "type": "string" },
-            "value": { "type": "string", "description": "Visible label or value of the option to select." }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["type", "direction"],
-          "properties": {
-            "type": { "const": "scroll" },
-            "direction": { "enum": ["up", "down"] },
-            "ref": { "type": "string", "description": "Optional: scroll within this element instead of the page." }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["type", "url"],
-          "properties": {
-            "type": { "const": "navigate" },
-            "url": { "type": "string", "description": "Absolute URL or path relative to base_url." }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["type", "seconds"],
-          "properties": {
-            "type": { "const": "wait" },
-            "seconds": { "type": "number", "minimum": 0.1, "maximum": 10 }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["type", "summary"],
-          "properties": {
-            "type": { "const": "done" },
-            "summary": { "type": "string", "description": "What was accomplished, in the persona's voice." }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["type", "reason"],
-          "properties": {
-            "type": { "const": "give_up" },
-            "reason": { "type": "string", "description": "Why the task cannot be completed." }
-          }
-        }
+        "ref": { "type": "string", "description": "Element ref from the latest snapshot, e.g. \"e42\" (click/type/select/tap; optional for scroll/swipe)." },
+        "text": { "type": "string", "description": "Text to type into the element; replaces the current value (type)." },
+        "submit": { "type": "boolean", "default": false, "description": "Press Enter after typing (type)." },
+        "value": { "type": "string", "description": "Visible label or value of the option to select (select)." },
+        "direction": { "enum": ["up", "down", "left", "right"], "description": "Direction to scroll (up/down) or swipe (up/down/left/right)." },
+        "url": { "type": "string", "description": "Absolute URL or path relative to base_url (navigate)." },
+        "seconds": { "type": "number", "minimum": 0.1, "maximum": 10, "description": "How long to wait, in seconds (wait)." },
+        "method": { "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"], "description": "HTTP method (request)." },
+        "path": { "type": "string", "description": "Request path or URL relative to base_url (request)." },
+        "body": { "description": "Optional request body — a JSON value for application/json, or a string (request)." },
+        "headers": { "type": "object", "description": "Optional request headers (request)." },
+        "summary": { "type": "string", "description": "What was accomplished, in the persona's voice (done)." },
+        "reason": { "type": "string", "description": "Why the task cannot be completed (give_up)." }
+      },
+      "allOf": [
+        { "if": { "required": ["type"], "properties": { "type": { "enum": ["click", "tap"] } } }, "then": { "required": ["ref"] } },
+        { "if": { "required": ["type"], "properties": { "type": { "const": "type" } } }, "then": { "required": ["ref", "text"] } },
+        { "if": { "required": ["type"], "properties": { "type": { "const": "select" } } }, "then": { "required": ["ref", "value"] } },
+        { "if": { "required": ["type"], "properties": { "type": { "enum": ["scroll", "swipe"] } } }, "then": { "required": ["direction"] } },
+        { "if": { "required": ["type"], "properties": { "type": { "const": "navigate" } } }, "then": { "required": ["url"] } },
+        { "if": { "required": ["type"], "properties": { "type": { "const": "wait" } } }, "then": { "required": ["seconds"] } },
+        { "if": { "required": ["type"], "properties": { "type": { "const": "request" } } }, "then": { "required": ["method", "path"] } },
+        { "if": { "required": ["type"], "properties": { "type": { "const": "done" } } }, "then": { "required": ["summary"] } },
+        { "if": { "required": ["type"], "properties": { "type": { "const": "give_up" } } }, "then": { "required": ["reason"] } }
       ]
     }
   }

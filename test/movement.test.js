@@ -9,7 +9,7 @@ import { movement, comparablePins, median, SCORE_DELTA_BADGE, DURATION_RATIO_BAD
 const PINS = {
   harness_version: "0.1.0",
   prompts_version: "prompts-v1",
-  step_schema_version: 2,
+  step_schema_version: 3,
   snapshot_format: "a11y-text-v1",
   settle: { name: "settle-v1", dom_quiet_ms: 500, net_quiet_ms: 500, max_ms: 10000 },
   actor_model: "claude-haiku-4-5",

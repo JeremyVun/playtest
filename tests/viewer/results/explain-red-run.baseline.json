@@ -1,0 +1,24 @@
+{
+  "accepted_at": "2026-06-14T11:19:51.152Z",
+  "run_id": "2026-06-14T1119-a2b4",
+  "run_dir": "/Users/jeremy/projects/dummy/runs/2026-06-14T1119-a2b4/explain-red-run",
+  "healed_from_run_id": null,
+  "pins": {
+    "harness_version": "0.1.0",
+    "prompts_version": "prompts-v2",
+    "step_schema_version": 3,
+    "snapshot_format": "a11y-text-v1",
+    "settle": {
+      "name": "settle-v1",
+      "dom_quiet_ms": 500,
+      "net_quiet_ms": 500,
+      "max_ms": 10000
+    },
+    "driver": "web",
+    "actor_model": "claude-haiku-4-5",
+    "grader_model": "claude-sonnet-4-6",
+    "gateway": "http://localhost:4175",
+    "headed": false,
+    "vision": false
+  }
+}

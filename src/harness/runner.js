@@ -12,7 +12,7 @@ import {
   firstLine,
   readBaseline,
 } from "./trajectory.js";
-import { Session } from "./browser.js";
+import { createDriver } from "./driver.js";
 import { Actor, loadPersona, describeAction } from "./actor.js";
 import { evaluateGate } from "./gate.js";
 import { gradeRun, checkAssertion } from "./grader.js";
@@ -24,14 +24,31 @@ const HARD_TIMEOUT = Symbol("hard timeout");
 
 const emptyPerf = () => ({ input_to_paint_ms: null, long_tasks_ms: 0, requests: 0, js_errors: 0, nav: null });
 
-function artifactsFor(stepNum, harEntries) {
+// Only reference artifacts the active driver actually wrote for this step, so an
+// api/mobile baseline never points at a png/mhtml that doesn't exist (the viewer
+// degrades, but the metadata must not lie). `screenshot` rides whenever the
+// step's snapshot produced an image (web always, mobile when a frame was
+// grabbed, api never); `mhtml` is web-only. a11y is written by every driver.
+// Web keeps both keys with identical string values, so web output is unchanged.
+function artifactsFor(stepNum, harEntries, { screenshot = true, mhtml = true } = {}) {
   const nnn = String(stepNum).padStart(3, "0");
   return {
-    screenshot: `steps/${nnn}.png`,
-    mhtml: `steps/${nnn}.mhtml`,
+    ...(screenshot ? { screenshot: `steps/${nnn}.png` } : {}),
+    ...(mhtml ? { mhtml: `steps/${nnn}.mhtml` } : {}),
     a11y: `steps/${nnn}.a11y.txt`,
     har_entries: harEntries,
   };
+}
+
+/**
+ * What artifacts the active driver wrote for a step, from the step's snapshot.
+ * screenshot rides when the snapshot grabbed a frame (web always; mobile when a
+ * frame came back; api never — its captureSnapshot returns screenshot: null);
+ * mhtml is web-only. For web both are true, so artifactsFor's output is the same
+ * keys/values it always emitted.
+ */
+function artifactFlags(driver, snap) {
+  return { screenshot: snap?.screenshot != null, mhtml: driver.id === "web" };
 }
 
 function addTokens(total, t) {
@@ -94,8 +111,8 @@ export async function runCase(rc, opts) {
     signal: abort.signal, // cancels in-flight LLM calls on hard timeout
   };
 
-  const finishInfra = async (error, { session = null, env = null } = {}) => {
-    if (session) await session.close().catch(() => {});
+  const finishInfra = async (error, { driver = null, env = null } = {}) => {
+    if (driver) await driver.close().catch(() => {});
     if (env) await env.teardown();
     // The manifest must carry the infra cause: result.error is the only place
     // a later reader (viewer, fix-loop skill) can find it — the in-memory
@@ -104,7 +121,8 @@ export async function runCase(rc, opts) {
     const manifest = buildManifest({
       rc, runId, mode: startMode, startedAt, videoStartedAt: null, llm, env, r,
       status: "infra", gate: { pass: false, checks: [] },
-      consoleErrors: 0, baseline, willGrade: false, headed,
+      consoleErrors: 0, baseline, willGrade: false, headed, settle: driver?.settle,
+      snapshotFormat: driver?.snapshotFormat,
     });
     writer.writeManifest(manifest);
     const result = { status: "infra", runDir: writer.dir, manifest, score: null, error };
@@ -136,16 +154,11 @@ export async function runCase(rc, opts) {
   }
   emit("env_ready", { base_url: env.baseUrl, managed: env.managed });
 
-  let session;
+  let driver;
   try {
-    session = await Session.launch({
-      baseUrl: env.baseUrl,
-      runDir: writer.dir,
-      storageState: rc.env.storage_state,
-      headed,
-    });
+    driver = await createDriver(rc, env, { runDir: writer.dir, headed });
   } catch (e) {
-    return finishInfra(`browser launch failed: ${firstLine(e)}`, { env });
+    return finishInfra(`driver launch failed: ${firstLine(e)}`, { env });
   }
   const videoStartedAt = Date.now();
 
@@ -154,14 +167,14 @@ export async function runCase(rc, opts) {
   let infra = null;
 
   const body = async () => {
-    const nav = await session.goto(env.baseUrl);
+    const nav = await driver.start();
     if (!nav.ok) throw new InfraError(`could not open ${env.baseUrl}: ${nav.error}`);
     r.initialNav = nav; // its nav vitals (LCP etc.) feed the perf gate
     const deadline = Date.now() + rc.limits.timeout_ms;
 
     if (startMode === "act") {
       writer.copyBaseline(baselinePaths(rc.file).traj);
-      const failed = await actLoop({ session, writer, rc, deadline, r, emit, baselineEnvelopes: baseline.envelopes });
+      const failed = await actLoop({ driver, writer, rc, deadline, r, emit, baselineEnvelopes: baseline.envelopes });
       if (failed) {
         if (!llm.available) {
           // contract: an unhealable act failure is a gate failure
@@ -172,10 +185,10 @@ export async function runCase(rc, opts) {
         }
         actualMode = "heal";
         emit("heal_start", { failedStep: failed.step });
-        await recordLoop({ session, writer, rc, persona, deadline, r, emit });
+        await recordLoop({ driver, writer, rc, persona, deadline, r, emit });
       }
     } else {
-      await recordLoop({ session, writer, rc, persona, deadline, r, emit });
+      await recordLoop({ driver, writer, rc, persona, deadline, r, emit });
     }
   };
 
@@ -208,7 +221,7 @@ export async function runCase(rc, opts) {
     clearTimeout(timer);
   }
 
-  if (infra) return finishInfra(infra.message, { session, env });
+  if (infra) return finishInfra(infra.message, { driver, env });
 
   // Gate (assert wired to the grader model), then manifest, then teardown.
   // Discovery skips the gate entirely, keyed on the case mode — not on the
@@ -221,12 +234,12 @@ export async function runCase(rc, opts) {
   } else {
     let finalUrl = "";
     try {
-      finalUrl = session.page.url();
+      finalUrl = driver.location() ?? "";
     } catch {}
     gate = await evaluateGate(rc, {
-      session,
+      driver,
       harEntries: readHar(writer.dir),
-      consoleErrorCount: session.consoleErrors(),
+      consoleErrorCount: driver.consoleErrors(),
       // the harness-side initial page load isn't an envelope; include its nav
       // vitals (perf.lcp_ms gates single-page cases) and its network requests
       // (api_called must see first-load calls like the app's bootstrap GET)
@@ -244,16 +257,23 @@ export async function runCase(rc, opts) {
         : null,
     });
     if (!gate.pass) emit("gate_fail", { checks: gate.checks.filter((c) => !c.pass) });
-    status = gate.pass && !actFailedUnhealed ? "pass" : "fail";
+    // A run that ended in an actor error has an incomplete trajectory (it stopped
+    // on a failed step), so it never passes — even if the gate happened to like
+    // the last snapshot it captured. This keeps a crashed run from being graded
+    // green or accepted as a baseline.
+    status = gate.pass && !actFailedUnhealed && r.endReason !== "error" ? "pass" : "fail";
   }
-  const willGrade = grade && llm.available && actualMode !== "act";
+  // Never grade an infra run: it produced no trustworthy trajectory, and the
+  // contract pins score to null on infra (a discovery actor-error lands here).
+  const willGrade = grade && llm.available && actualMode !== "act" && status !== "infra";
 
   const manifest = buildManifest({
     rc, runId, mode: actualMode, startedAt, videoStartedAt, llm, env, r,
-    status, gate, consoleErrors: session.consoleErrors(), baseline, willGrade, headed,
+    status, gate, consoleErrors: driver.consoleErrors(), baseline, willGrade, headed, settle: driver.settle,
+    snapshotFormat: driver.snapshotFormat,
   });
   writer.writeManifest(manifest);
-  await session.close().catch(() => {});
+  await driver.close().catch(() => {});
   await env.teardown();
 
   // The score rides on the result so trend lines and --json need not re-read
@@ -295,7 +315,7 @@ export async function runCase(rc, opts) {
 }
 
 /** Agentic loop (record, and heal continuation). Budget is total max_steps. */
-async function recordLoop({ session, writer, rc, persona, deadline, r, emit }) {
+async function recordLoop({ driver, writer, rc, persona, deadline, r, emit }) {
   const actor = new Actor(rc, persona);
   const costSoFar = () => estimateCost(rc.actor_model, r.tokens);
   while (r.envelopes.length < rc.limits.max_steps) {
@@ -305,18 +325,48 @@ async function recordLoop({ session, writer, rc, persona, deadline, r, emit }) {
       return;
     }
     const stepNum = r.envelopes.length + 1;
-    const snap = await session.captureSnapshot(stepNum);
+    const snap = await driver.captureSnapshot(stepNum);
     if (r.aborted) return;
     r.lastSnapshot = snap.text;
-    const { agentStep, tokens } = await actor.nextStep({
-      history: r.envelopes,
-      snapshotText: snap.text,
-      stepNum,
-      // Keyed off rc.vision only (false on every journey case by config rule),
-      // so heal runs sharing this loop never send images.
-      screenshot: rc.vision ? snap.screenshot : null,
-      signal: r.signal,
-    });
+    let agentStep, tokens;
+    try {
+      ({ agentStep, tokens } = await actor.nextStep({
+        history: r.envelopes,
+        snapshotText: snap.text,
+        stepNum,
+        // Keyed off rc.vision only (false on every journey case by config rule),
+        // so heal runs sharing this loop never send images.
+        screenshot: rc.vision ? snap.screenshot : null,
+        signal: r.signal,
+      }));
+    } catch (e) {
+      if (r.aborted) return; // a hard-timeout abort is recorded by run(), not here
+      // The actor could not produce a valid step — e.g. the model returned a
+      // malformed tool call. Record it as a failed step bound to the snapshot it
+      // choked on, instead of letting the throw unwind the loop and vanish: the
+      // viewer then shows where the run died, and the run is marked failed (see
+      // the end_reason check in run()), so it is never graded green or accepted
+      // as a baseline.
+      const message = firstLine(e);
+      const envelope = {
+        step: stepNum,
+        schema_version: STEP_SCHEMA_VERSION,
+        ts: Date.now(),
+        mode: "error",
+        error: message,
+        result: { ok: false, error: message, settle_ms: 0, url: snap.url },
+        perf: emptyPerf(),
+        artifacts: artifactsFor(stepNum, [], artifactFlags(driver, snap)),
+        network: { requests: [] },
+      };
+      emit("step_start", { step: stepNum, summary: "actor error" });
+      writer.appendEnvelope(envelope);
+      r.envelopes.push(envelope);
+      emit("step_result", { step: stepNum, ok: false, error: message, settleMs: 0, costSoFar: costSoFar() });
+      r.endReason = "error";
+      r.runError = message;
+      return;
+    }
     if (r.aborted) return;
     addTokens(r.tokens, tokens);
     // The summary only exists once the model has decided; one event per step.
@@ -334,7 +384,7 @@ async function recordLoop({ session, writer, rc, persona, deadline, r, emit }) {
       Object.assign(envelope, {
         result: { ok: true, error: null, settle_ms: 0, url: snap.url },
         perf: emptyPerf(),
-        artifacts: artifactsFor(stepNum, []),
+        artifacts: artifactsFor(stepNum, [], artifactFlags(driver, snap)),
         network: { requests: [] },
         tokens,
       });
@@ -345,17 +395,17 @@ async function recordLoop({ session, writer, rc, persona, deadline, r, emit }) {
       return;
     }
 
-    const before = await effectToken(session);
-    const exec = await session.execute(agentStep.action);
+    const before = await driver.effectToken();
+    const exec = await driver.execute(agentStep.action);
     Object.assign(envelope, {
       ...(exec.resolution ? { resolution: exec.resolution } : {}),
       result: { ok: exec.ok, error: exec.error, settle_ms: exec.settle_ms, url: exec.url ?? null },
       perf: exec.perf,
-      artifacts: artifactsFor(stepNum, exec.har_entries),
+      artifacts: artifactsFor(stepNum, exec.har_entries, artifactFlags(driver, snap)),
       network: exec.network,
       tokens,
     });
-    const confusion = await detectConfusion(envelope, r.envelopes, exec, before, session);
+    const confusion = await detectConfusion(envelope, r.envelopes, exec, before, driver);
     if (r.aborted) return; // do not append past the hard-timeout cut
     if (confusion) envelope.confusion = confusion;
     writer.appendEnvelope(envelope);
@@ -369,7 +419,7 @@ async function recordLoop({ session, writer, rc, persona, deadline, r, emit }) {
  * Walk the baseline's action track. Returns the failed baseline step (heal
  * point) or null when the track completed / deadline hit.
  */
-async function actLoop({ session, writer, rc, deadline, r, emit, baselineEnvelopes }) {
+async function actLoop({ driver, writer, rc, deadline, r, emit, baselineEnvelopes }) {
   for (const baseStep of actionTrack(baselineEnvelopes)) {
     if (r.aborted) return null;
     if (Date.now() >= deadline) {
@@ -379,12 +429,12 @@ async function actLoop({ session, writer, rc, deadline, r, emit, baselineEnvelop
     const stepNum = r.envelopes.length + 1;
     // Acted steps replay a known action: the summary is known up front.
     emit("step_start", { step: stepNum, summary: describeAction(actionOf(baseStep)) });
-    const snap = await session.captureSnapshot(stepNum);
+    const snap = await driver.captureSnapshot(stepNum);
     r.lastSnapshot = snap.text;
     // ts is "at action dispatch" (CONTRACTS): stamped before execution, like the
     // record loop, so the viewer's video seek lands on the frame the step acted on
     const ts = Date.now();
-    const exec = await session.executeLocator(baseStep);
+    const exec = await driver.executeLocator(baseStep);
     if (r.aborted) return null; // do not append past the hard-timeout cut
     const envelope = {
       step: stepNum,
@@ -396,7 +446,7 @@ async function actLoop({ session, writer, rc, deadline, r, emit, baselineEnvelop
       ...(exec.resolution ? { resolution: exec.resolution } : {}),
       result: { ok: exec.ok, error: exec.error, settle_ms: exec.settle_ms, url: exec.url ?? null },
       perf: exec.perf,
-      artifacts: artifactsFor(stepNum, exec.har_entries),
+      artifacts: artifactsFor(stepNum, exec.har_entries, artifactFlags(driver, snap)),
       network: exec.network,
     };
     if (!exec.ok) envelope.confusion = { type: "action_failed", note: exec.error };
@@ -414,8 +464,9 @@ async function actLoop({ session, writer, rc, deadline, r, emit, baselineEnvelop
   const doneStep = baselineEnvelopes.findLast((e) => actionOf(e)?.type === "done");
   const stepNum = r.envelopes.length + 1;
   let finalUrl = null;
+  let snap = null;
   try {
-    const snap = await session.captureSnapshot(stepNum);
+    snap = await driver.captureSnapshot(stepNum);
     r.lastSnapshot = snap.text;
     finalUrl = snap.url;
   } catch {}
@@ -429,7 +480,7 @@ async function actLoop({ session, writer, rc, deadline, r, emit, baselineEnvelop
     action: doneStep ? actionOf(doneStep) : { type: "done", summary: "acted the baseline track to completion" },
     result: { ok: true, error: null, settle_ms: 0, url: finalUrl },
     perf: emptyPerf(),
-    artifacts: artifactsFor(stepNum, []),
+    artifacts: artifactsFor(stepNum, [], artifactFlags(driver, snap)),
     network: { requests: [] },
   };
   writer.appendEnvelope(envelope);
@@ -442,7 +493,7 @@ async function actLoop({ session, writer, rc, deadline, r, emit, baselineEnvelop
 
 // Confusion heuristics (harness-side, contract §10): action_failed,
 // repeated_action (same type+target 3x consecutively), no_effect.
-async function detectConfusion(envelope, prior, exec, beforeToken, session) {
+async function detectConfusion(envelope, prior, exec, beforeToken, driver) {
   if (!exec.ok) return { type: "action_failed", note: exec.error };
 
   const sig = (e) => {
@@ -455,8 +506,14 @@ async function detectConfusion(envelope, prior, exec, beforeToken, session) {
   }
 
   const type = actionOf(envelope)?.type;
-  if ((type === "click" || type === "type") && exec.perf.requests === 0 && beforeToken !== null) {
-    const after = await effectToken(session);
+  // tap is the mobile click analog; (exec.perf?.requests ?? 0) tolerates a null
+  // perf (mobile has no web vitals) — for web, perf.requests is always numeric,
+  // so this is a no-op there.
+  if ((type === "click" || type === "tap" || type === "type") && (exec.perf?.requests ?? 0) === 0 && beforeToken !== null) {
+    // driver.effectToken() is the transport's "did anything change" fingerprint
+    // (web: last DOM-mutation time + form values + URL); the no_effect rule
+    // ("0 requests AND token unchanged") generalizes across drivers.
+    const after = await driver.effectToken();
     if (after !== null && after === beforeToken) {
       return { type: "no_effect", note: "no requests, no DOM or input changes, url unchanged" };
     }
@@ -464,21 +521,7 @@ async function detectConfusion(envelope, prior, exec, beforeToken, session) {
   return null;
 }
 
-// Cheap page-state fingerprint for no_effect detection: last DOM mutation time,
-// form values (MutationObserver misses input value changes), and the URL.
-async function effectToken(session) {
-  try {
-    return await session.page.evaluate(() => {
-      const vals = Array.from(document.querySelectorAll("input,textarea,select"), (el) => el.value).join("\u0000");
-      const d = window.__dummy;
-      return `${d ? d.lastMutationAt : 0}|${vals}|${location.href}`;
-    });
-  } catch {
-    return null;
-  }
-}
-
-function buildManifest({ rc, runId, mode, startedAt, videoStartedAt, llm, env, r, status, gate, consoleErrors, baseline, willGrade, headed = false }) {
+function buildManifest({ rc, runId, mode, startedAt, videoStartedAt, llm, env, r, status, gate, consoleErrors, baseline, willGrade, headed = false, settle = undefined, snapshotFormat = undefined }) {
   const finishedAt = new Date();
   return {
     schema_version: 1,
@@ -505,13 +548,20 @@ function buildManifest({ rc, runId, mode, startedAt, videoStartedAt, llm, env, r
     video_started_at: videoStartedAt,
     pins: {
       ...PINS_BASE,
+      // Settle + snapshot_format are driver-owned and pinned per driver (design
+      // §6, §16). For web, driver.settle === PINS_BASE.settle (settle-v1) and
+      // driver.snapshotFormat === "a11y-text-v1" (PINS_BASE.snapshot_format),
+      // so both are no-ops there; mobile/api record their own formats.
+      settle: settle ?? PINS_BASE.settle,
+      snapshot_format: snapshotFormat ?? PINS_BASE.snapshot_format,
+      driver: rc.env.driver ?? "web", // keys comparability (shared/movement.js PIN_KEYS): web/mobile/api runs never compare
       actor_model: rc.actor_model,
       grader_model: rc.grader_model,
       gateway: llm.baseUrl,
       headed, // headed + vision are part of the comparability key (shared/movement.js)
       vision: rc.vision,
     },
-    env: { base_url: env?.baseUrl ?? rc.env.base_url, managed: env?.managed ?? false },
+    env: { base_url: env?.baseUrl ?? rc.env.base_url, managed: env?.managed ?? false, driver: rc.env.driver ?? "web" },
     result: { status, end_reason: r.endReason, error: r.runError, gate },
     totals: {
       steps: r.envelopes.length,

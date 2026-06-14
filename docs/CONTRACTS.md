@@ -17,7 +17,7 @@ package.json                  # name @jeremyvun/playtest, bin: playtest -> src/h
 docs/playtest-design.md       # the design (read it first)
 docs/CONTRACTS.md             # this file
 src/
-  schemas/step.schema.json    # actor step contract, schema_version 2 (exists)
+  schemas/step.schema.json    # actor step contract — flat action, schema_version 3 (exists)
   schemas/grade.schema.json   # grader output contract (exists)
   schemas/case.schema.json    # case-file YAML contract (journey | discovery), Ajv-checked at load
   schemas/defaults.schema.json  # playtest.yaml contract: rejects case-only keys at load
@@ -59,9 +59,14 @@ src/
     server.js                 # zero-dep test subject app
     Dockerfile
   demo/                       # bundled demo suite (no baselines) that `playtest demo` copies to a temp dir
-tests/                        # example suite targeting the todo app
-  playtest.yaml
-  todos/*.yaml
+tests/                        # example suites targeting the todo app + the run viewer
+  playtest.yaml               # shared defaults (models, limits)
+  todos/                      # journey suite, managed via its own compose file
+    playtest.yaml
+    docker-compose.yml        # builds src/todo-app; managed-mode demo
+    stories/*.yaml            # case files
+    results/*.baseline.*      # committed saved paths
+  viewer/                     # the run viewer's own self-test (stories/ + results/ + fixtures/)
   seed/reset.sh
 test/                         # offline harness self-tests (npm test = node --test test/*.test.js)
 skills/                       # agent skills shipped in the npm package
@@ -70,12 +75,11 @@ skills/                       # agent skills shipped in the npm package
   playtest-stories/SKILL.md   # interview a PM, author cases (discovery or journey)
 personas/
   curious-newcomer.yaml       # example custom persona
-docker-compose.test.yml       # managed-mode demo for the todo app
 runs/                         # output, gitignored
 ```
 
 Harness version constant: `HARNESS_VERSION = "0.1.0"`, snapshot format `"a11y-text-v1"`,
-settle heuristic `"settle-v1"`, prompts version `"prompts-v1"`. Exported from `trajectory.js`
+settle heuristic `"settle-v1"`, prompts version `"prompts-v2"`. Exported from `trajectory.js`
 as `PINS_BASE` (see Manifest).
 
 ---
@@ -86,8 +90,8 @@ as `PINS_BASE` (see Manifest).
 
 ```js
 {
-  id: "todos/add-todo",            // path relative to the *suite root the user named*, no extension
-  file: "/abs/path/tests/todos/add-todo.yaml",
+  id: "todos/add-todo",            // path relative to the *suite root the user named*, no extension; any "stories/" grouping segment is dropped
+  file: "/abs/path/tests/todos/stories/add-todo.yaml",
   name: "add-todo",
   story: "...",                    // required
   description: "..." | null,       // optional one-line summary for run lists; never sent to the actor
@@ -106,11 +110,15 @@ as `PINS_BASE` (see Manifest).
   limits: { max_steps: 50, timeout_ms: 240000 },
   actor_model: "claude-haiku-4-5",
   grader_model: "claude-sonnet-4-6",
-  env: {
-    base_url: "http://localhost:4173",   // required (CLI --base-url overrides)
-    compose: "/abs/path/docker-compose.test.yml" | null,  // managed mode if set
+  env: {                               // driver-scoped; the per-driver subset is null elsewhere (see §16)
+    driver: "web",                       // "web" (default, absent ⇒ web) | "mobile" | "api"
+    base_url: "http://localhost:4173",   // required for web/api (CLI --base-url overrides); optional for mobile
+    compose: "/abs/path/tests/todos/docker-compose.yml" | null,  // managed mode if set
     init: "/abs/path/seed/reset.sh" | null,
-    storage_state: "/abs/path/anon.json" | null
+    storage_state: "/abs/path/anon.json" | null,   // web pre-auth
+    platform: "ios" | null, app: "/abs/path/MyApp.app" | null,   // mobile (Appium): app is the binary;
+    device: "iPhone 15" | null, appium_url: "http://..." | null,  //   app is required for mobile
+    openapi: "/abs/path/openapi.yaml" | null         // api: the spec that becomes the actor's "elements"
   }
 }
 ```
@@ -141,9 +149,9 @@ is discovery, false otherwise (see §2).
 ```js
 {
   step: 7,                          // 1-based
-  schema_version: 2,
+  schema_version: 3,
   ts: 1760000000000,                // epoch ms at action dispatch
-  mode: "agent" | "act",            // who decided this step
+  mode: "agent" | "act" | "error",  // who decided this step ("error": none — the actor failed)
   agent: {                          // absent on acted steps (they carry `acted_from`)
     thought: "...", action: { type: "click", ref: "e42" }, expectation: "...",
     visual: "..."                   // optional, vision runs only: what drew the eye, what
@@ -194,6 +202,15 @@ har.json keeps the rich detail. Known freeze: a request still pending at settle 
 `done` / `give_up` steps still get an envelope (no resolution, `result.ok: true`,
 artifacts from the final state, `network: { requests: [] }`).
 
+A step where the actor itself failed — the model could not produce a valid step
+(e.g. a malformed tool call that fails schema validation after the retry) — is
+recorded as an envelope with `mode: "error"`, a top-level `error` string, `result.ok:
+false` (with the same message), no `agent`/`resolution`/`tokens`, and artifacts from the
+snapshot it choked on. It is always the last step: the run ends with `end_reason: "error"`
+and **never passes** (so a crashed run is never graded green or accepted as a baseline).
+Before this, an actor crash unwound the loop and left no envelope, so the captured
+snapshot was orphaned and the gate could pass it on the last good page.
+
 ### Run directory
 
 ```
@@ -230,18 +247,28 @@ early infra deaths produce videoless runs).
   duration_ms,
   video_started_at,                     // epoch ms; maps envelope ts -> video time
   pins: { harness_version, actor_model, grader_model, prompts_version,
-          step_schema_version: 2, snapshot_format, settle: { name: "settle-v1",
+          step_schema_version: 3, snapshot_format, driver: "web", settle: { name: "settle-v1",
           dom_quiet_ms: 500, net_quiet_ms: 500, max_ms: 10000 }, gateway: <llm base URL>,
           headed: false, vision: false },  // pins (minus gateway) key run comparability —
-                                        // see src/shared/movement.js; missing = wildcard
+                                        // see src/shared/movement.js (PIN_KEYS includes driver +
+                                        // snapshot_format); missing = wildcard. driver is "web"|"mobile"|"api"
+                                        // and `settle` is driver-owned (settle-v1 / settle-mobile-v1 /
+                                        // settle-api-v1).
+                                        // snapshot_format is driver-owned and pinned per driver, like `settle`:
+                                        // each driver exposes a readonly `snapshotFormat` descriptor (web
+                                        // "a11y-text-v1", mobile "ax-tree-v1", api "api-text-v1") and
+                                        // buildManifest pins driver.snapshotFormat (PIN_KEYS includes it).
+                                        // Web pins "a11y-text-v1" === PINS_BASE, so web baselines are unchanged.
   env: { base_url, managed: false },
   result: {
     status: "pass" | "fail" | "infra" | "explored",   // explored: a discovery run that ended
                                                       // done/give_up/max_steps/timeout
     end_reason: "done" | "give_up" | "max_steps" | "timeout" | "error",
     error: "first line of the run error" | null,
-    gate: { pass: true, checks: [ { kind: "url_matches"|"element_exists"|"api_called"|"assert"|"perf", spec: "<human string>", pass: true, detail: "..." } ] }
-          | null                                      // explore runs skip the gate
+    gate: { pass: true, checks: [ { kind: "url_matches"|"element_exists"|"screen_shows"|"api_called"|"response_status"|"response_matches"|"assert"|"perf", spec: "<human string>", pass: true, detail: "..." } ] }
+          | null                                      // explore runs skip the gate. The driver-specific
+                                                      // kinds (screen_shows mobile; response_* api) ride here
+                                                      // when the case's driver declares them — see §7/§16.
   },
   totals: { steps, executed_steps, tokens: {in, out, cache_read}, cost_usd, console_errors, confusion_events },
   healed: false,
@@ -251,10 +278,14 @@ early infra deaths produce videoless runs).
 }
 ```
 
-### Baseline files (live next to the case file, committable)
+### Baseline files (committed under the suite's `results/` dir)
 
-- `<case>.baseline.jsonl` — the accepted trajectory, verbatim copy.
-- `<case>.baseline.json` — `{ accepted_at, run_id, run_dir, healed_from_run_id|null, pins }`
+The suite root is the nearest ancestor holding a `playtest.yaml`. Artifacts mirror
+the case's path within the suite, dropping any `stories/` grouping segment — so
+`<suite>/stories/foo.yaml` → `<suite>/results/foo.baseline.jsonl`.
+
+- `<suite>/results/<case>.baseline.jsonl` — the accepted trajectory, verbatim copy.
+- `<suite>/results/<case>.baseline.json` — `{ accepted_at, run_id, run_dir, healed_from_run_id|null, pins }`
 - Heal candidates: `<case>.healed.jsonl` + `<case>.healed.json` (same shape + `candidate: true`)
   — the pending "changed journey" awaiting review. `playtest accept` promotes candidate →
   baseline (removing the candidate files); `playtest reject` removes the candidate files
@@ -266,9 +297,14 @@ early infra deaths produce videoless runs).
 
 ```js
 export async function discoverCases(paths, { tags = [], baseUrl = null } = {})
-  // paths: array of dirs and/or .yaml case files. Walks dirs for *.yaml (skipping
-  // playtest.yaml, personas/ dirs, *.baseline.*, *.healed.*). Applies the
-  // defaults chain + CLI overrides. Defaults files are rejected as direct case arguments.
+  // paths: array of dirs and/or .yaml case files. A dir's cases come only from
+  // its suite roots (dirs with a playtest.yaml) and `stories/` subtrees — the
+  // stories/ segment is dropped from the id (stories/foo/bar.yaml -> foo/bar).
+  // Other subdirs are still traversed (to find nested suites/stories), but a
+  // case-shaped yaml found loose in one is warned about, not run. A directly
+  // named .yaml file is always a case, wherever it lives. (skipping playtest.yaml,
+  // personas/ + results/ dirs, *.baseline.*, *.healed.*) Applies the defaults
+  // chain + CLI overrides. Defaults files are rejected as direct case arguments.
   // Every YAML doc is Ajv-validated at load — case files against case.schema.json,
   // playtest.yaml files against defaults.schema.json — and a violation is a
   // DummyConfigError naming the file and each offending key ('unknown key "x"',
@@ -295,8 +331,8 @@ export class DummyConfigError extends Error {}
 ## 3. trajectory.js
 
 ```js
-export const HARNESS_VERSION, STEP_SCHEMA_VERSION = 2, SNAPSHOT_FORMAT = "a11y-text-v1",
-             PROMPTS_VERSION = "prompts-v1", SETTLE = { name:"settle-v1", dom_quiet_ms:500, net_quiet_ms:500, max_ms:10000 };
+export const HARNESS_VERSION, STEP_SCHEMA_VERSION = 3, SNAPSHOT_FORMAT = "a11y-text-v1",
+             PROMPTS_VERSION = "prompts-v2", SETTLE = { name:"settle-v1", dom_quiet_ms:500, net_quiet_ms:500, max_ms:10000 };
 export function newRunId(now = new Date())                  // "2026-06-10T0300-ab12"
 export class RunWriter {
   constructor(runsRoot, runId, caseId)   // creates runs/<runId>/<caseId>/steps/
@@ -313,7 +349,7 @@ export function actionTrack(envelopes)
 export function diffTracks(baselineTrack, newTrack)
   // LCS on signature: action.type + "|" + (resolution.locator ?? action.url ?? "") + "|" + (action.text ?? "")
   // -> { ops: [{ op: "same"|"del"|"add", a: env|null, b: env|null }], summary: { same, del, add } }
-export function baselinePaths(caseFile)   // -> { traj, meta, healedTraj, healedMeta }
+export function baselinePaths(caseFile)   // -> { traj, meta, healedTraj, healedMeta } under <suite>/results/ (suite = nearest playtest.yaml; stories/ dropped)
 export function readBaseline(caseFile)    // -> { envelopes, meta } | null
 export function acceptBaseline(caseFile, runDir, { healed = false } = {})
   // copy runDir/trajectory.jsonl + write meta; healed:true writes the .healed.* candidate instead
@@ -323,6 +359,12 @@ export function rejectHealed(caseFile)    // remove the healed candidate files (
 ```
 
 ## 4. browser.js (+ snapshot-injected.js)
+
+> Relocated: this `Session` is now the **`web` driver** at `src/harness/drivers/web.js`
+> (class `WebDriver`, surface unchanged) behind the Driver interface — see §16.
+> `src/harness/browser.js` is a one-line re-export (`WebDriver as Session`, `pngDimensions`)
+> for back-compat. The contract below is unchanged; `location()`/`effectToken()`/`start()`
+> and the `id`/`settle`/`overlay` descriptors were added (§16).
 
 ```js
 export class Session {
@@ -369,8 +411,9 @@ export function pngDimensions(buf)      // PNG IHDR {width, height} (bytes 16-23
 
 Action execution semantics: `click` → locator.click; `type` → fill, then optional Enter;
 `select` → selectOption by label, falling back to value; `scroll` → mouse.wheel ±600px
-(or element.scrollBy via evaluate when ref given); `navigate` → goto; `wait` → bounded sleep
-(still measured). After every action: **settle** = wait until (no in-flight tracked requests
+(or element.scrollBy via evaluate when ref given); `navigate` → goto; `back` → page.goBack
+(benign no-op at history start — goBack resolves null, url unchanged, still ok; classified as
+a navigation for perf attribution); `wait` → bounded sleep (still measured). After every action: **settle** = wait until (no in-flight tracked requests
 for `net_quiet_ms`) AND (no DOM mutations for `dom_quiet_ms`), capped at `max_ms`
 (cap reached → settled anyway, still ok). MutationObserver + rAF-paint hooks are installed
 via an init script on every document.
@@ -393,10 +436,16 @@ started at or after action dispatch, so think-time requests never mask the `no_e
 confusion heuristic or skew perf data.
 
 HAR entries (har.json, written incrementally, finalized on close):
-`{ startedDateTime, time, request: {method, url}, response: {status, bodySize, mimeType}, _failed: bool }`.
-har.json is the deep-debug artifact (timings, sizes, real status of requests that were
-still pending at settle); the envelopes' embedded `network.requests` is the portable,
-baseline-stable subset.
+`{ startedDateTime, time, request: {method, url, headers, body}, response: {status, bodySize, mimeType, headers, body}, _failed: bool }`.
+`request.body` is the request `postData` (capped); `response.body` is the response payload,
+captured for **text/JSON content types only** (binary skipped), capped at 64KB and not read
+above a 1MB content-length; `headers` are the sent/received header maps. Bodies + headers
+live ONLY in har.json — the embedded `network.requests` keeps its six baseline-stable fields
+with no bodies, so committed baselines never jitter on response ids/timestamps. har.json is
+the deep-debug artifact (timings, sizes, bodies, real status of requests that were still
+pending at settle) and the data source the gate reads for `response_*` checks; it lives under
+`runs/` (gitignored) and may contain auth headers/cookies. The envelopes' embedded
+`network.requests` is the portable, baseline-stable subset.
 
 `snapshot-injected.js` exports `export const SNAPSHOT_SOURCE = String(raw js)` — a function
 body string evaluated in the page. It walks the DOM; includes visible interactive elements
@@ -423,14 +472,24 @@ Cap snapshot at ~200 elements / ~6000 chars; set `truncated: true` beyond.
 
 ```js
 export function llmConfig()
-  // { baseUrl, apiKey, available: bool } from env: PLAYTEST_LLM_BASE_URL (default
-  // "https://api.anthropic.com/v1" — Anthropic's OpenAI-compat endpoint),
+  // { baseUrl, apiKey, available: bool, cache: bool } from env: PLAYTEST_LLM_BASE_URL
+  // (default "https://api.anthropic.com/v1" — Anthropic's OpenAI-compat endpoint),
   // PLAYTEST_LLM_API_KEY (fallbacks ANTHROPIC_API_KEY, then OPENAI_API_KEY).
   // available=false when no key AND no explicit base URL override (mock servers need
-  // no key: any base-url override counts as available). Error messages name the
+  // no key: any base-url override counts as available). cache=PLAYTEST_LLM_CACHE truthy
+  // (1/true/on/yes) — opt-in prompt caching, default off. Error messages name the
   // PLAYTEST_* variables.
-export async function chat({ model, messages, tools = null, toolChoice = null, maxTokens = 1024 })
+export function applyCacheControl(messages)
+  // Opt-in Anthropic prompt caching in the OpenAI request shape: marks every message
+  // BEFORE the volatile final one (per-turn snapshot / trajectory / claim) with a
+  // cache_control:{type:"ephemeral"} text block, so a translating gateway (Portkey,
+  // LiteLLM) caches the stable tools+system+log prefix. No-op on Anthropic's own
+  // OpenAI-compat endpoint (cache_control ignored). String content -> a one-element
+  // text block; block content (a vision snapshot) is left as-is. Off by default ->
+  // wire bytes unchanged (the offline/web golden path is byte-identical).
+export async function chat({ model, messages, tools = null, toolChoice = null, maxTokens = 1024, signal = null })
   // POST {baseUrl}/chat/completions, OpenAI contract. Forced tool call when toolChoice given.
+  // When cache is on (PLAYTEST_LLM_CACHE), messages pass through applyCacheControl first.
   // -> { text, toolCall: { name, args /* parsed object; JSON parse errors -> throws LlmError */ } | null,
   //      usage: { in, out, cache_read } }   // cache_read from usage.prompt_tokens_details.cached_tokens
   //                                         // or anthropic-style fields if present; else 0.
@@ -439,6 +498,9 @@ export async function forcedToolCall({ model, messages, tool, validate = () => n
   // chat() with the tool forced; `validate(args)` returns an error string or null. On a wrong/invalid
   // tool call, retries ONCE with the validation error appended as a user message. -> { args, tokens }.
   // Throws LlmError after the retry fails. The actor's step and the grader's grade both go through this.
+  // Stringified-args coercion: some OpenAI-compat gateways (and smaller models, e.g. haiku) return a
+  // nested tool argument JSON-encoded as a STRING. forcedToolCall runs coerceStringifiedArgs to parse
+  // such fields back into objects before validating, so a stringified `action` does not burn the retry.
 export function estimateCost(model, usage)  // -> USD float; pricing table for haiku-4-5 ($1/$5 per MTok,
                                             // cache read $0.10), sonnet-4-6 ($3/$15, $0.30),
                                             // opus-4-8 ($5/$25, $0.50); unknown -> 0.
@@ -483,8 +545,13 @@ export class Actor {
   //     verbatim by llm.js. A missing screenshot degrades to the plain string. The vision
   //     path keys off the resolved `vision` flag only (config guarantees it implies
   //     discovery), so journey/heal runs never send images.
-  // Calls chat() with the step tool (schema = step.schema.json, name "step", forced via toolChoice).
-  // Ajv-validates returned args; on failure retries ONCE with the validation error appended.
+  // Calls chat() with the step tool (name "step", forced via toolChoice). The tool's
+  // `parameters` are the SHIPPED, model-facing schema (toolParamsFor) — flat action, only
+  // this driver's verbs+fields, advisory keywords stripped, a worked example in the tool
+  // description; the Ajv gate is the STRICT validator (stepSchemaFor). The two are decoupled
+  // because the OpenAI-compat endpoint does not constrain decoding (overlay.js).
+  // Ajv-validates returned args; on failure retries ONCE with the validation error appended
+  // (the flat schema's per-verb `allOf` yields actionable "must have required property" text).
   // -> { agentStep: {thought, action, expectation}, tokens: {in, out, cache_read} }
   // Throws LlmError after the retry fails. `signal` cancels the in-flight call (hard timeout).
 }
@@ -500,22 +567,34 @@ expectation to be falsifiable ("the cart badge should show 1"), forbid invented 
 
 ```js
 export async function evaluateGate(resolvedCase, ctx)
-  // ctx: { session (live, final page), harEntries, consoleErrorCount, trajectory (envelopes), finalUrl,
-  //        checkAssertion: async (claim) => ({pass, detail}) }   // injected by runner; uses grader model
-  // Checks, in order: every success criterion, then every perf threshold.
-  // url_matches: glob (*, ?) against finalUrl — matches full URL or pathname.
-  // element_exists: ctx.session.finalPageCheck(selector).
-  // api_called: "METHOD /path/glob". Source of truth is the trajectory's embedded network
+  // ctx: { driver (live, final state), harEntries, consoleErrorCount, trajectory (envelopes), finalUrl,
+  //        checkAssertion: async (claim) => ({pass, detail}) | null }   // injected by runner; uses grader model.
+  //        finalUrl is fed from driver.location() (a URL for web/api, a screen/route id for mobile).
+  //        The web `session` was generalized to the Driver seam — gate.js only ever calls
+  //        ctx.driver.finalPageCheck() on it (element_exists/screen_shows); see §16.
+  // Checks, in order: every success criterion, then every perf threshold. The success kinds are
+  //   driver-scoped (config.js rejects a kind under the wrong driver at load, so the gate only
+  //   ever sees valid ones — see §16):
+  // url_matches (web/api): glob (*, ?) against finalUrl — matches full URL or pathname.
+  // element_exists (web): ctx.driver.finalPageCheck(cssSelector).
+  // screen_shows (mobile): ctx.driver.finalPageCheck(accessibility-id/predicate) — the mobile
+  //   analog of element_exists, same Driver seam, the mobile driver's query language.
+  // api_called (web/api): "METHOD /path/glob". Source of truth is the trajectory's embedded network
   //   data: when ANY trajectory element carries a `network` field, search
   //   trajectory.flatMap(e => e.network?.requests ?? []); otherwise fall back to mapping
   //   ctx.harEntries into the same compact shape (runs/baselines recorded before network
   //   embedding). Match = method case-insensitive AND glob against the request's `path`
   //   (else the pathname of `url`). Detail: pass "N matching request(s), e.g. METHOD url",
   //   fail "no matching request among N request(s)".
-  // assert: ctx.checkAssertion(claim) — model-checked; if LLM unavailable -> check fails with
-  //         detail "assert requires a model; no LLM configured" (gate fail, not infra).
-  // perf.lcp_ms / input_to_paint_ms: "< 2500" style (ops: < <= > >=) against the WORST nav lcp /
-  //         action input_to_paint in the trajectory. perf.console_errors: max allowed count (number).
+  // response_status (api): exact ("201") or class ("2xx") against ANY response's status in the
+  //   run's embedded network.requests (so a read-back after a mutation never flips the gate).
+  // response_matches (api): a minimal JSON-path/value check ("$.title == \"buy milk\"") over the
+  //   LAST response body, read from har.json (bodies stay out of the committed trajectory) and
+  //   JSON.parsed; deterministic, no model. Natural-language response claims use `assert`.
+  // assert (all drivers): ctx.checkAssertion(claim) — model-checked; if LLM unavailable -> check
+  //   fails with detail "assert requires a model; no LLM configured" (gate fail, not infra).
+  // perf.lcp_ms / input_to_paint_ms (web only): "< 2500" style (ops: < <= > >=) against the WORST
+  //   nav lcp / action input_to_paint in the trajectory. perf.console_errors (web): max allowed (number).
   // -> { pass, checks: [{kind, spec, pass, detail}] }  — never throws; always evaluates ALL checks.
 ```
 
@@ -751,13 +830,15 @@ Behavior contracts:
   they contain characters outside `[A-Za-z0-9@%+=:,./_-]` (single quotes, `'\''` escaping).
 - `--fail-on-changed`: pending changed journeys promote the exit code to 1 (never
   downgrades a 2), listing the journeys and their accept commands (stderr under `--json`).
-- install-skill: copies the packaged `skills/playtest/SKILL.md` into
-  `<project>/.claude/skills/playtest/SKILL.md` (project = nearest ancestor with `.git`,
-  else cwd). Byte-identical reruns succeed quietly ("already installed"); differing
-  content is the `new`-style guard — `already exists (use --force to overwrite)`, exit 2.
-  The skill documents only the shipped CLI surface; when the `--json` contract or command
-  names change, the skill text changes in the same commit (the self-test freezes the
-  contract side).
+- install-skill: copies EVERY packaged agent skill — discovered from the `skills/` dir, no
+  hardcoded list (currently `playtest` [fix-loop], `playtest-discovery`, `playtest-stories`)
+  — into `<project>/.claude/skills/<name>/SKILL.md` (project = nearest ancestor with `.git`,
+  else cwd), so a coding agent can author, run, and review Playtest end to end. Per-skill
+  idempotency: a byte-identical skill reruns quietly ("already installed"); differing content
+  is the `new`-style guard — `already exists (use --force to overwrite)`, exit 2 (a guard on
+  one skill aborts the rest; `--force` overwrites all). The skills document only the shipped
+  CLI surface; when the `--json` contract or command names change, the skill text changes in
+  the same commit (test/install-skill.test.js freezes the install contract).
 - clip: the argument is a run directory, else a case id resolved to its latest run under
   the nearest runs root (runs-root.js). Default output is zero-dependency: the existing
   `video.webm` plus a generated `video.vtt` sidecar in the run dir — cue N starts at
@@ -880,8 +961,11 @@ export function changed(root, singleRun)  // the /changed.json entries (also `vi
 ```
 
 GET/HEAD only (anything else → 405); strictly read-only — the viewer never writes
-baselines. Serves: `/` → `src/viewer/` static files; `/run/*` → files under the run dir
-(when `dir` is a single run). When `dir` is a **runs root**, `/runs.json` lists
+baselines (nor does it create the runs root: a missing `dir` is served as an empty
+picker — `/runs.json` → `[]` — so a fresh project with no runs yet, or a read-only
+mount whose runs dir is unpopulated, gets a working viewer instead of a crash; only a
+`dir` that exists but is a *file* is an error). Serves: `/` → `src/viewer/` static
+files; `/run/*` → files under the run dir (when `dir` is a single run). When `dir` is a **runs root**, `/runs.json` lists
 `[{run_id, case_id, path, status, mode, healed, started_at, duration_ms, story|null,
 description|null, tags}]` (read from manifests, newest first; `story`/`description`/`tags`
 echo `manifest.case` so the picker can say what each story is, not just its id) and
@@ -945,7 +1029,8 @@ thresholds: pass->fail, score ±5, duration ±30%; regression wins). Comparabili
 badge are computed by the shared module (imported over HTTP from /shared/movement.js,
 same rules and pin key as the CLI trend — §12); infra and explored *current* runs get no
 movement.
-Keyboard: ←/→ steps, v toggles a11y view. Everything must degrade gracefully when an
+Keyboard: ←/→ steps; Tab / Shift+Tab cycle the stage tabs (stills ⇄ a11y ⇄ video ⇄ diff); Space
+toggles autoplay. Everything must degrade gracefully when an
 artifact is missing (acted runs have no tokens; ungraded runs no grade.json).
 
 ## 14. testing/mock-llm.js (self-test fixture)
@@ -1009,5 +1094,108 @@ app and the mock's viewer-actor.js rules drive it). Three cases under `todos/`:
 called buy milk"; perf: console_errors 0), `complete-todo.yaml` (add two, complete one,
 expect counter "1 item left"), `clear-completed.yaml` (tags [smoke]; add, complete, clear,
 expect empty list + api_called DELETE). `tests/seed/reset.sh`: `curl -fsS -X POST
-"$BASE_URL/api/reset"` (chmod +x). `docker-compose.test.yml` at repo root builds
+"$BASE_URL/api/reset"` (chmod +x). `tests/todos/docker-compose.yml` builds
 `src/todo-app/Dockerfile`, publishes 4173.
+
+## 16. Drivers (transport seam)
+
+`createDriver(resolvedCase, env, { runDir, headed }) -> Driver` (`src/harness/driver.js`),
+a switch on `resolvedCase.env.driver` (`web` default | `mobile` | `api`); unknown ⇒
+`DummyConfigError`. `runner.js` depends only on this factory and the Driver interface —
+it never imports a concrete driver and never reaches into a transport client. The
+`mobile`/`api` arms are dynamic `import()`s so a web run never loads their module graph.
+
+Every driver implements: `start()` (open the app to its entry state; the returned
+ExecResult's perf+network seed the gate — web: goto base_url · mobile: launch app ·
+api: issues no prime request — start() returns ok with an empty network, since prepareEnv already
+health-probed the base URL and a synthetic prime would let api_called/response_status pass off it),
+`captureSnapshot(stepNum)`, `execute(action)` (agent mode),
+`executeLocator(actedStep)` (act mode), `finalPageCheck(query)`, `location()`
+(replaces `session.page.url()`), `effectToken()` (the `no_effect` fingerprint, transport-
+defined), `consoleErrors()`, `close()`; and exposes readonly `id`, `settle`, `overlay`.
+`ExecResult`/`Snapshot` are §4's shapes — **the envelope field stays named `url`**; it
+holds a screen/route id under mobile and a path under api. `perf` is driver-filled and may
+be `null` (mobile/api); the `no_effect` heuristic reads `exec.perf?.requests ?? 0`.
+`resolution.locator` is an opaque durable handle (Playwright selector / Appium
+accessibility-id-or-predicate / `"METHOD /path"`); `diffTracks` and act mode treat it as a
+string, so record→act→heal works on every driver with no trajectory-layer change.
+
+The drivers:
+
+- **`web`** — `src/harness/drivers/web.js`, the relocated `Session` (class `WebDriver`,
+  surface unchanged; `browser.js` is a one-line re-export of `WebDriver as Session` +
+  `pngDimensions`). `location()` = `page.url()`; `effectToken()` is the DOM-mutation/forms/
+  url fingerprint moved out of `runner.js`; `settle` = `settle-v1`. Byte-identical.
+- **`mobile`** — `src/harness/drivers/mobile.js` over Appium/W3C WebDriver
+  (`webdriverio`, an **`optionalDependency`**, lazy-imported; absence is a friendly
+  `preflightFor("mobile")` error). `captureSnapshot` walks the page-source AX tree into the
+  same `[eN]` text (`ax-tree-v1`, `drivers/mobile-snapshot.js`) + a screen capture; refs
+  resolve to accessibility-id/predicate locators + element-rect bbox. Verbs
+  `tap/type/swipe/scroll/back`. `settle` = `settle-mobile-v1` (AX-tree stable for 400ms,
+  capped). v1 has **no network capture** (network.requests empty; `api_called` on a mobile
+  case is a config error) and **no perf** (perf null; web-vital perf keys are config errors).
+- **`api`** — `src/harness/drivers/api.js` over `fetch`. `captureSnapshot` renders the API
+  surface: base URL + (when `app.openapi` is set) the operations as `[eN] METHOD /path` +
+  the actual last JSON response, pretty-printed and capped; `screenshot: null`. Verb
+  `request{method,path,body?,headers?}`; `resolution.locator = "METHOD /path"`.
+  `network.requests` is native; full request/response **bodies** go to `har.json` (never the
+  embedded list — baselines stay jitter-free) and are the data source for `response_matches`
+  and body-level `assert`. `settle` = `settle-api-v1` (response received). No spec ⇒
+  exploratory (paths inferred from the story), not baseline-grade.
+
+Config (`config.js`, §2): `app.driver` enum (both schemas; absent ⇒ web) lands on
+`ResolvedCase.env.driver`; the resolved `env` literal also carries `platform`/`app`/`device`/
+`appium_url` (mobile) and `openapi` (api), and `app`/`openapi` join the relative-path list.
+`base_url` is required for web/api, not mobile; the mobile driver requires `app` (the binary).
+Driver-aware cross-field validation (mirrors the discovery/vision rules) maps each success
+kind and perf key to its valid drivers and throws a file-naming `DummyConfigError` otherwise:
+`url_matches` web/api · `element_exists` web · `screen_shows` mobile · `response_status`/
+`response_matches` api · `api_called` web/api (mobile = "no network capture" error) · `assert`
+all · perf `lcp_ms`/`input_to_paint_ms`/`console_errors` web only.
+
+Actor (§6): the system overlay's transport block is per-driver — `actor-system.md` is the
+**web** overlay (kept under that name; the journey golden test reads it from disk). The web
+overlay now teaches the `back` verb, so `prompts_version` is `prompts-v2` — a deliberate bump,
+free here because the `step_schema_version` 2→3 move already severed comparability with old web
+baselines. `actor-mobile.md`/`actor-api.md` are self-contained mobile/api bodies. The step contract is a **flat action
+object** (`step.schema.json`, schema_version 3): one `type` verb plus the flat parameters it
+uses, NOT a `oneOf` union — per-verb requireds are enforced by an `allOf` of if/then. Because
+the OpenAI-compat endpoint does **not** constrain decoding, the shipped schema is documentation
+and the validator is the real gate, so `drivers/overlay.js` emits two decoupled artifacts per
+driver: `toolParamsFor` (SHIPPED to the model — only this driver's verbs AND only the fields
+those verbs use, `$id`/`$schema`/`$comment`/`allOf`/`additionalProperties`/min-max/default
+stripped, weak-model-tuned field descriptions, plus a worked example in the tool description)
+and `stepSchemaFor` (the STRICT Ajv validator — `additionalProperties:false`, the `allOf`
+requireds, min/max, with `type`/`direction` enums scoped to the driver's verbs). `VERB_FIELDS`
+drives the shipped field subset; a `driver.test.js` assertion pins it against the `allOf`
+requireds so it can't drop an enforced field. Verbs — web: `click/type/select/scroll/navigate/
+back/wait/done/give_up`; mobile: `tap/type/swipe/scroll/back/wait/done/give_up`; api:
+`request/wait/done/give_up`. **web gained `back`** (browser back → `page.goBack()`).
+`describeAction`, `clip.js`, and the viewer caption `switch` carry arms for every verb.
+**Deliberate strictness relaxation:** the flat action can't reject a field valid for a
+*different* verb of the same driver (e.g. a `click` carrying a stray `seconds`) — the per-verb
+`additionalProperties:false` that the old `oneOf` variants gave is gone. Accepted: the shipped
+schema is dumb-simple so a weak model rarely emits cross-verb junk, and `#perform` switches on
+`type` and ignores unread fields. Pinned by a `driver.test.js` case so it stays intentional.
+
+Gate (§7): `ctx.session` → `ctx.driver`; `element_exists`/`screen_shows` both call
+`driver.finalPageCheck`; `response_status` matches ANY response's status in the run's `network.requests`
+(exact `"201"` or class `"2xx"`); `response_matches` reads the last response body from
+`har.json` and runs a minimal JSON-path/value check (`$.title == "buy milk"`).
+
+Env (§9): `prepareEnv` gains a mobile arm (no HTTP origin — the driver's Appium session is
+the probe; init still runs with `BASE_URL`=the Appium endpoint; teardown is the driver's);
+api reuses the web compose+probe arm. Preflight (`preflightFor(driver)`, called by `cli.js`
+**after** discovery so only selected drivers are checked): web → chromium (unchanged),
+api → no-op, mobile → the webdriverio check. `playtest new --driver web|mobile|api`
+scaffolds a per-driver case + defaults template.
+
+Manifest/comparability (§1, movement.js): `manifest.pins.driver` (+ the driver's `settle`
+descriptor) and `manifest.env.driver` are written; `"driver"` is in `PIN_KEYS`, so web and
+mobile/api runs of the same case never compare. Legacy manifests without the pin stay
+wildcard-comparable. `step.schema.json` is now `schema_version 3` (flat action; the prior
+`oneOf` union is gone) — a **deliberate `step_schema_version` bump that severs comparability**
+of every committed `schema_version:2` baseline from new runs (it is in `PIN_KEYS`). Web also
+gained the `back` verb. **Viewer: zero code change**
+beyond the additive caption arms — film strip/ghost cursor (need png+bbox) and the vitals
+panel degrade for api; every panel already tolerates absent artifacts.

@@ -2,6 +2,8 @@
   "name": "@jeremyvun/playtest",
   "version": "0.1.0",
   "description": "User journey testing for web apps: an AI agent role-plays a user against your app and the harness scores whether the app let it succeed.",
+  "license": "MIT",
+  "author": "Jeremy Vun",
   "type": "module",
   "bin": {
     "playtest": "./src/harness/cli.js"

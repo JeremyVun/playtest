@@ -54,15 +54,15 @@ Or to discover insights / validate assumptions, use it in "discovery" mode. Exam
 Using the CLI directly is also fairly straightforward
 
 ```sh
-playtest new add-item [dir]   # Create a playtest story (add-item.yaml). Edit it manually
-playtest [dir]                # Run the test to record the journey
-playtest view                 # Launch trajectory viewer app to see run results
+playtest new my-user-story [dir]  # Create  playtest story (my-user-story.yaml). Edit manually
+playtest [dir]                    # Run the test to record the journey
+playtest view                     # Launch trajectory viewer app to see run results
 ```
 
 `playtest new` scaffolds a `web` playtest story by default. For mobile or api, use the `--driver` flag.
 
 ```sh
-playtest new --driver mobile login-flow   # native iOS/Android over Appium
+playtest new --driver mobile login-flow    # native iOS/Android over Appium
 playtest new --driver api    orders-api    # REST API over HTTP
 ```
 
@@ -107,8 +107,8 @@ checkout/                          # a suite
 app:
   driver: web                      # web (default playwright) · mobile (Appium) · api (HTTP)
   base_url: http://localhost:3000  # where the app runs — required for web/api (or --base-url)
-  # compose: docker-compose.yml    # optional: harness boots & tears the app down per run
-  # init: ./seed.sh                # optional: script run before each story to reset state
+  compose: docker-compose.yml      # optional: harness boots & tears the app down per run
+  init: ./seed.sh                  # optional: script run before each story to reset state
 mode: journey                      # journey (regression) · or discovery (VLM exploration)
 persona: tester                    # tester · exploratory · or a personas/*.yaml slug
 actor_model: claude-haiku-4-5      # role-plays the user (cheap by default)
@@ -133,11 +133,29 @@ persona: first-time-shopper             # the actor role; a list here fans out (
 success:                                # journey gate — every criterion must pass
   - url_matches: "/cart*"               # the address bar
   - api_called: "POST /api/cart"        # assert that an api call was made
+  - console_errors: 0                   # assert no js console errors
   - assert: the basket shows one item   # natural language, checked by the grader
 report:     # Natural language questions answered by the grader
   - Did anything in the checkout flow confuse them?
   - Could the task have been done in less steps?
 ```
+
+##### Success assertions
+
+The `success:` block is the **journey gate**: every criterion must pass for the run to be green.
+All are checked deterministically from the recorded run except `assert`, which states a claim in
+natural language for the grader agent to judge.
+
+| Key | Example | Drivers | Passes when |
+|---|---|---|---|
+| `url_matches` | `"/cart*"` | web, api | The final URL (full or pathname) matches the glob. |
+| `element_exists` | `"[data-testid=basket-item]"` | web | A Playwright locator matches on the final page — CSS by default, or `xpath=` / `text=` / `role=`. |
+| `screen_shows` | `"~basket-item"` | mobile | An Appium native selector matches on the final screen — accessibility id (`~`), XPath, or iOS/Android predicate. The mobile analog of `element_exists`. |
+| `api_called` | `"POST /api/cart"` | web, api | Some request matched the `METHOD /path-glob`. |
+| `response_status` | `"2xx"` | api | Some response had this status — an exact code or an `Nxx` class. |
+| `response_matches` | `"$.items[0].qty == 2"` | api | A dot/bracket JSON path over the last response body compares true (`==`, `!=`). A minimal subset — no wildcards or filters. |
+| `console_errors` | `0` | web | The run finished with at most N browser console errors. |
+| `assert` | `the basket shows one item` | web, mobile, api | The grader judges the claim true against the final page / screen / response. One model call per `assert`, even on replayed runs. |
 
 Each finished run carries a **status**:
 
@@ -153,15 +171,45 @@ Each finished run carries a **status**:
 
 #### Story Baselines and Healing
 
-When a run heals a journey, an interactive run ends with a review prompt; inspect with
-`playtest view --changed`, then `playtest accept <runDir>` or `playtest reject <runDir>`
-(non-interactive runs print those lines to resume later). Hidden but stable: `accept`,
-`reject`, `grade <runDir>`, and `run` (the explicit spelling of the default). Subcommand
-names beat path arguments — run a conflicting path as `playtest ./view` or
+A story's **baseline** — its *saved path* — is the trajectory the actor recorded the first
+time the story passed (`results/<story>.baseline.jsonl`). There is no separate script:
+later runs replay that path, and the agent re-records it when the UI moves. That's the
+`record → act → heal` lifecycle behind the statuses above:
+
+```
+first run, or a refresh
+       │
+       ▼
+record ─▶ saves the passing run as the baseline (the "saved path")
+       │
+       │   every later run re-executes that saved path, step for step:
+       ▼
+check  ─▶ all steps pass ─────────────▶ status: checked          ✓ green
+       │
+       │   a step fails — an element is gone, the UI changed
+       ▼
+heal   ─▶ the agent wakes at the failure point and finishes the task
+       │
+       ├─ finishes green ─▶ status: changed ─▶ review the heal diff:
+       │                      accept → healed run becomes the new baseline
+       │                      reject → discarded, baseline unchanged
+       │
+       └─ still fails ────▶ status: tried to heal                 ✗ broke
+```
+
+**Reviewing a changed journey.** An interactive run that heals ends at a review prompt.
+Inspect the diff (old baseline vs. healed run) with `playtest view --changed`, then
+`playtest accept <runDir>` to promote it or `playtest reject <runDir>` to discard it.
+Non-interactive runs (CI) don't prompt — they print those `accept` / `reject` lines so you
+can resume later, and `--fail-on-changed` turns a `changed` result into a failed build.
+
+**CLI note.** `accept`, `reject`, `grade <runDir>`, and `run` (the explicit name for the
+default command) are stable but hidden from `--help`. A subcommand name always wins over a
+path argument — to run a path that collides with one, use `playtest ./view` or
 `playtest run view`.
 
 
-## Commands
+## Playtest CLI Commands
 
 | Command | What it does |
 |---|---|

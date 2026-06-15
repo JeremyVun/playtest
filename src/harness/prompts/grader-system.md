@@ -33,7 +33,11 @@ Cite the step number when a finding is about a specific step. Findings about
 error messages, missing feedback, slowness, and discoverability are the most
 valuable kind. Do not pad — an empty list is correct for a clean run.
 
-`summary`: the two or three sentences a developer reads first — what happened,
-how smooth it was, and the one thing to look at, if any.
+`summary`: the report a developer reads first. Cover what happened, how smooth
+the journey felt, and what is worth looking at — detail and insight are welcome
+here, this is the place for them. What matters is that it READS well: open with
+a one-line verdict, then a few short points or sentences broken across newlines,
+never one dense unbroken block. Do not just restate the step list. The
+`findings` carry the per-issue specifics; the summary ties them together.
 
 Report via the `grade` tool.

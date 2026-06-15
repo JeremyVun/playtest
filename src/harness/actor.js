@@ -195,12 +195,15 @@ export class Actor {
 
   /**
    * @param {{ history: object[], snapshotText: string, stepNum: number,
-   *           screenshot?: Buffer|null, signal?: AbortSignal|null }} turn
+   *           screenshot?: Buffer|null, signal?: AbortSignal|null,
+   *           onContext?: ((messages: object[]) => void)|null }} turn
    *   screenshot: the step's viewport PNG; rides the snapshot message as an
    *   image part when the case has vision on (null degrades to text-only).
+   *   onContext: called with the assembled message window before the model call,
+   *   so the caller can persist it (context.jsonl) even if the call then fails.
    * @returns {Promise<{ agentStep: object, tokens: {in: number, out: number, cache_read: number} }>}
    */
-  async nextStep({ history, snapshotText, stepNum, screenshot = null, signal = null }) {
+  async nextStep({ history, snapshotText, stepNum, screenshot = null, signal = null, onContext = null }) {
     const snapText = `Current page snapshot (step ${stepNum}):\n${snapshotText}`;
     const snapContent = this.case.vision && screenshot
       ? [
@@ -208,13 +211,15 @@ export class Actor {
           { type: "image_url", image_url: { url: `data:image/png;base64,${screenshot.toString("base64")}` } },
         ]
       : snapText;
+    const messages = [
+      { role: "system", content: this.system },
+      { role: "user", content: renderLog(history) },
+      { role: "user", content: snapContent },
+    ];
+    if (onContext) onContext(messages);
     const { args, tokens } = await forcedToolCall({
       model: this.case.actor_model,
-      messages: [
-        { role: "system", content: this.system },
-        { role: "user", content: renderLog(history) },
-        { role: "user", content: snapContent },
-      ],
+      messages,
       tool: this.stepTool,
       validate: (a) => (this.validateStep(a) ? null : ajv.errorsText(this.validateStep.errors)),
       signal,

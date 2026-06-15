@@ -55,7 +55,7 @@ const DEFAULTS_TEMPLATE = `app:
   # compose: ./docker-compose.yml        # Playtest boots/tears down the app
   # init: ./seed/reset.sh                # runs before each case
   # storage_state: ./seed/anon.json      # pre-built browser session
-# actor_model: claude-haiku-4-5
+# actor_model: claude-sonnet-4-6      # the default; pin claude-haiku-4-5 to trade fidelity for cost
 # grader_model: claude-sonnet-4-6
 `;
 
@@ -68,7 +68,7 @@ const DEFAULTS_TEMPLATES = {
   # device: iPhone 15                    # target device/simulator (omit for a default)
   # appium_url: http://localhost:4723    # a running Appium server (omit for the local default)
   # init: ./seed/reset.mjs               # runs before each case (BASE_URL/RUN_ID)
-# actor_model: claude-haiku-4-5
+# actor_model: claude-sonnet-4-6      # the default; pin claude-haiku-4-5 to trade fidelity for cost
 # grader_model: claude-sonnet-4-6
 `,
   api: `app:
@@ -77,7 +77,7 @@ const DEFAULTS_TEMPLATES = {
   # openapi: ./openapi.yaml              # operations become the actor's "elements"
   # compose: ./docker-compose.yml        # Playtest boots/tears down the backend
   # init: ./seed/reset.mjs               # runs before each case (BASE_URL/RUN_ID)
-# actor_model: claude-haiku-4-5
+# actor_model: claude-sonnet-4-6      # the default; pin claude-haiku-4-5 to trade fidelity for cost
 # grader_model: claude-sonnet-4-6
 `,
 };

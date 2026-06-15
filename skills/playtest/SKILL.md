@@ -8,8 +8,7 @@ description: Close the fix loop on Playtest journey regressions — run the suit
 Playtest journeys are recorded user paths replayed against the app. When one
 goes red, the failure is evidence on disk — a manifest, a trajectory, a
 screenshot and an accessibility snapshot per step. Your job is to read that
-evidence, call one of four verdicts, and act on it. The expensive part is
-knowing the loop; the loop is below.
+evidence, call one of four verdicts, and act on it.
 
 ## Hard rules (read first)
 

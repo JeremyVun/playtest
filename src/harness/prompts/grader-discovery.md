@@ -47,8 +47,11 @@ the answer grounded in the trajectory, and `evidence_steps` listing the step
 numbers that support it. These questions have answers, not verdicts — never
 reduce one to a bare pass/fail.
 
-`summary`: the two or three sentences a product team reads first — where the
-user looked, where they expected the capability, and the single clearest
-recommendation the trajectory supports.
+`summary`: the report a product team reads first. Cover where the user looked,
+where they expected the capability, and the clearest recommendations — detail
+and insight are welcome here, this is the place for them. What matters is that it
+READS well: open with a one-line verdict, then a few short points or sentences
+broken across newlines, never one dense unbroken block. The `findings` and
+`report` carry the per-issue specifics; the summary ties them together.
 
 Report via the `grade` tool.

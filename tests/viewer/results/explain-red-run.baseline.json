@@ -1,7 +1,7 @@
 {
-  "accepted_at": "2026-06-14T11:19:51.152Z",
-  "run_id": "2026-06-14T1119-a2b4",
-  "run_dir": "/Users/jeremy/projects/dummy/runs/2026-06-14T1119-a2b4/explain-red-run",
+  "accepted_at": "2026-06-15T11:18:41.902Z",
+  "run_id": "2026-06-15T1118-810e",
+  "run_dir": "/Users/jeremy/projects/dummy/runs/2026-06-15T1118-810e/explain-red-run",
   "healed_from_run_id": null,
   "pins": {
     "harness_version": "0.1.0",
@@ -15,9 +15,9 @@
       "max_ms": 10000
     },
     "driver": "web",
-    "actor_model": "claude-haiku-4-5",
-    "grader_model": "claude-sonnet-4-6",
-    "gateway": "http://localhost:4175",
+    "actor_model": "@anthropic/claude-sonnet-4-6",
+    "grader_model": "@anthropic/claude-sonnet-4-6",
+    "gateway": "https://api.portkey.ai/v1",
     "headed": false,
     "vision": false
   }

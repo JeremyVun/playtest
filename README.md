@@ -111,7 +111,7 @@ app:
   init: ./seed.sh                  # optional: script run before each story to reset state
 mode: journey                      # journey (regression) · or discovery (VLM exploration)
 persona: tester                    # tester · exploratory · or a personas/*.yaml slug
-actor_model: claude-haiku-4-5      # role-plays the user (cheap by default)
+actor_model: claude-sonnet-4-6     # role-plays the user (default; pin claude-haiku-4-5 to cut cost)
 grader_model: claude-sonnet-4-6    # scores runs and checks `assert:` gates
 max_steps: 50                      # per-run limit on actor steps
 timeout: 4m                        # per-run wall-clock limit

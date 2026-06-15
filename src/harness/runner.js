@@ -57,6 +57,22 @@ function addTokens(total, t) {
   total.cache_read += t.cache_read ?? 0;
 }
 
+// The actor's per-turn context window is saved to context.jsonl for diagnostics;
+// inlined base64 screenshots are elided to a reference so the file stays small
+// and readable (the frame already lives at steps/NNN.png).
+function sanitizeContext(messages) {
+  return messages.map((m) =>
+    Array.isArray(m.content)
+      ? {
+          ...m,
+          content: m.content.map((part) =>
+            part?.type === "image_url"
+              ? { type: "image_url", image_url: { url: "<inline screenshot elided — see steps/*.png>" } }
+              : part),
+        }
+      : m);
+}
+
 /**
  * Run one case end to end. Never throws; InfraError -> status "infra".
  * `onEvent` receives progress events ({ type, caseId, ...payload }):
@@ -104,6 +120,7 @@ export async function runCase(rc, opts) {
     envelopes: [],
     tokens: { in: 0, out: 0, cache_read: 0 },
     lastSnapshot: null,
+    wroteContext: false, // any actor context.jsonl line written (record/heal steps only)
     initialNav: null,
     endReason: "error",
     runError: null,
@@ -338,6 +355,14 @@ async function recordLoop({ driver, writer, rc, persona, deadline, r, emit }) {
         // so heal runs sharing this loop never send images.
         screenshot: rc.vision ? snap.screenshot : null,
         signal: r.signal,
+        // Persist the exact context window before the model call, so even a
+        // failed/malformed call leaves a diagnostic record (CONTRACTS §3).
+        onContext: (messages) => {
+          try {
+            writer.appendContext({ step: stepNum, ts: Date.now(), model: rc.actor_model, messages: sanitizeContext(messages) });
+            r.wroteContext = true;
+          } catch {}
+        },
       }));
     } catch (e) {
       if (r.aborted) return; // a hard-timeout abort is recorded by run(), not here
@@ -582,6 +607,9 @@ function buildManifest({ rc, runId, mode, startedAt, videoStartedAt, llm, env, r
       video: "video.webm",
       trace: "trace.zip",
       grade: willGrade ? "grade.json" : null,
+      // per-turn actor context windows, for diagnostics; absent on pure act runs
+      // (no model calls) and explicitly null so the viewer doesn't probe for it
+      context: r.wroteContext ? "context.jsonl" : null,
       baseline_copy: mode !== "record" && baseline ? "baseline.jsonl" : null,
     },
   };

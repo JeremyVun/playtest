@@ -10,7 +10,7 @@
   "properties": {
     "thought": {
       "type": "string",
-      "description": "Free-form reasoning about the current page and what to do next."
+      "description": "Your reasoning, read later in the viewer and kept in the running log: what you see that matters, the action you want and why, and any uncertainty. Format it with newlines into short lines or short paragraphs — coherent and readable, never one dense unbroken block."
     },
     "expectation": {
       "type": "string",

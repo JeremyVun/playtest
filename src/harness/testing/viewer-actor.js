@@ -31,7 +31,7 @@ const SCENARIOS = [
   { key: "heal-review", re: /awaiting review|command for accepting/i },
   { key: "divergence", re: /deviates from the old baseline|first differing step/i },
   { key: "red-run", re: /check is red|failing success criteri/i },
-  { key: "history", re: /trended over time|been stable/i },
+  { key: "history", re: /has trended across|find that history panel/i },
   { key: "open-latest", re: /most recent run of the journey/i },
 ];
 

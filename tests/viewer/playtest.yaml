@@ -6,6 +6,14 @@
 # Runs offline against the mock (testing/viewer-actor.js drives these stories):
 #   npm run mock-llm &
 #   PLAYTEST_LLM_BASE_URL=http://localhost:4175 playtest tests/viewer
+# Model slugs carry the `@anthropic/` provider prefix so a Portkey gateway
+# (PLAYTEST_LLM_BASE_URL=https://api.portkey.ai/v1) can route them without an
+# x-portkey-provider / x-portkey-config header. The bare config.js defaults
+# (claude-haiku-4-5 / claude-sonnet-4-6) target Anthropic's own OpenAI-compat
+# endpoint and the offline mock, which ignore the prefix — so this is harmless
+# there (the mock echoes the model back) and required for Portkey.
+actor_model: "@anthropic/claude-sonnet-4-6"
+grader_model: "@anthropic/claude-sonnet-4-6"
 app:
   compose: ./docker-compose.yml
   base_url: http://viewer:4317

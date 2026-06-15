@@ -184,6 +184,89 @@ test("recorded run: film strip + step thought captions render", async () => {
   await page.close();
 });
 
+test("recorded run: the brief sits at the top of the caption panel", async () => {
+  // The user's goal must be the first thing in the left panel — instant context,
+  // above the per-step thought (which scrolls in its own region below it).
+  const { page, errors } = await open(`?run=${runsByMode.record.path}`);
+  await page.waitForSelector("#strip .cell");
+  const order = await page.evaluate(() => {
+    const kids = [...document.querySelector("#caption").children].map((c) => c.id);
+    return { first: kids[0], hasBody: kids.includes("cap-body") };
+  });
+  assert.equal(order.first, "cap-brief", "the brief is the first child of the caption panel");
+  assert.ok(order.hasBody, "the step body still renders below the brief");
+  const brief = await text(page, "#cap-brief");
+  assert.match(brief.toLowerCase(), /buy milk/, "the brief shows the story's goal");
+  assert.deepEqual(errors, [], "no console/page errors");
+  await page.close();
+});
+
+test("recorded run: a very long thought scrolls and does not push the film strip off screen", async () => {
+  // The step-through-stills regression: a dense, unscrolled thought grew the
+  // caption panel until the film strip was pushed past the bottom of the window.
+  const { page } = await open(`?run=${runsByMode.record.path}`);
+  await page.waitForSelector("#strip .cell");
+  await page.locator("#strip .cell").first().click();
+  const m = await page.evaluate(() => {
+    const t = document.querySelector("#cap-thought");
+    t.textContent = "Lorem ipsum dolor sit amet, consectetur. ".repeat(400); // ~16k chars
+    const strip = document.querySelector("#strip-zone").getBoundingClientRect();
+    const body = document.querySelector("#cap-body");
+    return {
+      stripBottom: strip.bottom,
+      viewport: window.innerHeight,
+      bodyScrolls: body.scrollHeight > body.clientHeight + 1,
+    };
+  });
+  assert.ok(m.stripBottom <= m.viewport + 1,
+    `film strip must stay within the viewport (bottom ${m.stripBottom} vs ${m.viewport})`);
+  assert.ok(m.bodyScrolls, "the thought body scrolls its overflow instead of growing the panel");
+  await page.close();
+});
+
+test("recorded run: a long film strip scrolls and does not push the inspector off screen", async () => {
+  // The locate-divergence regression: the #app grid had no column constraint, so
+  // its implicit `auto` column sized to its widest row — a long strip of fixed-
+  // width cells stretched the column past the viewport and carried the inspector
+  // off the right edge. The strip must scroll horizontally instead.
+  const { page } = await open(`?run=${runsByMode.record.path}`);
+  await page.waitForSelector("#strip .cell");
+  const m = await page.evaluate(() => {
+    // Force the many-stills condition regardless of the fixture's step count.
+    const strip = document.querySelector("#strip");
+    const proto = strip.querySelector(".cell");
+    for (let i = 0; i < 40; i++) strip.append(proto.cloneNode(true));
+    const insp = document.querySelector("#inspector").getBoundingClientRect();
+    return {
+      stripOverflows: strip.scrollWidth > strip.clientWidth + 1,
+      inspRight: insp.right,
+      docWidth: document.documentElement.scrollWidth,
+      viewport: window.innerWidth,
+    };
+  });
+  assert.ok(m.stripOverflows, "test precondition: the strip's cells must overflow its width");
+  assert.ok(m.inspRight <= m.viewport + 1,
+    `inspector must stay within the viewport (right ${m.inspRight} vs ${m.viewport})`);
+  assert.ok(m.docWidth <= m.viewport + 1,
+    `a long film strip must not widen the document (${m.docWidth} vs ${m.viewport})`);
+  await page.close();
+});
+
+test("healed run: clicking a diff cell opens that step in Stills", async () => {
+  // Diff cells are clickable but the diff pane is run-level — a click must jump
+  // to Stills so it has a visible effect (otherwise the cell reads as a dead button).
+  const { page, errors } = await open(`?run=${runsByMode.heal.path}`);
+  await page.waitForSelector("#strip .cell");
+  await page.locator("#tab-diff").click();
+  await page.waitForSelector("#pane-diff:not([hidden])");
+  await page.locator("#diff-body .dcell.clickable").first().click();
+  await page.waitForSelector("#pane-stills:not([hidden])");
+  assert.ok(await page.locator("#pane-stills").isVisible(), "Stills pane is shown after the click");
+  assert.ok(await page.locator("#pane-diff").isHidden(), "the diff pane is hidden after the jump");
+  assert.deepEqual(errors, [], "no console/page errors");
+  await page.close();
+});
+
 test("healed run: diff tab renders the action-track comparison", async () => {
   const { page, errors, failUnexpected404 } = await open(`?run=${runsByMode.heal.path}`);
   await page.waitForSelector("#strip .cell");

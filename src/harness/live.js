@@ -13,7 +13,6 @@ const REDRAW_MS = 100;
 // Unconditional ANSI: this reporter only exists when stdout is a TTY.
 const cyan = (s) => `\x1b[36m${s}\x1b[0m`;
 const dim = (s) => `\x1b[2m${s}\x1b[0m`;
-const red = (s) => `\x1b[31m${s}\x1b[0m`;
 
 export class LiveReporter {
   #out = process.stdout;
@@ -76,12 +75,6 @@ export class LiveReporter {
         if (!c) break;
         c.summary = "grading";
         this.#draw();
-        break;
-      case "gate_fail":
-        // Immediate signal; caseLine repeats the detail when the case ends.
-        for (const check of ev.checks ?? []) {
-          this.#print(`${red("x")} ${ev.caseId}  ${check.spec} ${dim(`— ${check.detail}`)}`);
-        }
         break;
       case "case_end":
         this.#active.delete(key);

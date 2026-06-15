@@ -15,26 +15,23 @@ out of road — not a failure.
 
 Most failed studies die here, not in the YAML. Check in order:
 
-1. **Tool present, discovery supported.** `playtest --version` proves the
-   tool is installed, but the version string signals nothing about discovery
-   support — feature-detect instead: the installed `@jeremyvun/playtest`
-   package must ship `src/schemas/case.schema.json` and that file must
-   mention `"mode"`. (Locate the package via `npm ls @jeremyvun/playtest` or
-   `npm root`, or resolve the `playtest` bin.) If the probe fails, stop and
-   tell the human to upgrade playtest before anything else.
+1. **Tool present, discovery supported.** `playtest --version` only proves it's
+   installed, not that it does discovery. Feature-detect: the installed
+   `@jeremyvun/playtest` (find it via `npm root` / `npm ls @jeremyvun/playtest`
+   or the `playtest` bin) must ship `src/schemas/case.schema.json`, and that
+   file must mention `"mode"`. If not, stop and have the human upgrade first.
 2. **LLM access.** One of `PLAYTEST_LLM_API_KEY`, `ANTHROPIC_API_KEY`, or
    `OPENAI_API_KEY` must be set — or `PLAYTEST_LLM_BASE_URL` must point at an
    explicit gateway (an explicit override counts as available with no key).
 3. **HARD GUARDRAIL — staging only.** Discovery agents genuinely click buy,
-   delete, and submit on whatever URL they are given; pointing a study at a
-   deployed URL is pointing an autonomous user at it. Staging with test
-   rails, never production. Require an explicit staging/test URL from the
-   human, and refuse to run anything that looks like production (customer-facing
-   domain, real accounts, live payment rails) even if asked to proceed.
+   delete, and submit on whatever URL they're given. Require an explicit
+   staging/test URL, and refuse anything that looks like production
+   (customer-facing domain, real accounts, live payment rails) even if asked
+   to proceed.
 
-Also set one expectation early: the agent navigates by accessibility tree,
-so semantically empty markup (div soup, no labels) is a hard limit — it
-surfaces as an accessibility finding, not a functional one.
+Set one expectation early: the agent navigates by the accessibility tree, so
+semantically empty markup (div soup, no labels) is a hard limit — it surfaces
+as an accessibility finding, not a functional one.
 
 ## 2. Interview and author
 
@@ -42,16 +39,16 @@ Both belong to the **playtest-stories** skill: it interviews the human as an
 adversarial thought partner (its interview decides discovery vs journey and
 surfaces the personas and friction hypotheses worth testing), then authors
 the study directory directly — runnable case YAMLs plus personas, validated
-with `playtest list`. It also carries a complete worked example of a study.
+with `playtest list`, and shows a worked discovery example.
 
 ## 3. Run — with cost honesty first
 
 Tell the human what the study costs **before** launching. Total runs = stories
 x personas, every one a fresh agentic pass: minutes of
 wall clock per persona, and with a Sonnet-class actor a study lands at
-single-digit dollars. The harness reports the actual `cost_usd` per run (its
-pricing table covers claude-haiku-4-5, claude-sonnet-4-6 and claude-opus-4-8;
-any other model reports a cost of $0). Get a nod, then:
+single-digit dollars. The harness reports the actual `cost_usd` per run (priced
+for claude-haiku-4-5 / claude-sonnet-4-6 / claude-opus-4-8; any other model
+reports $0). Get a nod, then:
 
 ```
 playtest studies/<name>/            # the study is just a suite

@@ -11,7 +11,7 @@ export class DummyConfigError extends Error {}
 const DEFAULTS_FILE = "playtest.yaml";
 
 const DEFAULTS = {
-  actor_model: "claude-haiku-4-5",
+  actor_model: "claude-sonnet-4-6",
   grader_model: "claude-sonnet-4-6",
   max_steps: 50,
   timeout: "4m",

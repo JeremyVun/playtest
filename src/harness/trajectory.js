@@ -6,7 +6,7 @@ import crypto from "node:crypto";
 export const HARNESS_VERSION = "0.1.0";
 export const STEP_SCHEMA_VERSION = 3;
 export const SNAPSHOT_FORMAT = "a11y-text-v1";
-export const PROMPTS_VERSION = "prompts-v2";
+export const PROMPTS_VERSION = "prompts-v3";
 export const SETTLE = { name: "settle-v1", dom_quiet_ms: 500, net_quiet_ms: 500, max_ms: 10000 };
 
 // Base of manifest.pins; runner adds actor_model, grader_model, gateway.
@@ -40,6 +40,12 @@ export class RunWriter {
 
   appendEnvelope(envelope) {
     fs.appendFileSync(path.join(this.#dir, "trajectory.jsonl"), JSON.stringify(envelope) + "\n");
+  }
+
+  /** One line per actor turn: the exact message window sent to the model, for
+   *  diagnostics (CONTRACTS §3). Images are elided to a reference by the caller. */
+  appendContext(entry) {
+    fs.appendFileSync(path.join(this.#dir, "context.jsonl"), JSON.stringify(entry) + "\n");
   }
 
   writeManifest(manifest) {

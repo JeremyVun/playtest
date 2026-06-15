@@ -126,7 +126,7 @@
     },
     "actor_model": {
       "type": "string",
-      "description": "Model that role-plays the user. Default \"claude-haiku-4-5\" (pinned cheap — for journeys the app is the variable, not the agent; the flat action schema is tuned to parse on smaller models). Discovery studies often choose a stronger model, e.g. \"claude-sonnet-4-6\". Inheritable."
+      "description": "Model that role-plays the user. Default \"claude-sonnet-4-6\" — a capable actor reads the page and recovers from friction far more reliably than a cheap one, and for both journeys and discovery the trajectory is only worth grading if the user was played well. Pin a cheaper model (e.g. \"claude-haiku-4-5\") when cost matters more than fidelity. Inheritable."
     },
     "grader_model": {
       "type": "string",

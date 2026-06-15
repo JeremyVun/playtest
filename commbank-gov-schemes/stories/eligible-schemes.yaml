@@ -1,0 +1,32 @@
+description: Single parent checks which government home-buying schemes she qualifies for.
+story: |
+  You are a single parent with one child, an Australian citizen, and you have
+  never owned a property. You've managed to save $20,000 and you're hoping to
+  buy your first home in Tasmania, somewhere in the $500,000–$600,000 range.
+  You've landed on CommBank's government scheme selector and you want it to tell
+  you which government home-buying schemes you'd be eligible for. Work through
+  its questions, answering honestly with your situation, until it shows you a
+  result.
+success:
+  # console_errors first (deterministic, no grader call), then three end-state
+  # checks (one grader call each):
+  #  1. The single-parent scheme is offered. CommBank surfaces the Family Home
+  #     Guarantee under the label "Help to Buy" — gate on that string.
+  #  2. The 5%-deposit scheme (First Home Guarantee) is NOT offered: her $20,000
+  #     is under 5% of a $500k–$600k purchase, so eligibility should exclude it.
+  #     A negative gate guards against the tool over-offering schemes she can't use.
+  #  3. The result gives her a way forward — a "Book an appointment" CTA.
+  # NOTE: this points at live commbank.com.au, whose own third-party scripts may
+  # log console errors — if the first `record` run fails only on this gate, that's
+  # the external-site exception; drop this line and the others still stand.
+  - console_errors: 0
+  - assert: >
+      The eligibility result shows the "Help to Buy" scheme as one this
+      single-parent, first-home buyer qualifies for.
+  - assert: >
+      The eligibility result does NOT offer any scheme that requires a minimum
+      5% deposit (the First Home Guarantee) — with $20,000 saved against a
+      $500,000–$600,000 purchase her deposit is under 5%, so a 5%-deposit scheme
+      should not be shown as available to her.
+  - assert: >
+      A "Book an appointment" button or link is visible on the result.

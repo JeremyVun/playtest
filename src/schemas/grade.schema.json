@@ -39,7 +39,7 @@
       },
       "description": "Free-form UX/quality observations, e.g. 'the error message after an invalid card is blank'."
     },
-    "summary": { "type": "string", "description": "Two or three sentences a developer reads in the report." },
+    "summary": { "type": "string", "description": "The report a developer reads first: what happened, how smooth it felt, and what to look at. Detail is welcome; format it with newlines into a one-line verdict plus a few short points — readable, never one dense block. The findings carry the per-issue specifics." },
     "report": {
       "type": "array",
       "items": {

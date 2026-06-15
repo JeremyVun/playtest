@@ -191,6 +191,23 @@ test("pass 1: first run records and blesses a baseline for every case (exit 0)",
     assert.ok(fs.existsSync(p.baseline), `expected blessed baseline ${p.baseline}`);
     assert.ok(fs.existsSync(p.baselineMeta), `expected baseline meta ${p.baselineMeta}`);
   }
+  // context.jsonl: one diagnostic line per actor turn, holding the exact model
+  // window (system + step log + current snapshot), advertised in the manifest.
+  for (const c of out.cases) {
+    const ctxPath = path.join(c.run_dir, "context.jsonl");
+    assert.ok(fs.existsSync(ctxPath), `expected context.jsonl in ${c.run_dir}`);
+    const lines = fs.readFileSync(ctxPath, "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l));
+    assert.equal(lines.length, c.steps, `context.jsonl should have one line per actor turn for ${c.id}`);
+    for (const entry of lines) {
+      assert.equal(typeof entry.step, "number", "context entry has a step number");
+      assert.ok(Array.isArray(entry.messages) && entry.messages[0]?.role === "system", "captures the system prompt");
+      const last = entry.messages.at(-1);
+      const lastText = typeof last.content === "string" ? last.content : last.content.map((p) => p.text ?? "").join("");
+      assert.match(lastText, /Current page snapshot/, "the current snapshot is the last message");
+    }
+    const manifest = JSON.parse(fs.readFileSync(path.join(c.run_dir, "manifest.json"), "utf8"));
+    assert.equal(manifest.artifacts.context, "context.jsonl", "manifest advertises context.jsonl");
+  }
 });
 
 // NOTE: the original self-test spec said "zero requests hit the mock" on the act pass,

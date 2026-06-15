@@ -1174,11 +1174,13 @@ function lcsDiff(A, B, sigA, sigB) {
 function diffCell(env, op) {
   if (!env) return h("div", { class: "dcell empty" });
   const d = describe(env);
-  // baseline-side envelopes aren't in state.steps — only this run's cells navigate
+  // baseline-side envelopes aren't in state.steps — only this run's cells navigate.
+  // Clicking opens the step in Stills (a visible jump) rather than re-selecting
+  // under the run-level diff pane, where nothing would appear to change.
   const idx = op === "del" ? -1 : state.steps.indexOf(env);
   return h(idx >= 0 ? "button" : "div", {
     class: "dcell " + op + (idx >= 0 ? " clickable" : ""),
-    onclick: idx >= 0 ? () => select(idx) : null,
+    onclick: idx >= 0 ? () => { setView("stills"); select(idx); } : null,
   },
     h("div", { class: "d-act" },
       h("span", { class: "d-num" }, String(env.step).padStart(2, "0")),
@@ -1192,7 +1194,7 @@ function diffCell(env, op) {
 // LCS track (it executed nothing), but it is the heal point — name it.
 function failedReplayCell(env) {
   const idx = state.steps.indexOf(env);
-  return h("button", { class: "dcell fail-note clickable", onclick: () => select(idx) },
+  return h("button", { class: "dcell fail-note clickable", onclick: () => { setView("stills"); select(idx); } },
     h("div", { class: "d-act" },
       h("span", { class: "d-num" }, String(env.step).padStart(2, "0")),
       icon("i-x"),
@@ -1538,12 +1540,12 @@ function renderGrade() {
     g.efficiency?.assessment ? h("div", { class: "gate-detail", style: "margin-bottom:6px" }, g.efficiency.assessment) : null,
     ...(report.length ? [h("div", { class: "label", style: "margin-top:10px" }, "report"), ...report] : []),
     ...findings,
-    g.summary ? h("p", { class: "grade-summary" }, "“" + g.summary + "”") : null);
+    g.summary ? h("p", { class: "grade-summary" }, g.summary) : null);
 }
 
-/* The brief sits pinned to the bottom of the left panel, below the step
-   thought — the "what the user was trying to do" context belongs next to
-   "what the agent was thinking", but the live thought reads first. */
+/* The brief sits at the TOP of the left panel, above the step thought: the
+   user's goal is the first thing to read, the instant context for everything
+   the agent then does. It stays put while the per-step thought scrolls below. */
 function renderBrief() {
   const c = state.manifest.case ?? {};
   // YAML block scalars arrive hard-wrapped: collapse single newlines to spaces

@@ -1,134 +1,151 @@
 ---
 name: playtest-stories
-description: Interview the human — PM, engineer, designer, anyone — as a constructive but adversarial thought partner to refine user stories for an existing user flow, then author them directly as runnable Playtest case YAMLs (discovery studies or journey regression cases).
+description: Help someone turn a fuzzy idea about an existing user flow into runnable Playtest stories. Interview them as a thought partner to sharpen the goal and the user, then author the stories directly as Playtest case YAMLs (regression journeys or open-ended discovery studies).
 ---
 
-# Playtest stories: interview, refine, author
+# Playtest stories
 
-Help the human turn a fuzzy interest in an existing user flow into a small
-set of user stories worth running, then author those stories as runnable
-Playtest case files. Your value is as a thought partner who pushes back, not a
-transcriber: draw out the maximum from the human collaboratively.
+You are helping someone — often non-technical — turn a vague interest in one of
+their app's flows into a few stories worth running. Be a friendly, plain-spoken
+assistant who pushes back well: draw out a sharp story, don't transcribe a fuzzy
+one. Keep Playtest jargon (modes, gates, baselines, base_url) to yourself — talk
+about *what the user wants to do* and *what you'll check* — and reveal an
+internal term only when they need it to decide something.
 
-## 1. Identify the flow — the answer picks the case mode
+## 1. Work out what they actually want
 
-Establish two things first: which flow of the platform, and what the human wants
-from running stories against it. The second answer decides the case mode:
+Settle two things, mostly by listening:
 
-- **Friction insight** — "where do users get stuck", "where should capability
-  X live", "will users find this" → **discovery** cases: personas plus
-  `report` questions. Findings have answers, not pass/fail.
-- **Regression protection** — "this flow must keep working" → **journey**
-  cases: deterministic `success` gates; the first run records a baseline that
-  later runs check.
+- **Which flow**, and for **which kind of user**.
+- **Why** they want to test it. This quietly decides the kind of story — don't
+  make them choose it:
+  - "make sure this keeps working" → a **journey** (a pass/fail regression test).
+  - "learn where people get stuck / whether they can find X" → a **discovery**
+    study (open-ended; findings, not pass/fail).
 
-State this fork to the human explicitly and confirm the choice before authoring.
-A mixed wish ("protect checkout AND learn why trials abandon it") is two
-story sets in two suites.
+Infer it from how they talk, reflect it back in plain words ("So you want a test
+that goes red if signup ever breaks — got it"), and confirm. A mixed wish ("make
+sure checkout works AND learn why people abandon it") is two sets of stories —
+say so and split them.
 
-## 2. The interview — be helpfully adversarial
+## 2. Interview — a thought partner, not a stenographer
 
-Concrete moves, not vibes:
+Push, kindly and with a reason:
 
-- **Refuse vague goals.** "Make export better" is not runnable. Ask: which
-  user, on which screen, trying to accomplish what, and what evidence exists
-  that they struggle today?
-- **Hunt missing user types.** People default to the user they know best. Ask
-  who the newest user is, who the most impatient, who is evaluating with a
-  reason to walk away, who holds a deprecated mental model from the old UI.
-  Each distinct answer is a persona candidate.
-- **Challenge assumptions with a reason attached.** "You assume users look in
-  Settings for export — what makes you think they go there rather than the
-  report screen they're already on?" Steelman the human's view first, then probe
-  it.
-- **Propose friction hypotheses the human has not raised** — naming collisions,
-  affordances hidden below the fold, flows that detour through unrelated
-  features — and let the human accept or kill them.
-- **Apply the decision test.** For each candidate story ask what the human would
-  do differently depending on the outcome. If no outcome changes anything,
-  cut the story.
-- **Converge** on a small set worth the run: typically a few stories times a
-  few personas, each story exactly one goal.
+- **Don't accept a vague goal.** "Make export better" can't be run. Ask: which
+  user, on which screen, doing what — and what makes them think it's a problem?
+- **Find the users they're forgetting.** People picture the user they know best.
+  Ask about the brand-new user, the impatient one, someone evaluating with a
+  reason to walk away. Each distinct answer may be its own persona.
+- **Question assumptions, gently.** "You expect people to look in Settings for
+  export — what makes you think they go there, not the report they're already
+  on?" Steelman their view first, then probe.
+- **Offer friction ideas they haven't raised** — a confusing label, a button
+  below the fold, a detour through an unrelated feature — and let them keep or
+  drop each.
+- **The decision test.** For each story, ask what they'd *do differently*
+  depending on the result. If nothing changes, drop it.
+- **Converge** on a small set — a few stories, each with exactly one goal.
 
-Stories state goals, never click-paths: "Get this month's timesheet data
-into a spreadsheet for your finance team", not "Click Reports, then Export".
-Second person, motivated, 2-4 lines. If the human insists on a click-path, that
-is a journey gate in disguise — ask whether they actually want regression
-protection.
+Stories describe a goal, never a click-path: "Get this month's timesheet into a
+spreadsheet for finance", not "Click Reports, then Export". Second person,
+motivated, 2–4 lines. If they insist on exact clicks, that's really a regression
+journey — check that's what they want.
 
-## 3. Author runnable YAMLs directly
+## 3. Author the YAMLs
 
-No intermediate stories document — write case files straight into a suite.
-Cases are only discovered in the suite root or a `stories/` subdir (a case-shaped
-yaml anywhere else is warned about and skipped, never run). Journey suites group
-their cases under `stories/` — the harness drops that segment from case ids
-(`stories/foo/bar.yaml` → `foo/bar`) and writes saved paths to a sibling
-`results/` dir, so the suite root stays browsable as baselines accumulate;
-`playtest new <name>` scaffolds into `stories/` automatically. Discovery studies
-have no saved paths, so their handful of cases can sit at the study root next to
-`personas/`. Before writing any YAML, read the installed package's
-`src/schemas/case.schema.json` and `src/schemas/defaults.schema.json`: they
-are the single source of truth for every key, with a description per
-property. Do not trust memorized key names. A complete worked example of a
-discovery study sits at the end of this skill.
+Write case files straight into a suite (no separate stories document).
 
-**Discovery cases — hand-author them.** (`playtest new <case>` scaffolds a
-journey-flavored template with a `success:` block, which is a config error in
-discovery.) A study is a directory:
+**Always ask how much to research first** — whether they want you to *research
+the app* or write a *pure black-box test* from the story alone:
+- **Remote URL** (`https://app.example.com`): you can't see the source, so
+  research means looking at the live site itself.
+- **Local URL** (`http://localhost:3000`): the source is very likely your
+  working directory, so research can also mean reading that code.
+If you read code, use it only for setup plumbing (how to boot/reset the app) —
+never to copy selectors, which the stories deliberately ignore.
 
-- `studies/<name>/playtest.yaml` — `mode: discovery`, model choices, and the
-  staging `app.base_url` (the **playtest-discovery** skill enforces the
-  never-production guardrail before any run).
-- One `<story>.yaml` per story — `story` + a `persona` list + `report` questions.
-  Report questions are what the grader must answer from each trajectory:
-  questions, never assertions.
+**Read the schemas — the source of truth, not your memory:**
+`src/schemas/case.schema.json` and `src/schemas/defaults.schema.json` describe
+every key.
 
-**Journey cases** — `playtest new <name> <dir>` scaffolds a usable template:
-`story` + `success` criteria (`url_matches` / `element_exists` /
-`api_called` / `assert`). Tell the human the first run records a baseline that
-later runs check.
+A suite is a folder with a `playtest.yaml` of shared settings — chiefly
+`app.base_url` (point it at a test copy of the app, not the live one customers
+use) plus model choices. Cases are discovered only in the suite root or a
+`stories/` subdir: put journey cases under `stories/` (baselines collect in a
+sibling `results/`; `playtest new <name>` scaffolds this), discovery cases at the
+study root beside `personas/`.
 
-**Always set `description`** (both case kinds): a one-line human-facing
-summary ("Add a todo and see it in the list") shown in run lists such as the
-viewer's picker, where the full story would be noise. It never reaches the
-actor, so its wording cannot change agent behavior — but keep it faithful to
-the story it summarizes; distill it from the interview, don't invent scope.
+**Always set `description`** — a one-line human summary shown in run lists (e.g.
+"Add a todo and see it in the list"). It never reaches the actor, so it can't
+change behavior; keep it faithful to the story.
 
-**Gate hygiene.** A gate is an end-state check; path determinism comes from
-the recorded baseline, not from the gate — so a few meaningful criteria beat
-many brittle ones. Gate on the surface a user could point at:
+### Journey cases (regression)
 
-- Prefer `url_matches` (the address bar) and `api_called` (requests the app
-  makes) — both implementation-resistant. Skip criteria that fire on every
-  page load regardless of what the user did: they prove nothing.
-- `assert` states the outcome in natural language and survives any refactor
-  that keeps the UX intact, at the cost of one grader call per run — even on
-  acted runs. Quote the load-bearing strings (`"playtest accept"`), since
-  checkers key on them.
-- Reserve `element_exists` for stable contracts: `data-testid` attributes or
-  ARIA landmarks. Never gate on styling classes — a CSS rename then reddens
-  the suite with no user-visible regression. If the app exposes no test-id
-  contract, tell the human (adding one is a small product fix worth
-  proposing) and gate with assert/url/api meanwhile.
+`story` + a `success` gate (every criterion must pass). The first run records a
+baseline; later runs replay it and re-check the gate — tell the person that in
+plain terms. The criteria, by driver (all deterministic except `assert`, which
+the grader judges in natural language):
 
-Reading the app's code while authoring is for **test-bench plumbing** — how
-to boot it, freeze fixture data, reset state deterministically — not for
-harvesting selectors. Mining the DOM for class names couples the suite to
-internals the stories were deliberately written to ignore.
+| Key | Example | Drivers | Passes when |
+|---|---|---|---|
+| `url_matches` | `"/cart*"` | web, api | The final URL (full or pathname) matches the glob. |
+| `element_exists` | `"[data-testid=basket-item]"` | web | A Playwright locator matches on the final page — CSS by default, or `xpath=` / `text=` / `role=`. |
+| `screen_shows` | `"~basket-item"` | mobile | An Appium native selector matches on the final screen — accessibility id (`~`), XPath, or predicate. The mobile analog of `element_exists`. |
+| `api_called` | `"POST /api/cart"` | web, api | Some request matched the `METHOD /path-glob`. |
+| `response_status` | `"2xx"` | api | Some response had this status — an exact code or an `Nxx` class. |
+| `response_matches` | `"$.items[0].qty == 2"` | api | A dot/bracket JSON path over the last response body compares true (`==`, `!=`). |
+| `console_errors` | `0` | web | The run finished with at most N browser console errors. |
+| `assert` | `the basket shows one item` | web, mobile, api | The grader judges the claim true against the final page / screen / response. One model call per `assert`, even on replayed runs. |
 
-**Personas** — either:
+**Choosing gates — a few durable checks beat many brittle ones**, on the surface
+a user could point at:
 
-- `playtest new persona <name>` — run it **from the study or repo root**: it
-  writes `./personas/` relative to your cwd, while resolution walks upward
-  from the case file, so a persona created from the wrong cwd is silently
-  unfindable.
-- Hand-author the two-key YAML (`name`, `description`), mirroring the voice
-  of the shipped `src/harness/prompts/persona-exploratory.md`: second person,
-  behavioral, honest about when and why this user gives up.
+- **Always start a web journey's `success` with `console_errors: 0`** —
+  deterministic, free, and exactly what `playtest new` scaffolds.
+- Prefer `url_matches` and `api_called` next — both survive refactors. Skip
+  checks that fire on every page load regardless of what the user did.
+- `assert` survives any redesign that keeps the UX intact, at one grader call
+  per run. Quote load-bearing strings.
+- `element_exists` only for stable hooks (`data-testid`, ARIA landmarks) — never
+  CSS classes (a rename would redden the suite for no real regression). If the
+  app has no such hook, say so — adding one is a small, worthwhile fix.
 
-Confirm every persona name a case references resolves: `playtest personas` — run
-it from the study directory, not the repo root (it lists personas visible from
-your cwd upward, so a study-local `personas/` dir is invisible from above).
+```yaml
+description: Sign up with email and land on the dashboard.
+story: |
+  You just heard about this app and want an account. Sign up with your
+  email and get to wherever new users land.
+success:
+  - console_errors: 0
+  - url_matches: /dashboard*
+  - assert: The page greets the new user and confirms the account was created.
+```
+
+### Discovery studies (insight)
+
+Hand-author these (`playtest new` writes a journey template). The suite's
+`playtest.yaml` sets `mode: discovery`; each case has a `story`, a `persona`
+list (one run per persona), and `report` questions — questions the grader
+answers from each run, never pass/fail assertions.
+
+```yaml
+description: Get timesheet data out as a spreadsheet, unprompted.
+story: |
+  You need this month's timesheet in a spreadsheet for finance. Get it out
+  of the app however seems natural.
+persona: [first-time-admin, power-user, skeptical-evaluator]
+report:
+  - Where did they look first, and what did they try before giving up?
+  - At which screen did they expect an export button?
+```
+
+**Personas** — built-in `tester`/`exploratory`, or a `personas/<name>.yaml` with
+two keys (`name`, `description`): second person, behavioral, honest about when
+this user gives up. Mirror `src/harness/prompts/persona-exploratory.md`.
+`playtest new persona <name>` scaffolds one into `./personas/` relative to cwd,
+so run it from the suite root; confirm names resolve with `playtest personas`
+from the suite dir.
 
 ## 4. Validate
 
@@ -136,60 +153,14 @@ your cwd upward, so a study-local `personas/` dir is invisible from above).
 playtest list <dir> --json
 ```
 
-Inspect the returned JSON array — the command exits 0 even on zero matches,
-so the exit code proves nothing. Check: every story is present; each
-discovery case fanned out into one id per persona, `<case-id>@<persona>`;
-`next_run` is `explore` for discovery cases. An empty array means a wrong
-directory or no case files; a config error (exit 2) names the file and key.
+Read the JSON (exit is 0 even on zero matches): every story present; discovery
+cases fanned out to `<case-id>@<persona>` with `next_run: explore`; journeys
+show `next_run: record`. A config error exits 2 and names the file and key.
 
 ## 5. Hand off
 
-To run a discovery study, use the **playtest-discovery** skill — it owns
-preflight, the staging guardrail, cost expectations, the run itself, and the
-mandatory synthesis. Journey suites are run directly (`playtest <dir>`). Do
-not drive a browser from this skill.
+- **Journey:** run it directly — `playtest <dir>`.
+- **Discovery:** use the **playtest-discovery** skill (it owns the run, the
+  test-environment check, and the synthesis).
 
-## Worked example
-
-A complete discovery study — the three file shapes §3 describes (verify key
-names against the schemas before reuse).
-
-`studies/timesheet-export/playtest.yaml`:
-
-```yaml
-# A study is just a suite: a directory whose playtest.yaml sets mode: discovery.
-mode: discovery
-actor_model: claude-sonnet-4-6
-grader_model: claude-opus-4-8
-max_steps: 60
-app:
-  base_url: https://staging.platform-x.example.com
-```
-
-`studies/timesheet-export/export-as-csv.yaml`:
-
-```yaml
-description: Get timesheet data out as a spreadsheet, unprompted.
-story: |
-  You need this month's timesheet data in a spreadsheet for your
-  finance team. Get it out of the platform however seems natural.
-persona: [first-time-admin, power-user, skeptical-evaluator]
-report:
-  - Where did the user look first, and what did they try before giving up?
-  - At which screen would this user have expected an export affordance?
-  - Did the attempt disturb or detour through any other flow?
-```
-
-`studies/timesheet-export/personas/first-time-admin.yaml` (the other two
-personas follow the same two-key shape):
-
-```yaml
-name: first-time-admin
-description: |
-  You are an office manager evaluating this platform on a trial. You are
-  comfortable with computers but have never seen this app before. You read
-  labels before clicking, hesitate at anything destructive-sounding, and
-  expect an undo to exist. When the thing you need is not where you expected
-  it, you give up and say exactly where you looked and where you expected
-  to find it.
-```
+Don't drive a browser from this skill.

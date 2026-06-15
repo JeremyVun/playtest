@@ -47,7 +47,11 @@ export async function prepareEnv(resolvedCase, runId) {
       execFile("docker", ["compose", "-f", env.compose, "-p", project, ...args], opts);
     teardown = async () => {
       try {
-        await compose(["down", "-v"], { timeout: 60000 });
+        // `--rmi local` also removes the image compose built for this app (the
+        // ones with no custom `image:` tag), so locally-built images don't pile
+        // up run after run; pulled/tagged base images (e.g. node:22-alpine) are
+        // kept, so re-runs don't re-pull. `-v` clears the run's anonymous volumes.
+        await compose(["down", "-v", "--rmi", "local"], { timeout: 60000 });
       } catch {}
     };
     try {

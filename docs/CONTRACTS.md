@@ -79,7 +79,7 @@ runs/                         # output, gitignored
 ```
 
 Harness version constant: `HARNESS_VERSION = "0.1.0"`, snapshot format `"a11y-text-v1"`,
-settle heuristic `"settle-v1"`, prompts version `"prompts-v2"`. Exported from `trajectory.js`
+settle heuristic `"settle-v1"`, prompts version `"prompts-v3"`. Exported from `trajectory.js`
 as `PINS_BASE` (see Manifest).
 
 ---
@@ -109,7 +109,7 @@ as `PINS_BASE` (see Manifest).
   report: ["Where did the user look first?"],      // report questions for the grader (most useful in discovery, honored on journeys); default []
   vision: false,                   // discovery capability: per-step screenshots to the actor (see §2, §6)
   limits: { max_steps: 50, timeout_ms: 240000 },
-  actor_model: "claude-haiku-4-5",
+  actor_model: "claude-sonnet-4-6",
   grader_model: "claude-sonnet-4-6",
   env: {                               // driver-scoped; the per-driver subset is null elsewhere (see §16)
     driver: "web",                       // "web" (default, absent ⇒ web) | "mobile" | "api"
@@ -142,7 +142,7 @@ file is a hard config error — defaults.schema.json rejects it at load
 `env: was renamed to app: (update <cwd-relative path>)`. Relative paths inside any YAML
 (`app.compose`, `app.init`, `app.storage_state`) resolve relative to the file that
 declared them. Durations accept `"5m"`, `"90s"`, `"250ms"`,
-or a number (ms). Defaults when nothing specifies them: `actor_model: "claude-haiku-4-5"`,
+or a number (ms). Defaults when nothing specifies them: `actor_model: "claude-sonnet-4-6"`,
 `grader_model: "claude-sonnet-4-6"`, `max_steps: 50`, `timeout: "4m"`,
 `persona: "tester"`, `mode: "journey"`, `vision`: true when the resolved mode
 is discovery, false otherwise (see §2).
@@ -214,6 +214,15 @@ and **never passes** (so a crashed run is never graded green or accepted as a ba
 Before this, an actor crash unwound the loop and left no envelope, so the captured
 snapshot was orphaned and the gate could pass it on the last good page.
 
+**context.jsonl** (diagnostics, written only on record/heal turns — pure act runs make
+no model calls and get none): one JSON line per actor turn,
+`{ step, ts, model, messages }`, where `messages` is the exact window sent to the actor
+that turn — system prompt, the running step log, and the current page snapshot. Inlined
+base64 screenshots are elided to `"<inline screenshot elided — see steps/*.png>"` so the
+file stays small. The line is written *before* the model call, so a failed/malformed call
+still leaves the context that produced it. Diagnostic only — never read back by the
+harness, never part of comparability; intended for an advanced-debug viewer panel.
+
 ### Run directory
 
 ```
@@ -225,6 +234,7 @@ runs/<run-id>/<case-id>/          # run-id: UTC "2026-06-10T0300-ab12" (timestam
   trace.zip                       # native Playwright trace
   baseline.jsonl                  # copy of the baseline acted from (act/heal runs only)
   grade.json                      # grader output (when graded)
+  context.jsonl                   # one line per actor turn: the model message window sent that step (record/heal only), images elided — diagnostics, §3
   steps/NNN.{png,mhtml,a11y.txt}  # NNN zero-padded to 3
   video.vtt                       # WebVTT sidecar, written by `playtest clip` (not the runner)
   clip.webm / clip.vtt            # `playtest clip --burn` / slideshow-fallback outputs
@@ -277,7 +287,9 @@ early infra deaths produce videoless runs).
   healed: false,
   baseline: { run_id: "...", accepted_at: "..." } | null,   // what was acted from
   artifacts: { trajectory: "trajectory.jsonl", har: "har.json", video: "video.webm",
-               trace: "trace.zip", grade: "grade.json" | null, baseline_copy: "baseline.jsonl" | null }
+               trace: "trace.zip", grade: "grade.json" | null,
+               context: "context.jsonl" | null,  // per-turn actor message windows (images elided); null on pure-act runs
+               baseline_copy: "baseline.jsonl" | null }
 }
 ```
 
@@ -335,7 +347,7 @@ export class DummyConfigError extends Error {}
 
 ```js
 export const HARNESS_VERSION, STEP_SCHEMA_VERSION = 3, SNAPSHOT_FORMAT = "a11y-text-v1",
-             PROMPTS_VERSION = "prompts-v2", SETTLE = { name:"settle-v1", dom_quiet_ms:500, net_quiet_ms:500, max_ms:10000 };
+             PROMPTS_VERSION = "prompts-v3", SETTLE = { name:"settle-v1", dom_quiet_ms:500, net_quiet_ms:500, max_ms:10000 };
 export function newRunId(now = new Date())                  // "2026-06-10T0300-ab12"
 export class RunWriter {
   constructor(runsRoot, runId, caseId)   // creates runs/<runId>/<caseId>/steps/
@@ -633,7 +645,8 @@ export async function prepareEnv(resolvedCase, runId)
   //   resolve base_url: if its hostname matches a compose service, rewrite to
   //   http://localhost:<published port> via `docker compose port`, normalized WITHOUT a
   //   trailing slash (the shape YAML base_urls have — init scripts concatenate
-  //   "$BASE_URL/path", and "//path" 404s). Teardown: `down -v`.
+  //   "$BASE_URL/path", and "//path" 404s). Teardown: `down -v --rmi local`
+  //   (drops the run's containers/volumes AND any locally-built image, keeping pulled base images).
   // External: base_url used as-is.
   // Then health-probe: GET base_url, ok if status < 500; 5 attempts, 1s apart.
   //   An external-mode probe failure against localhost/127.0.0.1 throws the onboarding hint
@@ -1161,9 +1174,12 @@ all · `console_errors` web · perf `lcp_ms`/`input_to_paint_ms` web only.
 
 Actor (§6): the system overlay's transport block is per-driver — `actor-system.md` is the
 **web** overlay (kept under that name; the journey golden test reads it from disk). The web
-overlay now teaches the `back` verb, so `prompts_version` is `prompts-v2` — a deliberate bump,
-free here because the `step_schema_version` 2→3 move already severed comparability with old web
-baselines. `actor-mobile.md`/`actor-api.md` are self-contained mobile/api bodies. The step contract is a **flat action
+overlay teaches the `back` verb (the `prompts-v1`→`v2` bump). `prompts_version` is now
+`prompts-v3`: a deliberate bump for readability/coherence rewrites of the model-facing
+prompts — `thought` and grader `summary` ask for coherent, newline-formatted output instead
+of one dense block, and the actor is told that repeating an action with no progress is a
+signal to change tack. Trajectories before and after are not comparable.
+`actor-mobile.md`/`actor-api.md` are self-contained mobile/api bodies. The step contract is a **flat action
 object** (`step.schema.json`, schema_version 3): one `type` verb plus the flat parameters it
 uses, NOT a `oneOf` union — per-verb requireds are enforced by an `allOf` of if/then. Because
 the OpenAI-compat endpoint does **not** constrain decoding, the shipped schema is documentation

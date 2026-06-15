@@ -106,7 +106,7 @@ personas/
 
 ```yaml
 # tests/playtest.yaml — inherited by every case below it
-actor_model: claude-haiku-4-5
+actor_model: claude-sonnet-4-6
 grader_model: claude-sonnet-4-6
 max_steps: 30
 timeout: 4m

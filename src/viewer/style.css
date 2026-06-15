@@ -59,6 +59,12 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 #app {
   display: grid;
   grid-template-rows: 58px minmax(0, 1fr) auto;
+  /* bound the single column to the viewport (min 0). Without it the implicit
+     `auto` column sizes to its widest row's content — a long film strip is a
+     row of fixed-width cells, so it would stretch the column past the viewport
+     and carry the inspector off the right edge. With the column bounded the
+     strip's own overflow-x scrolls instead. */
+  grid-template-columns: minmax(0, 1fr);
   height: 100vh;
 }
 
@@ -198,6 +204,8 @@ a.rn-btn:hover { color: var(--accent); border-color: var(--accent); background: 
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0; /* let the stage/caption scroll internally instead of growing the
+                    grid row, which would push the film strip past the viewport */
   border-right: 1px solid var(--line);
 }
 
@@ -397,12 +405,13 @@ a.rn-btn:hover { color: var(--accent); border-color: var(--accent); background: 
   border-right: 1px solid var(--line);
   background: var(--bg1);
   padding: 16px 18px;
-  overflow-y: auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
 }
-#cap-body { padding-bottom: 16px; }
+/* the per-step thought is the variable-length part — it scrolls on its own so a
+   long thought can never grow the panel and push the film strip off screen */
+#cap-body { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 16px; }
 
 .cap-meta { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
 .cap-step { width: 100%; font-size: 10.5px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); }
@@ -411,18 +420,22 @@ a.rn-btn:hover { color: var(--accent); border-color: var(--accent); background: 
   font-size: 14px;
   line-height: 1.65;
   color: var(--ink);
+  white-space: pre-wrap; /* preserve any line breaks in a structured thought */
 }
 .cap-thought.quiet { color: var(--faint); font-size: 13px; }
 
 .cap-expect { margin-top: 12px; font-size: 12px; line-height: 1.55; color: var(--dim); border-top: 1px solid var(--line); padding-top: 10px; }
 .cap-expect b, .brief-persona b { display: block; font-weight: 600; font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); margin-bottom: 2px; }
 
-/* the run's brief, pinned to the panel's bottom (margin-top: auto) */
-#cap-brief { margin-top: auto; border-top: 1px solid var(--line); padding-top: 12px; }
-.brief-persona { font-size: 12.5px; font-weight: 500; color: var(--ink); margin-bottom: 10px; }
+/* the run's brief sits at the TOP of the panel: instant context on the user's
+   goal, before the per-step thought. Stays put while the thought scrolls below. */
+#cap-brief { flex: none; border-bottom: 1px solid var(--line); padding-bottom: 14px; margin-bottom: 14px; }
+#cap-brief .label { color: var(--accent); font-size: 11px; margin-bottom: 6px; }
+.brief-persona { font-size: 12.5px; font-weight: 500; color: var(--ink); margin-top: 10px; margin-bottom: 0; }
 .brief-persona .bp-name { display: inline-flex; align-items: center; gap: 6px; }
 .brief-persona .ic { width: 13px; height: 13px; color: var(--accent); }
-#cap-brief .brief-story { font-size: 12px; line-height: 1.6; }
+/* the goal reads first: larger and brighter than body copy */
+#cap-brief .brief-story { font-size: 13px; line-height: 1.55; color: var(--ink); margin-bottom: 0; white-space: pre-wrap; }
 
 /* ---------- inspector ---------- */
 
@@ -542,10 +555,9 @@ a.rn-btn:hover { color: var(--accent); border-color: var(--accent); background: 
 .report-q { color: var(--ink); font-weight: 600; margin-bottom: 3px; }
 .report-a { color: var(--dim); word-break: break-word; }
 .report-a .f-step { color: var(--accent); cursor: pointer; }
-.grade-summary { font-size: 12.5px; color: var(--dim); font-style: italic; margin-top: 9px; }
-
-/* brief */
-.brief-story { font-size: 12.5px; color: var(--dim); white-space: pre-wrap; margin-bottom: 9px; }
+/* the grader's narrative report: may be multi-line and formatted, so preserve
+   newlines and keep it upright (long italic runs read poorly) */
+.grade-summary { font-size: 12.5px; line-height: 1.55; color: var(--dim); margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--line); white-space: pre-wrap; }
 
 /* history chart (Run tab) */
 .hist-svg { display: block; width: 100%; height: auto; }
@@ -572,7 +584,10 @@ a.rn-btn:hover { color: var(--accent); border-color: var(--accent); background: 
 
 #strip-zone { background: var(--bg1); border-top: 1px solid var(--line); }
 
-#strip { display: flex; gap: 9px; overflow-x: auto; padding: 10px 14px 12px; scrollbar-width: thin; }
+/* no scrollbar-width here: it would switch off the custom ::-webkit-scrollbar
+   below, leaving a native bar that mismatches the side panels. The strip sits on
+   the same --bg1 as the panels, so the shared styling blends identically. */
+#strip { display: flex; gap: 9px; overflow-x: auto; padding: 10px 14px 12px; }
 
 .cell {
   position: relative;

@@ -101,15 +101,16 @@ const dump = (res) => `\nstdout:\n${res.stdout}\nstderr:\n${res.stderr}`;
 
 // ---------- defaults ----------
 
-test("the default actor_model is the pinned cheap model (claude-haiku-4-5)", async () => {
-  // The cheap default is load-bearing: journeys pin a small actor on purpose
-  // (the app is the variable, not the agent). Catch a silent flip to a pricier model.
+test("the default actor_model is the capable model (claude-sonnet-4-6)", async () => {
+  // The default actor is sonnet: a capable user reads the page and recovers from
+  // friction far more reliably than a cheap one, and the trajectory is only worth
+  // grading if the user was played well. Catch a silent flip back to a weaker model.
   const dir = writeSuite({
     "playtest.yaml": BASE,
     "add-todo.yaml": 'story: |\n  Add a todo called "buy milk".\n',
   });
   const [rc] = await discoverCases([dir]);
-  assert.equal(rc.actor_model, "claude-haiku-4-5");
+  assert.equal(rc.actor_model, "claude-sonnet-4-6");
   assert.equal(rc.grader_model, "claude-sonnet-4-6");
 });
 

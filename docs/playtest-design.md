@@ -227,7 +227,7 @@ app:
 story: |
   You need this month's timesheet data in a spreadsheet for your
   finance team. Get it out of the platform however seems natural.
-personas: [first-time-admin, power-user, skeptical-evaluator]
+persona: [first-time-admin, power-user, skeptical-evaluator]
 report:
   - Where did the user look first, and what did they try before giving up?
   - At which screen would this user have expected an export affordance?

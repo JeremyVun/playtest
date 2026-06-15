@@ -109,8 +109,8 @@ app:
   base_url: http://localhost:3000  # where the app runs — required for web/api (or --base-url)
   # compose: docker-compose.yml    # optional: harness boots & tears the app down per run
   # init: ./seed.sh                # optional: script run before each story to reset state
-mode: [journey | discovery ]       # journey (regression) or discovery (VLM exploration)
-persona: [tester | exploratory]    # actor role. or use custom personas e.g. `personas/*.yaml`
+mode: journey                      # journey (regression) · or discovery (VLM exploration)
+persona: tester                    # tester · exploratory · or a personas/*.yaml slug
 actor_model: claude-haiku-4-5      # role-plays the user (cheap by default)
 grader_model: claude-sonnet-4-6    # scores runs and checks `assert:` gates
 max_steps: 50                      # per-run limit on actor steps
@@ -129,7 +129,7 @@ story: |    # the actor's goal in plain language
   cart, check that it shows up in your basket, then remove one and check
   if the price changed
 tags: [smoke]                           # optional, for --tag filtering
-personas: [first-time-shopper, bargain-hunter]   # runs once per persona
+persona: first-time-shopper             # the actor role; a list here fans out (discovery)
 success:                                # journey gate — every criterion must pass
   - url_matches: "/cart*"               # the address bar
   - api_called: "POST /api/cart"        # assert that an api call was made

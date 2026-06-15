@@ -9,5 +9,4 @@
 app:
   compose: ./docker-compose.yml
   base_url: http://viewer:4317
-max_steps: 25
 timeout: 3m

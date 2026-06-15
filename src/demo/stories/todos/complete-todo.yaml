@@ -4,5 +4,4 @@ story: |
   so mark "buy milk" as done.
 success:
   - api_called: "PATCH /api/todos/*"
-perf:
-  console_errors: 0
+  - console_errors: 0

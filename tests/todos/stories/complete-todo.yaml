@@ -6,5 +6,4 @@ story: |
 success:
   - api_called: "PATCH /api/todos/*"
   - assert: the counter shows "1 item left"
-perf:
-  console_errors: 0
+  - console_errors: 0

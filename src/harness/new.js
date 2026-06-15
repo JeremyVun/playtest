@@ -5,40 +5,46 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { DummyConfigError } from "./config.js";
 
-const CASE_TEMPLATE = `tags: []
-description: One-line summary for run lists.
-story: |
+const CASE_TEMPLATE = `story: |
   Describe what the user should do.
 
 success:
-  - assert: Describe what should be true when the task is complete.
+  - console_errors: 0          # deterministic gate (web; no model call)
+  # - assert: Describe what should be true when the task is complete.   # one grader call/run
 
-perf:
-  console_errors: 0
+# A bare story (empty success) already records a baseline. Add url_matches / element_exists /
+# api_called for free, or the assert above (natural-language) — best from a real interview.
+# tags: [smoke]                # optional, for --tag filtering
+# description: One-line summary shown in run lists.
 `;
 
 // Per-driver case templates: success kinds + verbs that fit the transport, so a
 // mobile/api user's first case isn't web-shaped. Selected by `new --driver`.
 const CASE_TEMPLATES = {
   web: CASE_TEMPLATE,
-  mobile: `tags: []
-description: One-line summary for run lists.
-story: |
+  mobile: `story: |
   Describe what the user should do in the app.
 
-success:
-  - screen_shows: "~some-accessibility-id"
-  - assert: Describe what should be true on the final screen.
+# A bare story already records a baseline. Add a success gate once you know what
+# proves the task done — screen_shows costs nothing; assert is one grader call/run.
+# success:
+#   - screen_shows: "~some-accessibility-id"
+#   - assert: Describe what should be true on the final screen.
+# tags: [smoke]                # optional, for --tag filtering
+# description: One-line summary shown in run lists.
 `,
-  api: `tags: []
-description: One-line summary for run lists.
-story: |
+  api: `story: |
   Describe what the integrator should do through the API.
 
-success:
-  - api_called: "POST /api/resource"
-  - response_status: "201"
-  - assert: Describe what should be true about the response.
+# A bare story already records a baseline. Add a success gate once you know what
+# proves the task done — api_called/response_status cost nothing; assert is one
+# grader call per run.
+# success:
+#   - api_called: "POST /api/resource"
+#   - response_status: "201"
+#   - assert: Describe what should be true about the response.
+# tags: [smoke]                # optional, for --tag filtering
+# description: One-line summary shown in run lists.
 `,
 };
 

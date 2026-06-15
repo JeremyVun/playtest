@@ -62,8 +62,7 @@ before(async () => {
       "success:",
       '  - element_exists: "[data-testid=todo-item]"',
       '  - api_called: "POST /api/todos"',
-      "perf:",
-      "  console_errors: 0",
+      '  - console_errors: 0',
       "",
     ].join("\n"),
   );

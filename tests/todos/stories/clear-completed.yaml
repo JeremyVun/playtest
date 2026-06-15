@@ -7,5 +7,4 @@ story: |
 success:
   - api_called: "DELETE /api/todos"
   - assert: the list is empty and the counter shows "0 items left"
-perf:
-  console_errors: 0
+  - console_errors: 0

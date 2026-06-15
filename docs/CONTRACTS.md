@@ -102,10 +102,11 @@ as `PINS_BASE` (see Manifest).
     { url_matches: "/done/*" },
     { element_exists: "[data-testid=x]" },
     { api_called: "POST /api/todos" },
+    { console_errors: 0 },
     { assert: "natural language claim about the final page" }
   ],
-  perf: { lcp_ms: "< 2500", console_errors: 0 },   // optional; keys: lcp_ms, console_errors, input_to_paint_ms
-  report: ["Where did the user look first?"],      // discovery report questions for the grader; default []
+  perf: { lcp_ms: "< 2500" },                      // optional latency budgets; keys: lcp_ms, input_to_paint_ms
+  report: ["Where did the user look first?"],      // report questions for the grader (most useful in discovery, honored on journeys); default []
   vision: false,                   // discovery capability: per-step screenshots to the actor (see §2, §6)
   limits: { max_steps: 50, timeout_ms: 240000 },
   actor_model: "claude-haiku-4-5",
@@ -123,17 +124,19 @@ as `PINS_BASE` (see Manifest).
 }
 ```
 
-A discovery case may declare `personas: [name, ...]` instead of the singular `persona`.
-The key is transient: `discoverCases` fans the case out into one ResolvedCase per entry —
-id `<id>@<persona>`, singular `persona` overridden — and the key never appears on a final
-ResolvedCase.
+`persona` is a scalar (one actor) or a list (`[name, ...]`). A discovery case with a list
+fans out — `discoverCases` produces one ResolvedCase per entry, id `<id>@<persona>`, the
+`persona` overridden per run — so the list form never appears on a final ResolvedCase. A
+journey given a list collapses to the first persona (a journey has a single recorded path),
+warning that the rest were ignored.
 
 Suite-defaults inheritance: collect defaults files from the repo root (dir containing
 `.git`; when no `.git` ancestor exists, every ancestor directory of the case contributes)
 down to the case's directory. The defaults filename is `playtest.yaml`. Deep-merge top-down
 (nearest file wins per key; the `app:` YAML block merges per-key into the resolved `env`
-field). `success`/`tags`/`report`/`personas` (and `story`/`description`) are case-only:
-declaring one in a defaults file is a hard config error — defaults.schema.json rejects the key at load
+field). `success`/`tags`/`report` (and `story`/`description`) are case-only, as is a
+`persona` *list* (a scalar `persona` default is fine): declaring a case-only key in a defaults
+file is a hard config error — defaults.schema.json rejects it at load
 (previously `success`/`tags` were silently skipped). A top-level `env:` key
 (the old name of `app:`) in any defaults or case file is rejected with
 `env: was renamed to app: (update <cwd-relative path>)`. Relative paths inside any YAML
@@ -312,16 +315,16 @@ export async function discoverCases(paths, { tags = [], baseUrl = null } = {})
   // were previously ignored; they are config errors (exit 2) now, deliberately.
   // A bare top-level key (`tags:` with no value) parses as null and is treated as
   // absent — it resolves to its default, exactly as before validation existed.
-  // Cross-field rules the schemas cannot express: a discovery case declaring `success`,
-  // or a non-discovery case declaring `personas`, is a DummyConfigError.
+  // Cross-field rules the schemas cannot express: a discovery case declaring `success`
+  // is a DummyConfigError. A journey case given a persona *list* uses the first persona
+  // (warned), rather than erroring.
   // `vision: true|false` is valid in both file kinds (inheritable); the effective value
   // resolves AFTER the merge: explicit value wins, default = true when mode is discovery,
   // false otherwise. `vision: true` resolving on a non-discovery case is a DummyConfigError
   // naming the case file — the rule IS the policy: no journey (measured) run can ever send
   // images. `vision: false` is always allowed.
-  // Discovery personas fan-out: a case's `personas: [a, b]` expands into one
-  // ResolvedCase per entry (id `<id>@<persona>`, singular persona overridden) before
-  // the sort.
+  // Discovery persona fan-out: a discovery case's `persona: [a, b]` expands into one
+  // ResolvedCase per entry (id `<id>@<persona>`, persona overridden) before the sort.
   // tags: AND-of-ORs not needed — a case matches if it has ANY of the given tags.
   // Returns ResolvedCase[] sorted by id. Throws DummyConfigError (message lists the file) on bad YAML.
 export function parseDuration(v)        // "5m"|"90s"|"250ms"|number -> ms
@@ -591,10 +594,12 @@ export async function evaluateGate(resolvedCase, ctx)
   // response_matches (api): a minimal JSON-path/value check ("$.title == \"buy milk\"") over the
   //   LAST response body, read from har.json (bodies stay out of the committed trajectory) and
   //   JSON.parsed; deterministic, no model. Natural-language response claims use `assert`.
+  // console_errors (web): ctx.consoleErrorCount <= the configured max (a number, e.g. 0) — a
+  //   deterministic correctness gate (no model), counted across the whole run.
   // assert (all drivers): ctx.checkAssertion(claim) — model-checked; if LLM unavailable -> check
   //   fails with detail "assert requires a model; no LLM configured" (gate fail, not infra).
   // perf.lcp_ms / input_to_paint_ms (web only): "< 2500" style (ops: < <= > >=) against the WORST
-  //   nav lcp / action input_to_paint in the trajectory. perf.console_errors (web): max allowed (number).
+  //   nav lcp / action input_to_paint in the trajectory.
   // -> { pass, checks: [{kind, spec, pass, detail}] }  — never throws; always evaluates ALL checks.
 ```
 
@@ -917,8 +922,9 @@ Behavior contracts:
   `<target>/playtest.yaml` is also written (active `app.base_url
   http://localhost:3000`; compose/init/storage_state and the model pins present but
   commented) with a `Created defaults:` line — inside an existing suite subtree only
-  the case file is written. Case template: tags / description / story /
-  success-assert / perf console_errors 0. Persona template: name + description placeholder in
+  the case file is written. Case template: active story + a success `console_errors: 0`
+  gate (a bare story records a baseline too); the assert hint, tags, and description
+  present but commented. Persona template: name + description placeholder in
   `./personas/`.
 - accept (acceptance safety — deliberately no `--force`, checked in order): manifest.json
   exists -> trajectory.jsonl exists -> `result.status === "pass"` (refusal names status and
@@ -1091,7 +1097,7 @@ init ../seed/reset.sh; the viewer self-test in `tests/viewer/` composes its own
 app and the mock's viewer-actor.js rules drive it). Three cases under `todos/`:
 `add-todo.yaml` (tags [smoke]; story: add "buy milk"; success: element_exists
 `[data-testid=todo-item]`, api_called `POST /api/todos`, assert "the list shows a todo
-called buy milk"; perf: console_errors 0), `complete-todo.yaml` (add two, complete one,
+called buy milk"; success: console_errors 0), `complete-todo.yaml` (add two, complete one,
 expect counter "1 item left"), `clear-completed.yaml` (tags [smoke]; add, complete, clear,
 expect empty list + api_called DELETE). `tests/seed/reset.sh`: `curl -fsS -X POST
 "$BASE_URL/api/reset"` (chmod +x). `tests/todos/docker-compose.yml` builds
@@ -1151,7 +1157,7 @@ Driver-aware cross-field validation (mirrors the discovery/vision rules) maps ea
 kind and perf key to its valid drivers and throws a file-naming `DummyConfigError` otherwise:
 `url_matches` web/api · `element_exists` web · `screen_shows` mobile · `response_status`/
 `response_matches` api · `api_called` web/api (mobile = "no network capture" error) · `assert`
-all · perf `lcp_ms`/`input_to_paint_ms`/`console_errors` web only.
+all · `console_errors` web · perf `lcp_ms`/`input_to_paint_ms` web only.
 
 Actor (§6): the system overlay's transport block is per-driver — `actor-system.md` is the
 **web** overlay (kept under that name; the journey golden test reads it from disk). The web

@@ -137,7 +137,6 @@ test("a defaults file rejects every case-only key", async () => {
     description: "description: One-line summary.\n",
     tags: "tags: [smoke]\n",
     success: "success:\n  - assert: anything\n",
-    personas: "personas: [power-user]\n",
     report: "report:\n  - Where did the user look first?\n",
   };
   for (const [key, yaml] of Object.entries(caseOnly)) {
@@ -239,20 +238,39 @@ test("a discovery case declaring success is a config error", async () => {
   await expectConfigError(dir, /gated\.yaml/, /discovery cases have no pass\/fail gate/);
 });
 
-test("personas in a journey-mode case is a config error", async () => {
+test("a journey given a persona list uses the first persona (no fan-out, no error)", async () => {
   const dir = writeSuite({
     "playtest.yaml": BASE,
-    "journey.yaml": "story: |\n  Placeholder journey.\npersonas: [power-user]\n",
+    "journey.yaml": "story: |\n  Placeholder journey.\npersona: [power-user, first-timer]\n",
   });
-  await expectConfigError(dir, /journey\.yaml/, /"personas" is discovery-only/);
+  const cases = await discoverCases([dir]);
+  assert.equal(cases.length, 1, "a journey does not fan out");
+  assert.equal(cases[0].persona, "power-user", "uses the first persona in the list");
+  assert.ok(!("personas" in cases[0]), "no fan-out list on a resolved journey case");
 });
 
-test("an empty personas array is a config error", async () => {
+test("an empty persona list is a config error", async () => {
   const dir = writeSuite({
     "playtest.yaml": BASE + "mode: discovery\n",
-    "empty.yaml": "story: |\n  Explore.\npersonas: []\n",
+    "empty.yaml": "story: |\n  Explore.\npersona: []\n",
   });
-  await expectConfigError(dir, /empty\.yaml/, /personas/);
+  await expectConfigError(dir, /empty\.yaml/, /persona.*at least 1 entry/);
+});
+
+test("the renamed personas: key gives a migration hint naming the file", async () => {
+  const dir = writeSuite({
+    "playtest.yaml": BASE + "mode: discovery\n",
+    "old.yaml": "story: |\n  Explore.\npersonas: [power-user]\n",
+  });
+  await expectConfigError(dir, /old\.yaml/, /personas: is now persona:/);
+});
+
+test("a persona list in a defaults file is rejected (scalar only there)", async () => {
+  const dir = writeSuite({
+    "playtest.yaml": BASE + "mode: discovery\npersona: [power-user, first-timer]\n",
+    "ok.yaml": "story: |\n  Explore.\n",
+  });
+  await expectConfigError(dir, /playtest\.yaml/, /persona.*must be string/);
 });
 
 test("a mobile case without app.app is a config error naming the file", async () => {
@@ -287,17 +305,16 @@ test("an api case with a web-only app key (storage_state) is rejected naming the
   await expectConfigError(dir, /auth\.yaml/, /app\.storage_state is not valid for the api driver/);
 });
 
-// ---------- personas fan-out ----------
+// ---------- persona-list fan-out ----------
 
-test("personas fan out into <id>@<ref> instances with persona overridden", async () => {
+test("a persona list fans out into <id>@<ref> instances with persona overridden", async () => {
   const dir = writeSuite({
     "playtest.yaml": BASE + "mode: discovery\n",
     "export-data.yaml": [
       "story: |",
       "  Get your data out of the app however seems natural.",
       "tags: [study]",
-      "persona: tester",
-      "personas: [power-user, first-timer]",
+      "persona: [power-user, first-timer]",
       "report:",
       "  - Where did the user look first?",
       "",
@@ -344,7 +361,7 @@ test("cli: a schema error exits 2 and names the file and key on stderr", async (
 test("cli: list --json shows fan-out ids with per-instance personas", async () => {
   const dir = writeSuite({
     "playtest.yaml": BASE + "mode: discovery\n",
-    "export-data.yaml": "story: |\n  Get your data out.\npersonas: [power-user, first-timer]\n",
+    "export-data.yaml": "story: |\n  Get your data out.\npersona: [power-user, first-timer]\n",
   });
   const res = await runCli(["list", dir, "--json"]);
   assert.equal(res.code, 0, `list should exit 0${dump(res)}`);

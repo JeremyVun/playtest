@@ -21,15 +21,11 @@
       "description": "Free-form labels for --tag filtering, e.g. [smoke]. Case-only: not allowed in playtest.yaml. Default []."
     },
     "persona": {
-      "type": "string",
-      "description": "Persona the actor role-plays: built-in \"tester\" or \"exploratory\", or the name/slug of a personas/*.yaml file. Default \"tester\". Inheritable. Discovery cases usually use the plural \"personas\" instead."
-    },
-    "personas": {
-      "type": "array",
+      "type": ["string", "array"],
+      "items": { "type": "string" },
       "minItems": 1,
       "uniqueItems": true,
-      "items": { "type": "string" },
-      "description": "Discovery-only fan-out: the case expands into one run per persona listed (same name/slug resolution as \"persona\"), each with id <case-id>@<persona> and the singular \"persona\" overridden. Config error in a journey-mode case or in playtest.yaml."
+      "description": "Persona the actor role-plays: built-in \"tester\" or \"exploratory\", or the name/slug of a personas/*.yaml file. A scalar runs one actor (default \"tester\", inheritable). A list (e.g. [first-timer, power-user]) fans out one run per persona in discovery — id <case-id>@<persona>, the persona overridden per run; on a journey only the first is used (a journey has one recorded path) and the rest are ignored with a warning."
     },
     "mode": {
       "enum": ["journey", "discovery"],
@@ -74,10 +70,14 @@
           "assert": {
             "type": "string",
             "description": "Natural-language claim about the final state — the page (web), the final screen (mobile), or the last response body (api) — checked by the grader model. Costs one model call per run, even on acted runs."
+          },
+          "console_errors": {
+            "type": "number",
+            "description": "web only: maximum console error count over the whole run, e.g. 0. Deterministic (no model call) — a correctness gate, not a perf budget."
           }
         }
       },
-      "description": "Journey-only deterministic gate: every criterion must pass, each entry exactly one of url_matches/element_exists/screen_shows/api_called/response_status/response_matches/assert. Each kind is valid only for its driver(s) (web: url_matches/element_exists/api_called/assert; mobile: screen_shows/assert; api: url_matches/api_called/response_status/response_matches/assert) — a wrong-driver kind is a config error. Case-only: not allowed in playtest.yaml. Config error in a discovery case (ask report: questions instead). Default []."
+      "description": "Journey-only deterministic gate: every criterion must pass, each entry exactly one of url_matches/element_exists/screen_shows/api_called/response_status/response_matches/console_errors/assert. Each kind is valid only for its driver(s) (web: url_matches/element_exists/api_called/console_errors/assert; mobile: screen_shows/assert; api: url_matches/api_called/response_status/response_matches/assert) — a wrong-driver kind is a config error. Case-only: not allowed in playtest.yaml. Config error in a discovery case (ask report: questions instead). Default []."
     },
     "perf": {
       "type": "object",
@@ -90,18 +90,14 @@
         "input_to_paint_ms": {
           "type": ["string", "number"],
           "description": "Threshold on the WORST input-to-paint latency in milliseconds; same format as lcp_ms."
-        },
-        "console_errors": {
-          "type": "number",
-          "description": "Maximum allowed console error count, e.g. 0."
         }
       },
-      "description": "Perf thresholds checked with the journey gate. Inheritable. Silently irrelevant in discovery (the gate never runs)."
+      "description": "Latency thresholds (LCP / input-to-paint) checked with the journey gate. Inheritable. Silently irrelevant in discovery (the gate never runs). No-console-errors is a success criterion, not a perf key."
     },
     "report": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Discovery report questions the grader must answer from the trajectory, e.g. \"At which screen would this user have expected an export affordance?\". Questions, not assertions — findings have answers, not pass/fail. Case-only: not allowed in playtest.yaml. Default []."
+      "description": "Report questions the grader answers from the trajectory, e.g. \"At which screen would this user have expected an export affordance?\". Questions, not assertions — findings have answers, not pass/fail. Most useful in discovery studies, but honored on journey cases too. Case-only: not allowed in playtest.yaml. Default []."
     },
     "max_steps": {
       "type": "integer",

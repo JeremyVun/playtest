@@ -4,7 +4,7 @@ story: |
   viewer, determine whether the "todos/add-todo" journey has been stable
   lately: is it getting better, worse, or flaky — and does anything need a
   closer look?
-personas: [reviewing-pm, new-evaluator]
+persona: [reviewing-pm, new-evaluator]
 report:
   - Did the user find any cross-run view of the journey (history, trend, grouping in the run list), or did they compare runs one at a time?
   - Which signals did they treat as "health" — status colors, scores, durations, step counts — and which available signals did they ignore?

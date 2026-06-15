@@ -123,6 +123,13 @@ async function checkSuccess(kind, value, ctx) {
       return { pass: Boolean(pass), detail: detail ?? "" };
     }
 
+    case "console_errors": {
+      // web only (config.js scopes it): a deterministic correctness gate, not a
+      // perf budget — the run must finish with no more than `value` console errors.
+      const count = ctx.consoleErrorCount ?? 0;
+      return { pass: count <= Number(value), detail: `${count} console error(s)` };
+    }
+
     default:
       return { pass: false, detail: `unknown success criterion "${kind}"` };
   }
@@ -130,16 +137,6 @@ async function checkSuccess(kind, value, ctx) {
 
 function checkPerf(key, threshold, ctx) {
   try {
-    if (key === "console_errors") {
-      const count = ctx.consoleErrorCount ?? 0;
-      return {
-        kind: "perf",
-        spec: `perf.console_errors <= ${threshold}`,
-        pass: count <= Number(threshold),
-        detail: `${count} console error(s)`,
-      };
-    }
-
     if (key === "lcp_ms" || key === "input_to_paint_ms") {
       const { op, limit } = parseThreshold(threshold);
       const spec = `perf.${key} ${op} ${limit}`;

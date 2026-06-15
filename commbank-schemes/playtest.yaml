@@ -1,0 +1,10 @@
+# NOTE: this points at CommBank's LIVE public tool — there is no staging copy we
+# control. The selector is read-only (it computes eligibility; it doesn't submit
+# an application or change account state), so running it is safe, but expect two
+# things: the page is heavy, and a CommBank redesign can redden the journey even
+# when nothing is truly "broken". Treat a failure as "look at what changed", not
+# "the bank is down".
+app:
+  base_url: https://www.commbank.com.au/retail/netbank/home-buying/tools/government-scheme-selector
+actor_model: "@anthropic/claude-sonnet-4-6"
+grader_model: "@anthropic/claude-sonnet-4-6"

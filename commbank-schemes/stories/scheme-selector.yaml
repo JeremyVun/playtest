@@ -1,0 +1,20 @@
+description: Single parent first-home buyer sees they're eligible for Help to Buy and the guarantee scheme.
+story: |
+  You are a single parent raising one child, and you're hoping to buy your
+  first home — somewhere in Tasmania priced between $500,000 and $600,000.
+  You have $20,000 saved, you're an Australian citizen, and you have never
+  owned property before. Work through the government scheme selector, answering
+  honestly about your situation, to find out which home-buying schemes you
+  qualify for.
+success:
+  - assert: >
+      At the end of the flow the results identify the "Help to Buy" scheme as
+      one this applicant is eligible for.
+  - assert: >
+      The results show the applicant is eligible for the government home
+      guarantee scheme, and reflect that as a single parent they qualify for the
+      reduced 2% deposit option (rather than the standard 5%) — i.e. their
+      $20,000 / under-5% savings is not treated as a barrier.
+  - assert: >
+      A "Book appointment" button or link is shown on the results at the end of
+      the flow.

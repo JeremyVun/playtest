@@ -101,8 +101,13 @@ the grader judges in natural language):
 **Choosing gates — a few durable checks beat many brittle ones**, on the surface
 a user could point at:
 
-- **Always start a web journey's `success` with `console_errors: 0`** —
-  deterministic, free, and exactly what `playtest new` scaffolds.
+- **`console_errors: 0` is a sensible default for an app you control** —
+  deterministic, free, and what `playtest new` scaffolds. But it gates on
+  *internal* noise, not the user's surface, so **drop it for any site you don't
+  own** (a third-party or production app you can't change): analytics and other
+  third-party scripts log console errors constantly, and the gate would redden
+  the journey for reasons unrelated to whether the user succeeded. Decide per
+  suite, don't add it reflexively.
 - Prefer `url_matches` and `api_called` next — both survive refactors. Skip
   checks that fire on every page load regardless of what the user did.
 - `assert` survives any redesign that keeps the UX intact, at one grader call

@@ -5,5 +5,4 @@ story: |
   empty again.
 success:
   - api_called: "DELETE /api/todos"
-perf:
-  console_errors: 0
+  - console_errors: 0

@@ -38,6 +38,9 @@ const SUCCESS_KIND_DRIVERS = {
   api_called: ["web", "api"],
   response_status: ["api"],
   response_matches: ["api"],
+  // No-console-errors is a deterministic correctness gate; web-only (it needs the
+  // browser console). It used to live under perf — a latency bucket it never fit.
+  console_errors: ["web"],
   assert: ["web", "mobile", "api"],
 };
 // Per-driver perf-key validity. Web vitals are web-only; mobile and api perf
@@ -46,7 +49,6 @@ const SUCCESS_KIND_DRIVERS = {
 const PERF_KEY_DRIVERS = {
   lcp_ms: ["web"],
   input_to_paint_ms: ["web"],
-  console_errors: ["web"],
 };
 // Per-driver app.* key validity. The app schema is flat (every key allowed for
 // every driver), so this is the cross-field rule it cannot express: a key set
@@ -69,7 +71,6 @@ const APP_KEY_DRIVERS = {
   appium_url: ["mobile"],
   openapi: ["api"],
 };
-const DRIVERS = ["web", "mobile", "api"];
 const DURATION_UNITS = { ms: 1, s: 1000, m: 60000 };
 
 /** "5m" | "90s" | "250ms" | number -> milliseconds. */
@@ -241,8 +242,15 @@ async function resolveCase(file, namedRoot, baseUrl) {
     if (merged.env[key] == null) continue; // bare key (null) -> treated as absent
     const valid = APP_KEY_DRIVERS[key];
     if (valid && !valid.includes(driver)) {
+      // Most common cause on the minimal-config path: a mobile/api case whose
+      // author forgot to switch app.driver off its web default. Name that
+      // recovery, the way the personas/vision/api_called errors below do.
+      const hint =
+        driver === "web" && valid.length === 1
+          ? ` (set app.driver: ${valid[0]} if this case targets ${valid[0]})`
+          : "";
       throw new DummyConfigError(
-        `${file}: app.${key} is not valid for the ${driver} driver (valid: ${valid.join("/")})`,
+        `${file}: app.${key} is not valid for the ${driver} driver (valid: ${valid.join("/")})${hint}`,
       );
     }
   }
@@ -259,17 +267,31 @@ async function resolveCase(file, namedRoot, baseUrl) {
     );
   }
 
-  // Cross-field rules the schemas cannot express. success/personas are
-  // case-only, so "declared" means "declared in this case file".
+  // Cross-field rules the schemas cannot express. success is case-only, so
+  // "declared" means "declared in this case file".
   if (merged.mode === "discovery" && merged.success !== undefined) {
     throw new DummyConfigError(
       `${file}: discovery cases have no pass/fail gate — remove "success" (ask "report" questions instead)`,
     );
   }
-  if (merged.mode !== "discovery" && merged.personas !== undefined) {
-    throw new DummyConfigError(
-      `${file}: "personas" is discovery-only — set mode: discovery, or use the singular "persona"`,
-    );
+
+  // persona is a scalar (one actor) or a list (run several). A discovery case
+  // fans out one run per persona (discoverCases); a journey has a single recorded
+  // path, so a list there collapses to the first actor — loudly, not silently.
+  let persona = merged.persona;
+  let personas; // the discovery fan-out list; never lands on a final ResolvedCase
+  if (Array.isArray(persona)) {
+    if (merged.mode === "discovery") {
+      personas = persona;
+      persona = persona[0];
+    } else {
+      persona = persona[0];
+      if (merged.persona.length > 1) {
+        console.warn(
+          `playtest: ${path.relative(process.cwd(), file)}: a journey runs one persona — using "${persona}", ignoring ${merged.persona.slice(1).join(", ")} (set mode: discovery to run every persona).`,
+        );
+      }
+    }
   }
 
   // Effective vision, resolved after the merge: explicit value wins; discovery
@@ -332,8 +354,8 @@ async function resolveCase(file, namedRoot, baseUrl) {
     story: merged.story,
     description: merged.description ?? null, // human-facing summary; never reaches the actor prompt
     mode: merged.mode,
-    persona: merged.persona,
-    personas: merged.personas, // consumed by the fan-out in discoverCases, never on a final ResolvedCase
+    persona,
+    personas, // consumed by the fan-out in discoverCases, never on a final ResolvedCase
     tags,
     success,
     perf: merged.perf ?? {},
@@ -402,6 +424,11 @@ async function loadYaml(file) {
   }
   if ("env" in doc) {
     throw new DummyConfigError(`env: was renamed to app: (update ${path.relative(process.cwd(), file)})`);
+  }
+  if ("personas" in doc) {
+    throw new DummyConfigError(
+      `personas: is now persona: — a scalar runs one actor, a list (e.g. [a, b]) fans out (update ${path.relative(process.cwd(), file)})`,
+    );
   }
   // A bare key (`tags:` with no value) parses as null; treat it as absent so
   // placeholder keys keep resolving to their defaults, as before validation.

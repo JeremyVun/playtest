@@ -4,7 +4,7 @@ story: |
   viewer is open in front of you. Work out which journey failed and what
   exactly went wrong — enough that you could tell the team what broke
   without re-running anything.
-personas: [ci-triager, new-evaluator]
+persona: [ci-triager, new-evaluator]
 report:
   - Where did the user look first to find the failing run, and how many wrong turns did they take before opening it?
   - Did they reach the failing success criteria themselves, or stop at the red status badge? What did they conclude broke?

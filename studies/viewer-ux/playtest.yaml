@@ -3,7 +3,6 @@
 mode: discovery
 actor_model: claude-sonnet-4-6
 grader_model: claude-opus-4-8
-max_steps: 40
 app:
   compose: ../../tests/viewer/docker-compose.yml
   base_url: http://viewer:4317

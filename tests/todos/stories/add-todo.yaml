@@ -7,5 +7,4 @@ success:
   - element_exists: "[data-testid=todo-item]"
   - api_called: "POST /api/todos"
   - assert: the list shows a todo called "buy milk"
-perf:
-  console_errors: 0
+  - console_errors: 0

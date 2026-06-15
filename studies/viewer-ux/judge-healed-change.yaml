@@ -4,7 +4,7 @@ story: |
   recording stopped working and the agent found a new path through the app.
   Decide whether you would bless the new recording, and be specific about
   what actually changed between the old path and the new one.
-personas: [ci-triager, reviewing-pm]
+persona: [ci-triager, reviewing-pm]
 report:
   - How did the user find the healed run — badges in the run list, the review list, or stumbling? Where did they expect a review queue to live? (The picker has no link to it — does that hurt?)
   - Did they find the baseline-vs-new comparison, and could they articulate the concrete difference between the two recordings?

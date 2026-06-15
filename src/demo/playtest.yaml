@@ -8,7 +8,6 @@
 # literally zero model calls.
 actor_model: claude-haiku-4-5
 grader_model: claude-sonnet-4-6
-max_steps: 25
 timeout: 3m
 app:
   base_url: http://localhost:4173

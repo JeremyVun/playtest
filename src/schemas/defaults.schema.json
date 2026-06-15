@@ -2,13 +2,13 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "dummy/defaults.schema.json",
   "title": "Playtest defaults file (playtest.yaml)",
-  "description": "Shared defaults for every case at or below this directory; the nearest playtest.yaml wins per key. Case-only keys (story, tags, success, report, personas) are config errors here — put them in the case file. max_steps/timeout may also be spelled nested under limits.",
+  "description": "Shared defaults for every case at or below this directory; the nearest playtest.yaml wins per key. Case-only keys (story, tags, success, report) are config errors here — put them in the case file; a persona *list* (the fan-out form) is case-only too, but a scalar persona default is fine. max_steps/timeout may also be spelled nested under limits.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
     "persona": {
       "type": "string",
-      "description": "Default persona the actor role-plays: built-in \"tester\" or \"exploratory\", or the name/slug of a personas/*.yaml file. Default \"tester\". A case file can override it (or fan out with the case-only \"personas\")."
+      "description": "Default persona the actor role-plays: built-in \"tester\" or \"exploratory\", or the name/slug of a personas/*.yaml file. Default \"tester\". Scalar only here (a suite-wide default actor); the persona *list* that fans a discovery study out is case-only — set it on the case."
     },
     "mode": {
       "enum": ["journey", "discovery"],
@@ -29,13 +29,9 @@
         "input_to_paint_ms": {
           "type": ["string", "number"],
           "description": "Threshold on the WORST input-to-paint latency in milliseconds; same format as lcp_ms."
-        },
-        "console_errors": {
-          "type": "number",
-          "description": "Maximum allowed console error count, e.g. 0."
         }
       },
-      "description": "Perf thresholds checked with the journey gate. Silently irrelevant in discovery (the gate never runs)."
+      "description": "Latency thresholds (LCP / input-to-paint) checked with the journey gate. Silently irrelevant in discovery (the gate never runs). No-console-errors is a success criterion, not a perf key."
     },
     "max_steps": {
       "type": "integer",

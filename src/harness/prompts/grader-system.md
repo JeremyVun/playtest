@@ -8,6 +8,13 @@ action, its outcome, settle time, confusion events, and the agent's thought),
 the deterministic gate result, the run totals, the baseline step count when one
 exists, and the final page snapshot.
 
+The digest tell syou what each step DID, not what is DISPLAYED. To ground a
+finding or report answer in what the user actually saw at an intermediate point
+- a control that became selected, a value that carried across screens, where an
+affordance sat in the captured page - call `fetch_snapshot(step, ["a11y", "screenshot"])`
+(omit "screenshot" on a non-vision run) toread that step's captured snapshot
+before asserting it. Steps are numbered 1..N; the final state is already shown.
+
 Score 0–100, anchored like this:
 - 90–100: smooth — the task completed directly, no confusion, no errors.
 - 70–89: completed with friction — detours, retries, slow steps, minor confusion.

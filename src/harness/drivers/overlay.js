@@ -127,7 +127,7 @@ export function toolParamsFor(driverId = "web") {
   const fields = [...new Set(verbs.flatMap((v) => VERB_FIELDS[v]))];
   const actionProps = { type: { enum: verbs, description: "The single thing to do this turn — exactly one of these." } };
   for (const f of fields) actionProps[f] = shippedField(id, f);
-  const { thought, expectation, visual } = CANON.properties;
+  const { thought, expectation, visual, confused, confused_reason } = CANON.properties;
   return {
     type: "object",
     required: ["thought", "action", "expectation"],
@@ -136,6 +136,8 @@ export function toolParamsFor(driverId = "web") {
       action: { type: "object", required: ["type"], properties: actionProps },
       expectation,
       visual,
+      confused,
+      confused_reason,
     },
   };
 }

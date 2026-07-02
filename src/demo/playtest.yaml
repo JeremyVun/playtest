@@ -6,9 +6,12 @@
 # criteria: every assert costs one model verdict per case even on acted runs,
 # and dropping them keeps the demo's punchline honest — the act pass makes
 # literally zero model calls.
-actor_model: claude-haiku-4-5
-grader_model: claude-sonnet-4-6
+actor_model: gpt5_4_mini
+grader_model: gpt5_5
 timeout: 3m
+parallel:
+  total: 10
+  record: 2
 app:
   base_url: http://localhost:4173
   init: ./seed/reset.mjs

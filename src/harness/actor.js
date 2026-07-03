@@ -6,10 +6,13 @@ import { fileURLToPath } from "node:url";
 import YAML from "yaml";
 import Ajv from "ajv";
 import { forcedToolCall } from "./llm.js";
+import { actionOf } from "./trajectory.js";
 import { overlayFor, toolParamsFor, stepSchemaFor } from "./drivers/overlay.js";
+import { DummyConfigError } from "./config.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const prompt = (name) => readFileSync(join(here, "prompts", name), "utf8");
+const personas = (name) => readFileSync(join(here, "personas", name), "utf8");
 
 const ajv = new Ajv({ allErrors: true });
 // Per-driver forced-tool schema + validator. The actor is shown only its
@@ -119,9 +122,14 @@ export function loadPersona(name, caseFile) {
   const searched = dirs.length
     ? `searched ${dirs.join(", ")}`
     : `no personas/ directory between ${start} and the repo root`;
-  throw new Error(
+  throw new DummyConfigError(
     `persona "${name}" not found: not a built-in, and no matching personas/*.yaml (${searched}). Create one with: playtest new persona ${name}`,
   );
+}
+
+export function describeStep(env) {
+  const action = actionOf(env);
+  return action ? describeAction(action) : "(baseline step)";
 }
 
 /** Human-readable one-liner for a step action (also used by the grader digest). */
@@ -147,11 +155,21 @@ export function describeAction(action) {
 
 const oneLine = (s) => String(s).replace(/\s*\n\s*/g, " ").trim();
 
+function outcomeOf(env) {
+  if (env.confusion?.type === "state_drift") {
+    return "the page changed under this recorded step, so it was SKIPPED - decide fresh from here";
+  }
+  if (env.result?.ok === false) return `error ${env.result.error}`;
+  switch (env.confusion?.type) {
+    case "no_effect": return "ok but NOTHING CHANGED on the page";
+    case "repeated_action": return "ok but you just did the SAME action against the SAME page - nothing changed";
+    default: return "ok";
+  }
+}
+
 function stepLine(env) {
-  const what = env.agent ? describeAction(env.agent.action) : `acted ${env.resolution?.locator ?? "(baseline step)"}`;
-  const outcome = env.result?.ok === false ? `error ${env.result.error}` : "ok";
   const url = env.result?.url;
-  return `step ${env.step}: ${what} -> ${outcome}${url ? ` | url now ${url}` : ""}`;
+  return `step ${env.step}: ${describeStep(env)} -> ${outcomeOf(env)}${url ? ` | url now ${url}` : ""}`;
 }
 
 // Append-only log: every step's line plus its thought, never rewritten, so
@@ -172,6 +190,7 @@ export class Actor {
   constructor(resolvedCase, persona) {
     this.case = resolvedCase;
     this.persona = persona;
+    this.setupContext = null;
     // The transport overlay (system + verb subset) for this case's driver. Web
     // (or an absent driver) loads actor-system.md verbatim, so a web journey's
     // assembled prompt is byte-identical to pre-driver-seam — the golden test.
@@ -203,7 +222,7 @@ export class Actor {
    *   so the caller can persist it (context.jsonl) even if the call then fails.
    * @returns {Promise<{ agentStep: object, tokens: {in: number, out: number, cache_read: number} }>}
    */
-  async nextStep({ history, snapshotText, stepNum, screenshot = null, signal = null, onContext = null }) {
+  async nextStep({ history, snapshotText, stepNum, screenshot = null, signal = null, onContext = null, onRetry = null }) {
     const snapText = `Current page snapshot (step ${stepNum}):\n${snapshotText}`;
     const snapContent = this.case.vision && screenshot
       ? [
@@ -213,16 +232,19 @@ export class Actor {
       : snapText;
     const messages = [
       { role: "system", content: this.system },
+      ...(this.setupContext ? [{ role: "user", content: `## Run setup\n\n${this.setupContext}` }] : []),
       { role: "user", content: renderLog(history) },
       { role: "user", content: snapContent },
     ];
-    if (onContext) onContext(messages);
+    if (onContext) onContext(messages, [this.stepTool]);
     const { args, tokens } = await forcedToolCall({
       model: this.case.actor_model,
       messages,
       tool: this.stepTool,
       validate: (a) => (this.validateStep(a) ? null : ajv.errorsText(this.validateStep.errors)),
       signal,
+      onRetry,
+      cacheBreakponit: messages.length - 2,
     });
     return { agentStep: args, tokens };
   }

@@ -28,10 +28,9 @@ text: "1 item left"
 
 You also receive the log of steps you have already taken and their outcomes.
 Read it before you act: if an action failed, read the error and try a different
-approach. And if you notice yourself repeating the same action — tapping the
-same thing two or three times in a row — take that as a sign it is not working,
-even when each tap "succeeds": the screen is not responding the way you expect,
-so stop and find a different path rather than doing it again.
+approach. And if you notice yourself repeating the same set of actions with no success
+take that as a sign it is not working and move on or try another way.
+Even when each tap "succeeds" but the screen is not responding the way you expect.
 
 ## What you do
 
@@ -48,7 +47,8 @@ Each turn you take exactly one step, reported via the `step` tool:
 - `action`: exactly one of:
   - `tap` a ref
   - `type` text into a ref (replaces the current value; set `submit: true` to submit after)
-  - `swipe` up, down, left, or right (optionally within a ref)
+  - `swipe` up, down, left, or right (optionally within a ref). For carousels, swiping left
+    goes to the next item, and swiping right goes to the previous item.
   - `scroll` up or down
   - `back` to go to the previous screen
   - `wait` a few seconds (only when the screen is visibly still loading)
@@ -58,6 +58,12 @@ Each turn you take exactly one step, reported via the `step` tool:
   show after this action — something the next snapshot can prove or disprove,
   like "the cart badge should show 1" or "a todo named buy milk appears in the
   list". Never something vague like "it works" or "the screen updates".
+- `confused` (optional): set `true` only when you are genuinely stuck or
+  confused this turn - a response makes no sense, t he API isn't behaving as you
+  expect, or you're unsure how to make progress - and add a one-line
+  `confused_reason`. Leave it out when things are going fine. It does NOT stop
+  the run or change the outcome; it just flags the moment for a reviewer. Keep
+  taking your best next action on the same turn.
 
 ## done and give_up
 

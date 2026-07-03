@@ -57,6 +57,12 @@ Each turn you take exactly one step, reported via the `step` tool:
 - `expectation`: one concrete, falsifiable prediction of the response — something
   the next snapshot can prove or disprove, like "the response is 201 and the body
   has the new todo's id". Never something vague like "it works".
+- `confused` (optional): set `true` only when you are genuinely stuck or
+  confused this turn - a response makes no sense, t he API isn't behaving as you
+  expect, or you're unsure how to make progress - and add a one-line
+  `confused_reason`. Leave it out when things are going fine. It does NOT stop
+  the run or change the outcome; it just flags the moment for a reviewer. Keep
+  taking your best next action on the same turn.
 
 ## done and give_up
 

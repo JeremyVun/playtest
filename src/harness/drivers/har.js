@@ -11,7 +11,7 @@ import path from "node:path";
 export const MAX_BODY_CHARS = 64 * 1024; // stored cap per body
 export const MAX_BODY_READ = 1024 * 1024; // don't buffer responses larger than this
 
-export const isTextualMime = (m) => /^text\//.test(m || "") || /(json|xml|javascript|x-www-form-urlencoded)/.test(m || "");
+export const isTextualMime = (m) => /^text\//.test(m || "") && (/^text\//.test(m || "") || /(json|xml|javascript|x-www-form-urlencoded)/.test(m || "");
 export const capBody = (s) => (s == null ? null : s.length > MAX_BODY_CHARS ? s.slice(0, MAX_BODY_CHARS) + "…[truncated]" : s);
 
 export function pathnameOf(url) {
@@ -20,6 +20,28 @@ export function pathnameOf(url) {
   } catch {
     return url;
   }
+}
+
+const ORIGIN_RE = /https?:\/\/[^/\s]+/g
+
+export function relativizeUrls(s, base) {
+  let prefix = null;
+  if (base) {
+    try {
+      const u = new URL(base);
+      prefix = (u.origin + u.pathname).replace(/\/$/, "");
+    } catch {}
+  }
+  if (prefix) s = s.split(prefix).join("");
+  return s.replace(ORIGIN_RE, "");
+}
+
+export function stripRefLines(text) {
+  return String(text ?? "")
+    .split("\n")
+    .map((line) => line.replace(/^\s*\[e\d+\]\s*/, "").replace(/\s+/g, " ").trim())
+    .filter((line) => line)
+    .join("\n")
 }
 
 /** Write the HAR entries to har.json under runDir (rewritten on every flush). */

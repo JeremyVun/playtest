@@ -66,6 +66,23 @@
       "type": "string",
       "description": "Model that grades finished runs and checks assert: criteria. Default \"claude-sonnet-4-6\"."
     },
+    "parallel": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "total": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Max cases run concurrently across the suite. Default 1 (serial). Equivalent to --parallel [n]."
+        },
+        "record": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Cap on how many cases may record (a fresh agentic pass) at once, within the total concurrency. Equivalent to --parallel-record <n>."
+        }
+      },
+      "description": "Concurrency defaults: run cases in parallel, with a separate cap on simultaneous records (recording is the expensive, model-heavy path). CLI --parallel / --parallel-record override. RECONSTRUCTION NOTE: inferred from src/demo/playtest.yaml usage + the playtest-ci/playtest-stories skill docs; the friend's exact schema wording was not filmed."
+    },
     "app": {
       "type": "object",
       "additionalProperties": false,

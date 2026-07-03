@@ -64,31 +64,48 @@ read from the video). Each is flagged in-file:
   resolution without it). Shape inferred from the yaml + skill docs; exact wording
   not filmed.
 
-## Tier 4 — RECOVERED-TO-BASE (collaborator's newer edits NOT reconstructable)
+## Tier 4 — TRANSCRIBED FROM VIDEO (slice → stitch → repair)
 
-The video shows these existing files **far larger** than `main`. Those additions
-(~4–5k lines total) cannot be faithfully OCR'd from a handheld video without
-inventing broken code, so **they are kept at the git-base version** — a coherent,
-older, working state. This is the single biggest fidelity gap.
+The 28 JavaScript files the video scrolls through are transcribed from the frames
+and now **replace** the git-base versions. Method: the video was cut to 3,574
+frames; per file, dense frames within its on-screen windows were fed to overlapping
+"slice" agents that transcribed line-anchored spans (using nvim's absolute line
+numbers); a deterministic JS stitch reconciled overlaps and inserted explicit
+`// [UNREADABLE lines N-M]` markers for any range the scroll skipped; a repair pass
+fixed slice-seam artifacts (duplicated/dropped lines, unbalanced braces).
 
-| File | git base | video (friend) | unrecovered delta |
-|---|---:|---:|---:|
-| `src/viewer/app.js` | 1614 | 2488 | +874 |
-| `src/harness/runner.js` | 682 | 1447 | +765 |
-| `src/harness/clip.js` | 347 | 765 | +418 |
-| `src/harness/grader.js` | 140 | 453 | +313 |
-| `src/viewer/style.css` | 784 | 1087 | +303 |
-| `src/harness/cli.js` | 641 | 940 | +299 |
-| `src/harness/config.js` | 490 | 778 | +288 |
-| `src/harness/drivers/web.js` | 1041 | 1290 | +249 |
-| `src/harness/snapshot-injected.js` | 175 | 424 | +249 |
-| `src/harness/live.js` | 142 | 390 | +248 |
-| `src/harness/llm.js` | 230 | 437 | +207 |
-| `src/harness/drivers/mobile*.js`, `gate.js`, `new.js`, `report.js`, `trajectory.js`, `demo.js`, `actor.js` | … | … | +30–120 each |
+**All 28 parse (`node --check`).** 12,395 lines total, **13% marked as `[UNREADABLE]`
+gaps** — no invented code fills them. Where a gap or the file tail left a block open,
+the repair added minimal closers tagged `// [reconstruction: …]`.
 
-The collaborator's driver WIP in the stash (`web.js`, `mobile.js`) was itself
-**syntactically broken** (an undeclared `#screenId`, a brace imbalance), so the
-whole `drivers/` dir was reverted to the clean git base rather than ship guesses.
+**17 files transcribed gap-free:** `cli.js`, `clip.js`, `driver.js`, `drivers/api.js`,
+`drivers/har.js`, `drivers/mobile-snapshot.js`, `drivers/overlay.js`, `env.js`,
+`grader.js`, `llm.js`, `new.js`, `preflight.js`, `prompt.js`, `runs-root.js`,
+`snapshot-injected.js`, `trajectory.js`, `shared/movement.js`.
+
+**11 files with gaps** (fast scroll → un-filmed ranges):
+
+| File | lines | gap lines |
+|---|---:|---:|
+| `src/viewer/app.js` | 1657 | 849 |
+| `src/harness/runner.js` | 1227 | 267 |
+| `src/harness/drivers/web.js` | 1138 | 190 |
+| `src/harness/drivers/mobile.js` | 436 | 109 |
+| `src/harness/view-server.js` | 342 | 83 |
+| `src/harness/live.js` | 361 | 40 |
+| `src/harness/report.js` | 229 | 36 |
+| `src/harness/actor.js` | 261 | 26 |
+| `src/harness/config.js` | 772 | 7 |
+| `gate.js`, `demo.js` | — | 1 each |
+
+`app.js` (the viewer) is the least complete — its 2,400+ lines were scrolled fast,
+so ~half is `[UNREADABLE]`. Grep `UNREADABLE` / `[reconstruction:` in any file to
+see exactly which lines are missing or inferred.
+
+Because these replace the tested git-base versions, `npm test` is now heavily red
+(the transcriptions have OCR-level imperfections and gaps, and diverge from the
+older pinned fixtures) — expected and accepted per the "transcribe the JS from the
+video" goal. The original working versions remain on `main`.
 
 ## Tier 5 — NOT RECOVERABLE (never filmed, binary, or derived)
 
@@ -108,19 +125,21 @@ whole `drivers/` dir was reverted to the clean git base rather than ship guesses
 
 ## Test status
 
-`npm test` cannot be green in this environment: **Playwright browser v1223 is not
-installed** (`npx playwright install`), so the integration tests that launch a real
-browser fail on `main` too.
+`npm test` is **not a meaningful gate on this branch** and is expected to be red,
+for three stacked reasons:
 
-- `main`: 125 tests, **93 pass / 32 fail** (all 32 environmental).
-- this branch: 125 tests, **86 pass / 39 fail**.
+1. **Environment** — Playwright browser v1223 isn't installed (`npx playwright
+   install`), so browser-launching tests fail on `main` too (32 failures there).
+2. **Pin/fixture drift** — the recovered stash edits the actor prompts and the skill
+   set; the collaborator's matching updates to `test/*.test.js` and the golden-byte
+   pins weren't in the stash and weren't filmed, so those pins mismatch.
+3. **Video-transcribed JS** (Tier 4) now replaces the tested git-base source, with
+   OCR-level imperfections and `[UNREADABLE]` gaps.
 
-The **7 extra failures vs main are pin/fixture drift, not runtime defects**: the
-collaborator edited the actor prompts and the skill set in alpha-0.4.0, so the
-golden-byte prompt pins, the `install-skill` manifest, and the api/mobile envelope
-pins no longer match — and the collaborator's corresponding test updates weren't
-recoverable. Verified healthy at runtime: the CLI loads, `--help` works, and every
-`src/demo` and `tests/` suite resolves.
+This is the accepted trade-off of "transcribe the JS from the video." The original
+green, tested versions are preserved on `main`; diff any file against `main` to see
+git-base ↔ video-reconstruction. Runtime sanity still holds: the CLI loads and every
+`src/demo`/`tests/` suite resolves.
 
 ## If you can still reach the collaborator
 

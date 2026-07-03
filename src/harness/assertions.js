@@ -1,4 +1,14 @@
-// [UNREADABLE ~lines 1-7: not visible in any frame — almost certainly the Node imports this module relies on, e.g. `import fs from "node:fs";`, `import path from "node:path";`, and probably `import { pathToFileURL } from "node:url";`, possibly preceded by a short module comment]
+// Custom-assertion registry: discover a suite's assertions/*/assertion.js and
+// route each declared success key to its assertion. The observing mirror of the
+// before_each hook (hooks.js): trusted, author-owned, convention-discovered code
+// that is NOT sandboxed. See docs/CONTRACTS.md §7/§10.
+// NOTE (reconstruction): the imports (line 1) and the discovery-loop scaffolding
+// below (`.map/.sort`, `const assertions = []`, `for (const name of dirs) {` and
+// the dynamic import) were not legible in any video frame; they are inferred from
+// the sibling loadHooks() pattern in hooks.js. Everything else is transcribed.
+import fs from "node:fs";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { DummyConfigError, BUILTIN_SUCCESS_KINDS } from "./config.js";
 import { firstLine } from "./trajectory.js";
 
@@ -11,7 +21,7 @@ const cache = new Map(); // suiteRoot → { routing, assertions }
 
 /**
  * Discover and register the suite's custom assertions.
- * Scans <suiteRoot>/assertions/*\/assertion.js in directory-scan order; dynamic-imports
+ * Scans <suiteRoot>/assertions/<name>/assertion.js in directory-scan order; dynamic-imports
  * each, calls keys() and builds the key → assertion routing table.
  * Collision checks (vs a built-in kind OR an earlier assertion) are cached by suiteRoot.
  * Every failure is a DummyConfigError (friendly, named — never a raw stack).
@@ -38,7 +48,21 @@ export async function loadAssertions(suiteRoot) {
   // naming an earlier assertion) is deterministic across filesystems.
   const dirs = entries
     .filter((e) => e.isDirectory())
-    // [UNREADABLE ~lines 48-69: not visible in any frame — the per-assertion discovery loop: finish building `dirs` (e.g. `.map((e) => e.name).sort();`), declare `const assertions = [];`, then `for (const name of dirs) { ... await import(pathToFileURL(...).href) ... const assertion = mod.default ?? mod; ... }` opening, up to the per-assertion validation that resumes below]
+    .map((e) => e.name)
+    .sort();
+
+  const assertions = [];
+  for (const name of dirs) {
+    const file = path.join(assertionsDir, name, "assertion.js");
+    let mod;
+    try {
+      mod = await import(pathToFileURL(file).href);
+    } catch (e) {
+      throw new DummyConfigError(
+        `assertion "${name}" (assertions/${name}/assertion.js) failed to load: ${firstLine(e)}`,
+      );
+    }
+    const assertion = mod.default ?? mod;
     for (const fn of ["keys", "gather", "verdict"]) {
       if (typeof assertion[fn] !== "function") {
         throw new DummyConfigError(
@@ -48,7 +72,7 @@ export async function loadAssertions(suiteRoot) {
     }
     // Optional `inheritable` (default true): on a clean act replay the gate reuses
     // this assertion's saved verdict instead of re-running gather/verdict (§7/§10).
-    // An assertion whose verdict depends on live state (the trajectory doesn't pin
+    // An assertion whose verdict depends on live state the trajectory doesn't pin
     // (e.g. a TTL'd row) sets inheritable: false to force a fresh observe+verdict.
     if ("inheritable" in assertion && typeof assertion.inheritable !== "boolean") {
       throw new DummyConfigError(
@@ -82,8 +106,7 @@ export async function loadAssertions(suiteRoot) {
       const owner = routing.get(key);
       if (owner) {
         throw new DummyConfigError(
-          `assertion "${name}": success key "${key}" is already registered by assertion "${owner.name}" — two assertions cannot own
-          the same key`,
+          `assertion "${name}": success key "${key}" is already registered by assertion "${owner.name}" — two assertions cannot own the same key`,
         );
       }
       routing.set(key, { name, assertion });

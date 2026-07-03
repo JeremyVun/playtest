@@ -1,4 +1,13 @@
-// [UNREADABLE ~lines 1-8: file header and imports (fs, path) not captured in any frame]
+// Storage provider: the viewer/report layer reads run artifacts through this thin
+// abstraction so a future remote backend (e.g. S3) can drop in behind the same
+// interface. See docs/CONTRACTS.md.
+// NOTE (reconstruction): the imports (line 1) and the tail from stat() onward
+// (stat body, createReadStream, class close) were not legible in any video frame;
+// they are inferred from the interface typedef below and standard node:fs usage.
+// The typedef and the listDir/readText methods are transcribed from the frames.
+import fs from "node:fs";
+import path from "node:path";
+
 /** @typedef {object} StorageProvider
  * @property {(rel: string) => {name: string, isFile: boolean, isDirectory: boolean}[] | null} listDir
  *   directory entries (null on an unreadable path; never throws)
@@ -40,4 +49,15 @@ export class LocalFsProvider {
   }
 
   stat(rel) {
-// [UNREADABLE ~lines 49+: stat() body, createReadStream(), class close, and exports not captured in any frame]
+    try {
+      const s = fs.statSync(path.join(this.root, rel));
+      return { size: s.size, mtime: s.mtime, isFile: s.isFile() };
+    } catch {
+      return null;
+    }
+  }
+
+  createReadStream(rel, opts) {
+    return fs.createReadStream(path.join(this.root, rel), opts);
+  }
+}

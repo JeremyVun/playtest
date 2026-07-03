@@ -1,33 +1,99 @@
-// Deterministic pass/fail gate. See docs/CONTRACTS.md §7.
+// [UNREADABLE lines 1-1: scrolled past, not captured in any frame]
 import { pathnameOf } from "./drivers/har.js";
+
+// Soft checks still fail the run (status "fail", exit 1) but do NOT block
+// baseline acceptance: an agent that genuinely completed the journey while the
+// app logged a console error or breached a latency budget shouldn't force a
+// re-record. console_errors and the perf thresholds are advisory by nature
+// (the app's correctness/latency, not whether the user reached the goal), so
+// they default to soft; every other kind is a hard correctness gate. There is
+// no per-criterion override — the kind decides (see docs/CONTRACTS.md §7).
+// severityOf only ever sees SUCCESS kinds; perf is a separate top-level case key
+// whose own loop hardcodes soft, so it isn't listed here.
+const SOFT_KINDS = new Set(["console_errors"]);
+const severityOf = (kind) => (SOFT_KINDS.has(kind) ? "soft" : "hard");
+
+// Inheritable kinds: a check whose verdict is fixed by the (unchanged) trajectory
+// but is expensive and/or non-deterministic to recompute, so a clean act replay
+// (no per-step drift, §10) reuses the verdict saved on the baseline instead of
+// re-running it. `assert` is the canonical one — an LLM judging a frozen snapshot
+// can flip its answer run to run. Deterministic built-ins (url_matches, api_called,
+// …) are NEVER inheritable: they're cheap and they ARE the regression catch.
+// FUTURE: a vision pixel-diff kind goes here too — this set is the single seam, so
+// adding a kind (or a custom-assertion opt-in below) is the only change needed.
+const INHERITABLE_BUILTIN_KINDS = new Set(["assert"]);
+
+/**
+ * Is this check kind eligible to reuse a saved baseline verdict on a clean replay?
+ * Built-ins: only the kinds in INHERITABLE_BUILTIN_KINDS. Custom assertions: opt-in
+ * via `inheritable` on the assertion module (default true — assertions.js validates
+ * the type). The gate is the single authority on inheritability so the runner and
+ * future kinds can't drift from it.
+ */
+export function isInheritable(kind, routing) {
+  if (INHERITABLE_BUILTIN_KINDS.has(kind)) return true;
+  const owner = routing?.get(kind);
+  if (owner) return owner.assertion.inheritable !== false;
+  return false;
+}
 
 /**
  * Evaluate every success criterion, then every perf threshold. Never throws;
  * a check that errors becomes a failed check.
  * @param {object} resolvedCase
  * @param {{ driver: object, harEntries: object[], consoleErrorCount: number,
- *           trajectory: object[], finalUrl: string,
- *           checkAssertion: ((claim: string) => Promise<{pass: boolean, detail: string}>) | null }} ctx
- * @returns {Promise<{ pass: boolean, checks: {kind, spec, pass, detail}[] }>}
+ *          trajectory: object[], finalUrl: string,
+ *          checkAssertion: ((claim: string) => Promise<{pass: boolean, detail: string}>) | null,
+ *          routing?: Map<string, {name: string, assertion: object}>,
+ *          evidence?: Record<string, unknown>,
+ *          inherited?: Map<string, {pass: boolean, detail: string}> }} ctx
+ * routing/evidence: custom assertions (a registered assertion success key
+ * dispatches to its verdict() over the gathered evidence). evaluateGate stays
+ * pure — it reads captured evidence, never does live I/O.
+ * inherited: on a CLEAN ACT REPLAY only (§10), the baseline's saved verdicts
+ * keyed by spec ("kind: value"); an inheritable check (isInheritable) reuses its
+ * prior verdict instead of re-running, marked { inherited: true }. Absent on
+ * record/heal/legacy — every check runs live.
+ * @returns {Promise<{ pass: boolean, hardPass: boolean, checks: {kind, severity, spec, label?, pass, detail, inherited?}[] }>}
+ *   pass = all checks pass (drives status/exit). hardPass = all HARD checks pass
+ *   (drives baseline acceptance — a soft-only failure still saves the baseline).
  */
 export async function evaluateGate(resolvedCase, ctx) {
   const checks = [];
 
   for (const criterion of resolvedCase.success ?? []) {
-    const [kind, value] = Object.entries(criterion)[0] ?? [];
+    // The check kind is the first key that isn't the optional cosmetic `label`
+    // (config.js guarantees exactly one such key). `label` rides along on the
+    // check for presentation (the clip summary card) — it never touches the verdict.
+    const [kind, value] = Object.entries(criterion).find(([k]) => k !== "label") ?? [];
+    const { label } = criterion;
     const spec = `${kind}: ${value}`;
+    // Clean act replay (§10): the trajectory is provably unchanged, so reuse the
+    // verdict the baseline saved for an inheritable check (assert / opted-in custom
+    // assertion) instead of re-running it. ctx.inherited is a Map<spec,{pass,detail}>
+    // passed ONLY on a clean replay; absent ⇒ everything runs live (record/heal, or
+    // a legacy baseline with no saved verdict — it self-heals on the next accept).
+    const prior = ctx.inherited?.get(spec);
+    if (prior && isInheritable(kind, ctx.routing)) {
+      checks.push({ kind, severity: severityOf(kind), spec, ...(label ? { label } : {}), pass: Boolean(prior.pass), detail: prior.detail ?? "", inherited: true });
+      continue;
+    }
     try {
-      checks.push({ kind, spec, ...(await checkSuccess(kind, value, ctx)) });
+      checks.push({ kind, severity: severityOf(kind), spec, ...(label ? { label } : {}), ...(await checkSuccess(kind, value, ctx)) });
     } catch (e) {
-      checks.push({ kind, spec, pass: false, detail: `check error: ${e.message}` });
+      checks.push({ kind, severity: severityOf(kind), spec, ...(label ? { label } : {}), pass: false, detail: `check error: ${e.message}` });
     }
   }
 
   for (const [key, threshold] of Object.entries(resolvedCase.perf ?? {})) {
-    checks.push(checkPerf(key, threshold, ctx));
+    checks.push({ severity: "soft", ...checkPerf(key, threshold, ctx) });
   }
 
-  return { pass: checks.every((c) => c.pass), checks };
+  return {
+    pass: checks.every((c) => c.pass),
+    hardPass: checks.every((c) => c.pass || c.severity === "soft"),
+    checks,
+  };
 }
 
 async function checkSuccess(kind, value, ctx) {
@@ -43,67 +109,82 @@ async function checkSuccess(kind, value, ctx) {
       return { pass, detail: pass ? `final url ${url}` : `final url ${url} does not match ${value}` };
     }
 
-    case "element_exists": {
-      const found = await ctx.driver.finalPageCheck(value);
-      return { pass: Boolean(found), detail: found ? "element present" : `no element matches ${value}` };
-    }
-
+    case "element_exists":
+      // screen_shows is the mobile analog of element_exists: an accessibility id /
+      // predicate resolves on the final screen. Same Driver.finalPageCheck seam, the
+      // mobile driver's query language (config.js scopes screen_shows to mobile) —
+      // so they share one branch, differing only in the report noun.
     case "screen_shows": {
-      // The mobile analog of element_exists: an accessibility id / predicate
-      // resolves on the final screen. Same Driver.finalPageCheck seam, the
-      // mobile driver's query language. (config.js scopes this to mobile.)
+      const noun = kind === "screen_shows" ? "screen element" : "element";
       const found = await ctx.driver.finalPageCheck(value);
-      return { pass: Boolean(found), detail: found ? "screen element present" : `no screen element matches ${value}` };
+      return { pass: Boolean(found), detail: found ? `${noun} present` : `no ${noun} matches ${value}` };
     }
 
     case "api_called": {
       const [method, ...rest] = String(value).trim().split(/\s+/);
+      // A bare method with no path glob would compile to an empty regex that only
+      // matches an empty path — silently never hitting. Name the mistake instead.
+      if (rest.length === 0) {
+        return { pass: false, detail: `api_called "${method}" is missing a path glob — write e.g. "POST /api/todos"` };
+      }
       const re = globToRegExp(rest.join(" "));
-      // Embedded per-envelope network data is the source of truth; the HAR
-      // sidecar is the fallback only when no envelope carries a network field
-      // at all (runs/baselines from before network data was embedded).
+      // Embedded per-envelope network data is the primary source; the HAR sidecar
+      // supplies (a) whole runs from before network data was embedded and (b) tail
+      // requests fired after the final settle, which land in har.json but in no
+      // envelope's network window (§4/§7). Union both, de-duped by method+path, so
+      // a post-settle request is still matchable without double-counting embedded
+      // ones on a modern run.
       const trajectory = ctx.trajectory ?? [];
-      const requests = trajectory.some((e) => e.network)
-        ? trajectory.flatMap((e) => e.network?.requests ?? [])
-        : (ctx.harEntries ?? []).map((e) => ({
-            method: e.request?.method ?? "",
-            url: e.request?.url ?? "",
-            path: pathnameOf(e.request?.url ?? ""),
-          }));
-      const hits = requests.filter(
-        (r) =>
-          r.method?.toUpperCase() === method.toUpperCase() &&
-          re.test(r.path ?? pathnameOf(r.url)),
-      );
-      return {
-        pass: hits.length > 0,
-        detail:
-          hits.length > 0
-            ? `${hits.length} matching request(s), e.g. ${hits[0].method} ${hits[0].url}`
-            : `no matching request among ${requests.length} request(s)`,
-      };
-    }
+      const embedded = trajectory.flatMap((e) => e.network?.requests ?? []);
+      const harReqs = (ctx.harEntries ?? []).map((e) => ({
+        method: e.request?.method ?? "",
+        url: e.request?.url ?? "",
+        path: pathnameOf(e.request?.url ?? ""),
+      }));
+    const seen = new Set(embedded.map((r) => `${r.method}^@${r.path ?? pathnameOf(r.url)}`));
+    const requests = embedded.concat(harReqs.filter((r) => !seen.has(`${r.method}^@${r.path ?? pathnameOf(r.url)}`)));
+    const hits = requests.filter(
+      (r) =>
+        r.method?.toUpperCase() === method.toUpperCase() &&
+        re.test(r.path ?? pathnameOf(r.url)),
+    );
+    // Common authoring slip: a glob without a leading "/" (e.g. "POST api/todos")
+    // anchors to ^api/todos$ and never matches the always-leading-slash request
+    // paths. When nothing matched and that's the shape, point at the fix.
+    const glob = rest.join(" ");
+    const slashHint =
+      hits.length === 0 && !glob.startsWith("/") && requests.some((r) => (r.path ?? pathnameOf(r.url)).startsWith("/"))
+        ? `(did you mean "/${glob}"? request paths start with "/")`
+        : "";
+    return {
+      pass: hits.length > 0,
+      detail:
+        hits.length > 0
+          ? `${hits.length} matching request(s), e.g. ${hits[0].method} ${hits[0].url}`
+          : `no matching request among ${requests.length} request(s)${slashHint}`,
+    };
+  }
 
-    case "response_status": {
-      // api: a response with this status — exact ("201") or a class ("2xx").
-      // Matches ANY request in the run (design "last or any"), so a verification
-      // read-back after a mutation (POST 201 then GET 200) doesn't flip the gate.
-      const reqs = (ctx.trajectory ?? []).flatMap((e) => e.network?.requests ?? []);
-      const hits = reqs.filter((r) => statusMatches(value, String(r.status)));
-      return {
-        pass: hits.length > 0,
-        detail:
-          hits.length > 0
-            ? `${hits.length} response(s) with status ${value}, e.g. ${hits[0].method} ${hits[0].path} → ${hits[0].status}`
-            : reqs.length
-              ? `no response matched ${value} among ${reqs.length} request(s) (last: ${reqs[reqs.length - 1].status})`
-              : "no request recorded in the run",
-      };
-    }
+  case "response_status": {
+    // api: a response with this status — exact ("201") or a class ("2xx").
+    // Matches ANY request in the run (design "last or any"), so a verification
+    // read-back after a mutation (POST 201 then GET 200) doesn't flip the gate.
+    const reqs = (ctx.trajectory ?? []).flatMap((e) => e.network?.requests ?? []);
+    const hits = reqs.filter((r) => statusMatches(value, String(r.status)));
+    return {
+      pass: hits.length > 0,
+      detail:
+        hits.length > 0
+          ? `${hits.length} response(s) with status ${value}, e.g. ${hits[0].method} ${hits[0].path} → ${hits[0].status}`
+          : reqs.length
+            ? `no response matched ${value} among ${reqs.length} request(s) (last: ${reqs[reqs.length - 1].status})`
+            : "no request recorded in the run",
+    };
+  }
 
-    case "response_matches": {
-      // api: a JSON-path/value over the LAST response body (from har.json, never
-      // the committed trajectory — bodies stay out of baselines). Deterministic.
+  case "response_matches": {
+    // api: a JSON-path/value over the LAST response body (from har.json, never
+    // the committed trajectory — bodies stay out of baselines). Deterministic.
       const body = lastResponseBody(ctx);
       if (body == null) return { pass: false, detail: "the last response had no body to match" };
       let json;
@@ -127,11 +208,50 @@ async function checkSuccess(kind, value, ctx) {
       // web only (config.js scopes it): a deterministic correctness gate, not a
       // perf budget — the run must finish with no more than `value` console errors.
       const count = ctx.consoleErrorCount ?? 0;
-      return { pass: count <= Number(value), detail: `${count} console error(s)` };
+      const pass = count <= Number(value);
+      // Carry the captured messages ({type,text}[]) whenever any were seen — even
+      // on a PASS (a nonzero budget like `console_errors: 2` passes with 2 errors,
+      // and the user still wants to see them). Only attached when non-empty, so a
+      // clean check's shape (and a legacy run's) is unchanged. detail stays the
+      // count string (the CLI prints it).
+      const errors = ctx.consoleErrorLog ?? [];
+      return { pass, detail: `${count} console error(s)`, ...(errors.length ? { errors } : {}) };
     }
 
-    default:
+    case "accessibility_violations": {
+      // web only (config.js scopes it): always-on axe-core captures WCAG
+      // violations per step (envelope.axe); the gate caps the TOTAL violation
+      // node count summed across the run — every WCAG violation on each step's
+      // page, not just the element the agent touched. Deterministic, HARD (not in
+      // SOFT_KINDS). Same envelope-summing pattern as api_called; no new ctx
+      // field. Envelopes without `axe` (non-web, failed-axe, state-drift)
+      // contribute 0.
+      const trajectory = ctx.trajectory ?? [];
+      const total = trajectory.reduce((sum, e) => sum + (e.axe?.counts?.total ?? 0), 0);
+      return {
+        pass: total <= Number(value),
+        detail: `${total} WCAG violation(s)`,
+      };
+    }
+
+    default: {
+      // A suite custom-assertion key (config.js registered it and validated it
+      // into the schema): dispatch to the owning assertion's verdict(), judging the
+      // evidence gather() captured during the observing phase. The value string
+      // is opaque to core — the assertion owns its grammar. verdict throwing is
+      // caught by evaluateGate (a failed check); a non-{pass} return is a failed
+      // check with a clear assertion-named detail. Severity is hard (severityOf:
+      // assertion keys aren't in SOFT_KINDS). See docs/CONTRACTS.md §7.
+      const owner = ctx.routing?.get(kind);
+      if (owner) {
+        const verdict = owner.assertion.verdict({ key: kind, value, evidence: ctx.evidence?.[owner.name] });
+        if (!verdict || typeof verdict !== "object" || typeof verdict.pass !== "boolean") {
+          return { pass: false, detail: `assertion "${owner.name}" returned ${JSON.stringify(verdict)} (expected { pass, detail })` };
+        }
+        return { pass: verdict.pass, detail: verdict.detail ?? "" };
+      }
       return { pass: false, detail: `unknown success criterion "${kind}"` };
+    }
   }
 }
 
@@ -186,7 +306,7 @@ function globToRegExp(glob) {
 // ---- api response helpers (response_status / response_matches) ----
 
 /** The LAST request's response body (lives in har.json, not the trajectory).
- *  Strictly the last entry — never scans back to an earlier (e.g. prime) body,
+ *  Strictly the last entry — never scans back to an earlier (e.g. prime) body;
  *  so a body-less final response (204) fails rather than matching the wrong one. */
 function lastResponseBody(ctx) {
   const entries = ctx.harEntries ?? [];
@@ -200,12 +320,12 @@ function statusMatches(pattern, status) {
   return p === status;
 }
 
-// Minimal JSON-path/value check: `<path> (==|!=|=) <literal>`. path is a dot/
+// Minimal JSON-path/value check: `<path> (=|!=) <literal>`. path is a dot/
 // bracket path with an optional leading $ (e.g. "$.title", "$[0].completed",
 // "deleted"); literal is a quoted string, number, boolean, or null.
 function matchJsonPath(expr, json) {
-  const m = String(expr).match(/^\s*(\$?[\w.[\]'"-]*?)\s*(==|!=|=)\s*(.+?)\s*$/);
-  if (!m) return { pass: false, detail: `cannot parse response_matches ${JSON.stringify(expr)} (expected: path == value)` };
+  const m = String(expr).match(/^\s*(\$?[\w.[\]'"-]*?)\s*(=|!=)\s*(.+?)\s*$/);
+  if (!m) return { pass: false, detail: `cannot parse response_matches ${JSON.stringify(expr)} (expected: path = value)` };
   const [, rawPath, op, rawVal] = m;
   const actual = resolveJsonPath(json, rawPath);
   const expected = parseLiteral(rawVal);
@@ -213,11 +333,14 @@ function matchJsonPath(expr, json) {
   // and true == "true" false-positive).
   const eq = JSON.stringify(actual) === JSON.stringify(expected);
   const pass = op === "!=" ? !eq : eq;
+  // JSON.stringify(undefined) is the literal string "undefined" — show a readable
+  // placeholder instead when the path resolved to nothing.
+  const shown = actual === undefined ? "(no value at path)" : JSON.stringify(actual);
   return {
     pass,
     detail: pass
-      ? `${rawPath || "$"} = ${JSON.stringify(actual)}`
-      : `${rawPath || "$"} = ${JSON.stringify(actual)}, expected ${op} ${JSON.stringify(expected)}`,
+      ? `${rawPath || "$"} = ${shown}`
+      : `${rawPath || "$"} = ${shown}, expected ${op} ${JSON.stringify(expected)}`,
   };
 }
 

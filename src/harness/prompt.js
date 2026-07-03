@@ -33,3 +33,25 @@ export async function promptChangedReview(count, { input = process.stdin, output
     rl.close();
   }
 }
+
+/**
+ * Numbered picker for a named environment (app.envs) when no --env was passed
+ * and the top-level app.* has no usable base_url. The caller gates on TTY; this
+ * assumes an interactive session. An empty/invalid choice defaults to the first.
+ * @param {string[]} names available env names (non-empty)
+ * @param {{ input?: import("node:stream").Readable, output?: import("node:stream").Writable }} [io]
+ * @returns {Promise<string>} the chosen env name
+ */
+export async function promptEnv(names, { input = process.stdin, output = process.stdout } = {}) {
+  const rl = readline.createInterface({ input, output });
+  try {
+    output.write("\nNo app.base_url configured. Pick an environment:\n");
+    names.forEach((name, i) => output.write(`  ${i + 1}) ${name}\n`));
+    const answer = (await rl.question(`Environment [1-${names.length}, default 1]: `)).trim();
+    const n = Number(answer);
+    if (answer !== "" && Number.isInteger(n) && n >= 1 && n <= names.length) return names[n - 1];
+    return names[0];
+  } finally {
+    rl.close();
+  }
+}

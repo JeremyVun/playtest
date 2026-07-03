@@ -112,7 +112,7 @@ export function listPersonas(fromDirOrCaseFile = process.cwd()) {
 /** @returns {{ name: string, description: string }} */
 export function loadPersona(name, caseFile) {
   if (BUILTIN_PERSONAS.includes(name)) {
-    return { name, description: prompt(`persona-${name}.md`).trim() };
+    return { name, description: personas(`persona-${name}.md`).trim() };
   }
   const start = caseFile ? dirname(resolve(caseFile)) : process.cwd();
   const match = customPersonas(start).find((p) => p.name === name || p.slug === name);
@@ -123,10 +123,18 @@ export function loadPersona(name, caseFile) {
     ? `searched ${dirs.join(", ")}`
     : `no personas/ directory between ${start} and the repo root`;
   throw new DummyConfigError(
-    `persona "${name}" not found: not a built-in, and no matching personas/*.yaml (${searched}). Create one with: playtest new persona ${name}`,
+    `persona "${name}" not found: not a built-in, and no matching personas/*.yaml (${searched}). Create one with: playtest new pers
+ona ${name}`,
   );
 }
 
+/**
+ * Human-readable one-liner for a step ENVELOPE: its action whether agent-decided
+ * or replayed from a baseline (actionOf), never the raw `resolution.locator` — a
+ * long CSS nth-of-type path for a nameless element that spams the log/digest and
+ * bears no relation to the [eN] role "name" snapshot the actor saw. Shared by
+ * the actor log (stepLine) and the grader digest so the two cannot drift apart.
+ */
 export function describeStep(env) {
   const action = actionOf(env);
   return action ? describeAction(action) : "(baseline step)";
@@ -143,7 +151,6 @@ export function describeAction(action) {
     case "wait": return `wait ${action.seconds}s`;
     case "done": return `done: ${action.summary}`;
     case "give_up": return `give_up: ${action.reason}`;
-    // mobile verbs:
     case "tap": return `tap ${action.ref}`;
     case "swipe": return `swipe ${action.direction}${action.ref ? ` on ${action.ref}` : ""}`;
     case "back": return "back";
@@ -155,43 +162,32 @@ export function describeAction(action) {
 
 const oneLine = (s) => String(s).replace(/\s*\n\s*/g, " ").trim();
 
+// The harness flags steps that made no progress (runner detectConfusion): a
+// click/type that changed nothing (no_effect), or the same action repeated
+// against an unchanged page (repeated_action). The actor only ever saw "→ ok"
+// for these and so kept spinning; surface the flag so it can recognise a dead
+// end and stop.
 function outcomeOf(env) {
+  // A state-drift marker is a non-executed step (result.ok:false, no resolution):
+  // the page changed under the recorded action so it was SKIPPED, not run/failed.
   if (env.confusion?.type === "state_drift") {
-    return "the page changed under this recorded step, so it was SKIPPED - decide fresh from here";
+    return "the page changed under this recorded step, so it was SKIPPED — decide fresh from here";
   }
   if (env.result?.ok === false) return `error ${env.result.error}`;
   switch (env.confusion?.type) {
     case "no_effect": return "ok but NOTHING CHANGED on the page";
-    case "repeated_action": return "ok but you just did the SAME action against the SAME page - nothing changed";
+    case "repeated_action": return "ok but you just did the SAME action against the SAME page — nothing changed";
     default: return "ok";
   }
 }
 
 function stepLine(env) {
   const url = env.result?.url;
-  return `step ${env.step}: ${describeStep(env)} -> ${outcomeOf(env)}${url ? ` | url now ${url}` : ""}`;
+  return `step ${env.step}: ${describeStep(env)} → ${outcomeOf(env)}${url ? ` | url now ${url}` : ""}`;
 }
-
-// Append-only log: every step's line plus its thought, never rewritten, so
-// the prefix is byte-stable between turns (prompt caching). Bounded by
-// max_steps (50 by default), a few thousand tokens at worst — the per-turn
-// page snapshot dwarfs it.
-function renderLog(history) {
-  if (!history.length) return "Steps so far: (none — this is your first step)";
-  const lines = ["Steps so far:"];
-  for (const env of history) {
-    lines.push(stepLine(env));
-    if (env.agent?.thought) lines.push(`  thought: ${oneLine(env.agent.thought)}`);
-  }
-  return lines.join("\n");
-}
-
-export class Actor {
-  constructor(resolvedCase, persona) {
-    this.case = resolvedCase;
-    this.persona = persona;
-    this.setupContext = null;
-    // The transport overlay (system + verb subset) for this case's driver. Web
+// [UNREADABLE lines 188-213: scrolled past, not captured in any frame]
+export class Actor { // [reconstruction: inserted to balance block; original line(s) not recoverable]
+  constructor(resolvedCase, persona) { // [reconstruction: inserted to balance block; original line(s) not recoverable]
     // (or an absent driver) loads actor-system.md verbatim, so a web journey's
     // assembled prompt is byte-identical to pre-driver-seam — the golden test.
     this.driverId = resolvedCase.env?.driver ?? "web";
@@ -214,12 +210,15 @@ export class Actor {
 
   /**
    * @param {{ history: object[], snapshotText: string, stepNum: number,
-   *           screenshot?: Buffer|null, signal?: AbortSignal|null,
-   *           onContext?: ((messages: object[]) => void)|null }} turn
-   *   screenshot: the step's viewport PNG; rides the snapshot message as an
-   *   image part when the case has vision on (null degrades to text-only).
-   *   onContext: called with the assembled message window before the model call,
-   *   so the caller can persist it (context.jsonl) even if the call then fails.
+   *         screenshot?: Buffer|null, signal?: AbortSignal|null,
+   *         onContext?: ((messages: object[], tools: object[]) => void)|null,
+   *         onRetry?: Function|null }} turn
+   * screenshot: the step's viewport PNG; rides the snapshot message as an
+   * image part when the case has vision on (null degrades to text-only).
+   * onContext: called with the assembled message window AND the tool definitions
+   * sent that turn, before the model call, so the caller can persist them
+   * (context.jsonl) even if the call then fails.
+   * onRetry: forwarded to the LLM call — fires on each 429/5xx backoff.
    * @returns {Promise<{ agentStep: object, tokens: {in: number, out: number, cache_read: number} }>}
    */
   async nextStep({ history, snapshotText, stepNum, screenshot = null, signal = null, onContext = null, onRetry = null }) {
@@ -232,6 +231,12 @@ export class Actor {
       : snapText;
     const messages = [
       { role: "system", content: this.system },
+      // Run-setup context (§3): a NON-pinned user message a before_each hook fed
+      // back (e.g. "Test user acme_user_42 (password hunter2), already signed
+      // up."). It lives in the message window, NOT in this.system — so it's
+      // outside the prompts_version golden pin (like the snapshot) and doesn't
+      // bust prompt caching. Placed before the log so it reads as standing
+      // background. Absent (null) => no message => byte-identical to today.
       ...(this.setupContext ? [{ role: "user", content: `## Run setup\n\n${this.setupContext}` }] : []),
       { role: "user", content: renderLog(history) },
       { role: "user", content: snapContent },
@@ -244,7 +249,11 @@ export class Actor {
       validate: (a) => (this.validateStep(a) ? null : ajv.errorsText(this.validateStep.errors)),
       signal,
       onRetry,
-      cacheBreakponit: messages.length - 2,
+      // Cache through the last stable message — the append-only "Steps so far"
+      // log at length-2 — so the volatile per-turn snapshot (the final message)
+      // stays fresh. length-2, not a fixed index, because an optional run-setup
+      // message shifts the log's position. See applyCacheControl.
+      cacheBreakpoint: messages.length - 2,
     });
     return { agentStep: args, tokens };
   }

@@ -16,6 +16,9 @@ const STATUS_LABEL = {
   fail: (w) => red("FAIL".padStart(w)),
   infra: (w) => yellow("INFRA".padStart(w)),
   explored: (w) => cyan("EXPLORED".padStart(w)),
+  // "INTERRUPTED" overflows the journey label width (5); padStart leaves an
+  // over-wide word unchanged, so the column simply isn't padded — harmless.
+  interrupted: (w) => yellow("INTERRUPTED".padStart(w)),
 };
 
 function fmtMs(ms) {
@@ -37,6 +40,13 @@ function failedChecks(manifest) {
 const MODE_DOING = { record: "recording", act: "checking", heal: "healing", explore: "exploring" };
 const MODE_DID = { record: "recorded", act: "checked", heal: "tried to heal", explore: "explored" };
 
+// Post-actor live-display words: once the actor is done the harness still works
+// (evaluate the gate, write the manifest + tear the browser/env down, grade),
+// and each phase replaces the mode word so the live line keeps moving instead
+// of freezing on the last step summary. Live-display only — never a finished
+// surface (the case ends on case_end before any phase would have completed).
+export const PHASE_DOING = { setup: "setting up", observing: "observing", gate: "evaluating gate", finishing: "saving", grading: "grading" };
+
 // For finished explore runs the mode label would just repeat the EXPLORED
 // status; say how the exploration ended instead.
 const EXPLORE_END = { done: "finished", give_up: "gave up", max_steps: "hit max steps", timeout: "timed out", error: "errored" };
@@ -57,7 +67,7 @@ export function modeLabel(mode, { healed = false, status } = {}) {
  * case's movement vs prior runs (computed in cli.js); zero deltas are
  * suppressed — they read as no movement.
  * @param {{ duration_delta_ms?: number|null, score_delta?: number|null,
- *           status_streak?: string|null }|null} [trend]
+ *          status_streak?: string|null }|null} [trend]
  */
 export function caseLine(result, trend = null, labelWidth = 5) {
   const m = result.manifest ?? {};
@@ -67,7 +77,18 @@ export function caseLine(result, trend = null, labelWidth = 5) {
 
   const bits = [];
   if (m.mode === "explore") bits.push(EXPLORE_END[m.result?.end_reason] ?? modeLabel(m.mode, { healed: m.healed, status }));
-  else if (m.mode) bits.push(modeLabel(m.mode, { healed: m.healed, status }));
+  // A plain "record" with no baseline rode along (first run, or a prior run that
+  // failed and so never saved a path) says so: it explains why this run derived
+  // the journey afresh instead of checking against a saved path.
+  else if (m.mode === "record" && m.baseline == null) bits.push(`${modeLabel(m.mode, { healed: m.healed, status })} (no baseline)`);
+  else if (m.mode) {
+    // A healed pass reads "changed"; append the step it diverged at so the ledger
+    // says WHERE the recovery began at a glance (the verbose reason rides the
+    // manifest + the end-of-run digest, not this line).
+    const label = modeLabel(m.mode, { healed: m.healed, status });
+    const at = status === "pass" && m.healed && m.heal?.from_step != null ? ` (healed @${m.heal.from_step})` : "";
+    bits.push(label + at);
+  }
   if (m.totals?.steps != null) bits.push(`${m.totals.steps} steps`);
   if (m.duration_ms != null) {
     bits.push(fmtMs(m.duration_ms) + (trend?.duration_delta_ms ? ` (${signedMs(trend.duration_delta_ms)})` : ""));
@@ -78,20 +99,53 @@ export function caseLine(result, trend = null, labelWidth = 5) {
   }
   if (m.totals?.cost_usd) bits.push(`$${m.totals.cost_usd.toFixed(2)}`);
   if (trend?.status_streak) bits.push(trend.status_streak);
-
   let line = `${label} ${id}${bits.length ? dim(`  ${bits.join(" · ")}`) : ""}`;
   if (status === "fail") {
-    for (const c of failedChecks(m)) line += `\n        ${red("x")} ${c.spec} ${dim(`— ${c.detail}`)}`;
-  } else if (status === "infra") {
-    const why = result.error ?? m.result?.end_reason;
-    if (why) line += yellow(`  (${why})`);
+    const failures = failedChecks(m);
+    for (const c of failures) {
+      // Soft failures (console_errors / perf) still fail the run but didn't
+      // block the baseline; mark them so the FAIL reads as advisory, not a
+      // blocked regression.
+      const soft = c.severity === "soft";
+      const mark = soft ? yellow("!") : red("x");
+      line += `\n        ${mark} ${c.spec}${soft ? dim(" (soft)") : ""} ${dim(`— ${c.detail}`)}`;
+    }
+    // Only soft checks failed: the agent reached the goal, so the path was saved
+    // as the baseline even though the run is FAIL. Say so — it explains why a
+    // re-record isn't needed.
+    if (failures.length && failures.every((c) => c.severity === "soft")) {
+      line += `\n        ${dim("baseline saved (only soft checks failed)")}`;
+    }
   }
-  return line;
+  return line; // [reconstruction: inserted to balance block; original line(s) not recoverable]
+} // [reconstruction: inserted to balance block; original line(s) not recoverable]
+// [UNREADABLE lines 120-155: scrolled past, not captured in any frame]
+export function healDigest(results) { // [reconstruction: inserted to balance block; original line(s) not recoverable]
+  const healed = results.filter((r) => r.status === "pass" && r.manifest?.healed); // [reconstruction: inserted to balance block; original line(s) not recoverable]
+  if (!healed.length) return ""; // [reconstruction: inserted to balance block; original line(s) not recoverable]
+  const groups = new Map(); // [reconstruction: inserted to balance block; original line(s) not recoverable]
+  for (const r of healed) { // [reconstruction: inserted to balance block; original line(s) not recoverable]
+    const kind = r.manifest.heal?.kind; // [reconstruction: inserted to balance block; original line(s) not recoverable]
+    if (!groups.has(kind)) groups.set(kind, []);
+    groups.get(kind).push(r);
+  }
+  const idW = Math.max(...healed.map((r) => (r.manifest.case?.id ?? "?").length));
+  const blocks = [];
+  for (const [kind, runs] of groups) {
+    const head = dim(`${runs.length} healed · ${HEAL_PHRASE[kind] ?? "agent recovered"}:`);
+    const rows = runs.map((r) => {
+      const id = (r.manifest.case?.id ?? "?").padEnd(idW);
+      const step = r.manifest.heal?.from_step;
+      return dim(`     ${id} ${step !== null ? `step ${step}` : "—"}`);
+    });
+    blocks.push([head, ...rows].join("\n"));
+  }
+  return "\n" + blocks.join("\n") + "\n";
 }
 
 /** Totals line for a set of runs. */
 export function summary(results) {
-  const counts = { pass: 0, fail: 0, infra: 0, explored: 0 };
+  const counts = { pass: 0, fail: 0, infra: 0, explored: 0, interrupted: 0 };
   let duration = 0;
   let cost = 0;
   for (const r of results) {
@@ -106,6 +160,7 @@ export function summary(results) {
     counts.explored > 0 ? cyan(`${counts.explored} explored`) : null,
     counts.fail > 0 ? red(`${counts.fail} failed`) : null,
     counts.infra > 0 ? yellow(`${counts.infra} infra`) : null,
+    counts.interrupted > 0 ? yellow(`${counts.interrupted} interrupted`) : null,
   ].filter(Boolean);
   return `\n${parts.join(", ")} · ${results.length} run(s) · ${fmtMs(duration)} · $${cost.toFixed(2)}`;
 }
@@ -127,7 +182,8 @@ export function junitXml(results) {
   const suitesXml = [];
   for (const [name, runs] of suites) {
     const failures = runs.filter((r) => r.status === "fail").length;
-    const errors = runs.filter((r) => r.status === "infra").length;
+    // An interrupted (Ctrl-C'd) run is an error, same bucket as infra.
+    const errors = runs.filter((r) => r.status === "infra" || r.status === "interrupted").length;
     const time = runs.reduce((s, r) => s + (r.manifest?.duration_ms ?? 0), 0) / 1000;
     totals.tests += runs.length;
     totals.failures += failures;
@@ -137,8 +193,8 @@ export function junitXml(results) {
     const cases = runs.map((r) => {
       const m = r.manifest ?? {};
       const open =
-        `    <testcase classname="${esc(name)}" name="${esc(m.case?.id ?? "unknown")}"` +
-        ` time="${((m.duration_ms ?? 0) / 1000).toFixed(3)}"`;
+        `<testcase classname="${esc(name)}" name="${esc(m.case?.id ?? "unknown")}"` +
+        `  time="${((m.duration_ms ?? 0) / 1000).toFixed(3)}"`;
       if (r.status === "fail") {
         const failed = failedChecks(m);
         const message = failed.map((c) => c.spec).join("; ") || `gate failed (${m.result?.end_reason ?? "unknown"})`;
@@ -149,20 +205,24 @@ export function junitXml(results) {
         const why = r.error ?? m.result?.end_reason ?? "environment error";
         return `${open}>\n      <error message="${esc(why)}"/>\n    </testcase>`;
       }
+      if (r.status === "interrupted") {
+        return `${open}>\n      <error message="interrupted"/>\n    </testcase>`;
+      }
       return `${open}/>`;
     });
 
     suitesXml.push(
-      `  <testsuite name="${esc(name)}" tests="${runs.length}" failures="${failures}"` +
-        ` errors="${errors}" time="${time.toFixed(3)}">\n${cases.join("\n")}\n  </testsuite>`,
+      `<testsuite name="${esc(name)}" tests="${runs.length}" failures="${failures}"` +
+      ` errors="${errors}" time="${time.toFixed(3)}">\n${cases.join("\n")}\n  </testsuite>`,
     );
   }
 
   return [
     `<?xml version="1.0" encoding="UTF-8"?>`,
-    `<testsuites tests="${totals.tests}" failures="${totals.failures}" errors="${totals.errors}" time="${totals.time.toFixed(3)}">`,
+    `<testsuites tests="${totals.tests}" failures="${totals.failures}" errors="${totals.errors}" time="${totals.time.toFixed(3)}">
+    `,
     ...suitesXml,
     `</testsuites>`,
-    ``,
+
   ].join("\n");
-}
+} // [reconstruction: inserted to balance block; original line(s) not recoverable]

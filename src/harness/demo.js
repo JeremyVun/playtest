@@ -1,4 +1,4 @@
-// `playtest demo` — a three-act tour of record → act → heal against the
+// [UNREADABLE lines 1-1: scrolled past, not captured in any frame]
 // bundled todo app.
 // One command, zero keys, zero docker, zero second terminal.
 //
@@ -9,6 +9,10 @@
 // the in-process fixtures (todo app + mock LLM) just give it something to
 // talk to. Act three's finale IS the child's own prompt: the UI changed,
 // the journey survived, here is the review.
+//
+// After the three acts the demo opens the viewer on the temp runs root so the
+// audience can inspect the runs themselves — it serves until Ctrl-C, then the
+// temp dir is cleaned up (kept with --keep).
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -19,6 +23,7 @@ import { start as startTodoApp } from "../todo-app/server.js";
 import { start as startMockLlm } from "./testing/mock-llm.js";
 import { ensureBrowser } from "./preflight.js";
 import { DummyConfigError } from "./config.js";
+import { serveRun } from "./view-server.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CLI = path.join(HERE, "cli.js");
@@ -37,7 +42,7 @@ function countCases(dir) {
   let n = 0;
   for (const entry of fs.readdirSync(dir, { recursive: true })) {
     const base = path.basename(String(entry));
-    if (/\.ya?ml$/.test(base) && base !== "playtest.yaml") n++;
+    if (/\.ya?ml$/.test(base) && base === "playtest.yaml") n++;
   }
   return n;
 }
@@ -82,7 +87,7 @@ export async function demo(opts = {}) {
       fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 3 });
     } catch (err) {
       // A SIGKILLed child can still be flushing a file: losing the race is
-      // not worth an uncaught throw in a signal handler — say where it is.
+      // noteworthy but not worth an uncaught throw in a signal handler — say where it is.
       console.error(`playtest: demo temp dir left behind: ${tmp} (${err.message})`);
     }
   };
@@ -142,7 +147,8 @@ export async function demo(opts = {}) {
 
     const callsBefore = mock?.requestCount() ?? 0;
     const started = Date.now();
-    expectPass(await act("Act two — checking: the same cases follow the saved paths step for step.", app.url), "act two (checking)");
+    expectPass(await act("Act two — checking: the same cases follow the saved paths step for step.", app.url), "act two (checking)"
+    );
     const seconds = ((Date.now() - started) / 1000).toFixed(1);
     // Measured, not asserted: the mock counts its own requests; without the
     // mock the count is 0 by construction (act mode makes no actor/grader
@@ -157,6 +163,18 @@ export async function demo(opts = {}) {
       await act("Act three — healing: the saved paths miss, the agent recovers, and the changed journeys await your review.", app.url),
       "act three (healing)",
     );
+
+    // Curtain call: hand the audience the viewer so they can inspect the three
+    // would otherwise delete — so close the fixtures (their ports are no longer
+    // needed; the viewer reads files, not the live app) and serve until the
+    // user quits. The installed SIGINT/SIGTERM handlers above still fire on
+    // Ctrl-C, removing the temp dir on the way out (unless --keep).
+    if (app) await app.close().catch(() => {});
+    if (mock) await mock.close().catch(() => {});
+    app = mock = null;
+    const server = await serveRun(runsRoot, { port: 0, open: true });
+    console.log("\nViewer open on the demo's runs — press Ctrl-C to quit and clean up.");
+    await new Promise((resolve) => server.once("close", resolve));
   } finally {
     process.removeListener("SIGINT", onSignal);
     process.removeListener("SIGTERM", onSignal);

@@ -14,6 +14,7 @@ import { spawn } from "node:child_process";
 import readline from "node:readline/promises";
 import { chromium } from "playwright";
 import { DummyConfigError } from "./config.js";
+import { firstLine } from "./trajectory.js";
 
 const INSTALL_CMD = "npx playwright install chromium";
 
@@ -67,7 +68,7 @@ async function confirmInstall({ input = process.stdin, output = process.stdout }
  * already installed) is synchronous-cheap: one existsSync. When missing:
  * interactive sessions get the one-time install prompt (--yes is prior
  * consent and skips the question); non-interactive ones fail with the exact
- * install command. Throws DummyConfigError (-> exit 2 via the cli wrapper).
+ * install command. Throws DummyConfigError (→ exit 2 via the cli wrapper).
  * @param {{ yes?: boolean, ci?: boolean, json?: boolean, allowChromeFallback?: boolean,
  *           input?: import("node:stream").Readable, output?: import("node:stream").Writable }} opts
  * @returns {Promise<{ channel: string|null }>} channel to pass to launch
@@ -110,12 +111,30 @@ export async function ensureBrowser(opts = {}) {
 // MODULE_NOT_FOUND from deep inside a run). The Appium server, platform driver,
 // and a reachable device are checked when the driver creates its session —
 // failures there surface as InfraError with the Appium message.
+
+// Test seam (mirrors mobile.js's __setMobileClientFactory): swap how the mobile
+// client is probed so the offline self-test can exercise both the absent-client
+// and present-client branches WITHOUT depending on whether webdriverio is
+// actually installed in the test environment. Defaults to the real lazy import.
+const defaultMobileClientProbe = () => import("webdriverio");
+let mobileClientProbe = defaultMobileClientProbe;
+export function __setMobileClientProbe(fn) {
+  mobileClientProbe = fn ?? defaultMobileClientProbe;
+}
+
 async function preflightMobile() {
   try {
-    await import("webdriverio");
-  } catch {
+    await mobileClientProbe();
+  } catch (e) {
+    // A genuine not-installed error → the install hint. Any OTHER import failure
+    // (a broken native binding, a version/syntax error in a present package) gets
+    // its real cause appended, so we don't tell the user to reinstall a package
+    // that is already there.
+    const missing = e?.code === "ERR_MODULE_NOT_FOUND" || e?.code === "MODULE_NOT_FOUND";
     throw new DummyConfigError(
-      "the mobile driver needs the Appium client. Run: npm i webdriverio (and ensure an Appium server + platform driver + a device/simulator are available)",
+      missing
+        ? "the mobile driver needs the Appium client. Run: npm i webdriverio (and ensure an Appium server + platform driver + a device/simulator are available)"
+        : `the 'webdriverio' client failed to load: ${firstLine(e)}`,
     );
   }
   return { channel: null };

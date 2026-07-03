@@ -3,7 +3,7 @@ import { execFile as execFileCb } from "node:child_process";
 import { promisify } from "node:util";
 import fs from "node:fs";
 import path from "node:path";
-import { firstLine } from "./trajectory.js";
+import { firstLine, suiteRootFor } from "./trajectory.js";
 
 const execFile = promisify(execFileCb);
 
@@ -171,15 +171,11 @@ function findComposeFile(caseFile) {
  * case file.
  */
 function defaultsFileFor(caseFile) {
-  const start = caseFile ? path.dirname(path.resolve(caseFile)) : process.cwd();
-  for (let dir = start; ; ) {
-    const file = path.join(dir, "playtest.yaml");
-    if (fs.existsSync(file)) return file;
-    const parent = path.dirname(dir);
-    if (fs.existsSync(path.join(dir, ".git")) || parent === dir) break;
-    dir = parent;
-  }
-  return path.join(start, "playtest.yaml");
+  // suiteRootFor (trajectory.js) is the same nearest-playtest.yaml walk, falling
+  // back to the case dir; join "playtest.yaml" to recover the file. caseFile is
+  // null only on the cwd-rooted external-probe hint path, handled here.
+  const root = caseFile ? suiteRootFor(caseFile) : process.cwd();
+  return path.join(root, "playtest.yaml");
 }
 
 async function runInit(script, baseUrl, runId) {

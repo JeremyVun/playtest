@@ -4,7 +4,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { DummyConfigError } from "./config.js";
-import { findManifests } from "./view-server.js";
+import { findManifests, readJsonFile, manifestToHistoryEntry } from "./view-server.js";
 
 // Bound on the ancestor walk so a bare `playtest view` in /tmp never scans
 // huge parent trees; the .git root also ends the walk (checked, then stop).
@@ -34,9 +34,9 @@ export function findRunsRoot(explicit = null, from = process.cwd()) {
   }
   throw new DummyConfigError(
     "no runs directory found here. Run some tests first (playtest [paths...]), or name a run or runs root:\n" +
-      "  playtest view runs/\n" +
-      "  playtest view runs/2026-06-10T1325-cd37/todos/add-todo\n" +
-      "  playtest view --runs-root <dir>",
+    "  playtest view runs/\n" +
+    "  playtest view runs/2026-06-10T1325-cd37/todos/add-todo\n" +
+    "  playtest view --runs-root <dir>",
   );
 }
 
@@ -46,38 +46,20 @@ export function findRunsRoot(explicit = null, from = process.cwd()) {
  * serves a whole runAll — there is no persistent index; runs/ is the history.
  * Score comes from the sibling grade.json (null when ungraded). Unparseable
  * manifests and ones without case id / started_at are skipped.
- * @returns {Map<string, {run_id: string|null, started_at: string, status: string|null,
+ * @returns {Map<string, {run_id: string|null, started_at: string|null, status: string|null,
  *   mode: string|null, healed: boolean, duration_ms: number|null, steps: number|null,
  *   score: number|null, pins: object|null}[]>}
  */
 export function scanHistory(root) {
   const byCase = new Map();
   for (const dir of findManifests(path.resolve(root))) {
-    const m = readJson(path.join(dir, "manifest.json"));
+    const m = readJsonFile(path.join(dir, "manifest.json"));
     if (typeof m?.case?.id !== "string" || typeof m.started_at !== "string") continue;
     if (!byCase.has(m.case.id)) byCase.set(m.case.id, []);
-    byCase.get(m.case.id).push({
-      run_id: m.run_id ?? null,
-      started_at: m.started_at,
-      status: m.result?.status ?? null,
-      mode: m.mode ?? null,
-      healed: m.healed ?? false,
-      duration_ms: m.duration_ms ?? null,
-      steps: m.totals?.steps ?? null,
-      score: readJson(path.join(dir, "grade.json"))?.score ?? null,
-      pins: m.pins ?? null, // the comparability key (shared/movement.js)
-    });
+    byCase.get(m.case.id).push(manifestToHistoryEntry(m, readJsonFile(path.join(dir, "grade.json"))?.score));
   }
   for (const list of byCase.values()) list.sort((a, b) => a.started_at.localeCompare(b.started_at));
   return byCase;
-}
-
-function readJson(file) {
-  try {
-    return JSON.parse(fs.readFileSync(file, "utf8"));
-  } catch {
-    return null;
-  }
 }
 
 /**
@@ -88,7 +70,7 @@ function readJson(file) {
 export function latestRun(root, caseId = null) {
   let best = null;
   for (const dir of findManifests(root)) {
-    const manifest = readJson(path.join(dir, "manifest.json"));
+    const manifest = readJsonFile(path.join(dir, "manifest.json"));
     if (typeof manifest?.started_at !== "string") continue;
     if (caseId && manifest.case?.id !== caseId) continue;
     if (!best || manifest.started_at > best.manifest.started_at) best = { dir, manifest };

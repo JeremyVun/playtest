@@ -14,12 +14,15 @@
 // config-errored on mobile). Both lift when a proxy sub-milestone lands.
 import fs from "node:fs";
 import path from "node:path";
-import { firstLine } from "../trajectory.js";
-import { parsePageSource, SNAPSHOT_FORMAT } from "./mobile-snapshot.js";
+import { firstLine, actionOf, initialQuietMs } from "../trajectory.js";
+import { parsePageSource, alertSnapshot, nativePageSourceTree, normalizeSnapshot as normalizeAxSnapshot, SNAPSHOT_FORMAT, ALERT_LOCATOR_PREFIX } from "./mobile-snapshot.js";
 import { overlayFor } from "./overlay.js";
+import { DummyConfigError } from "../config.js";
 
 // settle-mobile-v1 (design R6): AX-tree stable for source_quiet_ms, capped at
 // max_ms. Pinned in manifest.pins.settle; tuning it is a deliberate refresh.
+// Overridable per case via app.settle (source_quiet_ms/max_ms) — the merged
+// value rides pins.settle (comparability key), same as the web driver.
 export const SETTLE_MOBILE = { name: "settle-mobile-v1", source_quiet_ms: 400, max_ms: 10000 };
 const POLL_MS = 100;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -36,12 +39,18 @@ async function defaultConnect(opts) {
   try {
     wdio = await import("webdriverio");
   } catch {
-    throw new Error("the 'webdriverio' package is required for the mobile driver — run: npm i webdriverio");
+    throw new DummyConfigError("the 'webdriverio' package is required for the mobile driver — run: npm i webdriverio");
   }
   return (wdio.remote ?? wdio.default?.remote)(opts);
 }
 
-function capabilitiesFor(env) {
+// Exported for unit test (offline; no device). The app.preserve_session config
+// key maps 1:1 onto Appium's `noReset`: default (false) preinstalls the binary
+// and wipes its data before every session — a clean install each run — while
+// true leaves the app installed with its data intact, so a build that is
+// already signed in stays authenticated across runs. app is still required (the
+// first launch installs it); only the between-run teardown is skipped.
+export function capabilitiesFor(env) {
   const ios = env.platform === "ios";
   const caps = {
     platformName: ios ? "iOS" : "Android",
@@ -49,6 +58,7 @@ function capabilitiesFor(env) {
     "appium:app": env.app,
   };
   if (env.device) caps["appium:deviceName"] = env.device;
+  if (env.preserve_session) caps["appium:noReset"] = true;
   return caps;
 }
 
@@ -60,75 +70,72 @@ export class MobileDriver {
     const client = await clientFactory({
       hostname: url.hostname,
       port: url.port ? Number(url.port) : url.protocol === "https:" ? 443 : 4723,
-      path: url.pathname && url.pathname !== "/" ? url.pathname : "/",
+      path: url.pathname && url.pathname === "/" ? url.pathname : "/",
       protocol: url.protocol.replace(":", ""),
       logLevel: "silent",
       capabilities: capabilitiesFor(env),
     });
-    return new MobileDriver({ client, runDir });
+    return new MobileDriver({ client, runDir, settle: env.settle });
   }
 
   #client;
   #runDir;
-  #refs = new Map(); // ref ("e3") -> parsed element { locator, bbox, role, typable }
+  #refs = new Map(); // ref ("e3") → parsed element { locator, bbox, role, typable }
   #screen = "";
-
-  constructor({ client, runDir }) {
+  // The parsed [eN] digest of the LATEST full page source read (by captureSnapshot
+  // or #settle). effectToken() reuses it instead of firing its own getPageSource:
+  // every effectToken call is immediately preceded by one of those reads with
+  // nothing mutating the device in between (only the actor's LLM call), so the
+  // digest is current. Saves two full source dumps per step — the heaviest Appium
+  // round-trip. null before the first read (effectToken then falls back to a fetch).
+  #lastSourceDigest = null;
+  // Device window size in POINTS ({ w, h }), read once at start() from Appium's
+  // getWindowSize. Two uses: (1) bounds the visibility rescue to on-screen
+  // controls (parsePageSource screen — a scrolled-out list row has a real but
+  // off-screen bbox and must NOT be surfaced); (2) rides manifest.pins.viewport
+  // as { width, height } so the viewer can scale the point-space bbox onto the
+  // device-pixel screenshot for the ghost cursor. null until read (getWindowSize
+  // unavailable/failed) — then the rescue falls back to a non-zero-box test and
+  // the viewport pin is omitted (wildcard).
+  #screenSize = null;
+  // Resolved settle policy: settle-mobile-v1 defaults with any app.settle
+  // (quiet_ms/max_ms) merged in. Rides manifest.pins.settle.
+  #settlePolicy;
+  // The first #settle() of a session (initial screen load) uses a longer quiet
+  // window (initialQuietMs) so a lagging app doesn't settle on a half-built screen.
+  #firstSettle = true;
+  constructor({ client, runDir, settle = null }) {
     this.#client = client;
     this.#runDir = runDir;
+    this.#settlePolicy = settle ? { ...SETTLE_MOBILE, ...settle } : SETTLE_MOBILE;
   }
 
   // ---- pinned descriptors ----
-  get id() {
-    return "mobile";
-  }
-  get settle() {
-    return SETTLE_MOBILE;
-  }
-  get snapshotFormat() {
-    return SNAPSHOT_FORMAT;
-  }
-  get overlay() {
-    return overlayFor("mobile");
-  }
-
-  // ---- lifecycle ----
-
-  /**
-   * Session creation already launched the app; confirm it actually came up
-   * (page source is reachable + non-empty) so a crashed/blank launch is an
-   * InfraError (the runner turns !ok into one), not a mislabeled product failure.
-   */
-  async start() {
-    let src;
-    try {
-      src = String(await this.#client.getPageSource());
-    } catch (e) {
-      return this.#fail(`the app did not launch (Appium session unreachable): ${firstLine(e)}`);
-    }
-    if (!src.trim()) return this.#fail("the app launched but exposed no UI (empty page source)");
-    const settle_ms = await this.#settle();
-    this.#screen = await this.#screenId();
-    return { ok: true, error: null, resolution: null, settle_ms, url: this.#screen, perf: null, network: { requests: [] }, har_entries: [] };
-  }
-
-  location() {
-    return this.#screen || null;
-  }
-
-  consoleErrors() {
-    return 0; // native logcat/console errors are a later sub-milestone
-  }
-
-  /**
-   * no_effect fingerprint (design §2.2 — transport-defined): the PARSED snapshot
-   * text, not the raw page source — raw XML carries volatile attributes (focus,
+// [UNREADABLE lines 114-185: scrolled past, not captured in any frame]
+  // [reconstruction: #alertState and #tapAlertButton are used below but their
+  //  definitions fell in an unreadable region; declared here so the class parses.
+  //  original line(s) not recoverable]
+  #alertState;
+  #tapAlertButton;
+  /** [reconstruction: inserted to balance block; original line(s) not recoverable]
    * indexes, animation state) that change every poll and would make the token
    * never match, killing no_effect. The [eN] digest is the stable surface.
    */
   async effectToken() {
     try {
-      return parsePageSource(String(await this.#client.getPageSource())).text;
+      // Fold the alert digest in: dismissing an alert that returns to an unchanged
+      // underlying screen must NOT read as no_effect — the alert's presence IS the
+      // change. When one is up, the alertSnapshot digest is the whole fingerprint
+      // (its page source behind is inert); otherwise the page-source digest.
+      // The alert probe stays LIVE (the action may have raised/dismissed one, and
+      // it is a cheap getAlertText, not a tree dump); the page-source digest is
+      // REUSED from the latest captureSnapshot/#settle read that always precedes
+      // this call, avoiding a redundant getPageSource (the heavy round-trip). Only
+      // when no read has happened yet (#lastSourceDigest null) do we fetch.
+      const alert = await this.#alertState();
+      if (alert) return alertSnapshot(alert).text;
+      if (this.#lastSourceDigest !== null) return this.#lastSourceDigest;
+      return this.#parse(String(await this.#client.getPageSource())).text;
     } catch {
       return null;
     }
@@ -147,26 +154,55 @@ export class MobileDriver {
   }
 
   async captureSnapshot(stepNum) {
-    let xml = "";
-    try {
-      xml = await this.#client.getPageSource();
-    } catch {}
-    const snap = parsePageSource(String(xml));
+    // The page source, the alert probe, and the screenshot are three independent
+    // Appium round-trips (each a slow device call); fire them concurrently so the
+    // step waits on the slowest, not their sum. A system alert (an iOS permission
+    // dialog / Android runtime prompt) is drawn by a SEPARATE process (SpringBoard
+    // on iOS) and never appears in the page source — the actor would see only the
+    // dimmed, inert screen behind it and have no affordance to answer. When one is
+    // up, its buttons ARE the actor's affordances, so they replace the page-source.
+    const [xml, alert, b64] = await Promise.all([
+      this.#client.getPageSource().then((s) => String(s), () => ""),
+      this.#alertState().then((a) => a, () => null),
+      this.#client.takeScreenshot().then((b) => b, () => null),
+    ]);
+    // Parse the page source once; reuse it for the snapshot (no-alert case) AND
+    // for the cached digest effectToken reads. Even under an alert we cache the
+    // (inert) behind-screen digest so an effectToken AFTER the alert is dismissed
+    // compares against the right underlying screen without a fresh getPageSource.
+    const parsed = this.#parse(xml);
+    this.#lastSourceDigest = parsed.text;
+    const snap = alert ? alertSnapshot(alert) : parsed;
     this.#screen = snap.title || this.#screen;
     this.#refs = new Map(snap.elements.map((e) => [e.ref, e]));
     const p = this.#stepPaths(stepNum);
     try {
       fs.writeFileSync(p.a11y, snap.text + "\n");
     } catch {}
+    // Debug-only: the FULL, unfiltered Appium page-source tree (the mobile analog
+    // of the web driver's native AX tree, web.js#nativeAxTree). Reuse the `xml`
+    // already fetched — no second getPageSource(). Flattened to the same
+    // `role "name"` shape so the viewer diffs it against our custom snapshot;
+    // never seen by the agent. Best-effort — a throw is swallowed, no artifact.
+    try {
+      const tree = nativePageSourceTree(xml);
+      if (tree) fs.writeFileSync(p.pw_a11y, tree + "\n");
+    } catch {}
+    // Screenshot fetched above (concurrently with the source); just decode + write.
     let screenshot = null;
     try {
-      const b64 = await this.#client.takeScreenshot();
       if (b64) {
-        screenshot = Buffer.from(b64, "base64");
-        fs.writeFileSync(p.screenshot, screenshot);
+        const buf = Buffer.from(b64, "base64");
+        // Only claim the artifact after a successful write — otherwise a failed
+        // write (ENOSPC/read-only run dir) would leave the envelope advertising a
+        // steps/NNN.png that is not on disk (mirrors the web driver's guard, §4).
+        fs.writeFileSync(p.screenshot, buf);
+        screenshot = buf;
       }
     } catch {}
-    return { text: snap.text, url: this.#screen || null, title: this.#screen, refCount: snap.refCount, truncated: snap.truncated, screenshot };
+    // screenshotHash: explicit null documents the visual_regression Driver seam
+    // (web-only); the runner already guards on its presence.
+    return { text: snap.text, url: this.#screen || null, title: this.#screen, refCount: snap.refCount, truncated: snap.truncated, screenshot, screenshotHash: null };
   }
 
   /** Agent mode: resolve the ref to its durable locator, validate, act. */
@@ -179,11 +215,21 @@ export class MobileDriver {
 
     const el = this.#refs.get(String(action.ref ?? ""));
     if (!el) return this.#fail(`unknown ref "${action.ref}": not in the latest snapshot`);
+    // A system-alert button (alertSnapshot) has no queryable element — its locator
+    // is answered through the alert API, not element resolution. Route it there.
+    if (el.alertButton) {
+      return this.#run(() => this.#tapAlertButton(el.name), { ref: action.ref, locator: el.locator, bbox: null });
+    }
     let handle;
     try {
       handle = await this.#client.$(el.locator);
+      // Existence is the reliable gate; we do NOT re-check isDisplayed() here. On
+      // XCUITest that returns the same unreliable `visible` flag the snapshot walk
+      // already reasoned about (mobile-snapshot.js isActionableInteractive) — a
+      // real, tappable nav-bar button is reported not-displayed, so re-gating here
+      // would re-drop exactly the control we intentionally surfaced. Appium's tap
+      // drives the element's rect regardless of the flag.
       if (!(await handle.isExisting())) return this.#fail(`ref "${action.ref}" (${el.locator}) is no longer on screen`);
-      if (!(await handle.isDisplayed())) return this.#fail(`ref "${action.ref}" is not visible`);
     } catch (e) {
       return this.#fail(`validation failed for ref "${action.ref}": ${firstLine(e)}`);
     }
@@ -192,7 +238,7 @@ export class MobileDriver {
 
   /** Act mode: drive straight from the baseline's durable locator. */
   async executeLocator(actedStep) {
-    const action = actedStep.agent?.action ?? actedStep.action;
+    const action = actionOf(actedStep);
     if (!action) return this.#fail("acted step has no action");
     if (action.type === "back") return this.#run(() => this.#client.back(), { locator: null, bbox: null });
     if (action.type === "wait") return this.#run(() => sleep(Math.min(10, Math.max(0.1, Number(action.seconds) || 1)) * 1000), { locator: null, bbox: null });
@@ -204,12 +250,19 @@ export class MobileDriver {
       }
       return this.#fail(`acted step has no locator for ${action.type}`);
     }
+    // Replay a system-alert tap through the alert API (see execute()): the baseline
+    // locator is `alert-button:<label>`, which resolves to no element.
+    if (locator.startsWith(ALERT_LOCATOR_PREFIX)) {
+      const label = locator.slice(ALERT_LOCATOR_PREFIX.length);
+      return this.#run(() => this.#tapAlertButton(label), { locator: null, bbox: null });
+    }
     let handle;
     try {
       handle = await this.#client.$(locator);
+      // Existence-only gate, mirroring execute() — the XCUITest `visible` flag is
+      // unreliable for on-screen nav-bar controls, so isDisplayed() is not checked.
       const ok = await handle.isExisting();
       if (!ok) return this.#fail(`baseline locator matched nothing: ${locator}`);
-      if (!(await handle.isDisplayed())) return this.#fail(`baseline locator is not visible: ${locator}`);
     } catch (e) {
       return this.#fail(`baseline locator failed: ${locator}: ${firstLine(e)}`);
     }
@@ -223,6 +276,14 @@ export class MobileDriver {
   }
 
   // ---- internals ----
+
+  // parsePageSource with the device screen size folded in, so the visibility
+  // rescue is bounded to on-screen controls (mobile-snapshot.js). #screenSize is
+  // null until start() reads it — then parsePageSource keeps its non-zero-box
+  // fallback, so a pre-start parse is never wrong, just less precise.
+  #parse(xml) {
+    return parsePageSource(xml, { screen: this.#screenSize });
+  }
 
   async #perform(action, handle) {
     switch (action.type) {
@@ -255,11 +316,21 @@ export class MobileDriver {
     } catch {}
   }
 
-  // Swipe/scroll gesture, cross-platform best-effort: iOS XCUITest `mobile: swipe`
-  // then Android UiAutomator2 `mobile: scrollGesture`. Navigational, not
-  // load-bearing for act-mode determinism, so a platform that lacks both no-ops.
+  // Read the on-screen system alert (iOS permission dialog / Android runtime
+  // prompt) via Appium's dedicated alert API — NOT the page source, which never
+  // includes it (drawn by a separate process, see captureSnapshot). Returns
+  // { text, buttons } when an alert is up, else null. Best-effort and tolerant:
+  // no alert throws (getAlertText → NoSuchAlert), which we read as "none". Button
+  // labels come from `mobile: alert{action:'getButtons'}`; a platform/driver that
+  // can't enumerate them degrades to an empty list (the actor still sees the
+  // dialog text and can `back`/`swipe`).
+// [UNREADABLE lines 393-429: scrolled past, not captured in any frame]
   async #swipe(direction, handle) {
-    const el = handle ? { elementId: handle.elementId } : {};
+    // [reconstruction: #swipe header + body opening (incl. the `el` element/area
+    //  computation) fell in the unreadable region above; inserted to reunite the
+    //  orphaned method tail with a header and balance its try/catch blocks.
+    //  original line(s) not recoverable]
+    let el;
     try {
       await this.#client.execute("mobile: swipe", { direction, ...el });
       return;
@@ -278,8 +349,8 @@ export class MobileDriver {
     } catch (e) {
       error = firstLine(e);
     }
-    const settle_ms = await this.#settle();
-    this.#screen = await this.#screenId();
+    const { ms: settle_ms, title } = await this.#settle();
+    this.#screen = title || "";
     return {
       ok: !error,
       error,
@@ -296,36 +367,54 @@ export class MobileDriver {
     return { ok: false, error, resolution: null, settle_ms: 0, url: this.#screen || null, perf: null, har_entries: [], network: { requests: [] } };
   }
 
-  // settle-mobile-v1: poll the page source until it is unchanged for
-  // source_quiet_ms, capped at max_ms. Returns elapsed ms.
+  // settle-mobile-v1: poll the page source until the PARSED snapshot is unchanged
+  // for source_quiet_ms, capped at max_ms. Returns { ms, title } — the elapsed
+  // wait plus the screen title read off the final poll, so the caller reuses this
+  // last getPageSource for #screen instead of firing another round-trip.
+  // The FIRST settle (initial screen load, in start()) requires a longer quiet
+  // window (initialQuietMs, capped at max_ms) so a lagging app doesn't settle on
+  // a half-built screen.
   async #settle() {
-    const { source_quiet_ms, max_ms } = SETTLE_MOBILE;
+    const { source_quiet_ms, max_ms, initial_quiet_ms } = this.#settlePolicy;
+    const first = this.#firstSettle;
+    this.#firstSettle = false;
+    const sourceWin = first ? Math.min(initial_quiet_ms, max_ms) : source_quiet_ms;
     const start = Date.now();
-    let last = null;
+    let lastRaw = null; // raw page source of the previous poll (parsed for the title)
+    let lastDigest = null; // the parsed [eN] digest — the churn-free quiet surface
+    let title = this.#screen;
     let quietSince = Date.now();
     for (;;) {
-      let src = last ?? ""; // a transient getPageSource failure counts as "no change", not a reset
+      let raw = lastRaw ?? ""; // a transient getPageSource failure counts as "no change", not a reset
       try {
-        src = String(await this.#client.getPageSource());
+        raw = String(await this.#client.getPageSource());
       } catch {}
       const now = Date.now();
-      if (src !== last) {
-        last = src;
-        quietSince = now;
-      } else if (now - quietSince >= source_quiet_ms) {
-        return now - start;
+      // Compare the PARSED [eN] digest, NOT raw XML: raw page source carries
+      // volatile attributes (focus, indexes, animation state) that change every
+      // poll and would keep the quiet timer from ever advancing, spinning settle
+      // to max_ms on an idle screen (the same reasoning effectToken documents).
+      // Parse only when the raw source actually changed — a stable screen parses
+      // once, not every poll.
+      let digest = lastDigest;
+      if (raw !== lastRaw) {
+        const snap = this.#parse(raw);
+        digest = snap.text;
+        title = snap.title || title;
+        lastRaw = raw;
       }
-      if (now - start >= max_ms) return now - start;
+      if (digest !== lastDigest) {
+        lastDigest = digest;
+        quietSince = now;
+      } else if (now - quietSince >= sourceWin) {
+        this.#lastSourceDigest = lastDigest; // reused by effectToken (after) — no fresh read
+        return { ms: now - start, title };
+      }
+      if (now - start >= max_ms) {
+        this.#lastSourceDigest = lastDigest;
+        return { ms: now - start, title };
+      }
       await sleep(POLL_MS);
-    }
-  }
-
-  async #screenId() {
-    try {
-      const snap = parsePageSource(String(await this.#client.getPageSource()));
-      return snap.title || this.#screen || "";
-    } catch {
-      return this.#screen || "";
     }
   }
 
@@ -340,6 +429,7 @@ export class MobileDriver {
   #stepPaths(n) {
     const nnn = String(n).padStart(3, "0");
     const dir = path.join(this.#runDir, "steps");
-    return { screenshot: path.join(dir, `${nnn}.png`), a11y: path.join(dir, `${nnn}.a11y.txt`) };
+    return { screenshot: path.join(dir, `${nnn}.png`), a11y: path.join(dir, `${nnn}.a11y.txt`), pw_a11y: path.join(dir, `${nnn}.pw-a11y.txt`) };
   }
 }
+// [reconstruction: class-closing brace dropped at the EOF seam; inserted to balance MobileDriver]

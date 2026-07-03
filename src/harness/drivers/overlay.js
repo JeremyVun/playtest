@@ -58,9 +58,8 @@ const VERB_FIELDS = {
 
 // `direction` serves scroll (web: up/down) and additionally swipe on mobile
 // (left/right). Scoped per driver so the model is never offered a verb-foreign
-// value, and the validator rejects one.
+// value and the validator rejects one.
 const DIRECTION_ENUM = { web: ["up", "down"], mobile: ["up", "down", "left", "right"] };
-
 // Model-facing field descriptions: concise, verb-anchored, weak-model-tuned.
 // They intentionally differ from the canonical schema's contract descriptions;
 // load-bearing clauses (replaces the current value, label or value, relative to
@@ -127,7 +126,7 @@ export function toolParamsFor(driverId = "web") {
   const fields = [...new Set(verbs.flatMap((v) => VERB_FIELDS[v]))];
   const actionProps = { type: { enum: verbs, description: "The single thing to do this turn — exactly one of these." } };
   for (const f of fields) actionProps[f] = shippedField(id, f);
-  const { thought, expectation, visual } = CANON.properties;
+  const { thought, expectation, visual, confused, confused_reason } = CANON.properties;
   return {
     type: "object",
     required: ["thought", "action", "expectation"],
@@ -136,6 +135,8 @@ export function toolParamsFor(driverId = "web") {
       action: { type: "object", required: ["type"], properties: actionProps },
       expectation,
       visual,
+      confused,
+      confused_reason,
     },
   };
 }

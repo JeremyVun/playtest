@@ -1,0 +1,183 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "dummy/case.schema.json",
+  "title": "Playtest case file",
+  "description": "One test case (<name>.yaml): a journey (regression with a deterministic gate) or a discovery study (open-ended exploration, no gate). Any key left unset inherits from the nearest playtest.yaml up the directory chain (nearest wins). max_steps/timeout may also be spelled nested under limits.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["story"],
+  "properties": {
+    "story": {
+      "type": "string",
+      "description": "Required. The user's goal in natural language, addressed to the actor in the second person (\"You keep forgetting to buy milk...\"). Journey stories name concrete targets in double quotes; discovery stories state a goal without prescribing the path (\"Get your timesheet data out of the platform however seems natural\")."
+    },
+    "description": {
+      "type": "string",
+      "description": "Optional one-line human-facing summary, e.g. \"Add a todo and see it in the list\". Shown in run lists (the viewer's picker) instead of the story prose; never sent to the actor, so it cannot change agent behavior. Case-only: not allowed in playtest.yaml."
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Free-form labels for --tag filtering, e.g. [smoke]. Case-only: not allowed in playtest.yaml. Default []."
+    },
+    "persona": {
+      "type": ["string", "array"],
+      "items": { "type": "string" },
+      "minItems": 1,
+      "uniqueItems": true,
+      "description": "Persona the actor role-plays: built-in \"tester\" or \"exploratory\", or the name/slug of a personas/*.yaml file. A scalar runs one actor (default \"tester\", inheritable). A list (e.g. [first-timer, power-user]) fans out one run per persona in discovery — id <case-id>@<persona>, the persona overridden per run; on a journey only the first is used (a journey has one recorded path) and the rest are ignored with a warning."
+    },
+    "mode": {
+      "enum": ["journey", "discovery"],
+      "description": "Case kind, default \"journey\". journey: regression test — deterministic success gate, baseline record/act/heal, pass/fail exit codes. discovery: product-insight study — no success gate, always a fresh agentic run that ends \"explored\" (give_up is a valid, informative outcome), graded with the discoverability rubric. Inheritable: a study directory usually sets mode: discovery once in its playtest.yaml."
+    },
+    "vision": {
+      "type": "boolean",
+      "description": "Discovery capability: send each step's viewport screenshot to the actor alongside the a11y snapshot and ask for visual observations (the step's \"visual\" field). Defaults to true when the resolved mode is discovery, false otherwise. Inheritable. \"vision: true\" resolving on a journey case is a config error — the regression instrument stays a11y-only by construction; \"vision: false\" is always allowed."
+    },
+    "success": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "maxProperties": 1,
+        "properties": {
+          "url_matches": {
+            "type": "string",
+            "description": "Glob (* and ?) matched against the final URL or its pathname, e.g. \"/done/*\"."
+          },
+          "element_exists": {
+            "type": "string",
+            "description": "web only: CSS selector that must match on the final page, e.g. \"[data-testid=todo-item]\"."
+          },
+          "screen_shows": {
+            "type": "string",
+            "description": "mobile only: an accessibility id / predicate that must resolve on the final screen — the mobile analog of element_exists, e.g. \"~todo-cell-buy-milk\"."
+          },
+          "response_status": {
+            "type": "string",
+            "description": "api only: the status of the last response, exact (\"201\") or a class (\"2xx\")."
+          },
+          "response_matches": {
+            "type": "string",
+            "description": "api only: a JSON-path/value over the last response body, deterministic (no model), e.g. \"$.title == \\\"buy milk\\\"\" or \"completed == false\". Natural-language response claims use assert instead."
+          },
+          "api_called": {
+            "type": "string",
+            "description": "\"METHOD /path/glob\" that must appear in the run's network traffic, e.g. \"POST /api/todos\" or \"PATCH /api/todos/*\". web and api only; mobile has no network capture in v1, so api_called on a mobile case is a config error."
+          },
+          "assert": {
+            "type": "string",
+            "description": "Natural-language claim about the final state — the page (web), the final screen (mobile), or the last response body (api) — checked by the grader model. Costs one model call per run, even on acted runs."
+          },
+          "console_errors": {
+            "type": "number",
+            "description": "web only: maximum console error count over the whole run, e.g. 0. Deterministic (no model call) — a correctness gate, not a perf budget."
+          }
+        }
+      },
+      "description": "Journey-only deterministic gate: every criterion must pass, each entry exactly one of url_matches/element_exists/screen_shows/api_called/response_status/response_matches/console_errors/assert. Each kind is valid only for its driver(s) (web: url_matches/element_exists/api_called/console_errors/assert; mobile: screen_shows/assert; api: url_matches/api_called/response_status/response_matches/assert) — a wrong-driver kind is a config error. Case-only: not allowed in playtest.yaml. Config error in a discovery case (ask report: questions instead). Default []."
+    },
+    "perf": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "lcp_ms": {
+          "type": ["string", "number"],
+          "description": "Threshold on the WORST navigation LCP in milliseconds: \"< 2500\" style (ops < <= > >=) or a bare number meaning <= n."
+        },
+        "input_to_paint_ms": {
+          "type": ["string", "number"],
+          "description": "Threshold on the WORST input-to-paint latency in milliseconds; same format as lcp_ms."
+        }
+      },
+      "description": "Latency thresholds (LCP / input-to-paint) checked with the journey gate. Inheritable. Silently irrelevant in discovery (the gate never runs). No-console-errors is a success criterion, not a perf key."
+    },
+    "report": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Report questions the grader answers from the trajectory, e.g. \"At which screen would this user have expected an export affordance?\". Questions, not assertions — findings have answers, not pass/fail. Most useful in discovery studies, but honored on journey cases too. Case-only: not allowed in playtest.yaml. Default []."
+    },
+    "max_steps": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Maximum actor steps before the run ends with end_reason max_steps. Default 50. Inheritable. Equivalent nested spelling: limits.max_steps."
+    },
+    "timeout": {
+      "type": ["string", "number"],
+      "description": "Wall-clock limit per run: \"5m\", \"90s\", \"250ms\", or a number of milliseconds. Default \"4m\". Inheritable. Equivalent nested spelling: limits.timeout."
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_steps": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Same as top-level max_steps."
+        },
+        "timeout": {
+          "type": ["string", "number"],
+          "description": "Same as top-level timeout."
+        }
+      },
+      "description": "Nested spelling of max_steps/timeout; normalized to the top-level keys at load time."
+    },
+    "actor_model": {
+      "type": "string",
+      "description": "Model that role-plays the user. Default \"claude-sonnet-4-6\" — a capable actor reads the page and recovers from friction far more reliably than a cheap one, and for both journeys and discovery the trajectory is only worth grading if the user was played well. Pin a cheaper model (e.g. \"claude-haiku-4-5\") when cost matters more than fidelity. Inheritable."
+    },
+    "grader_model": {
+      "type": "string",
+      "description": "Model that grades finished runs and checks assert: criteria. Default \"claude-sonnet-4-6\". Inheritable."
+    },
+    "app": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "driver": {
+          "enum": ["web", "mobile", "api"],
+          "description": "Transport for the app under test. Default \"web\" (Playwright/Chromium). \"mobile\" drives a native iOS/Android app via Appium; \"api\" drives a REST API via fetch. Inheritable — usually set once in a playtest.yaml. The other app.* keys, success kinds, and perf keys are validated per-driver."
+        },
+        "base_url": {
+          "type": "string",
+          "description": "Where the app under test runs, e.g. http://localhost:4173. Required for web and api (or pass --base-url); optional for mobile. Agents really click buy/delete/submit — point at staging or test, never production."
+        },
+        "compose": {
+          "type": "string",
+          "description": "docker-compose file path, relative to this file: managed mode — the harness boots and tears down the app per run. web/api."
+        },
+        "init": {
+          "type": "string",
+          "description": "Executable script path, relative to this file, run before each case to reset app state. Receives BASE_URL/RUN_ID. Any driver — also the mobile/api pre-auth path."
+        },
+        "storage_state": {
+          "type": "string",
+          "description": "Playwright storage-state JSON path, relative to this file, for a pre-authenticated browser session. web only."
+        },
+        "platform": {
+          "enum": ["ios", "android"],
+          "description": "mobile only: the target platform (Appium XCUITest for ios, UiAutomator2 for android)."
+        },
+        "app": {
+          "type": "string",
+          "description": "mobile only: path (relative to this file) to the app binary to install — a .app/.ipa (ios) or .apk (android). Required for the mobile driver."
+        },
+        "device": {
+          "type": "string",
+          "description": "mobile only: the target device/emulator/simulator name or udid. Omit to let the driver pick a default available device."
+        },
+        "appium_url": {
+          "type": "string",
+          "description": "mobile only: URL of a running Appium server, e.g. http://localhost:4723. Omit to use the default local Appium endpoint."
+        },
+        "openapi": {
+          "type": "string",
+          "description": "api only: path (relative to this file) to an OpenAPI spec. Its operations become the interactable \"elements\" the actor sees; recommended for journey (baseline-grade) api cases. Without it, the actor infers paths from the story (exploratory only)."
+        }
+      },
+      "description": "App under test. Merges per-key down the defaults chain, so a case can override just base_url. The app.driver key selects which subset applies (see its enum); a key set for the wrong driver is a config error."
+    }
+  }
+}

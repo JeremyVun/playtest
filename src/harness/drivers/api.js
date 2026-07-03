@@ -12,9 +12,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import YAML from "yaml";
-import { firstLine, actionOf } from "../trajectory.js";
+import { firstLine } from "../trajectory.js";
 import { overlayFor } from "./overlay.js";
-import { MAX_BODY_READ, capBody, isTextualMime, pathnameOf, flushHar, relativizeUrls } from "./har.js";
+import { MAX_BODY_READ, capBody, isTextualMime, pathnameOf, flushHar } from "./har.js";
 
 const REQUEST_TIMEOUT_MS = 15000;
 // max_ms mirrors the real per-request abort (REQUEST_TIMEOUT_MS) so the pinned
@@ -56,22 +56,7 @@ export class ApiDriver {
     return SETTLE_API;
   }
   get snapshotFormat() {
-    return "api-text-v2";
-  }
-
-  /**
-   * Drift comparison surface (§10): the api snapshot is base URL + operations +
-   * the last response status + body. Canonicalize the JSON body (stable key
-   * order) so semantically-equal responses with reordered keys don't read as
-   * drift; non-JSON bodies pass through. Response headers are NOT in the snapshot
-   * text (captureSnapshot never emits them), so there is nothing header-shaped to
-   * strip here. Pure; exported for test.
-   *
-   * Future: a JSON-path exclusion config (ignore volatile fields like ids/
-   * timestamps) would hook in here — the seam is reserved, not built.
-   */
-  normalizeSnapshot(text, base = this.#baseUrl) {
-    return normalizeApiSnapshot(text, base);
+    return "api-text-v1";
   }
   get overlay() {
     return overlayFor("api");
@@ -93,10 +78,6 @@ export class ApiDriver {
 
   consoleErrors() {
     return 0;
-  }
-
-  consoleErrorLog() {
-    return []; // no console concept for the api transport
   }
 
   /** Transport-defined no_effect token: a fingerprint of the last response. */
@@ -131,9 +112,7 @@ export class ApiDriver {
     try {
       fs.writeFileSync(path.join(this.#runDir, "steps", `${String(stepNum).padStart(3, "0")}.a11y.txt`), text + "\n");
     } catch {}
-    // screenshotHash: explicit null documents the visual_regression Driver seam
-    // (web-only); the runner already guards on its presence.
-    return { text, url: this.location(), title: this.#baseUrl, refCount: this.#operations.length, truncated: false, screenshot: null, screenshotHash: null };
+    return { text, url: this.location(), title: this.#baseUrl, refCount: this.#operations.length, truncated: false, screenshot: null };
   }
 
   async execute(action) {
@@ -149,7 +128,7 @@ export class ApiDriver {
   }
 
   async executeLocator(actedStep) {
-    const action = actionOf(actedStep);
+    const action = actedStep.agent?.action ?? actedStep.action;
     if (action?.type !== "request") return this.execute(action ?? {});
     return this.#request(action, { resolution: { locator: `${action.method} ${action.path}`, bbox: null } });
   }
@@ -202,14 +181,9 @@ export class ApiDriver {
       const len = parseInt(respHeaders["content-length"], 10);
       // Capture text/JSON only, and never buffer a body whose declared length
       // exceeds the read cap (binary + huge bodies are recorded by size alone).
-      // On the api transport the body IS the actor's observable and the gate's
-      // source for response_matches, so an absent Content-Type (a header servers
-      // legitimately omit) is treated as capturable text rather than dropped —
-      // otherwise a valid JSON response reads as "(no body)" and fails the gate.
-      const capturable = mime === "" || isTextualMime(mime);
       const tooBig = Number.isFinite(len) && len > MAX_BODY_READ;
-      const text = capturable && !tooBig ? await res.text().catch(() => "") : "";
-      respBody = capturable && !tooBig ? capBody(text) : null;
+      const text = isTextualMime(mime) && !tooBig ? await res.text().catch(() => "") : "";
+      respBody = isTextualMime(mime) && !tooBig ? capBody(text) : null;
       entry.response = { status, bodySize: Number.isFinite(len) ? len : text ? Buffer.byteLength(text) : -1, mimeType: mime, headers: respHeaders, body: respBody };
     } catch (e) {
       error = firstLine(e);
@@ -263,52 +237,6 @@ function operationsFrom(spec) {
     }
   }
   return ops;
-}
-
-// Stable-key-order re-serialization of any JSON value (recursive sort of object
-// keys; arrays keep order). Reserve hook: a future JSON-path exclusion config
-// would prune volatile fields here before re-stringifying.
-function canonicalizeJson(value) {
-  if (Array.isArray(value)) return value.map(canonicalizeJson);
-  if (value && typeof value === "object") {
-    const out = {};
-    for (const k of Object.keys(value).sort()) out[k] = canonicalizeJson(value[k]);
-    return out;
-  }
-  return value;
-}
-
-/**
- * Normalize an api snapshot for drift comparison. The header + operations lines
- * are kept verbatim; the response body (everything after the `Last response:`
- * line) is canonicalized to stable JSON key order when it parses as JSON, else
- * passed through. When `base` is given, the comparison is made BASE-AWARE: the
- * snapshot's OWN base_url (origin + base path prefix) is subtracted from the
- * `API: <baseUrl>` head + any response url, leaving the relative form — so the
- * same ops/body under two environments (incl. a deployment path prefix) don't
- * read as drift, mirroring the `url_matches` pathname precedent (gate.js §7).
- * The two sides of a drift comparison are relativized against their OWN bases.
- * `base === null` ⇒ origin-only stripping (legacy baselines); NO second arg ⇒
- * no-op pass-through (backward compatible). Pure; exported for test.
- */
-export function normalizeApiSnapshot(text, base = undefined) {
-  let s = String(text ?? "");
-  if (base !== undefined) s = relativizeUrls(s, base);
-  const idx = s.indexOf("\nLast response:");
-  if (idx === -1) return s.trimEnd();
-  const head = s.slice(0, idx);
-  const rest = s.slice(idx + 1); // from "Last response:" onward
-  const nl = rest.indexOf("\n");
-  if (nl === -1) return s.trimEnd();
-  const statusLine = rest.slice(0, nl);
-  const body = rest.slice(nl + 1).trim();
-  let normBody = body;
-  try {
-    normBody = JSON.stringify(canonicalizeJson(JSON.parse(body)));
-  } catch {
-    // non-JSON body (or the "(no body)" placeholder) passes through
-  }
-  return `${head}\n${statusLine}\n${normBody}`.trimEnd();
 }
 
 function prettyCap(body) {

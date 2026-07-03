@@ -1,0 +1,117 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "dummy/defaults.schema.json",
+  "title": "Playtest defaults file (playtest.yaml)",
+  "description": "Shared defaults for every case at or below this directory; the nearest playtest.yaml wins per key. Case-only keys (story, tags, success, report) are config errors here — put them in the case file; a persona *list* (the fan-out form) is case-only too, but a scalar persona default is fine. max_steps/timeout may also be spelled nested under limits.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "persona": {
+      "type": "string",
+      "description": "Default persona the actor role-plays: built-in \"tester\" or \"exploratory\", or the name/slug of a personas/*.yaml file. Default \"tester\". Scalar only here (a suite-wide default actor); the persona *list* that fans a discovery study out is case-only — set it on the case."
+    },
+    "mode": {
+      "enum": ["journey", "discovery"],
+      "description": "Case kind for every case below, default \"journey\". journey: regression test — deterministic success gate, baseline record/act/heal, pass/fail exit codes. discovery: product-insight study — no success gate, always a fresh agentic run that ends \"explored\" (give_up is a valid, informative outcome), graded with the discoverability rubric. A study directory sets mode: discovery here once."
+    },
+    "vision": {
+      "type": "boolean",
+      "description": "Discovery capability: send each step's viewport screenshot to the actor alongside the a11y snapshot and ask for visual observations (the step's \"visual\" field). Defaults to true when a case's resolved mode is discovery, false otherwise. \"vision: true\" resolving on a journey case is a config error — the regression instrument stays a11y-only by construction; \"vision: false\" is always allowed."
+    },
+    "perf": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "lcp_ms": {
+          "type": ["string", "number"],
+          "description": "Threshold on the WORST navigation LCP in milliseconds: \"< 2500\" style (ops < <= > >=) or a bare number meaning <= n."
+        },
+        "input_to_paint_ms": {
+          "type": ["string", "number"],
+          "description": "Threshold on the WORST input-to-paint latency in milliseconds; same format as lcp_ms."
+        }
+      },
+      "description": "Latency thresholds (LCP / input-to-paint) checked with the journey gate. Silently irrelevant in discovery (the gate never runs). No-console-errors is a success criterion, not a perf key."
+    },
+    "max_steps": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Maximum actor steps before a run ends with end_reason max_steps. Default 50. Equivalent nested spelling: limits.max_steps."
+    },
+    "timeout": {
+      "type": ["string", "number"],
+      "description": "Wall-clock limit per run: \"5m\", \"90s\", \"250ms\", or a number of milliseconds. Default \"4m\". Equivalent nested spelling: limits.timeout."
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_steps": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Same as top-level max_steps."
+        },
+        "timeout": {
+          "type": ["string", "number"],
+          "description": "Same as top-level timeout."
+        }
+      },
+      "description": "Nested spelling of max_steps/timeout; normalized to the top-level keys at load time."
+    },
+    "actor_model": {
+      "type": "string",
+      "description": "Model that role-plays the user. Default \"claude-sonnet-4-6\" — a capable actor reads the page and recovers from friction far more reliably than a cheap one, and for both journeys and discovery the trajectory is only worth grading if the user was played well. Pin a cheaper model (e.g. \"claude-haiku-4-5\") when cost matters more than fidelity."
+    },
+    "grader_model": {
+      "type": "string",
+      "description": "Model that grades finished runs and checks assert: criteria. Default \"claude-sonnet-4-6\"."
+    },
+    "app": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "driver": {
+          "enum": ["web", "mobile", "api"],
+          "description": "Transport for the app under test. Default \"web\" (Playwright/Chromium). \"mobile\" drives a native iOS/Android app via Appium; \"api\" drives a REST API via fetch. A study/suite usually sets it once here. The other app.* keys, success kinds, and perf keys are validated per-driver."
+        },
+        "base_url": {
+          "type": "string",
+          "description": "Where the app under test runs, e.g. http://localhost:4173. Required for web and api (or pass --base-url); optional for mobile. Agents really click buy/delete/submit — point at staging or test, never production."
+        },
+        "compose": {
+          "type": "string",
+          "description": "docker-compose file path, relative to this file: managed mode — the harness boots and tears down the app per run. web/api."
+        },
+        "init": {
+          "type": "string",
+          "description": "Executable script path, relative to this file, run before each case to reset app state. Receives BASE_URL/RUN_ID. Any driver — also the mobile/api pre-auth path."
+        },
+        "storage_state": {
+          "type": "string",
+          "description": "Playwright storage-state JSON path, relative to this file, for a pre-authenticated browser session. web only."
+        },
+        "platform": {
+          "enum": ["ios", "android"],
+          "description": "mobile only: the target platform (Appium XCUITest for ios, UiAutomator2 for android)."
+        },
+        "app": {
+          "type": "string",
+          "description": "mobile only: path (relative to this file) to the app binary to install — a .app/.ipa (ios) or .apk (android). Required for the mobile driver."
+        },
+        "device": {
+          "type": "string",
+          "description": "mobile only: the target device/emulator/simulator name or udid. Omit to let the driver pick a default available device."
+        },
+        "appium_url": {
+          "type": "string",
+          "description": "mobile only: URL of a running Appium server, e.g. http://localhost:4723. Omit to use the default local Appium endpoint."
+        },
+        "openapi": {
+          "type": "string",
+          "description": "api only: path (relative to this file) to an OpenAPI spec whose operations become the interactable \"elements\" the actor sees. Recommended for journey api cases."
+        }
+      },
+      "description": "App under test. Merges per-key down the defaults chain, so deeper files or the case can override just base_url. The app.driver key selects which subset applies; a key set for the wrong driver is a config error."
+    }
+  }
+}

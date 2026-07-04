@@ -57,7 +57,10 @@ before(async () => {
     req.on("end", () => {
       const parsed = JSON.parse(body);
       requests.push(parsed);
-      const name = parsed.tool_choice?.function?.name ?? "none";
+      const offered = (parsed.tools ?? []).map((t) => t?.function?.name).filter(Boolean);
+      const name =
+        parsed.tool_choice?.function?.name ??
+        (parsed.tool_choice === "auto" && offered.includes("grade") ? "grade" : "none");
       const user = parsed.messages.find((m) => m.role === "user")?.content ?? "";
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({
@@ -77,7 +80,7 @@ before(async () => {
   delete process.env.PLAYTEST_LLM_API_KEY;
   delete process.env.ANTHROPIC_API_KEY;
   delete process.env.OPENAI_API_KEY;
-  delete process.env.PLAYTEST_LLM_CACHE; // these tests assert on the default prompt bytes (cache off)
+  process.env.PLAYTEST_LLM_CACHE = "0"; // these tests assert exact prompt bytes
 });
 
 after(async () => {
@@ -148,7 +151,7 @@ function makeFixture({ mode = "journey", report = [], baseline = false } = {}) {
   return { resolvedCase, runDir };
 }
 
-/** gradeRun with the stub, returning the grade plus the single captured request. */
+/** gradeRun with the stub, returning the grade plus the terminal captured request. */
 async function captureGrade(resolvedCase, runDir) {
   const countBefore = requests.length;
   const grade = await gradeRun(runDir, resolvedCase);

@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "dummy/step.schema.json",
   "title": "Actor step",
-  "description": "The actor agent's entire turn: one thought, one action, one expectation. schema_version 3.",
+  "description": "The actor agent's entire turn: one thought, one action, one expectation. schema_version 6.",
   "$comment": "The canonical VALIDATION contract — the real gate, compiled per driver by forcedToolCall. `action` is a FLAT object: one `type` verb plus the flat parameters that verb uses (NOT a oneOf union). Per-verb required parameters are enforced by the `allOf` if/then block. drivers/overlay.js projects this per driver: stepSchemaFor() scopes the `type` (and `direction`) enum to a driver's verbs and is what validates; toolParamsFor() derives a stripped, model-facing copy (no allOf/additionalProperties/min-max, only the driver's fields). The OpenAI-compat endpoint does NOT constrain decoding, so the shipped schema is documentation and THIS file is enforcement. Verbs — web: click/type/select/scroll/navigate/back/wait/done/give_up; mobile: tap/type/swipe/scroll/back/wait/done/give_up; api: request/wait/done/give_up (wait, done, give_up shared across all drivers; back is web+mobile).",
   "type": "object",
   "additionalProperties": false,
@@ -19,6 +19,58 @@
     "visual": {
       "type": "string",
       "description": "Only when a screenshot was provided: your visual read of the rendered page — what drew the eye first, what competed for attention, and what was missed or hard to find. Omit on text-only turns."
+    },
+    "confused": {
+      "type": "boolean",
+      "description": "Set true ONLY when you are genuinely stuck or confused this turn — you cannot find what you need, the page is not behaving as you expect, or you are unsure how to make progress. Leave it out when things are going fine. This does not stop the run; it flags the moment for review. When true, give a one-line confused_reason."
+    },
+    "confused_reason": {
+      "type": "string",
+      "description": "One line on WHY you are confused or stuck, in your own words (only when confused is true)."
+    },
+    "axe": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "web only: axe-core WCAG 2.0 A/AA + 2.1 AA violations (always-on for web, never enters the actor prompt). A single full-page `axe.run` over the whole document, counting every violation on the page. On executed agent/act steps it is captured AFTER the action settled; on the terminal done/give_up steps it is a full-page capture of the page the actor ended on. Absent on non-web runs, state-drift markers, and when axe capture fails (best-effort).",
+      "required": ["violations", "counts"],
+      "properties": {
+        "violations": {
+          "type": "array",
+          "description": "Up to 25 violations. Each is one axe rule firing on one or more page nodes.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "nodes"],
+            "properties": {
+              "id": { "type": "string", "description": "axe rule id, e.g. \"image-alt\"." },
+              "impact": { "type": ["string", "null"], "description": "axe impact: minor/moderate/serious/critical (or null)." },
+              "help": { "type": ["string", "null"], "description": "One-line remediation guidance from axe (how to fix), capped at 300 chars. Optional — older captures omit it." },
+              "help_url": { "type": ["string", "null"], "description": "Canonical Deque docs URL for the rule (axe helpUrl, version-pinned). Optional — the viewer constructs a fallback link from the rule id when absent." },
+              "wcag_tags": { "type": "array", "items": { "type": "string" }, "description": "WCAG success-criterion tags carried by the rule, e.g. [\"wcag2a\",\"wcag111\"]." },
+              "nodes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["target"],
+                  "properties": {
+                    "target": { "type": "array", "items": { "type": "string" }, "description": "CSS selector path to the offending node." },
+                    "html": { "type": "string", "description": "The node's outer HTML, capped at 200 chars." }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["total"],
+          "properties": {
+            "total": { "type": "number", "description": "Total violation NODE count for this step (sum of nodes across all violations, full-page run)." }
+          }
+        }
+      }
     },
     "action": {
       "type": "object",

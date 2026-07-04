@@ -1221,3 +1221,42 @@ of every committed `schema_version:2` baseline from new runs (it is in `PIN_KEYS
 gained the `back` verb. **Viewer: zero code change**
 beyond the additive caption arms — film strip/ghost cursor (need png+bbox) and the vitals
 panel degrade for api; every panel already tolerates absent artifacts.
+
+## 17. alpha-0.4.0 reconstructed changes
+
+This section records contract changes observed in the reconstructed `alpha-0.4.0`
+branch. It is intentionally additive: the collaborator's original doc edits were
+not filmed, so do not treat unedited older sections above as overriding these
+points.
+
+- `pins.step_schema_version` is now `6`; `pins.prompts_version` is `v7`.
+  Step envelopes keep the flat `action` contract with per-verb `allOf`
+  validation, and add the v6 fields used by the runner/viewer: `confused`,
+  `confused_reason`, and `a11y.violations[]` for per-step axe captures.
+- Config accepts visual drift gates: `visual_regression` and
+  `visual_regression_drift`. Drift is a replay-time state/pixel divergence
+  signal, not a model-authored assertion.
+- Parallel execution is configured as `parallel: { total, record }`: `total`
+  caps all selected work; `record` separately caps baseline-recording work so
+  recordings do not stampede shared state.
+- `app.envs` names environment overlays. The selected environment is recorded
+  in `manifest.env`, along with `viewport`, `preserve_session`, seeded
+  `cookies`, and `settle.initial_quiet_ms`.
+- A case may declare a `before_each` hook. Its execution is recorded in
+  `manifest.setup` with whether it ran, duration, and whether it returned setup
+  context; returned context is not persisted verbatim.
+- Baseline metadata carries `verdicts`, the inheritable gate verdicts saved at
+  accept time. `gate.js` decides inheritance with `isInheritable`; clean act
+  replays may reuse saved `assert` and opted-in custom assertion verdicts.
+- Custom assertions live at `assertions/*/assertion.js`. The assertion router
+  selects by success criterion, runs an observing phase when required, and feeds
+  results through the normal gate check shape.
+- `manifest.totals.lcp_ms` stores the worst navigation LCP seen in the run.
+  `manifest.heal` records `{ from_step, kind, reason }` for healed or drifted
+  continuations.
+- Video artifacts are now a slideshow `video.mp4` plus `video.vtt` captions.
+  This replaces the older webm screencast contract for new runs; old viewers
+  must continue to tolerate missing or legacy video artifacts.
+- Run-data access is routed through the storage-provider seam. `view-server.js`
+  and `runs-root.js` use provider-backed listing/JSON reads for run artifacts;
+  local filesystem access is one provider, not the contract itself.

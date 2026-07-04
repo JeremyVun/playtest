@@ -31,6 +31,8 @@
   <symbol id="i-net" viewBox="0 0 16 16"><path d="M2 4.5h7M2 8h11M2 11.5h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
   <symbol id="i-token" viewBox="0 0 16 16"><path d="M8 2.2 13.4 8 8 13.8 2.6 8Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
   <symbol id="i-gauge" viewBox="0 0 16 16"><path d="M3.4 12.6a6.5 6.5 0 1 1 9.2 0" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="m8 9.3 2.7-2.7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-expand" viewBox="0 0 16 16"><path d="M6.5 3H3v3.5M9.5 3H13v3.5M6.5 13H3V9.5M9.5 13H13V9.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-collapse" viewBox="0 0 16 16"><path d="M3 6.5h3.5V3M13 6.5H9.5V3M3 9.5h3.5V13M13 9.5H9.5V13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-cursor" viewBox="0 0 24 24"><path d="M5 3 19 11.2 12.6 12.8 9.8 19Z" fill="#f4f2ec" stroke="#0b0c0e" stroke-width="1.6" stroke-linejoin="round"/></symbol>
 </svg>
 
@@ -53,6 +55,7 @@
       <nav id="stage-tabs">
         <button data-view="stills" class="tab on"><svg class="ic"><use href="#i-film"/></svg>Stills</button>
         <button data-view="a11y" class="tab"><svg class="ic"><use href="#i-eye"/></svg>Agent view</button>
+        <button data-view="context" class="tab" id="tab-context" hidden><svg class="ic"><use href="#i-token"/></svg>Context</button>
         <button data-view="video" class="tab"><svg class="ic"><use href="#i-play"/></svg>Video</button>
         <button data-view="diff" class="tab" id="tab-diff" hidden><svg class="ic"><use href="#i-branch"/></svg>Diff</button>
         <button id="play" title="play through the steps (space)" aria-label="play through the steps"><svg class="ic"><use href="#i-play"/></svg>Play</button>
@@ -78,7 +81,15 @@
             </div>
             <div class="placeholder" id="shot-missing" hidden></div>
           </div>
-          <div class="pane" id="pane-a11y" hidden><pre id="a11y-pre"></pre></div>
+          <div class="pane" id="pane-a11y" hidden>
+            <div id="a11y-mode" hidden>
+              <button data-mode="custom" class="on">Custom</button>
+              <button data-mode="pw">Playwright</button>
+            </div>
+            <pre id="a11y-pre"></pre>
+            <div id="a11y-diff" hidden></div>
+          </div>
+          <div class="pane" id="pane-context" hidden><div id="ctx-body"></div></div>
           <div class="pane" id="pane-video" hidden>
             <div class="video-box">
               <video id="video" controls preload="metadata"></video>

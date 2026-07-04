@@ -11,6 +11,7 @@ import path from "node:path";
 
 export const MAX_BODY_CHARS = 64 * 1024; // stored cap per body
 export const MAX_BODY_READ = 1024 * 1024; // don't buffer responses larger than this
+export const HAR_FLUSH_INTERVAL_STEPS = 5;
 
 // HTML page documents are textual but huge and never read by the gate
 // (response_matches/assert work over JSON/text-data) — skip their bodies so
@@ -70,4 +71,22 @@ export function stripRefLines(text) {
 /** Write the HAR entries to har.json under runDir (rewritten on every flush). */
 export function flushHar(runDir, entries) {
   fs.writeFileSync(path.join(runDir, "har.json"), JSON.stringify({ log: { entries } }) + "\n");
+}
+
+/**
+ * Step-counted HAR writer for hot paths. It writes the first completed step for
+ * crash recovery, then every Nth step, and any forced call (gate/close).
+ */
+export function createHarFlusher(runDir, entries, { interval = HAR_FLUSH_INTERVAL_STEPS } = {}) {
+  const parsedInterval = Math.floor(Number(interval));
+  const every = Number.isFinite(parsedInterval) && parsedInterval > 0 ? parsedInterval : HAR_FLUSH_INTERVAL_STEPS;
+  let completedSteps = 0;
+  let wrote = false;
+  return ({ force = false } = {}) => {
+    if (!force) completedSteps++;
+    if (!force && wrote && completedSteps % every !== 0) return false;
+    flushHar(runDir, entries);
+    wrote = true;
+    return true;
+  };
 }

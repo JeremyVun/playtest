@@ -57,6 +57,30 @@
         }
       },
       "description": "Answers to the case's report questions, one entry per question, in order. Present only when the case declares report questions."
+    },
+    "a11y": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total_violations", "steps_with_violations", "top_rules"],
+      "description": "HARNESS-COMPUTED accessibility summary (NOT grader-authored) — exact axe-core counts spread onto the grade after the LLM call, for compliance. Present only when the run carried axe captures (web). The grader sees a short digest of this in its prompt so findings can reference a11y, but it never writes these numbers.",
+      "properties": {
+        "total_violations": { "type": "number", "description": "Total violation NODE count across all steps (full-page runs) — what accessibility_violations gates on." },
+        "steps_with_violations": { "type": "number", "description": "How many steps had at least one violation." },
+        "top_rules": {
+          "type": "array",
+          "description": "The most frequently firing axe rules, descending by node count.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "count", "impact"],
+            "properties": {
+              "id": { "type": "string", "description": "The axe-core rule id." },
+              "count": { "type": "number", "description": "Violation node count for this rule across the run." },
+              "impact": { "type": ["string", "null"], "description": "axe-core impact severity for the rule, or null when none was reported." }
+            }
+          }
+        }
+      }
     }
   }
 }

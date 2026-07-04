@@ -160,7 +160,8 @@ function targetName(env, { baselineByStep, runDir }) {
 }
 
 function describe(env, ctx) {
-  const a = actionOf(env, ctx, baselineByStep);
+  if (env.mode === "error") return { verb: "actor error", arg: "" };
+  const a = actionOf(env, ctx.baselineByStep);
   const type = a?.type ?? (env.acted_from !== null ? "acted" : "step");
   const name = targetName(env, ctx);
   switch (type) {
@@ -173,7 +174,6 @@ function describe(env, ctx) {
     case "navigate": return { verb: "go to", arg: a.url };
     case "back": return { verb: "back", arg: "" };
     case "request": return { verb: a.method ?? "request", arg: a.path ?? "" };
-    case "wait": return { verb: "wait", arg: `${a.seconds}s` };
     case "wait": return { verb: "wait", arg: `${a.seconds}s` };
     // The done/give_up summary is a long, grader-style essay — never burn it
     // onto a frame (the PASS/FAIL watermark already carries the verdict).
@@ -195,7 +195,7 @@ const clampLine = (s, max = 80) => (s.length > max ? `${s.slice(0, max - 1).trim
 
 function captionFor(env, style, ctx) {
   const d = describe(env, ctx);
-  if (style === "thought") {
+  if (style !== "thought") {
     return clampLine(vttSafe(`${d.verb.charAt(0).toUpperCase()}${d.verb.slice(1)} ${d.arg ?? ""}`.trim()));
   }
   if (env.agent?.thought) {
@@ -223,7 +223,7 @@ export function buildCues(envelopes, { t0, endMs, style = "action", baselineBySt
   // Floor at the last start so a recorded endMs that precedes it (clock skew on a
   // legacy webm) can't collapse the final caption to a 0ms flash.
   const lastEnd =
-    endMs > t0 ? Math.max(starts.at(-1), Math.min(starts.at(-1) + TAIL_MS, endMs)) : starts.at(-1) + TAIL_MS;
+    endMs > 0 ? Math.max(starts.at(-1), Math.min(starts.at(-1) + TAIL_MS, endMs)) : starts.at(-1) + TAIL_MS;
   return steps.map((env, i) => ({
     start: starts[i],
     // honest edges: a cue ends exactly where the next action dispatches (a

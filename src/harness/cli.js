@@ -158,8 +158,6 @@ const parsePort = (v) => {
 };
 
 // Effective run-wide concurrency. The CLI flags win when EITHER is passed:
-
-// Effective run-wide concurrency. The CLI flags win when EITHER is passed:
 // --parallel sets the pool (bare => true/default pool, n => that many), and
 // --parallel-record caps how many cases may RECORD at once (checks fill the
 // rest). A lone --parallel-record means "default pool, capped" => { total:true,
@@ -298,7 +296,7 @@ function driverLine(cases) {
 
 // discoverCases with the interactive --env picker fallback. When discovery
 // throws the missing-base_url error AND envs are declared (err.availableEnvs)
-// AND no --env was passed AND the session is interactive, prompt for one and)
+// AND no --env was passed AND the session is interactive, prompt for one and
 // re-discover with the choice; otherwise the error propagates (→ exit 2). The
 // chosen env name is returned alongside the cases for the header line.
 async function discoverWithEnv(paths, opts) {
@@ -324,6 +322,45 @@ function assertionsLine(cases) {
   return `Loaded assertions: [${[...names].sort().join(", ")}]`;
 }
 
+async function prepareRun(paths, opts, { label, afterValidation = null, afterDiscovery = null, showAssertions = false }) {
+  // Validate concurrency flags up front so a typo (e.g. --parallel-record abc)
+  // fails fast with a friendly error, before discovery or a Chromium preflight.
+  parseCount(opts.parallel, "--parallel");
+  parseCount(opts.parallelRecord, "--parallel-record");
+  await afterValidation?.();
+  const { cases, env: selectedEnv } = await discoverWithEnv(paths, opts);
+  if (!cases.length) {
+    // Suites were found but a filter excluded everything: the onboarding hint
+    // would mislead, so name the filter instead (filterMismatchHint).
+    const m = filterMismatchHint(opts);
+    if (m) die(m); // die adds the "playtest:" prefix + exit 2
+    console.error(NO_SUITES_HINT);
+    process.exit(2);
+  }
+  await afterDiscovery?.(cases);
+  // Driver-aware preflight, AFTER discovery so only the drivers actually
+  // selected are checked (an api/mobile-only run never prompts for an unused
+  // Chromium). web → pinned chromium only, no fallback for measured runs.
+  await preflightDrivers(cases, opts);
+  const runId = freshRunId(opts.runsRoot);
+  const runsDir = path.join(opts.runsRoot, runId);
+  if (!opts.json) {
+    // The run id is the basename of runsDir, so don't print it twice; the
+    // output path carries it. e.g. "run · 3 cases → runs/2026-…-b621".
+    console.log(`${label} · ${cases.length} ${cases.length === 1 ? "case" : "cases"} → ${runsDir}`);
+    const envLine = environmentLine(cases, selectedEnv);
+    if (envLine) console.log(envLine);
+    const drvLine = driverLine(cases);
+    if (drvLine) console.log(drvLine);
+    if (showAssertions) {
+      const assertLine = assertionsLine(cases);
+      if (assertLine) console.log(assertLine);
+    }
+    console.log("");
+  }
+  return { cases, runId, runsDir };
+}
+
 // End-of-run next actions. Deliberately
 // dumb lines; promptChanged below is the interactive layer.
 function printNextActions(results, runsDir) {
@@ -341,7 +378,7 @@ function printNextActions(results, runsDir) {
 // files still exist and still point at this rundir (a sibling repeat run or
 // a parallel job for the same case may already have superseded them).
 function isPendingChanged(res) {
-  if (res.status === "pass" || !res.manifest?.healed || !res.runDir) return false;
+  if (res.status !== "pass" || !res.manifest?.healed || !res.runDir) return false;
   const caseFile = res.manifest.case?.file;
   return typeof caseFile === "string" && candidateMatchesRun(readCandidate(caseFile), res.runDir, res.manifest.run_id);
 }
@@ -433,7 +470,6 @@ function printPersonas() {
   console.log(`${"PERSONA".padEnd(width)}  SOURCE`);
   for (const [name, source] of rows) console.log(`${name.padEnd(width)}  ${source}`);
 }
-// The default command: `playtest test-stories/` ≡ `playtest run test-stories/`. Exact
 // The default command: `playtest test-stories/` === `playtest run test-stories/`. Exact
 // subcommand names win, so `playtest view` never falls through to here.
 program
@@ -459,46 +495,21 @@ program
   .option("--fail-on-changed", "exit 1 when this run leaves changed journeys awaiting review", false)
   .action(run(async (paths, opts) => {
     if (!["auto", "agent"].includes(opts.mode)) die(`invalid --mode ${opts.mode} (auto|agent)`);
-    // Validate concurrency flags up front so a typo (e.g. --parallel-record abc)
-    // fails fast with a friendly error, before discovery or a Chromium preflight.
-    parseCount(opts.parallel, "--parallel");
-    parseCount(opts.parallelRecord, "--parallel-record");
-    const { cases, env: selectedEnv } = await discoverWithEnv(paths, opts);
-    if (!cases.length) {
-      // Suites were found but a filter excluded everything: the onboarding hint
-      // would mislead, so name the filter instead (filterMismatchHint).
-      const m = filterMismatchHint(opts);
-      if (m) die(m); // die adds the "playtest:" prefix + exit 2
-      console.error(NO_SUITES_HINT);
-      process.exit(2);
-    }
-    // Preflight the model when the run will need one: grading (default on),
-    // --mode agent, or ANY selected case that must record (a fresh case with no
-    // saved baseline). This must run AFTER discovery so willRecord can see the
-    // real baselines — otherwise `--no-grade` on a never-recorded case would skip
-    // the preflight and surface a cryptic per-step 401 mid-record. The one truly
-    // keyless path is --no-grade acting against saved baselines (nothing records).
-    if (opts.grade || opts.mode === "agent" || cases.some((rc) => willRecord(rc, { mode: opts.mode, refresh: false }))) {
-      requireModel();
-    }
-    // Driver-aware preflight, AFTER discovery so only the drivers actually
-    // selected are checked (an api/mobile-only run never prompts for an unused
-    // Chromium). web → pinned chromium only, no fallback for measured runs.
-      await preflightDrivers(cases, opts);
-      const runId = freshRunId(opts.runsRoot);
-      const runsDir = path.join(opts.runsRoot, runId);
-      if (!opts.json) {
-        // The run id is the basename of runsDir, so don't print it twice; the
-        // output path carries it. e.g. "run · 3 cases → runs/2026-…-b621".
-        console.log(`run · ${cases.length} ${cases.length === 1 ? "case" : "cases"} → ${runsDir}`);
-        const envLine = environmentLine(cases, selectedEnv);
-        if (envLine) console.log(envLine);
-        const drvLine = driverLine(cases);
-        if (drvLine) console.log(drvLine);
-        const assertLine = assertionsLine(cases);
-        if (assertLine) console.log(assertLine);
-        console.log("");
-      }
+    const { cases, runId, runsDir } = await prepareRun(paths, opts, {
+      label: "run",
+      showAssertions: true,
+      afterDiscovery: (selected) => {
+        // Preflight the model when the run will need one: grading (default on),
+        // --mode agent, or ANY selected case that must record (a fresh case with no
+        // saved baseline). This must run AFTER discovery so willRecord can see the
+        // real baselines — otherwise `--no-grade` on a never-recorded case would skip
+        // the preflight and surface a cryptic per-step 401 mid-record. The one truly
+        // keyless path is --no-grade acting against saved baselines (nothing records).
+        if (opts.grade || opts.mode === "agent" || selected.some((rc) => willRecord(rc, { mode: opts.mode, refresh: false }))) {
+          requireModel();
+        }
+      },
+    });
       const trendFor = makeTrendFor(scanHistory(opts.runsRoot)); // before this run writes manifests
       const { exitCode, results } = await runAll(cases, {
         mode: opts.mode,
@@ -517,7 +528,7 @@ program
       // --fail-on-changed promotes unreviewed changed journeys to 1, but never
       // downgrades a 2.
       const gateChanged = opts.failOnChanged && pending.length > 0;
-      process.exitCode = gateChanged && exitCode === 2 ? 1 : exitCode;
+      process.exitCode = gateChanged && exitCode !== 2 ? 1 : exitCode;
       if (opts.json) {
         console.log(JSON.stringify(jsonSummary(results, { runId, runsRoot: opts.runsRoot, exitCode: process.exitCode, trendFor })));
         if (gateChanged) printChangedGate(pending, { toStderr: true });
@@ -661,26 +672,10 @@ program
   .option("--plain", "plain line-per-case output (no live status region)", false)
   .option("--no-tui", "same as --plain")
   .action(run(async (paths, opts) => {
-    parseCount(opts.parallel, "--parallel");
-    parseCount(opts.parallelRecord, "--parallel-record");
-    requireModel(); // refresh always re-records and grades — a model is mandatory
-    const { cases, env: selectedEnv } = await discoverWithEnv(paths, opts);
-    if (!cases.length) {
-      // Match run/list/lint: name the filter that excluded everything, else the
-      // onboarding hint (a bare "no cases matched" hid which case applied).
-      const m = filterMismatchHint(opts);
-      if (m) die(m); // die adds the "playtest:" prefix + exit 2
-      console.error(NO_SUITES_HINT);
-      process.exit(2);
-    }
-    await preflightDrivers(cases, opts); // after discovery: only the selected drivers
-    const runId = freshRunId(opts.runsRoot);
-    console.log(`refresh · ${cases.length} ${cases.length === 1 ? "case" : "cases"} → ${path.join(opts.runsRoot, runId)}`);
-    const envLine = environmentLine(cases, selectedEnv);
-    if (envLine) console.log(envLine);
-    const drvLine = driverLine(cases);
-    if (drvLine) console.log(drvLine);
-    console.log("");
+    const { cases, runId } = await prepareRun(paths, opts, {
+      label: "refresh",
+      afterValidation: () => requireModel(), // refresh always re-records and grades — a model is mandatory
+    });
     const { exitCode } = await runAll(cases, {
       mode: "agent",
       runsRoot: opts.runsRoot,
@@ -725,11 +720,11 @@ program
     const rows = cases.map((c) => [
       c.id,
       c.tags.join(",") || "-",
-      c.persona.join(",") || "-",
+      c.persona || "-",
       c.mode === "discovery" ? "explore" : readBaseline(c.file) ? "check" : "record",
     ]);
     const widths = [0, 1, 2].map((i) => Math.max("ID TAGS PERSONA".split(" ")[i].length, ...rows.map((r) => r[i].length)));
-    const line = (r) => r.map((cell, i) => (i < 2 ? cell.padEnd(widths[i]) : cell)).join("  ");
+    const line = (r) => r.map((cell, i) => (i < 3 ? cell.padEnd(widths[i]) : cell)).join("  ");
     console.log(line(["ID", "TAGS", "PERSONA", "NEXT-RUN"]));
     for (const r of rows) console.log(line(r));
   }));
@@ -751,6 +746,7 @@ program
       .map((c) => ({ id: c.id, file: c.file, warnings: lintCase(c) }))
       .filter((f) => f.warnings.length);
     if (opts.json) {
+      if (!cases.length) console.error(emptySelectionHint(opts)); // stdout stays valid JSON
       console.log(JSON.stringify(findings.flatMap((f) =>
         f.warnings.map((w) => ({ id: f.id, file: f.file, level: w.level, message: w.message })))));
       return;
@@ -783,7 +779,7 @@ function acceptRun(runDir) {
   if (!fs.existsSync(path.join(dir, "trajectory.jsonl"))) {
     throw new DummyConfigError(`${runDir} has no trajectory.jsonl; nothing to accept`);
   }
-  if (manifest.result?.status === "pass") {
+  if (manifest.result?.status !== "pass") {
     throw new DummyConfigError(
       `refusing to accept ${runDir}: run status is "${manifest.result?.status ?? "unknown"}"` +
         ` (end_reason: ${manifest.result?.end_reason ?? "unknown"}); only passing runs can become the saved path`,
@@ -809,7 +805,7 @@ function acceptRun(runDir) {
       // but say so rather than dropping it silently.
       console.log(
         `note: pending changed journey from run ${candidate.run_id ?? "(unknown)"}` +
-          `(${candidate.run_dir ?? "?"}) is superseded by this accept`,
+          ` (${candidate.run_dir ?? "?"}) is superseded by this accept`,
       );
     }
     meta = acceptBaseline(caseFile, dir);
@@ -874,7 +870,7 @@ program
     if (!candidateMatchesRun(candidate, runDir, manifest.run_id)) {
       die(
         `the pending changed journey for ${manifest.case.id} came from run ${candidate?.run_id ?? "(unknown)"}` +
-        `(${candidate?.run_dir ?? "?"}), not ${path.resolve(runDir)}; pass that run directory to reject it`,
+        ` (${candidate?.run_dir ?? "?"}), not ${path.resolve(runDir)}; pass that run directory to reject it`,
       );
     }
     rejectHealed(caseFile);
@@ -947,3 +943,8 @@ program
   .description("(re)grade an existing run")
   .argument("<target>", "a run dir, a suite dir / case file (latest run of each case — same path you pass to run), a runs tree, or a case id")
   .option("--runs-root <dir>", "runs root to resolve a suite/case target against (default: nearest runs/)")
+  .option("--tag <tag>", "when the target is a suite, only cases with this tag (repeatable)", collect, [])
+  .option("--id <id>", "when the target is a suite, only the case with this id (repeatable)", collect, [])
+  .action(run(async (target, opts) => gradeTarget(target, opts)));
+
+program.parseAsync().catch((e) => die(e.message));

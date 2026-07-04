@@ -123,8 +123,7 @@ export function loadPersona(name, caseFile) {
     ? `searched ${dirs.join(", ")}`
     : `no personas/ directory between ${start} and the repo root`;
   throw new DummyConfigError(
-    `persona "${name}" not found: not a built-in, and no matching personas/*.yaml (${searched}). Create one with: playtest new pers
-ona ${name}`,
+    `persona "${name}" not found: not a built-in, and no matching personas/*.yaml (${searched}). Create one with: playtest new persona ${name}`,
   );
 }
 
@@ -185,9 +184,24 @@ function stepLine(env) {
   const url = env.result?.url;
   return `step ${env.step}: ${describeStep(env)} → ${outcomeOf(env)}${url ? ` | url now ${url}` : ""}`;
 }
-// [UNREADABLE lines 188-213: scrolled past, not captured in any frame]
-export class Actor { // [reconstruction: inserted to balance block; original line(s) not recoverable]
-  constructor(resolvedCase, persona) { // [reconstruction: inserted to balance block; original line(s) not recoverable]
+
+function renderLog(history) {
+  if (!history.length) return "Steps so far: (none - this is your first step)";
+  const lines = ["Steps so far:"];
+  for (const env of history) {
+    lines.push(stepLine(env));
+    if (env.agent?.thought) lines.push(`  thought: ${oneLine(env.agent.thought)}`);
+  }
+  return lines.join("\n");
+}
+
+export class Actor {
+  constructor(resolvedCase, persona) {
+    this.case = resolvedCase;
+    this.persona = persona;
+
+    this.setupContext = null;
+
     // (or an absent driver) loads actor-system.md verbatim, so a web journey's
     // assembled prompt is byte-identical to pre-driver-seam — the golden test.
     this.driverId = resolvedCase.env?.driver ?? "web";

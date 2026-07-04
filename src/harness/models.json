@@ -1,0 +1,8 @@
+{
+  "sonnet": "@bedrock-eus2/us.anthropic.claude-sonnet-4-6",
+  "haiku": "@bedrock-eus2/us.anthropic.claude-haiku-4-5-20251001-v1:0",
+  "opus": "@bedrock-eus2/us.anthropic.claude-opus-4-8",
+  "gpt5_5": "@az-eus2-ci018274955/prod-syd-gai-emergingte-east-gpt-55-2026-04-24-dz-federated",
+  "gpt5_4": "@az-eus2-ci018274955/prod-syd-gai-emergingte-east-gpt-54-2026-03-05-dz-federated",
+  "gpt5_4_mini": "@az-eus2-ci018274955/prod-syd-gai-emergingte-east-gpt-54-mini-2026-03-17-dz-federated"
+}

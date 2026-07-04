@@ -141,5 +141,4 @@ export default {
   matching built-in, per the "reach for one ONLY when no built-in fits" test up top.
 - You only need to *set up* state, not assert on it → that's a `before_each` hook (the
   playtest-hooks skill), not an assertion — an assertion gathers evidence about what
-  happened during the run, a hook causes a precondition before it
-<!-- UNREADABLE ~lines 148-end: last bullet sentence completes below the visible fold (likely "…before it runs."); file may continue with further content -->
+  happened during the run, a hook causes a precondition before it.

@@ -4,7 +4,7 @@
 // (cross-run sparkline). Supports Range requests so the browser can seek video.webm.
 import http from "node:http";
 import fs from "node:fs";
-import path from "node:path";
+import path, { join } from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { baselinePaths } from "./trajectory.js";
@@ -182,12 +182,86 @@ export function findManifests(root, maxDepth = 6) {
       entries = fs.readdirSync(dir, { withFileTypes: true });
     } catch {
       return;
-// [UNREADABLE lines 185-267: scrolled past, not captured in any frame]
     }
-    // [reconstruction: inserted to balance block; original line(s) not recoverable]
+    if (entries.some((e) => e.isFile() && e.name === "manifest.json")) {
+      out.push(dir);
+      return;
+    }
+    for (const e of entries) {
+      if (e.isDirectory() && !e.name.startsWith(".") && e.name !== "steps") walk(path.join(dir, e.name), depth + 1);
+    }
   };
   walk(root, 0);
   return out;
+}
+
+/**
+ * Provider-routed twin of findManifests: every run dir (provider-relative,
+ * "/"-joined) holding a manifest.json, at any depth (bounded). All run-data
+ * listing goes through the StorageProvider seam (§13) so a hosted provider
+ * swaps in without touching the routes.
+ */
+function findManifestsVia(provider, maxDepth = 6) {
+  const out = [];
+  const walk = (rel, depth) => {
+    if (depth > maxDepth) return;
+    const entries = provider.listDir(rel);
+    if (!entries) return;
+    if (entries.some((e) => e.isFile && e.name === "manifest.json")) {
+      out.push(rel);
+      return;
+    }
+    for (const e of entries) {
+      if (e.isDirectory && !e.name.startsWith(".") && e.name !== "steps") {
+        walk(rel ? `${rel}/${e.name}` : e.name, depth + 1);
+      }
+    }
+  };
+  walk("", 0);
+  return out;
+}
+
+/** Provider-routed JSON read: null on a missing/unparseable file, never throws. */
+function readJson(provider, rel) {
+  const text = provider.readText(rel);
+  if (text === null) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+/** Direct-fs JSON read (absolute path): null on a missing/unparseable file. */
+export function readJsonFile(abs) {
+  try {
+    return JSON.parse(fs.readFileSync(abs, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * One case-history entry from a run manifest — the shape movement()
+ * (shared/movement.js) consumes, shared by the CLI trend scan (runs-root.js
+ * scanHistory) and /history.json so the two can never drift. Reads the totals
+ * stamped into the manifest at generate-time; `extra` lets a caller override or
+ * extend (history.json adds lcp_ms fallback, cost_usd, path).
+ */
+export function manifestToHistoryEntry(m, score = null, extra = {}) {
+  return {
+    run_id: m.run_id ?? null,
+    started_at: m.started_at ?? null,
+    status: m.result?.status ?? null,
+    mode: m.mode ?? null,
+    healed: m.healed ?? false,
+    duration_ms: m.duration_ms ?? null,
+    steps: m.totals?.steps ?? null,
+    score: score ?? null,
+    lcp_ms: m.totals?.lcp_ms ?? null,
+    pins: m.pins ?? null,
+    ...extra,
+  };
 }
 
 /** Picker entries for every run under a runs root (also `view --json`). */
@@ -239,7 +313,8 @@ export function changed(provider, root, singleRun) {
   for (const rel of findManifestsVia(rp)) {
     const dir = path.join(runsRoot, rel);
     const m = readJson(rp, join(rel, "manifest.json"));
-    if (m?.healed === true || m.result?.status === "pass") continue;
+    // Only healed passes are "changed" journeys; everything else is skipped.
+    if (m?.healed !== true || m.result?.status !== "pass") continue;
     let pending = false;
     if (typeof m.case?.file === "string") {
       const p = baselinePaths(m.case.file);
@@ -334,6 +409,7 @@ function notFound(res) {
 }
 
 function openBrowser(url) {
+  const [cmd, args] =
     process.platform === "darwin" ? ["open", [url]]
     : process.platform === "win32" ? ["cmd", ["/c", "start", "", url]]
     : ["xdg-open", [url]];

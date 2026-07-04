@@ -49,7 +49,7 @@ export const PHASE_DOING = { setup: "setting up", observing: "observing", gate: 
 
 // For finished explore runs the mode label would just repeat the EXPLORED
 // status; say how the exploration ended instead.
-const EXPLORE_END = { done: "finished", give_up: "gave up", max_steps: "hit max steps", timeout: "timed out", error: "errored" };
+const EXPLORE_END = { done: "finished", give_up: "gave up", max_steps: "hit max steps", timeout: "timed out", stuck: "got stuck", error: "errored" };
 
 /** In-progress label for the live display. */
 export function modeDoing(mode) {
@@ -99,6 +99,7 @@ export function caseLine(result, trend = null, labelWidth = 5) {
   }
   if (m.totals?.cost_usd) bits.push(`$${m.totals.cost_usd.toFixed(2)}`);
   if (trend?.status_streak) bits.push(trend.status_streak);
+
   let line = `${label} ${id}${bits.length ? dim(`  ${bits.join(" · ")}`) : ""}`;
   if (status === "fail") {
     const failures = failedChecks(m);
@@ -116,16 +117,28 @@ export function caseLine(result, trend = null, labelWidth = 5) {
     if (failures.length && failures.every((c) => c.severity === "soft")) {
       line += `\n        ${dim("baseline saved (only soft checks failed)")}`;
     }
+  } else if (status === "infra" ) {
+    const why = result.error ?? m.result?.end_reason;
+    if (why) line += yellow(`  (${why})`);
+  } else if (status === "interrupted") {
+    line += yellow("  (interrupted)");
+    const why = result.error ?? m.result?.end_reason;
+    if (why) line += yellow(`  (${why})`);
   }
-  return line; // [reconstruction: inserted to balance block; original line(s) not recoverable]
-} // [reconstruction: inserted to balance block; original line(s) not recoverable]
-// [UNREADABLE lines 120-155: scrolled past, not captured in any frame]
-export function healDigest(results) { // [reconstruction: inserted to balance block; original line(s) not recoverable]
-  const healed = results.filter((r) => r.status === "pass" && r.manifest?.healed); // [reconstruction: inserted to balance block; original line(s) not recoverable]
-  if (!healed.length) return ""; // [reconstruction: inserted to balance block; original line(s) not recoverable]
-  const groups = new Map(); // [reconstruction: inserted to balance block; original line(s) not recoverable]
-  for (const r of healed) { // [reconstruction: inserted to balance block; original line(s) not recoverable]
-    const kind = r.manifest.heal?.kind; // [reconstruction: inserted to balance block; original line(s) not recoverable]
+  return line;
+}
+
+const HEAL_PHRASE = {
+  drift: "saved paths drifted, agent recovered",
+  action_failed: "recorded actions failed, agent recovered",
+};
+
+export function healDigest(results) {
+  const healed = results.filter((r) => r.status === "pass" && r.manifest?.healed);
+  if (!healed.length) return "";
+  const groups = new Map(); // kind -> runs, first-seen order
+  for (const r of healed) {
+    const kind = r.manifest.heal?.kind ?? "drift";
     if (!groups.has(kind)) groups.set(kind, []);
     groups.get(kind).push(r);
   }
@@ -136,7 +149,7 @@ export function healDigest(results) { // [reconstruction: inserted to balance bl
     const rows = runs.map((r) => {
       const id = (r.manifest.case?.id ?? "?").padEnd(idW);
       const step = r.manifest.heal?.from_step;
-      return dim(`     ${id} ${step !== null ? `step ${step}` : "—"}`);
+      return dim(`     ${id} ${step != null ? `step ${step}` : "—"}`);
     });
     blocks.push([head, ...rows].join("\n"));
   }
@@ -193,8 +206,8 @@ export function junitXml(results) {
     const cases = runs.map((r) => {
       const m = r.manifest ?? {};
       const open =
-        `<testcase classname="${esc(name)}" name="${esc(m.case?.id ?? "unknown")}"` +
-        `  time="${((m.duration_ms ?? 0) / 1000).toFixed(3)}"`;
+        `    <testcase classname="${esc(name)}" name="${esc(m.case?.id ?? "unknown")}"` +
+        ` time="${((m.duration_ms ?? 0) / 1000).toFixed(3)}"`;
       if (r.status === "fail") {
         const failed = failedChecks(m);
         const message = failed.map((c) => c.spec).join("; ") || `gate failed (${m.result?.end_reason ?? "unknown"})`;
@@ -219,10 +232,9 @@ export function junitXml(results) {
 
   return [
     `<?xml version="1.0" encoding="UTF-8"?>`,
-    `<testsuites tests="${totals.tests}" failures="${totals.failures}" errors="${totals.errors}" time="${totals.time.toFixed(3)}">
-    `,
+    `<testsuites tests="${totals.tests}" failures="${totals.failures}" errors="${totals.errors}" time="${totals.time.toFixed(3)}">`,
     ...suitesXml,
     `</testsuites>`,
-
+    ``,
   ].join("\n");
-} // [reconstruction: inserted to balance block; original line(s) not recoverable]
+}

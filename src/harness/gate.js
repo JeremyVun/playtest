@@ -1,4 +1,3 @@
-// [UNREADABLE lines 1-1: scrolled past, not captured in any frame]
 import { pathnameOf } from "./drivers/har.js";
 
 // Soft checks still fail the run (status "fail", exit 1) but do NOT block
@@ -22,6 +21,7 @@ const severityOf = (kind) => (SOFT_KINDS.has(kind) ? "soft" : "hard");
 // FUTURE: a vision pixel-diff kind goes here too — this set is the single seam, so
 // adding a kind (or a custom-assertion opt-in below) is the only change needed.
 const INHERITABLE_BUILTIN_KINDS = new Set(["assert"]);
+const REQUEST_DEDUP_SEPARATOR = "\0";
 
 /**
  * Is this check kind eligible to reuse a saved baseline verdict on a clean replay?
@@ -141,8 +141,8 @@ async function checkSuccess(kind, value, ctx) {
         url: e.request?.url ?? "",
         path: pathnameOf(e.request?.url ?? ""),
       }));
-    const seen = new Set(embedded.map((r) => `${r.method}^@${r.path ?? pathnameOf(r.url)}`));
-    const requests = embedded.concat(harReqs.filter((r) => !seen.has(`${r.method}^@${r.path ?? pathnameOf(r.url)}`)));
+    const seen = new Set(embedded.map((r) => `${r.method}${REQUEST_DEDUP_SEPARATOR}${r.path ?? pathnameOf(r.url)}`));
+    const requests = embedded.concat(harReqs.filter((r) => !seen.has(`${r.method}${REQUEST_DEDUP_SEPARATOR}${r.path ?? pathnameOf(r.url)}`)));
     const hits = requests.filter(
       (r) =>
         r.method?.toUpperCase() === method.toUpperCase() &&
@@ -324,8 +324,8 @@ function statusMatches(pattern, status) {
 // bracket path with an optional leading $ (e.g. "$.title", "$[0].completed",
 // "deleted"); literal is a quoted string, number, boolean, or null.
 function matchJsonPath(expr, json) {
-  const m = String(expr).match(/^\s*(\$?[\w.[\]'"-]*?)\s*(=|!=)\s*(.+?)\s*$/);
-  if (!m) return { pass: false, detail: `cannot parse response_matches ${JSON.stringify(expr)} (expected: path = value)` };
+  const m = String(expr).match(/^\s*(\$?[\w.[\]'"-]*?)\s*(==|!=|=)\s*(.+?)\s*$/);
+  if (!m) return { pass: false, detail: `cannot parse response_matches ${JSON.stringify(expr)} (expected: path == value)` };
   const [, rawPath, op, rawVal] = m;
   const actual = resolveJsonPath(json, rawPath);
   const expected = parseLiteral(rawVal);

@@ -182,7 +182,13 @@ export async function gradeRun(runDir, resolvedCase, { signal = null, onRetry = 
     { role: "user", content: sections.join("\n\n") },
   ];
 
-  let args = null, tokens = null;
+  let args = null;
+  const tokens = { in: 0, out: 0, cache_read: 0 };
+  const addUsage = (usage) => {
+    tokens.in += usage?.in ?? 0;
+    tokens.out += usage?.out ?? 0;
+    tokens.cache_read += usage?.cache_read ?? 0;
+  };
   // Fetch turns; the loop ends when the model grades (args set) or when it must
   // be forced. The last allowed turn forces a grade so a grade always lands.
   for (let turn = 0; turn < MAX_GRADE_TURNS && args === null; turn++) {
@@ -197,6 +203,7 @@ export async function gradeRun(runDir, resolvedCase, { signal = null, onRetry = 
         signal,
         onRetry,
       });
+      addUsage(usage);
       if (toolCall?.name === "fetch_snapshot") {
         // Surface the fetch to a live spinner, then echo the assistant's tool
         // call and answer it as a tool-role message (OpenAI tool-result shape).
@@ -222,7 +229,6 @@ export async function gradeRun(runDir, resolvedCase, { signal = null, onRetry = 
         const coerced = coerceStringifiedArgs(toolCall.args);
         if (validate(coerced) === null) {
           args = coerced;
-          tokens = usage;
           break;
         }
         // Coerce/validate failed: fall through to the forced extraction below,
@@ -236,9 +242,8 @@ export async function gradeRun(runDir, resolvedCase, { signal = null, onRetry = 
     // self-produced grade failed validation. forcedToolCall coerces +
     // reattempts; its failure writes grade.error.json below.
     onFetch?.(null); // no longer fetching — the spinner returns to "grading"
-    onFetch?.(null); // no longer fetching — the spinner returns to "grading"
     try {
-      ({ args, tokens } = await forcedToolCall({
+      const forced = await forcedToolCall({
         model: resolvedCase.grader_model,
         messages,
         tool: GRADE_TOOL,
@@ -247,7 +252,9 @@ export async function gradeRun(runDir, resolvedCase, { signal = null, onRetry = 
         maxTokens,
         signal,
         onRetry,
-      }));
+      });
+      args = forced.args;
+      addUsage(forced.tokens);
     } catch (e) {
       // Persist the raw gateway tool-call bytes next to the run so a validation
       // failure (e.g. an argument the model JSON-stringified) is debuggable

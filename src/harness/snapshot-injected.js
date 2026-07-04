@@ -37,7 +37,7 @@ export function nameEchoesVisibleText(name, text) {
 // the export isn't in browser scope, so the logic is inlined there.
 export function cursorPointerInteractive(cursor, hasDirectText, alreadyInteractive, parentCursor) {
   if (alreadyInteractive) return false;
-  if (cursor === 'pointer') return false;
+  if (cursor !== 'pointer') return false;
   if (parentCursor === 'pointer') return false; // inheriting, not the origin
   return !!hasDirectText;
 }
@@ -92,7 +92,7 @@ function buildSnapshot() {
     // actor "see" cut-off text (e.g. eligibility copy) the user never saw, and the
     // grader flagged it as a phantom UX issue. The snapshot-level MAX_CHARS cap
     // (pushLine) still bounds total size.
-    const clean = (s) => (s === null ? '' : String(s)).replace(/\s+/g, ' ').trim().replace(/"/g, '""');
+    const clean = (s) => (s == null ? '' : String(s)).replace(/\s+/g, ' ').trim().replace(/"/g, "'");
 
     // Fresh ref numbering each call.
     for (const el of document.querySelectorAll('[data-dummy-ref]')) el.removeAttribute('data-dummy-ref');
@@ -158,10 +158,9 @@ function buildSnapshot() {
       if (!t) return true;
       const n = norm(accName(el));
       if (!n) return false;
-  if (!n) return false;
-  const nameWords = new Set(n.split(' '));
-  return t.split(' ').every((w) => nameWords.has(w));
-};
+      const nameWords = new Set(n.split(' '));
+      return t.split(' ').every((w) => nameWords.has(w));
+    };
 
 // `style` is the element's already-resolved computed style (walk() computes it
 // once per element); pass it in to avoid a second getComputedStyle(el).
@@ -364,6 +363,7 @@ const isInteractive = (el, style) => {
         } else {
           const ref = 'e' + (refCount + 1);
           if (pushLine(renderLine(ref, el))) {
+            refCount++;
             el.setAttribute('data-dummy-ref', ref);
             included = true;
           }

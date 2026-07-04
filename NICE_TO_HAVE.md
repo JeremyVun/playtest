@@ -224,3 +224,12 @@ CLI and the `CI_INTEGRATION.md` §12 API at that point.
 Superseded by `playtest demo` as the first-run path. Do it only if managed
 mode needs a living exercise: point a suite's `playtest.yaml` at
 `tests/todos/docker-compose.yml` via the `app:` block.
+
+## View-Server Cleanups Deferred From The alpha-0.4.0 Review (2026-07-04)
+
+- `view-server.js` has both `findManifests` (direct fs) and `findManifestsVia`
+  (StorageProvider). Collapse to the provider one only **after** `runs-root.js`
+  migrates to a provider — not before.
+- `/history.json` and `/changed.json` re-walk every manifest per request. Fine
+  for local use; if the hosted-viewer idea (above) is revisited, an index
+  belongs behind the StorageProvider seam — do not build it for local mode.

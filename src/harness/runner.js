@@ -63,6 +63,9 @@ export function _installSigintHandler() {
 }
 
 const emptyPerf = () => ({ input_to_paint_ms: null, long_tasks_ms: 0, requests: 0, js_errors: 0, nav: null });
+function baseEnvelope(stepNum, { ts = Date.now(), ...extras } = {}) {
+  return { step: stepNum, schema_version: STEP_SCHEMA_VERSION, ts, ...extras };
+}
 
 // Circuit-breaker (§10): a run that keeps FAILING the same way is stuck, not
 // exploring. When this many consecutive steps fail identically (same action +
@@ -72,7 +75,7 @@ const emptyPerf = () => ({ input_to_paint_ms: null, long_tasks_ms: 0, requests: 
 // could not make progress" signal, keyed on the action + error (so a run making
 // varied failed attempts (genuinely probing) is NOT cut — only a true loop is.
 const STUCK_FAIL_LIMIT = 4;
-// [UNREADABLE lines 75-81: scrolled past, not captured in any frame]
+
 function artifactsFor(stepNum, harEntries, { screenshot = true, mhtml = true, pwA11y = false } = {}) {
   const nnn = String(stepNum).padStart(3, "0");
   return {
@@ -113,7 +116,15 @@ function decideRecord({ discovery, mode, refresh, baseline, storyChanged }) {
  * @returns {boolean}
  */
 export function willRecord(rc, { mode = "auto", refresh = false } = {}) {
-// [UNREADABLE lines 122-133: scrolled past, not captured in any frame]
+  const discovery = rc.mode === "discovery";
+  let baseline = null;
+  if (!discovery && mode !== "agent" && !refresh) {
+    try {
+      baseline = readBaseline(rc.file);
+    } catch {
+      return true;
+    }
+  }
   const storyChanged = !!baseline && baseline.meta?.story_hash !== storyHash(rc.story, rc.persona);
   return decideRecord({ discovery, mode, refresh, baseline, storyChanged });
 }
@@ -129,8 +140,7 @@ export function willRecord(rc, { mode = "auto", refresh = false } = {}) {
  * snapshot filter dropped, in the viewer's Custom|Native diff.
  */
 function artifactFlags(driver, snap) {
-  return { screenshot: snap?.screenshot !== null, mhtml: driver.id === "web", pwA11y: driver.id === "web" || driver.id === "mobile"
-  };
+  return { screenshot: snap?.screenshot !== null, mhtml: driver.id === "web", pwA11y: driver.id === "web" || driver.id === "mobile" };
 }
 function addTokens(total, t) {
   total.in += (t?.in ?? 0);
@@ -215,7 +225,7 @@ export async function runCase(rc, opts) {
   const discovery = rc.mode === "discovery";
   let baseline = null;
   let baselineError = null;
-  if (!discovery && mode === "agent" && !refresh) {
+  if (!discovery && mode !== "agent" && !refresh) {
     try {
       baseline = readBaseline(rc.file);
     } catch (e) {
@@ -356,7 +366,6 @@ export async function runCase(rc, opts) {
     // the world it sets up is the same), and may hand a small string back into the
     // actor's context (§3). Absent hook ⇒ no phase ⇒ nothing changes (web
     // golden). A throw or a bad return value is INFRA (exit 2, gate skipped, actor
-  // golden). A throw or a bad return value is INFRA (exit 2, gate skipped, actor
   // never starts — "couldn't get to the start line", same class as a gather
   // throw / app.init failure); finishInfra tears down the driver + env.
   {
@@ -542,7 +551,7 @@ export async function runCase(rc, opts) {
   const owners = new Map(); // name → { owner, allInherited }
   if (routing.size > 0) {
     for (const criterion of rc.success ?? []) {
-      const kind = Object.keys(criterion).find((k) => k === "label");
+      const kind = Object.keys(criterion).find((k) => k !== "label");
       const owner = routing.get(kind);
       if (!owner) continue;
       const isInh =
@@ -602,6 +611,9 @@ export async function runCase(rc, opts) {
   // summary while the gate runs (an assert: criterion makes a blocking grader
   // call here — the biggest post-actor stall). Surface it as a phase.
   emit("phase", { phase: "gate" });
+  try {
+    await driver.flushHar?.();
+  } catch {}
   gate = await evaluateGate(rc, {
     driver,
     routing,
@@ -647,7 +659,9 @@ export async function runCase(rc, opts) {
   }
   // Never grade an infra run: it produced no trustworthy trajectory, and the
   // contract pins score to null on infra (a discovery actor-error lands here).
-  const willGrade = grade && llm.available && actualMode === "act" && status !== "infra";
+  // Act replays are never graded either — a clean replay's trajectory is
+  // provably unchanged, so a fresh grade would only add cost + nondeterminism.
+  const willGrade = grade && llm.available && actualMode !== "act" && status !== "infra";
 
   // Manifest write + browser/video flush + env teardown is another silent
   // window (seconds for a managed container); keep the live line moving.
@@ -715,6 +729,7 @@ export async function runCase(rc, opts) {
       // existsSync, not readBaseline: a corrupt-but-present baseline must not
       // throw here, and must not be silently overwritten by an accept.
       if (actualMode === "record" && (refresh || storyChanged || !fs.existsSync(baselinePaths(rc.file).traj))) {
+        acceptBaseline(rc.file, writer.dir);
         if (refresh || storyChanged) {
           // A refreshed/story-changed baseline invalidates any pending healed
           // candidate: that candidate diffs against the baseline this accept just
@@ -731,43 +746,135 @@ export async function runCase(rc, opts) {
     emit("case_end", { status, result });
     return result;
   } finally {
-    // [reconstruction: inserted to balance the try opened at the top of runCase;
-    // the flusher-unregister its leading comment (§292-295) describes was dropped at the seam]
     _sigintFlushers.delete(writePlaceholderManifest);
   }
 }
 
-// [reconstruction: recordLoop's signature (known verbatim from its call sites in
-// runCase's body, §441/§444) and per-step head were dropped at the slice seam; the
-// surviving tail below is kept verbatim. Loop shape reconstructed to balance the block.]
 async function recordLoop({ driver, writer, rc, persona, deadline, r, emit }) {
-  while (r.envelopes.length < rc.limits.max_steps) {
-// [UNREADABLE lines 751-900: scrolled past, not captured in any frame]
-  const confusion = await detectConfusion(envelope, r.envelopes, exec, before, driver);
-  if (r.aborted) return; // do not append past the hard-timeout cut
-  // Harness-detected confusion is objective evidence and wins the single
-  // confusion slot; a turn the actor SELF-REPORTED as confusing (the optional
-  // `confused` step field) falls back into it so it flows through the same
-  // viewer chip / grader digest / confusion_events count. The raw self-report
-  // also stays on envelope.agent for replay regardless. Only assigned when
-  // present — a clean step keeps NO confusion key (web golden byte-identical).
-  const flagged = confusion ?? selfReportedConfusion(agentStep);
-  if (flagged) envelope.confusion = flagged;
-  writer.appendEnvelope(envelope);
-  r.envelopes.push(envelope);
-  emit("step_result", { step: stepNum, ok: exec.ok, error: exec.error, settleMs: exec.settle_ms, costSoFar: costSoFar(), tokens:
-    tokensSoFar(tokens.in) });
+  const actor = new Actor(rc, persona);
+  actor.setupContext = r.setupContext;
+  const costSoFar = () => estimateCost(rc.actor_model, r.tokens);
+  const tokensSoFar = (ctx) => ({ ctx, in: r.tokens.in, out: r.tokens.out });
 
-  // Circuit-breaker: STUCK_FAIL_LIMIT consecutive identical failures mean the
-  // actor is looping on a dead end (the reported StepPay run tapped a vanished
-  // ref 8× before an unrelated crash finally ended it). End the run cleanly with
-  // end_reason "stuck" rather than burning the rest of max_steps. Keyed on the
-  // action + error so varied probing is never cut — only a true repeat loop.
-  if (isStuck(r.envelopes)) {
-    r.endReason = "stuck";
-    return;
+  while (r.envelopes.length < rc.limits.max_steps) {
+    if (r.aborted) return;
+    if (Date.now() >= deadline) {
+      r.endReason = "timeout";
+      return;
+    }
+    const stepNum = r.envelopes.length + 1;
+    const snap = await driver.captureSnapshot(stepNum);
+    if (r.aborted) return;
+    r.lastSnapshot = snap.text;
+    let agentStep, tokens;
+    try {
+      ({ agentStep, tokens } = await actor.nextStep({
+        history: r.envelopes,
+        snapshotText: snap.text,
+        stepNum,
+        screenshot: rc.vision ? snap.screenshot: null,
+        signal: r.signal,
+        onContext: (messages, tools) => {
+          try {
+            if (!r.wroteContext) {
+              writer.appendContext({ type: "header", ts: Date.now(), model: rc.actor_model, system: messages[0]?.content, tools });
+              r.wroteContext = true;
+            }
+            writer.appendContext({
+              step: stepNum,
+              ts: Date.now(),
+              model: rc.actor_model,
+              messages: sanitizeContext(messages).filter((m) => m.role !== "system"),
+            });
+          } catch {}
+        },
+        onRetry: ({ status, attempt, maxAttempts, waitMs }) =>
+          emit("retry", { phase: "acting", step: stepNum, status, attempt, maxAttempts, waitMs }),
+      }));
+    } catch (e) {
+      if (r.aborted) return;
+      const message = firstLine(e);
+      const envelope = baseEnvelope(stepNum, {
+        mode: "error",
+        error: message,
+        result: { ok: false, error: message, settle_ms: 0, url: snap.url },
+        perf: emptyPerf(),
+        artifacts: artifactsFor(stepNum, [], artifactFlags(driver, snap)),
+        network: { requests: [] },
+      });
+      emit("step_start", { step: stepNum, summary: "actor error" });
+      writer.appendEnvelope(envelope);
+      r.envelopes.push(envelope);
+      emit("step_result", { step: stepNum, ok: false, error: message, settleMs: 0, costSoFar: costSoFar(), tokens: tokensSoFar(null) });
+      r.endReason = "error";
+      r.runError = message;
+      return;
+    }
+    if (r.aborted) return;
+    addTokens(r.tokens, tokens);
+    emit("step_start", { step: stepNum, summary: describeAction(agentStep.action) });
+
+    const envelope = baseEnvelope(stepNum, {
+      mode: "agent",
+      agent: agentStep,
+      snapshot_text: snap.text,
+      ...(rc.visual_regression && snap.screenshotHash ? { screenshot_hash: snap.screenshotHash } : {}),
+    });
+    const type = agentStep.action.type;
+    if (type === "done" || type === "give_up") {
+      const axe = await driver.captureAxe?.();
+      Object.assign(envelope, {
+        result: { ok: true, error: null, settle_ms: 0, url: snap.url },
+        perf: emptyPerf(),
+        artifacts: artifactsFor(stepNum, [], artifactFlags(driver, snap)),
+        network: { requests: [] },
+        ...(axe ? { axe } : {}),
+        tokens,
+      });
+      writer.appendEnvelope(envelope);
+      r.envelopes.push(envelope);
+      emit("step_result", { step: stepNum, ok: true, error: null, settleMs: 0, costSoFar: costSoFar(), tokens: tokensSoFar(tokens.in) });
+      r.endReason = type;
+      return;
+    }
+
+    const before = await driver.effectToken();
+    const exec = await driver.execute(agentStep.action);
+    Object.assign(envelope, {
+      ...(exec.resolution ? { resolution: exec.resolution } : {}),
+      result: { ok: exec.ok, error: exec.error, settle_ms: exec.settle_ms, url: exec.url ?? null },
+      perf: exec.perf,
+      artifacts: artifactsFor(stepNum, exec.har_entries, artifactFlags(driver, snap)),
+      network: exec.network,
+      ...(exec.axe ? { axe: exec.axe } : {}),
+      ...(exec.console_errors?.length ? { console_errors: exec.console_errors } : {}),
+      tokens,
+    });
+    const confusion = await detectConfusion(envelope, r.envelopes, exec, before, driver);
+    if (r.aborted) return; // do not append past the hard-timeout cut
+    // Harness-detected confusion is objective evidence and wins the single
+    // confusion slot; a turn the actor SELF-REPORTED as confusing (the optional
+    // `confused` step field) falls back into it so it flows through the same
+    // viewer chip / grader digest / confusion_events count. The raw self-report
+    // also stays on envelope.agent for replay regardless. Only assigned when
+    // present — a clean step keeps NO confusion key (web golden byte-identical).
+    const flagged = confusion ?? selfReportedConfusion(agentStep);
+    if (flagged) envelope.confusion = flagged;
+    writer.appendEnvelope(envelope);
+    r.envelopes.push(envelope);
+    emit("step_result", { step: stepNum, ok: exec.ok, error: exec.error, settleMs: exec.settle_ms, costSoFar: costSoFar(), tokens:
+      tokensSoFar(tokens.in) });
+
+    // Circuit-breaker: STUCK_FAIL_LIMIT consecutive identical failures mean the
+    // actor is looping on a dead end (the reported StepPay run tapped a vanished
+    // ref 8× before an unrelated crash finally ended it). End the run cleanly with
+    // end_reason "stuck" rather than burning the rest of max_steps. Keyed on the
+    // action + error so varied probing is never cut — only a true repeat loop.
+    if (isStuck(r.envelopes)) {
+      r.endReason = "stuck";
+      return;
+    }
   }
-  } // [reconstruction: inserted to close the record loop dropped at the seam]
   r.endReason = "max_steps";
 }
 
@@ -817,15 +924,35 @@ async function actLoop({ driver, writer, rc, deadline, r, emit, baselineEnvelope
     // State drift (§10): the page is no longer what the baseline expected, so the
     // recorded action is no longer trustworthy. Do NOT execute it — record a
     // non-executed drift marker (result.ok:false, no resolution → excluded from
-// [UNREADABLE lines 974-1005: scrolled past, not captured in any frame]
-    if (drift) { // [reconstruction: drift-branch opener dropped at seam; body not recoverable]
+    // actionTrack, so it can never be replayed as a step) and escalate to heal
+    // from this baseline step. The marker carries confusion.type "state_drift":
+    // the actor's history renderer reads it as "SKIPPED — decide fresh from here".
+    if (drift) {
+      const envelope = baseEnvelope(stepNum, {
+        ts,
+        mode: "act",
+        acted_from: baseStep.step,
+        action: actionOf(baseStep),
+        result: { ok: false, error: drift, settle_ms: 0, url: snap.url ?? null },
+        perf: emptyPerf(),
+        artifacts: artifactsFor(stepNum, [], artifactFlags(driver, snap)),
+        network: { requests: [] },
+        confusion: { type: "state_drift", note: drift },
+      });
+      writer.appendEnvelope(envelope);
+      r.envelopes.push(envelope);
+      emit("step_result", {
+        step: stepNum, ok: false, error: drift, settleMs: 0,
+        costSoFar: estimateCost(rc.actor_model, r.tokens),
+        tokens: { ctx: null, in: r.tokens.in, out: r.tokens.out },
+      });
+      r.healReason = drift;
+      r.healKind = "drift";
       return baseStep;
     }
     const exec = await driver.executeLocator(baseStep);
     if (r.aborted) return null; // do not append past the hard-timeout cut
-    const envelope = {
-      step: stepNum,
-      schema_version: STEP_SCHEMA_VERSION,
+    const envelope = baseEnvelope(stepNum, {
       ts,
       mode: "act",
       acted_from: baseStep.step,
@@ -837,7 +964,7 @@ async function actLoop({ driver, writer, rc, deadline, r, emit, baselineEnvelope
       network: exec.network,
       // web-only a11y capture (always-on); conditional → byte-identical otherwise.
       ...(exec.axe ? { axe: exec.axe } : {}),
-    };
+    });
     // An execution failure escalates to heal: resume after the failed step.
     if (!exec.ok) envelope.confusion = { type: "action_failed", note: exec.error };
     writer.appendEnvelope(envelope);
@@ -878,10 +1005,7 @@ async function actLoop({ driver, writer, rc, deadline, r, emit, baselineEnvelope
   // full-page, best-effort (null → no `axe`, keeping non-web / capture-failure
   // envelopes byte-identical).
   const axe = snap ? await driver.captureAxe?.() : null;
-  const envelope = {
-    step: stepNum,
-    schema_version: STEP_SCHEMA_VERSION,
-    ts: Date.now(),
+  const envelope = baseEnvelope(stepNum, {
     mode: "act",
     ...(terminalStep ? { acted_from: terminalStep.step } : {}),
     action: terminalStep ? actionOf(terminalStep) : { type: "done", summary: "acted the baseline track to completion" },
@@ -890,7 +1014,7 @@ async function actLoop({ driver, writer, rc, deadline, r, emit, baselineEnvelope
     artifacts: artifactsFor(stepNum, [], artifactFlags(driver, snap)),
     network: { requests: [] },
     ...(axe ? { axe } : {}),
-  };
+  });
   writer.appendEnvelope(envelope);
   r.envelopes.push(envelope);
   emit("step_start", { step: stepNum, summary: describeAction(envelope.action) });
@@ -903,7 +1027,6 @@ async function actLoop({ driver, writer, rc, deadline, r, emit, baselineEnvelope
  * Multi-channel drift check for act-mode replay (§10). Returns the first
  * non-null channel reason (a11y wins ties; its note distinguishes the channel),
  * else null.
- * Channel 1 — a11y (ALWAYS, the control): compare the driver-normalized
  * Channel 1 — a11y (ALWAYS, the control): compare the driver-normalized
  * freshly-captured snapshot against the driver-normalized baseline
  * snapshot_text. No threshold — any post-normalization difference is drift.
@@ -955,7 +1078,7 @@ export async function detectConfusion(envelope, prior, exec, beforeToken, driver
   if (!exec.ok) return { type: "action_failed", note: exec.error };
   const sig = (e) => {
     const a = actionOf(e) ?? {};
-    return `${a.type}/${a.ref ?? a.resolution?.locator ?? a.url ?? ""}`;
+    return `${a.type}/${a.ref ?? e.resolution?.locator ?? a.url ?? ""}`;
   };
   // Repeating an action isn't confusion on its own — an actor may legitimately
   // scroll a long page to the bottom, each scroll revealing fresh content. The
@@ -1057,12 +1180,57 @@ export function buildManifest({ rc, runId, mode, startedAt, videoStartedAt, llm,
       // run (the golden web demo) keeps its manifest env shape unchanged.
       ...(rc.env.cookies ? { cookies: rc.env.cookies } : {}),
     },
-    // [reconstruction: buildManifest's remaining return fields + the object/function
-    // close were dropped at the slice seam and are not recoverable; braces balanced
-    // to keep the file parseable]
+    result: { status, end_reason: r.endReason, error: r.runError, gate },
+    // Heal provenance: where the act replay diverged and why. Only on heal runs —
+    // the ledger line ("healed @N"), the end-of-run heal digest (report.js), and
+    // the viewer all group on it.
+    ...(mode === "heal"
+      ? { heal: { from_step: r.healedFromStep, kind: r.healKind, reason: r.healReason } }
+      : {}),
+    totals: {
+      steps: r.envelopes.length,
+      executed_steps: actionTrack(r.envelopes).length,
+      // Merged actor+grader token bucket, priced per model (runTotals); the
+      // manifest is rewritten with the final figure once grading is done.
+      ...runTotals(rc, r),
+      console_errors: consoleErrors,
+      confusion_events: r.envelopes.filter((e) => e.confusion).length,
+      // Worst navigation LCP stamped at write time (mirrors view-server worstLcp)
+      // so history readers don't re-parse the trajectory per run.
+      lcp_ms: worstNavLcp(r.envelopes),
+    },
+    // Setup phase provenance (§6): { ran, returned_context, duration_ms } when a
+    // before_each hook ran; absent otherwise so hook-less manifests are unchanged.
+    ...(r.setup ? { setup: r.setup } : {}),
+    healed: mode === "heal",
+    baseline:
+      mode !== "record" && baseline
+        ? { run_id: baseline.meta?.run_id ?? null, accepted_at: baseline.meta?.accepted_at ?? null }
+        : null,
+    artifacts: {
+      trajectory: "trajectory.jsonl",
+      har: "har.json",
+      // null until the post-run slideshow build assigns "video.mp4" (ffmpeg
+      // present); a non-null video_started_at marks a legacy webm screencast.
+      video,
+      trace: "trace.zip",
+      grade: willGrade ? "grade.json" : null,
+      // per-turn actor context windows, for diagnostics; absent on pure act runs
+      // (no model calls) and explicitly null so the viewer doesn't probe for it
+      context: r.wroteContext ? "context.jsonl" : null,
+      baseline_copy: mode !== "record" && baseline ? "baseline.jsonl" : null,
+    },
   };
 }
-// [UNREADABLE lines 1244-1309: scrolled past, not captured in any frame]
+
+function readHar(runDir) {
+  try {
+    return JSON.parse(fs.readFileSync(`${runDir}/har.json`, "utf8")).log.entries;
+  } catch {
+    return [];
+  }
+}
+
 /**
  * budget's `record` cap; `Infinity` means "no cap" (the scalar
  * forms, byte-identical to the old single-pool behavior). When `total` is `true`
@@ -1223,4 +1391,4 @@ export async function runAll(resolvedCases, opts) {
   // Ctrl-C the re-raised SIGINT terminates the process (exit 130) before runAll
   // even returns; an "interrupted" result reaching here is the placeholder path.
   return { exitCode: anyFail ? 1 : anyInfra ? 2 : 0, results };
-} // [reconstruction: inserted to close runAll; original closing brace dropped at EOF seam]
+}

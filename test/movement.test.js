@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { movement, comparablePins, median, SCORE_DELTA_BADGE, DURATION_RATIO_BADGE } from "../src/shared/movement.js";
+import { movement, comparablePins, median, SCORE_DELTA_BADGE } from "../src/shared/movement.js";
 
 const PINS = {
   harness_version: "0.1.0",
@@ -117,19 +117,23 @@ test("status movement and streak text", () => {
 
   const healed = movement([entry()], current({ healed: true }));
   assert.equal(healed.statusMove, "pass → healed");
-  assert.equal(healed.badge, null, "pass → healed is not a regression by itself");
+  assert.equal(healed.badge, "regression", "a healed pass needs review");
 });
 
-test("badge thresholds: score ±5, duration ±30% vs prev; regression wins", () => {
+test("badge thresholds: score ±5; duration deltas do not drive badges", () => {
   const base = entry({ duration_ms: 1000, score: 80 });
   assert.equal(movement([base], current({ score: 80 - SCORE_DELTA_BADGE })).badge, "regression");
   assert.equal(movement([base], current({ score: 80 + SCORE_DELTA_BADGE })).badge, "improved");
-  assert.equal(movement([base], current({ duration_ms: 1000 * (1 + DURATION_RATIO_BADGE) })).badge, "regression");
-  assert.equal(movement([base], current({ duration_ms: 1000 * (1 - DURATION_RATIO_BADGE) })).badge, "improved");
+  const slower = movement([base], current({ duration_ms: 1400, score: 80 }));
+  assert.equal(slower.duration.prev, 400, "duration delta still surfaces");
+  assert.equal(slower.badge, null, "duration is not a regression signal");
+  const faster = movement([base], current({ duration_ms: 700, score: 80 }));
+  assert.equal(faster.duration.prev, -300, "faster runs still report duration deltas");
+  assert.equal(faster.badge, null, "duration is not an improvement signal");
   assert.equal(movement([base], current({ duration_ms: 1100, score: 81 })).badge, null);
   assert.equal(
     movement([base], current({ score: 90, duration_ms: 1400 })).badge,
-    "regression",
-    "regression wins when signals disagree",
+    "improved",
+    "score movement wins because duration is not a badge signal",
   );
 });

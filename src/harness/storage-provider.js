@@ -1,18 +1,16 @@
-// Storage provider: the viewer/report layer reads run artifacts through this thin
-// abstraction so a future remote backend (e.g. S3) can drop in behind the same
-// interface. See docs/CONTRACTS.md.
-// NOTE (reconstruction): the imports (line 1) and the tail from stat() onward
-// (stat body, createReadStream, class close) were not legible in any video frame;
-// they are inferred from the interface typedef below and standard node:fs usage.
-// The typedef and the listDir/readText methods are transcribed from the frames.
+// Storage seam for the trajectory viewer's run-data access (docs/CONTRACTS.md §13).
+// view-server.js routes its run-data reads through a StorageProvider so a future
+// hosted viewer can swap LocalFsProvider for an S3/DB-backed one without touching
+// the HTTP routing or the browser. All paths are relative to the provider's root.
 import fs from "node:fs";
 import path from "node:path";
 
-/** @typedef {object} StorageProvider
+/**
+ * @typedef {object} StorageProvider
  * @property {(rel: string) => {name: string, isFile: boolean, isDirectory: boolean}[] | null} listDir
  *   directory entries (null on an unreadable path; never throws)
  * @property {(rel: string) => string | null} readText
- *   file contents as text (null on any read error)
+ *   file contents as text (null on any error)
  * @property {(rel: string) => {size: number, mtime: Date, isFile: boolean} | null} stat
  *   file metadata (null if absent)
  * @property {(rel: string, opts?: {start?: number, end?: number}) => import("node:stream").Readable} createReadStream
@@ -50,8 +48,8 @@ export class LocalFsProvider {
 
   stat(rel) {
     try {
-      const s = fs.statSync(path.join(this.root, rel));
-      return { size: s.size, mtime: s.mtime, isFile: s.isFile() };
+      const st = fs.statSync(path.join(this.root, rel));
+      return { size: st.size, mtime: st.mtime, isFile: st.isFile() };
     } catch {
       return null;
     }

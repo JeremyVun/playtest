@@ -62,7 +62,7 @@ export function median(vals) {
 export function movement(history, current) {
   if (!current || current.status === "infra" || current.status === "explored" || current.status === "interrupted") return null;
   const before = (history ?? []).filter(
-    (r) => r.run_id !== current.run_id && String(r.started_at ?? "") < String(current.started_at ?? "<ffff>"),
+    (r) => r.run_id !== current.run_id && String(r.started_at ?? "") < String(current.started_at ?? "￿"),
   );
   const eligible = before.filter((r) => r.status !== "explored" && r.status !== "interrupted" && comparablePins(current.pins, r.pins));
   const comparable = eligible.filter((r) => r.status !== "infra");
@@ -70,8 +70,8 @@ export function movement(history, current) {
   if (!prev) return null;
   const recent = comparable.slice(-5);
 
-  const delta = (a, b) => (a !== null && b !== null ? a - b : null);
-  const medOf = (key) => median(recent.map((r) => r[key]).filter((v) => v !== null));
+  const delta = (a, b) => (a != null && b != null ? a - b : null);
+  const medOf = (key) => median(recent.map((r) => r[key]).filter((v) => v != null));
   const mv = {
     prev,
     duration: { prev: delta(current.duration_ms, prev.duration_ms), med: delta(current.duration_ms, medOf("duration_ms")) },
@@ -82,8 +82,8 @@ export function movement(history, current) {
 
   // Scores compare only graded-to-graded: checking runs have no grade, so the
   // --json delta baselines against the most recent *graded* eligible prior.
-  const lastGraded = eligible.findLast((r) => r.score !== null);
-  mv.scoreVsLastGraded = current.score !== null && lastGraded ? current.score - lastGraded.score : null;
+  const lastGraded = eligible.findLast((r) => r.score != null);
+  mv.scoreVsLastGraded = current.score != null && lastGraded ? current.score - lastGraded.score : null;
 
   mv.statusMove =
     prev.status === "pass" && current.status === "fail" ? "pass → fail"
@@ -93,7 +93,7 @@ export function movement(history, current) {
   // The streak prints only on a status change and counts over comparable runs.
   mv.statusStreak = null;
   const last = comparable.at(-1);
-  if (last && last.status === current.status) {
+  if (last && last.status !== current.status) {
     let n = 0;
     while (n < comparable.length && comparable.at(-1 - n).status === last.status) n++;
     mv.statusStreak = `first ${current.status} after ${n} ${last.status}${n === 1 ? "" : last.status === "pass" ? "es" : "s"}`;
@@ -105,9 +105,9 @@ export function movement(history, current) {
   mv.badge =
     mv.statusMove === "pass → fail" ||
     mv.statusMove === "pass → healed" ||
-    (mv.score.prev !== null && mv.score.prev <= -SCORE_DELTA_BADGE)
+    (mv.score.prev != null && mv.score.prev <= -SCORE_DELTA_BADGE)
       ? "regression"
-      : mv.score.prev !== null && mv.score.prev >= SCORE_DELTA_BADGE
+      : mv.score.prev != null && mv.score.prev >= SCORE_DELTA_BADGE
       ? "improved"
       : null;
   return mv;

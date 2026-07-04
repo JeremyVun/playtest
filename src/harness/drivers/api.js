@@ -14,7 +14,7 @@ import path from "node:path";
 import YAML from "yaml";
 import { firstLine, actionOf } from "../trajectory.js";
 import { overlayFor } from "./overlay.js";
-import { MAX_BODY_READ, capBody, isTextualMime, pathnameOf, flushHar, relativizeUrls } from "./har.js";
+import { MAX_BODY_READ, capBody, isTextualMime, pathnameOf, createHarFlusher, relativizeUrls } from "./har.js";
 
 const REQUEST_TIMEOUT_MS = 15000;
 // max_ms mirrors the real per-request abort (REQUEST_TIMEOUT_MS) so the pinned
@@ -41,12 +41,14 @@ export class ApiDriver {
   #runDir;
   #operations;
   #har = [];
+  #harFlusher;
   #lastResponse = null; // { status, mime, body } for the snapshot + effectToken
 
   constructor({ baseUrl, runDir, operations }) {
     this.#baseUrl = baseUrl;
     this.#runDir = runDir;
     this.#operations = operations ?? [];
+    this.#harFlusher = createHarFlusher(runDir, this.#har);
   }
 
   get id() {
@@ -125,7 +127,7 @@ export class ApiDriver {
     }
     if (this.#lastResponse) {
       lines.push("", `Last response: ${this.#lastResponse.status}${this.#lastResponse.mime ? ` ${this.#lastResponse.mime}` : ""}`);
-      lines.push(prettyCap(this.#lastResponse.body));
+      lines.push(prettyBody(this.#lastResponse.body));
     }
     const text = lines.join("\n");
     try {
@@ -144,18 +146,21 @@ export class ApiDriver {
       // (trajectory.js keys actionTrack on resolution), matching web/mobile.
       return this.#ok({ resolution: { locator: null, bbox: null }, network: { requests: [] }, har_entries: [], settle_ms: ms });
     }
-    if (action?.type === "request") return this.#fail(`action type "${action?.type}" is not executable on api`);
-    return this.#request(action, { resolution: { locator: `${action.method} ${action.path}`, bbox: null } });
+    if (action?.type !== "request") return this.#fail(`action type "${action?.type}" is not executable on api`);
     return this.#request(action, { resolution: { locator: `${action.method} ${action.path}`, bbox: null } });
   }
   async executeLocator(actedStep) {
     const action = actionOf(actedStep);
-    if (action?.type === "request") return this.execute(action ?? {});
+    if (action?.type !== "request") return this.execute(action ?? {});
     return this.#request(action, { resolution: { locator: `${action.method} ${action.path}`, bbox: null } });
   }
 
   async close() {
-    this.#flushHar();
+    this.#flushHar(true);
+  }
+
+  async flushHar() {
+    this.#flushHar(true);
   }
 
   // ---- internals ----
@@ -175,7 +180,7 @@ export class ApiDriver {
     const userHeaders = action.headers ?? {};
     const hasContentType = Object.keys(userHeaders).some((h) => h.toLowerCase() === "content-type");
     const headers = {
-      ...(hasBody && typeof action.body === "string" && !hasContentType ? { "content-type": "application/json" } : {}),
+      ...(hasBody && typeof action.body !== "string" && !hasContentType ? { "content-type": "application/json" } : {}),
       ...userHeaders,
     };
 
@@ -242,9 +247,9 @@ export class ApiDriver {
     return { ok: false, error, resolution: null, settle_ms: 0, url: this.location(), perf: null, har_entries: [], network: { requests: [] } };
   }
 
-  #flushHar() {
+  #flushHar(force = false) {
     try {
-      flushHar(this.#runDir, this.#har);
+      this.#harFlusher({ force });
     } catch {}
   }
 }

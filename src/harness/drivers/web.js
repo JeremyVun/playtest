@@ -9,7 +9,7 @@ import { SETTLE, firstLine, VISION_DRIFT_DEFAULT, actionOf, initialQuietMs } fro
 import { SNAPSHOT_SOURCE } from "../snapshot-injected.js";
 import { runAxeInPage } from "../axe-source.js";
 import { overlayFor } from "./overlay.js";
-import { MAX_BODY_CHARS, MAX_BODY_READ, capBody, isTextualMime, pathnameOf, flushHar, relativizeUrls, stripRefLines } from "./har.js";
+import { MAX_BODY_CHARS, MAX_BODY_READ, capBody, isTextualMime, pathnameOf, createHarFlusher, relativizeUrls, stripRefLines } from "./har.js";
 
 const ACTION_TIMEOUT_MS = 5000;
 const NAV_TIMEOUT_MS = 15000;
@@ -33,20 +33,12 @@ const MAX_ERROR_LOG = 50;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// HAR body capture (MAX_BODY_CHARS/MAX_BODY_READ/capBody/isTextualMime/pathnameOf)
-// + flushHar live in ./har.js, shared with the api driver. har.json captures
-// request/response bodies + headers — text/JSON only, capped, and ONLY in
-// har.json (never the embedded network.requests, so committed baselines stay
-// jitter-free); it lives under runs/ (gitignored) and may carry auth headers.
-// [UNREADABLE lines 41-70: scrolled past, not captured in any frame]
-/**
- * dot) is HOST-ONLY: the cookie is sent to this exact host, NOT its subdomains,
- * and NOT across a redirect to a different host — strict() re-seeds for the
- * landed host to cover that (#reseedForLandedHost). Called with the base_url at
- * seed time and with the post-redirect page_url() when re-seeding, so host is
- * whichever URL is passed. Returns [] for a null/empty map or an unparseable
- * URL. Pure; exported for test.
- */
+export function normalizeWebSnapshot(text, base = undefined) {
+  let s = String(text ?? "");
+  if (base !== undefined) s = relativizeUrls(s, base);
+  return stripRefLines(s);
+}
+
 export function cookiesFor(cookies, baseUrl) {
   if (!cookies || typeof cookies !== "object") return [];
   let host;
@@ -101,14 +93,69 @@ export function visualDriftReason(nowHash, wasHash, threshold = VISION_DRIFT_DEF
   if (typeof nowHash !== "string" || typeof wasHash !== "string") return null;
   const dist = hammingDistance(nowHash, wasHash);
   if (dist <= threshold) return null;
-  return `the page looks different under the recorded action: the screenshot diverged from the baseline visually (perceptual-hash
-  distance ${dist} > ${threshold})`;
+  return `the page looks different under the recorded action: the screenshot diverged from the baseline visually (perceptual-hash distance ${dist} > ${threshold})`;
 }
-/**
- * @typedef {object} ExecResult
-// [UNREADABLE lines 137-148: scrolled past, not captured in any frame]
- */
 
+/**
+ * Compute the visual-regression dHash and the model-facing downscaled PNG in one
+ * browser evaluate call. The on-disk screenshot remains the original bytes; this
+ * returns the optional downscaled copy for vision prompts.
+ */
+export async function processScreenshotImage(page, buf, maxEdge = VISION_MAX_EDGE) {
+  const dim = pngDimensions(buf);
+  const downscale = Boolean(dim && Math.max(dim.width, dim.height) > maxEdge);
+  try {
+    const processed = await page.evaluate(async ({ src, cap, downscale }) => {
+      const img = new Image();
+      await new Promise((res, rej) => {
+        img.onload = res;
+        img.onerror = rej;
+        img.src = src;
+      });
+
+      const dhashCanvas = document.createElement("canvas");
+      const W = 9;
+      const H = 8;
+      dhashCanvas.width = W;
+      dhashCanvas.height = H;
+      const dhashCtx = dhashCanvas.getContext("2d");
+      dhashCtx.drawImage(img, 0, 0, W, H);
+      const { data } = dhashCtx.getImageData(0, 0, W, H);
+      const gray = (x, y) => {
+        const i = (y * W + x) * 4;
+        return (data[i] + data[i + 1] + data[i + 2]) / 3;
+      };
+      let hi = 0;
+      let lo = 0;
+      let n = 0;
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W - 1; x++) {
+          const bit = gray(x, y) > gray(x + 1, y) ? 1 : 0;
+          if (n < 32) hi = (hi << 1) | bit;
+          else lo = (lo << 1) | bit;
+          n++;
+        }
+      }
+      const hex = (v) => (v >>> 0).toString(16).padStart(8, "0");
+      let downscaledDataUrl = null;
+      if (downscale) {
+        const scale = cap / Math.max(img.width, img.height);
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+        downscaledDataUrl = canvas.toDataURL("image/png");
+      }
+      return { dHash: hex(hi) + hex(lo), downscaledDataUrl };
+    }, { src: `data:image/png;base64,${buf.toString("base64")}`, cap: maxEdge, downscale });
+    const image = processed?.downscaledDataUrl
+      ? Buffer.from(processed.downscaledDataUrl.split(",")[1], "base64")
+      : buf;
+    return { screenshotHash: typeof processed?.dHash === "string" ? processed.dHash : null, screenshot: image };
+  } catch {
+    return { screenshotHash: null, screenshot: buf };
+  }
+}
 // Init script, installed on every document: mutation timestamp for dom-quiet,
 // longtask totals, and buffered nav-vitals (LCP/FCP/CLS) collectors. TTFB comes
 // from the navigation timing entry at read time.
@@ -380,6 +427,7 @@ export class WebDriver {
   #cdp = null;
   #runDir;
   #har = [];
+  #harFlusher;
   #harCursor = 0; // end of the previous step's HAR window (see #run)
   #reqInfo = new Map(); // request → { index, startMs }
   #inflight = new Set();
@@ -408,19 +456,89 @@ export class WebDriver {
   // Resolved Chromium viewport (app.viewport or DEFAULT_VIEWPORT). Rides
   // manifest.pins.viewport (part of the comparability key).
   #viewport;
-  #warmReload = false; // [reconstruction: inserted to balance block; original line(s) not recoverable]
-  #cookies = null; // [reconstruction: inserted to balance block; original line(s) not recoverable]
-// [UNREADABLE lines 450-553: scrolled past, not captured in any frame]
-  /**
-   * markers, text — is exactly the behavioral surface the actor chose its action
-   * against, so a behaviorally-changed element diverges and heals.
-   *
-   * `base` lets the caller relativize against a DIFFERENT base than this live
-   * driver's — the act loop passes the baseline's recording-time base for the
-   * baseline side and the live base for the captured side, so a deployment path
-   * prefix (t2's `/retail/netbank`) collapses on both sides. Defaults to this
-   * driver's own baseUrl (the same-base case: same-run confusion checks).
-   */
+  #warmReload = false;
+  #cookies = null;
+
+  constructor({ baseUrl, runDir, browser, context, page, settle = null, viewport = DEFAULT_VIEWPORT }) {
+    this.baseUrl = baseUrl;
+    this.page = page;
+    this.#browser = browser;
+    this.#context = context;
+    this.#runDir = runDir;
+    this.#harFlusher = createHarFlusher(runDir, this.#har);
+    this.#settlePolicy = settle ? { ...SETTLE, ...settle } : SETTLE;
+    this.#viewport = viewport;
+
+    context.on("request", (req) => {
+      this.#reqInfo.set(req, { index: this.#har.length, startMs: Date.now() });
+      let body = null;
+      try {
+        body = req.postData();
+      } catch {}
+      this.#har.push({
+        startedDateTime: new Date().toISOString(),
+        time: -1,
+        request: { method: req.method(), url: req.url(), headers: req.headers(), body: capBody(body) },
+        response: { status: 0, bodySize: -1, mimeType: "", headers: null, body: null },
+        _failed: false,
+      });
+      this.#inflight.add(req);
+      this.#lastNetAt = Date.now();
+    });
+    context.on("response", (resp) => {
+      const info = this.#reqInfo.get(resp.request());
+      if (!info) return;
+      const e = this.#har[info.index];
+      const headers = resp.headers();
+      e.response.status = resp.status();
+      e.response.mimeType = (headers["content-type"] || "").split(";")[0].trim();
+      const len = parseInt(headers["content-length"], 10);
+      e.response.bodySize = Number.isFinite(len) ? len : -1;
+      e.response.headers = headers;
+      if (isTextualMime(e.response.mimeType) && (e.response.bodySize < 0 || e.response.bodySize <= MAX_BODY_READ)) {
+        this.#captureBody(resp, e);
+      }
+      this.#lastNetAt = Date.now();
+    });
+    const finish = (failed) => (req) => {
+      const info = this.#reqInfo.get(req);
+      if (info) {
+        const e = this.#har[info.index];
+        e.time = Date.now() - info.startMs;
+        if (failed) e._failed = true;
+      }
+
+      this.#reqInfo.delete(req);
+      this.#inflight.delete(req);
+      this.#lastNetAt = Date.now();
+    };
+    context.on("requestfinished", finish(false));
+    context.on("requestfailed", finish(true));
+
+    page.on("console", (msg) => {
+      if (msg.type() === "error") this.#pushError("console", msg.text());
+    });
+    page.on("pageerror", (err) => {
+      this.#pushError("pageerror", firstLine(err?.message ?? String(err)));
+    });
+  }
+
+  get id() {
+    return "web";
+  }
+
+  get settle() {
+    return this.#settlePolicy;
+  }
+
+  get viewport() {
+    return this.#viewport;
+  }
+
+  get snapshotFormat() {
+    return "a11y-text-v5";
+  }
+
   normalizeSnapshot(text, base = this.baseUrl) {
     return normalizeWebSnapshot(text, base);
   }
@@ -494,12 +612,30 @@ export class WebDriver {
     }
     return true;
   }
-// [UNREADABLE lines 636-679: scrolled past, not captured in any frame]
-  // [reconstruction: inserted to balance block; captureSnapshot(stepNum) opening
-  // and the snap/url derivation preceding this line were lost in the UNREADABLE
-  // seam above — signature restored from the Driver contract (driver.js), the
-  // dropped body lines are not recoverable]
+
+  location() {
+    return this.#checkUrl ?? this.#pageUrl();
+  }
+
+  async effectToken() {
+    try {
+      return await this.page.evaluate(() => {
+        const vals = Array.from(document.querySelectorAll("input,textarea,select"), (el) => el.value).join("\u0000");
+        const d = window.__dummy;
+        return `${d ? d.lastMutationAt : 0}|${vals}|${location.href}`;
+      });
+    } catch {
+      return null;
+    }
+  }
+
+  async goto(urlOrPath) {
+    return this.#run({ type: "navigate", url: urlOrPath }, null, { locator: null, bbox: null });
+  }
+
   async captureSnapshot(stepNum) {
+    const snap = await this.page.evaluate(SNAPSHOT_SOURCE);
+    const url = this.page.url();
     const title = await this.page.title().catch(() => "");
     const p = this.#stepPaths(stepNum);
     fs.writeFileSync(p.a11y, snap.text + "\n");
@@ -524,8 +660,9 @@ export class WebDriver {
       } catch {
         wrote = false;
       }
-      screenshotHash = await this.#computeDHash(screenshot);
-      screenshot = wrote ? await this.#capImage(screenshot) : null;
+      const processed = await processScreenshotImage(this.page, screenshot);
+      screenshotHash = processed.screenshotHash;
+      screenshot = wrote ? processed.screenshot : null;
     }
     try {
       const { data } = await this.#cdp.send("Page.captureSnapshot", { format: "mhtml" });
@@ -561,7 +698,7 @@ export class WebDriver {
     }
 
     const ref = String(action.ref ?? "");
-    if (!/^\d+$/.test(ref)) return this.#fail(`invalid ref "${ref}"`);
+    if (!/^e\d+$/.test(ref)) return this.#fail(`invalid ref "${ref}"`);
     const loc = this.page.locator(`[data-dummy-ref="${ref}"]`);
     try {
       if ((await loc.count()) === 0) return this.#fail(`unknown ref "${ref}": not in the latest snapshot`);
@@ -705,13 +842,17 @@ export class WebDriver {
   }
 
   async close() {
-    this.#flushHar();
+    this.#flushHar(true);
     try {
       await this.#context.tracing.stop({ path: path.join(this.#runDir, "trace.zip") });
     } catch {}
     await this.#checkContext?.close().catch(() => {});
     await this.#context.close().catch(() => {});
     await this.#browser.close().catch(() => {});
+  }
+
+  async flushHar() {
+    this.#flushHar(true);
   }
 
   // ---- internals ----
@@ -801,8 +942,7 @@ export class WebDriver {
             : null,
         },
         har_entries: harEntries,
-        network: requests,
-      network: { requests },
+        network: { requests },
       // web-only a11y capture; absent when axe failed/was empty-of-violations is
       // STILL present (counts: {total:0}). Conditional only on capture success so
       // a failed-axe ExecResult is shaped exactly as before.
@@ -940,87 +1080,6 @@ export class WebDriver {
     }
   }
 
-  /**
-   * Downscale a PNG whose longest edge exceeds VISION_MAX_EDGE, via the live
-   * page's canvas (no native image dependency). Full-page captures of a tall
-   * page commonly exceed the cap, so this fires for them; falls back to the
-   * original bytes on any failure.
-   */
-  async #capImage(buf) {
-    const dim = pngDimensions(buf);
-    if (!dim || Math.max(dim.width, dim.height) <= VISION_MAX_EDGE) return buf;
-    try {
-      const dataUrl = await this.page.evaluate(async ({ src, cap }) => {
-        const img = new Image();
-        await new Promise((res, rej) => {
-          img.onload = res;
-          img.onerror = rej;
-          img.src = src;
-        });
-        const scale = cap / Math.max(img.width, img.height);
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.round(img.width * scale);
-        canvas.height = Math.round(img.height * scale);
-        canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
-        return canvas.toDataURL("image/png");
-      }, { src: `data:image/png;base64,${buf.toString("base64")}`, cap: VISION_MAX_EDGE });
-      return Buffer.from(dataUrl.split(",")[1], "base64");
-    } catch {
-      return buf;
-    }
-  }
-
-  /**
-   * Perceptual difference-hash (dHash) of a PNG buffer, the visual_regression
-   * pixel oracle. Mirrors #capImage's page-canvas trick (no native image dep):
-   * push the PNG into the live page, draw it onto a tiny 9×8 canvas, read the
-   * grayscale pixels, then for each of the 8 rows compare the 8 adjacent column
-   * pairs L→R (a bit set when the left pixel is brighter) — 8×8 = 64 bits. The
-   * 9×8 downscale + adjacent-gradient comparison is the QUANTIZATION that makes
-   * the hash robust to antialiasing / cursor / compositor jitter. Bits pack into
-   * two unsigned 32-bit halves (avoid BigInt across the bridge), returned as a
-   * 16-char lowercase hex string. try/catch → null; never blocks a run.
-   */
-  async #computeDHash(buf) {
-    try {
-      return await this.page.evaluate(async (src) => {
-        const img = new Image();
-        await new Promise((res, rej) => {
-          img.onload = res;
-          img.onerror = rej;
-          img.src = src;
-        });
-        const W = 9;
-        const H = 8;
-        const canvas = document.createElement("canvas");
-        canvas.width = W;
-        canvas.height = H;
-        const ctx = canvas.getContext("2d");
-        ctx.drawImage(img, 0, 0, W, H);
-        const { data } = ctx.getImageData(0, 0, W, H);
-        const gray = (x, y) => {
-          const i = (y * W + x) * 4;
-          return (data[i] + data[i + 1] + data[i + 2]) / 3;
-        };
-        let hi = 0;
-        let lo = 0;
-        let n = 0;
-        for (let y = 0; y < H; y++) {
-          for (let x = 0; x < W - 1; x++) {
-            const bit = gray(x, y) > gray(x + 1, y) ? 1 : 0;
-            if (n < 32) hi = (hi << 1) | bit;
-            else lo = (lo << 1) | bit;
-            n++;
-          }
-        }
-        const hex = (v) => (v >>> 0).toString(16).padStart(8, "0");
-        return hex(hi) + hex(lo);
-      }, `data:image/png;base64,${buf.toString("base64")}`);
-    } catch {
-      return null;
-    }
-  }
-
   async #bbox(loc) {
     const b = await loc.boundingBox().catch(() => null);
     return b ? { x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.width), h: Math.round(b.height) } : null;
@@ -1044,7 +1103,7 @@ export class WebDriver {
     if (!Array.isArray(nodes) || nodes.length === 0) return null;
     const byId = new Map(nodes.map((n) => [n.nodeId, n]));
     const prop = (n, name) => (n.properties ?? []).find((p) => p.name === name)?.value?.value;
-    const clean = (s) => (s === null ? "" : String(s)).replace(/\s+/g, " ").trim().replace(/"/g, "'");
+    const clean = (s) => (s == null ? "" : String(s)).replace(/\s+/g, " ").trim().replace(/"/g, "'");
     // Roles dropped entirely: InlineTextBox/LineBreak are sub-text fragments that
     // duplicate their StaticText parent. Unnamed structural containers (generic/
     // none/presentation) have no counterpart in the custom (interactive/text-only)
@@ -1097,8 +1156,8 @@ export class WebDriver {
     };
   }
 
-  #flushHar() {
-    flushHar(this.#runDir, this.#har);
+  #flushHar(force = false) {
+    this.#harFlusher({ force });
   }
 
   // Pull a textual response body into its HAR entry, capped and guarded — many

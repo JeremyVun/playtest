@@ -1,4 +1,91 @@
-// [UNREADABLE lines 1-88: scrolled past, not captured in any frame]
+/* Playtest trajectory viewer. Loads /run/manifest.json (or /runs.json → picker,
+   /changed.json → review list) and renders the recording. Every artifact is
+   optional: missing files degrade to placeholders, never a blank app.
+   Strictly read-only: accepting/rejecting changed journeys happens in the CLI. */
+
+import { movement } from "./shared/movement.js";
+import { AUTOPLAY_MS } from "./shared/timing.js";
+
+const $ = (sel) => document.querySelector(sel);
+
+// When a still-click seeks the video to a step's `ts`, land this far PAST the
+// caption cue boundary so the playhead sits inside the step's own cue (a seek
+// onto the exact boundary renders two stacked cues). Tiny vs the smallest step
+// gap, so it never bleeds into the next cue. See seekVideo().
+const SEEK_NUDGE_S = 0.05;
+
+const state = {
+  base: "/run",            // url prefix of the run dir
+  manifest: null,
+  steps: [],               // trajectory envelopes
+  baseline: null,          // baseline envelopes or null
+  baselineByStep: new Map(),
+  har: [],
+  grade: null,
+  inheritedGrade: null,    // {grade, from} — a checked run's quality carried from the last graded run
+  history: [],
+  movement: null,          // this run vs its history (computeMovement)
+  rootMode: false,         // serving a runs root (?run= used) — sibling links resolve
+  runPath: null,           // normalized ?run= value (root mode), null in single-run mode
+  acceptCmd: null,         // exact "playtest accept <dir>" for this run, when pending
+  cur: 0,
+  view: "stills",
+  itab: "step",            // inspector tab: "step" | "run"
+  inspWide: false,         // inspector widened to ~half the screen (long grade reports)
+  playing: false,          // stills autoplay (strip play button / space)
+  a11yCache: new Map(),
+  a11yMode: "custom",      // Agent view: "custom" (our snapshot) | "pw" (Playwright native a11y, debug)
+  pwA11yCache: new Map(),
+  context: null,           // { system, byStep:Map<step,{messages}> } from context.jsonl, or null
+  videoOk: false,
+};
+
+let wired = false; // one-time listeners (tabs, keys, run links); loadRun re-runs on run switches
+let loadSeq = 0;   // bails a stale loadRun when rapid pager clicks overlap mid-fetch
+let navSeq = 0;
+
+/* ---------- tiny DOM + fetch helpers ---------- */
+
+function h(tag, attrs = {}, ...children) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v == null) continue;
+    if (k === "class") el.className = v;
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else el.setAttribute(k, v);
+  }
+  for (const c of children.flat()) {
+    if (c == null) continue;
+    el.append(c.nodeType ? c : document.createTextNode(c));
+  }
+  return el;
+}
+
+function icon(name, cls = "ic") {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", cls);
+  const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+  use.setAttribute("href", "#" + name);
+  svg.append(use);
+  return svg;
+}
+
+async function fetchJson(url) {
+  try {
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    return await r.json();
+  } catch { return null; }
+}
+
+async function fetchText(url) {
+  try {
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    return await r.text();
+  } catch { return null; }
+}
+
 function parseJsonl(text) {
   if (!text) return [];
   const out = [];
@@ -11,8 +98,8 @@ function parseJsonl(text) {
 }
 
 // context.jsonl: a {type:"header", system} first line (system hoisted out once,
-// byte-identical every step) — one {step, messages} line per turn. We tolerate
-// the legacy no-header format too (system carried per-line inside `messages`);
+// byte-identical every step) + one {step, messages} line per turn. We tolerate
+// the legacy no-header format too (system carried per-line inside `messages`):
 // fall back to the first message that looks like the system/persona prompt.
 // Any parse trouble returns null so the Context tab simply stays hidden.
 function parseContext(text) {
@@ -25,9 +112,9 @@ function parseContext(text) {
     const byStep = new Map();
     for (const l of lines) {
       if (l.type === "header") { system = l.system ?? null; tools = l.tools ?? null; continue; }
-      if (l.step == null || !Array.isArray(l.messages)) continue;
+      if (l.step === null || !Array.isArray(l.messages)) continue;
       let messages = l.messages;
-      // legacy no-header: the system message rides inside messages
+      // legacy: no header line → the system message rides inside messages
       if (system == null && messages[0]?.role === "system") {
         system = messages[0].content ?? null;
       }
@@ -65,12 +152,8 @@ function fmtClock(seconds) {
   const s = (seconds % 60).toFixed(1).padStart(4, "0");
   return `${m}:${s}`;
 }
-
-// Readable local datetime for run lists: "today 14:23", "yesterday 09:01",
-// "Jun 10, 14:23" (year appended when it isn't this year). Callers put the
-// full ISO string in the title attribute for hover.
+  // full ISO string in the title attribute for hover.
 function fmtDate(iso) {
-  if (!iso) return "—";
   if (!iso) return "—";
   const d = new Date(iso);
   if (isNaN(d)) return String(iso);
@@ -117,7 +200,7 @@ function relTime(iso, now = new Date()) {
 
 // "2026-06-11T0422-d926" → "d926": the random suffix is the readable part;
 // the timestamp half duplicates the started column (and is UTC besides).
-const shortRunId = (id) => (id === null ? "—" : String(id).split("-").at(-1));
+const shortRunId = (id) => (id == null ? "—" : String(id).split("-").at(-1));
 
 // Persona descriptions are authored with hard line wraps for source-editing
 // readability. Reflow for display: collapse runs of single newlines (soft
@@ -168,7 +251,7 @@ function actionOf(env) {
 const ACTION_ICONS = {
   click: "i-click", type: "i-type", select: "i-select", scroll: "i-scroll",
   navigate: "i-nav", wait: "i-wait", done: "i-done", give_up: "i-giveup",
-  // mobile + api verbs reuse existing glyphs (the ?? "i-film" fallback covers any gap)
+  // mobile verbs reuse web icons where sensible (the ?? fallback covers any gap)
   tap: "i-click", swipe: "i-scroll", back: "i-back", request: "i-net",
 };
 
@@ -177,7 +260,7 @@ function locatorName(locator) {
   if (!locator) return null;
   let m = locator.match(/name="((?:[^"\\]|\\.)*)"/);
   if (m) return m[1];
-  m = locator.match(/data-testid=["']?([\w-]+)/);
+  m = locator.match(/\[data-testid=["']?([\w-]+)/);
   if (m) return m[1];
   m = locator.match(/^text="((?:[^"\\]|\\.)*)"$/);
   if (m) return m[1];
@@ -186,9 +269,9 @@ function locatorName(locator) {
 
 function targetName(env) {
   const a = actionOf(env);
-  // a failed acted step has no resolution of its own; name it from the baseline's
+  // a failed action has no resolution of its own; name it from the baseline's
   const locator = env.resolution?.locator
-    ?? (env.acted_from !== null ? state.baselineByStep.get(env.acted_from)?.resolution?.locator : null);
+    ?? (env.acted_from != null ? state.baselineByStep.get(env.acted_from)?.resolution?.locator : null);
   return locatorName(locator) ?? (a?.ref ? `ref ${a.ref}` : null);
 }
 
@@ -196,18 +279,29 @@ function targetName(env) {
 function describe(env) {
   const a = actionOf(env);
   if (env.mode === "error") return { icon: "i-warn", verb: "actor error", arg: "" };
-  const type = a?.type ?? (env.acted_from !== null ? "acted" : "step");
+  const type = a?.type ?? (env.acted_from != null ? "acted" : "step");
   const ic = ACTION_ICONS[type] ?? "i-film";
   const name = targetName(env);
   switch (type) {
     case "click": return { icon: ic, verb: "click", arg: name ?? "?" };
-    case "type": return { icon: ic, verb: "type", arg: `"${a.text}"${name ? " → " + name : ""}` };
-    case "select": return { icon: ic, verb: "select", arg: `"${a.value}"${name ? " in " + name : ""}` };
+    case "type": return { icon: ic, verb: "type", arg: `${a.text}${name ? " → " + name : ""}` };
+    case "select": return { icon: ic, verb: "select", arg: `${a.value}${name ? " in " + name : ""}` };
     case "scroll": return { icon: ic, verb: "scroll", arg: a.direction };
     case "navigate": return { icon: ic, verb: "go to", arg: a.url };
     case "wait": return { icon: ic, verb: "wait", arg: `${a.seconds}s` };
     case "done": return { icon: ic, verb: "done", arg: a.summary };
-// [UNREADABLE lines 297-312: scrolled past, not captured in any frame]
+    case "give_up": return { icon: ic, verb: "gave up", arg: a.reason };
+    // mobile verbs
+    case "tap":      return { icon: ic, verb: "tap",    arg: name ?? "?" };
+    case "swipe": return { icon: ic, verb: "swipe", arg: `${a.direction}${name ? " on " + name : ""}` };
+    case "back": return { icon: ic, verb: "back", arg: "" };
+    case "api_request": return { icon: ic, verb: a.method ?? "request", arg: a.path ?? "" };
+    case "request": return { icon: ic, verb: a.method ?? "request", arg: a.path ?? "" };
+    default: return { icon: ic, verb: "acted", arg: name ?? `baseline step ${env.acted_from ?? "?"}` };
+  }
+}
+
+/* ---------- boot ---------- */
 async function boot() {
   const params = new URLSearchParams(location.search);
   const runParam = params.get("run");
@@ -251,8 +345,57 @@ async function loadRun() {
   // an explicit null in manifest.artifacts means "this run has none" — don't probe
   const gradeRel = m.artifacts?.grade === null ? null : (m.artifacts?.grade ?? "grade.json");
   const baseRel = m.artifacts?.baseline_copy === null ? null : (m.artifacts?.baseline_copy ?? "baseline.jsonl");
+  const contextRel = m.artifacts?.context ?? null;
   // context.jsonl is only fetched when the manifest advertises it (record/heal)
-// [UNREADABLE lines 357-432: scrolled past, not captured in any frame]
+  const [trajText, har, grade, baseText, history, contextText] = await Promise.all([
+    fetchText(state.base + "/" + (m.artifacts?.trajectory ?? "trajectory.jsonl")),
+    fetchJson(state.base + "/" + (m.artifacts?.har ?? "har.json")),
+    gradeRel ? fetchJson(state.base + "/" + gradeRel) : null,
+    baseRel ? fetchText(state.base + "/" + baseRel) : null,
+    fetchJson("/history.json?case=" + encodeURIComponent(caseId)),
+    contextRel ? fetchText(state.base + "/" + contextRel) : null,
+  ]);
+  if (seq !== loadSeq) return; // superseded by a newer run switch
+
+  state.steps = parseJsonl(trajText);
+  state.har = har?.log?.entries ?? [];
+  state.grade = grade;
+  state.inheritedGrade = null;
+  state.baseline = baseText ? parseJsonl(baseText) : null;
+  state.baselineByStep.clear();
+  if (state.baseline) for (const env of state.baseline) state.baselineByStep.set(env.step, env);
+  state.history = Array.isArray(history) ? history : [];
+  state.context = parseContext(contextText);
+  if (!state.context && state.view === "context") state.view = "stills";
+  $("#tab-context").hidden = !state.context;
+  state.movement = computeMovement();
+
+  // a healed pass may be awaiting acceptance: the changed list knows this
+  // run's cwd-relative dir, which makes the accept command copy-pasteable.
+  // Match THIS run's entry — by root-relative path in root mode (repeat-run
+  // siblings share run_id), by run_id+case_id when serving a single run —
+  // and only offer the command while that entry is still pending.
+  if (m.healed && m.result?.status === "pass") {
+    const changed = await fetchJson("/changed.json");
+    if (seq !== loadSeq) return;
+    const mine = Array.isArray(changed)
+      ? changed.find((e) =>
+          state.rootMode ? e.path === state.runPath : e.run_id === m.run_id && e.case_id === caseId)
+      : null;
+    if (mine?.pending) state.acceptCmd = "playtest accept " + shellQuote(mine.run_dir_rel);
+  }
+
+  document.title = `Playtest — ${caseId || "run"}`;
+  $("#app").hidden = false;
+  $("#back").hidden = !state.rootMode; // the picker only exists when serving a runs root
+
+  // The chosen inspector tab survives moving between runs (run-nav pager,
+  // history dots). Fresh sessions: a failed run opens on the verdict.
+  let stored = null;
+  try { stored = sessionStorage.getItem("playtest.itab"); } catch {}
+  try { state.inspWide = sessionStorage.getItem("playtest.inspWide") === "1"; } catch {}
+  state.itab = !state.steps.length ? "run" : (stored ?? (m.result?.status === "fail" ? "run" : "step"));
+
   renderHeader();
   renderRunNav();
   renderBrief();
@@ -300,10 +443,11 @@ async function navigate(path, { push = true } = {}) {
   // reset run-scoped state; rootMode and the chosen view/itab survive
   Object.assign(state, {
     steps: [], baseline: null, har: [], grade: null, inheritedGrade: null, history: [],
-    movement: null, acceptCmd: null, cur: 0, videoOk: false,
+    movement: null, acceptCmd: null, cur: 0, context: null, videoOk: false,
   });
   state.baselineByStep.clear();
   state.a11yCache.clear();
+  state.pwA11yCache.clear();
   await loadRun();
 }
 
@@ -477,7 +621,7 @@ function renderPicker(runs, filterNote = null, activeTags = pickerTagsFromUrl())
       )));
     if (!open) return [main];
     return [main, ...g.runs.slice(1).map((r) => runRow(href(r), "sub", ...cells(r,
-      h("td", { class: "td-case" }, h("a", { class: "case-link", href: href(r) }, "↳ " + (r.case_id ?? "?"))))))]; // [reconstruction: balancing a gap; original code not recoverable]
+      h("td", { class: "td-case" }, h("a", { class: "case-link", href: href(r) }, "↳ " + (r.case_id ?? "?"))))))];
   };
   // re-render with the new tag selection, syncing it into the URL (back/forward
   // restores it; reload keeps it). a fresh Set keeps the closed-over one immutable.
@@ -527,12 +671,11 @@ function pickerTagsFromUrl() {
 /* Read-only changed-journey review list (?filter=changed). Pending rows show
  * the latest changed-mode run; healed passes stay listed, dimmed, as history. */
 function renderChanged(entries) {
+  const el = $("#picker");
   el.hidden = false;
   const pending = entries.filter((e) => e.pending);
-  // pending (the review queue) first, then healed passes as dimmed history
-  const items = [...pending, ...entries.filter((e) => !e.pending)]
-    .map((e) => ({ ...e, pending: e.pending ? "changed" : "historical" }));
-  /* cols mirrors the picker: identity first, run id last */
+  const items = entries.map((e) => ({ ...e, state: e.pending ? "changed" : "historical" }));
+  // column order mirrors the picker: identity first, run id last
   const cols = [
     { key: "case_id", label: "case" },
     { key: "state", label: "state" },
@@ -541,16 +684,16 @@ function renderChanged(entries) {
     { key: "run_id", label: "run id" },
   ];
   const rowsFor = (e) => {
-    const run = "?run=" + encodeURIComponent(e.path);
-    const row = runRow(run, e.pending ? "" : "hist", ...cells(e,
-      h("td", { class: "td-case" + (e.pending ? " pending" : "") }, h("a", { class: "case-link", href: run }, e.case_id ?? "?")),
-      h("td", {},
-        e.pending
-          ? h("span", { class: "chip accent" }, icon("i-branch"), "changed")
-          : h("span", { class: "chip" }, "historical")),
-      h("td", { class: "td-num", title: e.score == null ? "ungraded" : null }, e.score !== null ? String(e.score) : "—"),
-      h("td", { class: "td-date", title: e.started_at }, fmtDate(e.started_at)),
-      h("td", { class: "td-id", title: e.run_id }, shortRunId(e.run_id))));
+    const href = "?run=" + encodeURIComponent(e.path);
+    const row = runRow(href, e.pending ? null : "dim",
+      h("td", { class: "td-case" }, h("a", { class: "case-link", href }, e.case_id ?? "?")),
+      h("td", {}, e.pending
+        ? h("span", { class: "chip accent" }, icon("i-branch"), "changed")
+        : h("span", { class: "chip" }, "historical")),
+      h("td", { class: "num", title: e.score === null ? "ungraded" : null }, e.score !== null ? String(e.score) : "—"),
+      h("td", { class: "td-date", title: e.started_at ?? "" }, fmtDate(e.started_at)),
+      h("td", { class: "td-id", title: e.run_id ?? "" }, shortRunId(e.run_id)),
+    );
     if (!e.pending) return [row];
     const dir = shellQuote(e.run_dir_rel);
     return [row, h("tr", { class: "cmds-row" },
@@ -573,7 +716,7 @@ function renderChanged(entries) {
 /**
  * Deltas of this run vs its history. The comparability rules — pin set
  * included — and the badge thresholds live in the shared module (served at
- * /shared/movement.js, the same code the CLI uses); this maps the viewer's state
+ * /shared/movement.js, same code cli.js uses); this maps the viewer's state
  * onto its inputs. The current run's worst LCP comes from the step envelopes,
  * like the server computes it for history entries.
  */
@@ -595,7 +738,7 @@ function computeMovement() {
 
 // Only the distilled regression/improved verdict goes in the topbar. No
 // statusMove chip either: "pass → healed" duplicates the "changed" mode chip
-// and "pass→fail" duplicates the fail status + regression badge.
+// and "pass → fail" duplicates the fail status + regression badge.
 function movementBadge() {
   const mv = state.movement;
   if (!mv?.badge) return null;
@@ -618,7 +761,7 @@ function renderHeader() {
   const m = state.manifest;
   $("#case-id").replaceChildren(
     m.case?.id ?? "unknown case",
-    h("span", { class: "run-id" }, `  ·  ${m.run_id ?? ""}`),
+    h("span", { class: "run-id" }, ` · ${m.run_id ?? ""}`),
   );
 
   const badges = [statusChip(m.result?.status), modeChip(m.mode, m.healed, m.result?.status)];
@@ -631,21 +774,91 @@ function renderHeader() {
   const move = movementBadge();
   if (move) badges.push(move);
   // The targeted environment (app.envs.<name> via --env). The default env has no
-  // name — Name[DEFAULT] would only confuse, so it's omitted there.
-// [UNREADABLE lines 812-881: scrolled past, not captured in any frame]
+  // name — a "[DEFAULT]" chip would only confuse, so it's omitted there.
+  const envName = m.env?.env_name;
+  if (envName) badges.push(h("span", { class: "chip", title: m.env?.base_url ?? "" }, String(envName).toUpperCase()));
+  $("#run-badges").replaceChildren(...badges);
+
+  const t = m.totals?.tokens ?? {};
+  const cost = m.totals?.cost_usd;
+  const el = $("#cost-strip");
+  const cachePct = t.in ? Math.round(((t.cache_read ?? 0) / t.in) * 100) : 0;
+  el.replaceChildren(
+    h("div", { class: "cost-label", title: "Estimated US-dollar cost of the model (LLM) API calls for this whole run. Checked/replayed runs make no model calls, so they cost about nothing." }, "run cost"),
+    h("div", { class: "cost-usd" }, "$" + (cost ?? 0).toFixed(4)),
+    h("div", { class: "cost-sub", title: "Total input / output tokens for the run, and the share of input served from the prompt cache (higher means cheaper)." },
+      !t.in && !t.out && !cost
+        ? "no model calls"
+        : `${fmtTokens(t.in)} in · ${fmtTokens(t.out)} out · ${cachePct}% cached`),
+  );
+}
+
+/* ---------- run pager: ‹ 3 / 6 › through this story's history ---------- */
+
+// Topbar pager over the case's runs, oldest → newest. Root mode only —
+// sibling run links don't resolve when serving a single run directory.
+// Repeat-run siblings share run_id, so the current run is matched by path.
+function renderRunNav() {
+  const el = $("#run-nav");
+  const hist = state.history;
+  const idx = hist.findIndex((r) =>
+    state.runPath ? r.path === state.runPath : r.run_id === state.manifest.run_id);
+  if (!state.rootMode || hist.length < 2 || idx < 0) { el.hidden = true; return; }
+  const btn = (r, glyph, label) => r?.path
+    ? h("a", { class: "rn-btn", href: "?run=" + encodeURIComponent(r.path),
+        title: `${label}: ${r.run_id} · ${fmtDate(r.started_at)}` }, glyph)
+    : h("span", { class: "rn-btn off" }, glyph);
+  el.hidden = false;
+  el.replaceChildren(
+    h("div", { class: "rn-label" }, "this story"),
+    h("div", { class: "rn-row" },
+      btn(hist[idx - 1], "<", "older run"),
+      // space-pad the index to the total's width (mono + white-space:pre) so
+      // the pager doesn't change width while stepping through runs
+      h("span", { class: "rn-pos" }, `${String(idx + 1).padStart(String(hist.length).length)} / ${hist.length}`),
+      btn(hist[idx + 1], ">", "newer run"),
+    ),
+  );
+}
+
+/* ---------- cross-run history chart (Run tab) ---------- */
+
+const HIST_COLOR = { pass: "var(--pass)", fail: "var(--fail)", infra: "var(--warn)", explored: "var(--accent)", interrupted: "var(--warn)" };
+
+// A journey is a deterministic pass/fail run — the gate is the verdict and the
+// grader's 0-100 score is only advisory "quality". Discovery has no gate, so
+// its score IS the data product. Mode rides the manifest; runner stamps
+// "explore" for discovery (see app.js:651). The per-row guard keeps a (not
+// expected) mixed history honest.
+const isJourney = () => state.manifest.mode !== "explore";
+
+function renderSparkline() {
+  const el = $("#sec-history");
+  const note = (msg) =>
+    el.replaceChildren(sec("i-gauge", "history", null, h("div", { class: "empty-note" }, msg)));
+  const hist = state.history;
+  if (!hist || hist.length < 2) return note("first recorded run of this case — history will accrue here");
+
+  // A journey leads with the pass/fail status sequence (the verdict), with the
+  // grader score as a faint advisory "quality" overlay. Discovery has no gate,
+  // so its score is the y-axis and the data product — rendered exactly as before.
+  const journey = isJourney();
+
+  // Every run of the case sits on the trend line. Ungraded runs (checking runs
+  // have no grade.json) carry the last known score forward — drawn hollow so
   // they read as "still at 90" rather than as a grade of their own. The y-axis
   // is the quality score when ≥2 runs are graded; else duration — except a
   // journey leads with the status band, so an ungraded journey just shows pips.
-  const graded = hist.filter((r) => r.score !== null);
+  const graded = hist.filter((r) => r.score != null);
   const useScore = graded.length >= 2;
   const yMetric = useScore ? "score" : journey ? null : "duration";
   const own = hist.map((r) => (yMetric === "score" ? r.score : yMetric === "duration" ? r.duration_ms : null));
-  const known = own.filter((v) => v !== null);
+  const known = own.filter((v) => v != null);
   if (!journey && !known.length) return note("not enough comparable runs to chart yet");
 
   const W = 300, H = 76, L = 12, R = 12, T = 18, B = 14;
   const x = (i) => L + (i * (W - L - R)) / Math.max(1, hist.length - 1);
-  const esc = (s) => s.replace(/&/g, "&").replace(/</g, "<");
+  const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
   const clampX = (px) => Math.min(Math.max(px, 16), W - 16);
   const cur = (r) => (state.runPath ? r.path === state.runPath : r.run_id === state.manifest.run_id);
   const curIdx = hist.findIndex(cur);
@@ -662,7 +875,7 @@ function renderHeader() {
       const isCur = cur(r);
       const cx = x(i).toFixed(1);
       const title = `${r.run_id} · ${r.status}` +
-        (r.score !== null ? ` · quality ${r.score}` : ` · ungraded`) +
+        (r.score != null ? ` · quality ${r.score}` : ` · ungraded`) +
         ` · ${fmtMs(r.duration_ms)} · ${relTime(r.started_at)}`;
       const pip = `<circle class="hd" cx="${cx}" cy="${BAND_Y}" r="${isCur ? 5 : 4}" fill="${color}" ${isCur ? 'stroke="var(--ink)" stroke-width="1.4"' : ""}/>`;
       const mark = `<g><circle cx="${cx}" cy="${BAND_Y}" r="9" fill="transparent"/>${pip}<title>${esc(title)}</title></g>`;
@@ -673,8 +886,8 @@ function renderHeader() {
     // clearly beneath the status pips and reads as a subtle degradation line.
     let overlay = "";
     if (useScore) {
-      let carry = own.find((v) => v !== null);
-      const plotted = own.map((v) => (v !== null ? (carry = v) : carry));
+      let carry = own.find((v) => v != null);
+      const plotted = own.map((v) => (v != null ? (carry = v) : carry));
       const min = Math.min(...known), max = Math.max(...known);
       const span = max - min;
       const QT = T + 22, QB = H - B; // overlay lives below the band
@@ -686,17 +899,73 @@ function renderHeader() {
     svgBody = overlay + band;
     subtitle = `${hist.length} runs · pass/fail` + (useScore ? " · quality overlay" : "");
   } else {
-    // DISCOVERY (and journey never reaches here); score is the y-axis.
-    const firstKnown = own.find((v) => v !== null);
-    let carry = firstKnown;
-    const plotted = own.map((v) => (v !== null ? (carry = v) : carry));
-    const min = Math.min(...known), max = Math.max(...known);
-    const span = max - min;
-// [UNREADABLE lines 941-998: scrolled past, not captured in any frame]
-  // Step envelopes never carry mode "heal" — the runner writes "agent" for the
-  // heal continuation — so a step is a heal step when the agent was driving in a
-  // run that healed: everything after the replayed track broke.
+    // DISCOVERY (and journey never reaches here): score is the y-axis.
+  const firstKnown = own.find((v) => v != null);
+  let carry = firstKnown;
+  const plotted = own.map((v) => (v != null ? (carry = v) : carry));
+  const min = Math.min(...known), max = Math.max(...known);
+  const span = max - min;
+  // a flat series sits mid-chart, not pinned to the bottom edge
+  const y = (v) => (span === 0 ? (T + H - B) / 2 : H - B - ((v - min) / span) * (H - T - B));
+  const fmtVal = (v) => (useScore ? String(Math.round(v)) : fmtMs(v));
+  const pts = plotted.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`);
+  const marks = hist.map((r, i) => {
+    const ghost = own[i] === null;
+    const isCur = cur(r);
+    const color = HIST_COLOR[r.status] ?? "var(--dim)";
+    const title = `${r.run_id} · ${r.status}` +
+      (r.score != null ? ` · score ${r.score}` : useScore ? ` · ungraded (last score ${fmtVal(plotted[i])})` : "") +
+      ` · ${fmtMs(r.duration_ms)} · ${relTime(r.started_at)}`;
+    const cx = x(i).toFixed(1), cy = y(plotted[i]).toFixed(1);
+    const shape = ghost
+      ? `<circle class="hd" cx="${cx}" cy="${cy}" r="${isCur ? 4 : 3}" fill="var(--bg1)" stroke="${isCur ? "var(--ink)" : color}" stroke-width="1.4"/>`
+      : `<circle class="hd" cx="${cx}" cy="${cy}" r="${isCur ? 4 : 3}" fill="${color}" ${isCur ? 'stroke="var(--ink)"' : ""}/>`;
+    // invisible r=9 circle widens the hover/click target around the mark
+    const mark = `<g><circle cx="${cx}" cy="${cy}" r="9" fill="transparent"/>${shape}<title>${esc(title)}</title></g>`;
+    return link(i, r, mark);
+  }).join("");
+  // annotate the BEST real value — highest score, but lowest (fastest) duration —
+  // and the current run when its real value differs
+  const best = useScore ? max : min;
+  const bestIdx = own.findIndex((v) => v === best);
+  const bestY = y(best) - 8 < T ? y(best) + 14 : y(best) - 8; // keep the label on-canvas
+  const labels = [`<text class="hist-val" x="${clampX(x(bestIdx)).toFixed(1)}" y="${bestY.toFixed(1)}" text-anchor="middle">${fmtVal(best)}</text>`];
+  const curVal = curIdx >= 0 ? own[curIdx] : null;
+  if (curVal != null && curVal !== best) {
+    labels.push(`<text class="hist-val cur" x="${clampX(x(curIdx)).toFixed(1)}" y="${Math.min(H - 2, y(curVal) + 14).toFixed(1)}" text-anchor="middle">${fmtVal(curVal)}</text>`);
+  }
+  svgBody = `<polyline points="${pts.join(" ")}" fill="none" stroke="var(--line2)" stroke-width="1.5"/>${marks}${labels.join("")}`;
+  subtitle = useScore ? `${graded.length} of ${hist.length} graded · score` : `${hist.length} runs · duration`;
+  }
 
+  const chart = h("div", { class: "hist-chart" });
+  chart.innerHTML = `<svg viewBox="0 0 ${W} ${H}" class="hist-svg">${svgBody}</svg>`;
+
+  const hasGhosts = own.some((v) => v === null);
+  // oldest → newest framed in relative time ("3 weeks ago → today"); the
+  // absolute datetimes ride the hover title. Per-dot relative age lives in each
+  // mark's <title> above.
+  const foot = h("div", { class: "hist-foot" },
+    h("span", { title: `${fmtDate(hist[0].started_at)} → ${fmtDate(hist.at(-1).started_at)}` },
+      `${relTime(hist[0].started_at)} → ${relTime(hist.at(-1).started_at)}`),
+    h("span", { class: "hist-legend" },
+      ...[...new Set(hist.map((r) => r.status))].map((s) =>
+        h("span", { class: "lg" }, h("span", { class: "lg-dot", style: `background:${HIST_COLOR[s] ?? "var(--dim)"}` }), s ?? "?")),
+      // a journey's pips are solid even when ungraded — the score is just a faint
+      // overlay — so the "hollow = ungraded" legend only applies to discovery.
+      !journey && hasGhosts
+        ? h("span", { class: "lg", title: "hollow = ungraded run, shown at the last graded score" },
+            h("span", { class: "lg-ghost" }), "ungraded")
+        : null),
+  );
+  el.replaceChildren(sec("i-gauge", "history", subtitle, chart, foot));
+}
+
+/* ---------- film strip ---------- */
+
+// Step envelopes never carry mode "heal" — the runner writes "agent" for the
+// heal continuation — so a step is a heal step when the agent was driving in a
+// run that healed: everything after the replayed track broke.
 const isHealStep = (env) => env.mode === "agent" && !!state.manifest?.healed;
 
 const MAX_SETTLE_BAR = 2000; // ms that fills the little settle lane
@@ -712,7 +981,7 @@ const MAX_SETTLE_BAR = 2000; // ms that fills the little settle lane
 function settleTail(env) {
   const raw = env.result?.settle_ms ?? 0;
   const s = state.manifest?.pins?.settle;
-  if (!s || s.dom_quiet_ms == null || s.net_quiet_ms == null) return raw;
+  if (!s || s.dom_quiet_ms === null || s.net_quiet_ms === null) return raw;
   return Math.max(0, raw - Math.max(s.dom_quiet_ms, s.net_quiet_ms));
 }
 
@@ -762,40 +1031,39 @@ function renderStrip() {
       thumb,
       h("div", { class: "cell-cap" },
         h("div", { class: "cell-line" },
-          h("span", { class: "n" }, String(env.step).padStart(2, "0")),
-          icon(d.icon),
-          h("span", { class: "t" }, `${d.verb} ${d.arg ?? ""}`)),
-        tele,
-      ),
-      h("div", { class: "cell-prog" }), // autoplay countdown bar; animates while #strip.playing
-    ));
-  });
-}
+            h("span", { class: "n" }, String(env.step).padStart(2, "0")),
+            icon(d.icon),
+            h("span", { class: "t" }, `${d.verb} ${d.arg ?? ""}`)),
+          tele,
+        ),
+        h("div", { class: "cell-prog" }), // autoplay countdown bar; animates while #strip.playing
+      ));
+    });
+  }
 
-/* ---------- autoplay: walk the steps like a slideshow ---------- */
+  /* ---------- autoplay: walk the steps like a slideshow ---------- */
 
-const AUTOPLAY_MS = 1200;
-let playTimer = null;
+  let playTimer = null;
 
-function setPlaying(on) {
-  if (on && !state.steps.length) return;
-  state.playing = on;
-  clearInterval(playTimer);
-  playTimer = null;
-  const btn = $("#play");
-  btn.replaceChildren(icon(on ? "i-pause" : "i-play"), on ? "Pause" : "Play");
-  btn.title = on ? "pause (space)" : "play through the steps (space)";
-  btn.setAttribute("aria-label", on ? "pause" : "play through the steps");
-  btn.classList.toggle("on", on);
-  // the active cell's countdown bar animates only while this class is on
-  const strip = $("#strip");
-  strip.classList.toggle("playing", on);
-  strip.style.setProperty("--autoplay-ms", AUTOPLAY_MS + "ms");
+  function setPlaying(on) {
+    if (on && !state.steps.length) return;
+    state.playing = on;
+    clearInterval(playTimer);
+    playTimer = null;
+    const btn = $("#play");
+    btn.replaceChildren(icon(on ? "i-pause" : "i-play"), on ? "Pause" : "Play");
+    btn.title = on ? "pause (space)" : "play through the steps (space)";
+    btn.setAttribute("aria-label", on ? "pause" : "play through the steps");
+    btn.classList.toggle("on", on);
+    // the active cell's countdown bar animates only while this class is on
+    const strip = $("#strip");
+    strip.classList.toggle("playing", on);
+    strip.style.setProperty("--autoplay-ms", AUTOPLAY_MS + "ms");
   if (!on) return;
-  if (state.cur >= state.steps.length - 1) select(0, { auto: true }); // play at the end restarts
-  playTimer = setInterval(() => {
-    if (state.cur >= state.steps.length - 1) setPlaying(false);
-    else select(state.cur + 1, { auto: true });
+    if (state.cur >= state.steps.length - 1) select(0, { auto: true }); // play at the end restarts
+    playTimer = setInterval(() => {
+      if (state.cur >= state.steps.length - 1) setPlaying(false);
+      else select(state.cur + 1, { auto: true });
   }, AUTOPLAY_MS);
 }
 
@@ -812,18 +1080,19 @@ function select(i, { instant = false, auto = false } = {}) {
     c.classList.toggle("on", on);
     if (on) {
       c.scrollIntoView({ block: "nearest", inline: "nearest", behavior: instant ? "auto" : "smooth" });
-      // keep DOM focus on the active cell for manual navigation (arrows/Home/End)
-      // so a subsequent Space plays from THIS cell — otherwise focus
-      // lingers on a previously-clicked cell and Space fires its native click.
-      if (document.activeElement?.closest("#strip")) c.focus({ preventScroll: true });
+      // Keep DOM focus on the active cell for manual navigation (arrows/Home/End)
+      // click) so a subsequent Space plays from THIS still — otherwise focus
+      // lingers on a previously-clicked cell and Space fires its native click,
+      // snapping selection back. Never on autoplay ticks (would steal focus).
+      if (!auto && document.activeElement?.closest("#strip")) c.focus({ preventScroll: true });
     }
   });
 
   // A state-drift step's app changed under the recorded action — nudge the user toward
-  // the Diff tab by gently pulsing them.
+  // the Agent view (recorded-vs-now a11y diff) and the Diff tab by gently pulsing them.
   const drift = env.confusion?.type === "state_drift";
-  document.querySelectorAll('.tab[data-view="diff"], #tab-diff').forEach((t) => t.classList.toggle("drift", drift));
   document.querySelectorAll('.tab[data-view="a11y"], #tab-diff').forEach((t) => t.classList.toggle("drift", drift));
+
   updateCaption(env);
   updateStage(env);
   renderInspectorStep(env);
@@ -834,8 +1103,8 @@ function updateCaption(env) {
   meta.push(env.mode === "act"
     ? h("span", { class: "chip" }, `replayed · step ${env.acted_from ?? "?"}`)
     : isHealStep(env)
-      ? h("span", { class: "chip accent" }, icon("i-branch"), "healed · agent took over")
-      : h("span", { class: "chip" }, "agent"));
+    ? h("span", { class: "chip accent" }, icon("i-branch"), "healed · agent took over")
+    : h("span", { class: "chip" }, "agent"));
   if (env.result?.ok === false) meta.push(h("span", { class: "chip fail" }, icon("i-x"), "failed"));
   if (env.confusion) meta.push(h("span", { class: "chip warn" }, icon("i-warn"), "confusion · " + env.confusion.type.replace("_", " ")));
   $("#cap-meta").replaceChildren(...meta);
@@ -853,7 +1122,7 @@ function updateCaption(env) {
     // them after the verb (avoids "— done I added x.." double-period reads).
     const what =
       d.verb === "done" || d.verb === "gave up"
-        ? `${d.verb === "done" ? "finished" : "gave up"}: “${String(d.arg ?? "").replace(/[.\s]+$/, "")}”`
+        ? `${d.verb === "done" ? "finished" : "gave up"}: "${String(d.arg ?? "").replace(/[.\s]+$/, "")}"`
         : `${d.verb} ${d.arg ?? ""}`.trim();
     thought.textContent = `Playing baseline trajectory against live app:\n\n${what}`;
     thought.className = "cap-thought quiet";
@@ -929,7 +1198,6 @@ function sizeShotWrap() {
   wrap.style.height = w / r + "px";
 }
 window.addEventListener("resize", () => { if (state.view === "stills") sizeShotWrap(); });
-
 function stillMissing(env) {
   $("#shot-wrap").hidden = true;
   const el = $("#shot-missing");
@@ -947,14 +1215,14 @@ function placeGhost(env) {
   }
   // bbox is in the driver's layout unit — web: CSS px (Playwright boundingBox);
   // mobile: iOS points / Android px (the same unit getWindowSize reports). The
-  // still PNG is device px = layout unit × device_scale_factor. Derive the factor
-  // from the known viewport width the run pins (the still is viewport.width ×
-  // dsf wide) and scale the bbox into device px (so the % matches the
-  // image). This is unit-agnostic: iOS points→pixels yields the retina scale,
+  // still PNG is device px = layout unit x device_scale_factor. Derive the factor
+  // from the known viewport width that rides pins.viewport (naturalWidth =
+  // viewport.width x dsf) and scale the bbox into device px so the % matches the
+  // image. This is unit-agnostic: iOS points→pixels yields the retina scale,
   // Android px→px yields 1, web CSS px→device px yields the DPR — each correct.
-  // Absent a viewport pin (old runs / a driver that doesn't report it) ⇒ dsf 1, no-op.
+  // Absent viewport (old runs / a driver that couldn't report it) => dsf 1, no-op.
   const vpw = state.manifest?.pins?.viewport?.width;
-  const dsf = (vpw && img.naturalWidth) ? img.naturalWidth / vpw : 1;
+  const dsf = vpw ? img.naturalWidth / vpw : 1;
   const cx = (((bbox.x + (bbox.w ?? 0) / 2) * dsf) / img.naturalWidth) * 100;
   const cy = (((bbox.y + (bbox.h ?? 0) / 2) * dsf) / img.naturalHeight) * 100;
   const wasShown = ghost.classList.contains("show");
@@ -971,27 +1239,24 @@ function placeGhost(env) {
 }
 
 /* ---------- stage: a11y text ---------- */
+
 async function showA11y(env) {
   const pre = $("#a11y-pre");
   const diff = $("#a11y-diff");
-  // The Custom / Playwright toggle only appears when this step has the (web-only,
-  // on-debug) native tree we can diff against; without it we force the custom view.
-
+  // The Custom|Playwright toggle only appears when this step has the (web-only,
+  // debug) native tree on disk; without it we force the custom view.
   const pwRel = env.artifacts?.pw_a11y;
   const mode = $("#a11y-mode");
-  // the native tree comes from Playwright (web) or Appium (mobile); name the
-  // toggle for whichever produced it.
-  const pwBtn = mode.querySelector('button[data-mode="pw"]');
-  if (pwBtn) pwBtn.textContent = state.manifest.pins?.driver === "mobile" ? "Appium" : "Playwright";
-  mode.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.mode === state.a11yMode));
   mode.hidden = !pwRel;
-
+  if (!pwRel && state.a11yMode === "pw") state.a11yMode = "custom";
+  mode.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.mode === state.a11yMode));
   if (state.a11yMode === "pw" && pwRel) {
     // Custom (left) vs native browser tree (right), as an eyeballable side-by-side
-    // diff: the only thing the native tree has that we synthesize — the browser doesn't expose.
+    // only the custom side has = something we synthesize the browser doesn't expose.
     const customRel = env.artifacts?.a11y;
     if (customRel && !state.a11yCache.has(customRel)) state.a11yCache.set(customRel, await fetchText(state.base + "/" + customRel));
     if (!state.pwA11yCache.has(pwRel)) state.pwA11yCache.set(pwRel, await fetchText(state.base + "/" + pwRel));
+    if (state.steps[state.cur] !== env) return;
     showA11yNativeDiff(pre, diff, state.a11yCache.get(customRel) ?? "", state.pwA11yCache.get(pwRel) ?? "");
     return;
   }
@@ -1001,13 +1266,23 @@ async function showA11y(env) {
   // selection may have moved while fetching
   if (state.steps[state.cur] !== env) return;
   const current = state.a11yCache.get(rel);
-  // visual drift: the a11y snapshot can read [IDENTICAL] but the screenshot diverged
-  // (visual regression) — a pixel channel differs. There is no a11y diff to show — the
-// [UNREADABLE lines 1309-1395: scrolled past, not captured in any frame]
-  // [reconstruction: an orphaned tail (a diff.replaceChildren(h("div.a11y-cols",
-  //  ...)) call) of the unreadable statement above was removed so the file parses;
-  //  its head fell in the gap and is not recoverable]
-  diff.hidden = false;
+  // Visual drift: the a11y tree was IDENTICAL but the screenshot diverged
+  // (visual_regression's pixel channel). There is no a11y diff to show — the
+  // signal lives in the pixels — so surface the confusion note and point at the
+  // Stills tab (where the run's screenshot already renders).
+  if (env.confusion?.type === "state_drift" && /visually/.test(env.confusion?.note ?? "")) {
+    showVisualDriftNote(pre, diff, current, env);
+    return;
+  }
+  // State drift: the agent saw something different on replay than the baseline
+  // recorded. The baseline step the action came from (acted_from) carries the
+  // recorded a11y inline (snapshot_text), so we can show what the agent saw THEN
+  // vs NOW as a two-column line diff — the visual form of the drift signal.
+  const baseline = env.confusion?.type === "state_drift" && env.acted_from !== null
+    ? state.baselineByStep.get(env.acted_from)?.snapshot_text
+    : null;
+  if (typeof baseline === "string") showA11yDrift(pre, diff, baseline, current, env);
+  else showA11ySingle(pre, diff, current, env);
 }
 
 function renderA11yText(pre, text, env) {
@@ -1017,6 +1292,77 @@ function renderA11yText(pre, text, env) {
     return;
   }
   colorizeSnapshot(pre, text);
+}
+
+/** Custom snapshot beside the browser-native accessibility tree. */
+function showA11yNativeDiff(pre, diff, customText, nativeText) {
+  pre.hidden = true;
+  const A = String(customText ?? "").split("\n");
+  const B = String(nativeText ?? "").split("\n");
+  const ops = lcsDiff(A, B, A, B);
+  diff.replaceChildren(
+    h("div", { class: "a11y-cols" },
+      h("div", { class: "diff-colhead" }, "custom snapshot"),
+      h("div", { class: "diff-colhead" }, "native tree"),
+      ...ops.flatMap((o) => [
+        a11yLineCell(o.a, o.op === "add" ? "empty" : o.op),
+        a11yLineCell(o.b, o.op === "del" ? "empty" : o.op),
+      ]),
+    ),
+  );
+  diff.hidden = false;
+}
+
+/** Visual-only drift: a11y identical, pixels diverged. Show the note + Stills pointer. */
+function showVisualDriftNote(pre, diff, current, env) {
+  diff.hidden = true;
+  diff.replaceChildren();
+  pre.hidden = false;
+  pre.replaceChildren(
+    h("span", { class: "head" }, "visual drift: the a11y tree is unchanged but the screenshot diverged from the baseline — see the Stills tab"),
+    "\n\n",
+  );
+  if (env.confusion?.note) pre.append(env.confusion.note + "\n\n");
+  if (current) colorizeSnapshot(pre, current);
+}
+
+/** Normal single-panel a11y view (every step except a drift step). */
+function showA11ySingle(pre, diff, text, env) {
+  diff.hidden = true;
+  diff.replaceChildren();
+  pre.hidden = false;
+  renderA11yText(pre, text, env);
+}
+
+/** Two-column line diff: baseline recording (what the agent saw) vs this run. */
+function showA11yDrift(pre, diff, baseText, nowText, env) {
+  pre.hidden = true;
+  const A = String(baseText).split("\n");
+  const B = String(nowText ?? "").split("\n");
+  const ops = lcsDiff(A, B, A, B); // signatures ARE the lines (exact-line LCS)
+  diff.replaceChildren(
+    h("div", { class: "a11y-cols" },
+      h("div", { class: "diff-colhead" }, "baseline recording"),
+      h("div", { class: "diff-colhead" }, "this run"),
+      ...ops.flatMap((o) => [
+        a11yLineCell(o.a, o.op === "add" ? "empty" : o.op),
+        a11yLineCell(o.b, o.op === "del" ? "empty" : o.op),
+      ]),
+    ),
+  );
+  diff.hidden = false;
+}
+
+/** One a11y line in a drift column; null line = an empty (added/removed) slot. */
+function a11yLineCell(line, op) {
+  if (line === null) return h("div", { class: "acell empty" });
+  const m = line.match(/^(\[e\d+\])(.*)$/);
+  const inner = m
+    ? [h("span", { class: "ref" }, m[1]), m[2]]
+    : line.startsWith("Page:")
+    ? [h("span", { class: "head" }, line)]
+    : [line];
+  return h("div", { class: "acell " + op }, ...inner);
 }
 
 // Append a snapshot's text into `pre`, colorizing [eN] element refs and the
@@ -1056,9 +1402,8 @@ function kb(chars) {
   return (chars / 1024).toFixed(1) + " KB";
 }
 
-// The Context tab shows exactly what the model was sent that turn: a collapsed
-// SYSTEM card (the persona prompt, constant across steps) and any TOOLS card up
-// top, then one card per message in the turn's context window. The SYSTEM/TOOLS
+// Per-step Context tab: shows exactly what the model was sent that turn — a
+// collapsed SYSTEM card (constant persona prompt) + one card per per-step
 // cards are folded by default (they repeat every step); the message cards open.
 // A card's open/closed state is keyed by a STABLE identity (ctxCardState) so it
 // survives the full rebuild we do on every step change — otherwise a card you
@@ -1082,86 +1427,86 @@ function showContext(env) {
   const total = (system ? system.length : 0) + msgs.reduce((n, m) => n + ctxContentText(m.content).length, 0);
   const model = entry?.model ?? state.manifest?.pins?.actor_model ?? "model";
   const inTok = env.tokens?.in;
-  const tokPart = inTok !== null ? ` · ${fmtTokens(inTok)} tok` : "";
-  body.append(h("div", { class: "ctx-head" },
-    `Context · step ${env.step} · ${model} · ${kb(total)}${tokPart}`));
+const tokPart = inTok != null ? ` · ${fmtTokens(inTok)} tok` : "";
+body.append(h("div", { class: "ctx-head" },
+  `Context · step ${env.step} · ${model} · ${kb(total)}${tokPart}`));
 
-  if (!entry) {
-    body.append(h("div", { class: "placeholder" }, `no context captured for step ${env.step}`));
-    return;
-  }
-
-  // A collapsible card whose fold state persists across steps (ctxCardState).
-  // The header carries the body's size in KB. `fixed` cards (SYSTEM, TOOLS) are
-  // the constant scaffolding hoisted out of every turn — set apart with a quiet
-  // tint + accent rail + a labelling icon, not a "locked" metaphor (nothing here
-  // is gated; the whole viewer is read-only).
-  const addCard = (key, label, text, fill, { open = false, fixed = false, glyph = null } = {}) => {
-    const st = ctxState(key, { open });
-    const pre = h("pre", {});
-    fill(pre);
-    const head = h("summary", { class: "ctx-card-h" },
-      glyph ? icon(glyph) : null,
-      h("span", {}, `${label} · ${kb(text.length)}`));
-    const card = h("details", { class: fixed ? "ctx-card ctx-fixed" : "ctx-card" }, head, pre);
-    // set the OPEN PROPERTY (not via setAttribute — a present open
-    // attribute opens a <details> regardless of its value) so open:false
-    // cards honestly render closed and ignore the persisted fold state.
-    card.open = st.open;
-    card.addEventListener("toggle", () => { st.open = card.open; });
-    body.append(card);
-  };
-
-  // SYSTEM: the persona prompt, identical every step — folded by default.
-  if (system !== null) {
-    addCard("system", "SYSTEM · persona prompt", system,
-      (pre) => { pre.textContent = system; }, { fixed: true, glyph: "i-persona" });
-  }
-
-  // TOOLS: the function tool(s) the actor could call this turn, also constant
-  // every step — folded by default, pretty-printed JSON.
-  const tools = ctx?.tools ?? null;
-  if (Array.isArray(tools) && tools.length) {
-    const names = tools.map((t) => t?.function?.name ?? t?.name).filter(Boolean).join(", ");
-    const json = JSON.stringify(tools, null, 2);
-    addCard("tools", `TOOLS · ${names || "available tools"}`, json,
-      (pre) => { pre.textContent = json; }, { fixed: true, glyph: "i-token" });
-  }
-
-  // Per-step message cards: open by default.
-  for (const m of msgs) {
-    const text = ctxContentText(m.content);
-    const role = (m.role ?? "msg").toUpperCase();
-    const isSnapshot = text.startsWith("Current page snapshot");
-    const label = isSnapshot
-      ? `${role} · current snapshot`
-      : `${role} · steps so far`;
-    addCard(label, label, text,
-      (pre) => { if (isSnapshot) colorizeSnapshot(pre, text); else pre.textContent = text; },
-      { open: true });
-  }
+if (!entry) {
+  body.append(h("div", { class: "placeholder" }, `no context captured for step ${env.step}`));
+  return;
 }
 
-/* ---------- stage: video ---------- */
+// A collapsible card whose fold state persists across steps (ctxCardState).
+// The header carries the body's size in KB. `fixed` cards (SYSTEM, TOOLS) are
+// the constant scaffolding hoisted out of every turn — set apart with a quiet
+// tint + accent rail + a labelling icon, not a "locked" metaphor (nothing here
+// is gated; the whole viewer is read-only).
+const addCard = (key, label, text, fill, { open = false, fixed = false, glyph = null } = {}) => {
+  const st = ctxState(key, { open });
+  const pre = h("pre", {});
+  fill(pre);
+  const head = h("summary", { class: "ctx-card-h" },
+    glyph ? icon(glyph) : null,
+    h("span", {}, `${label} · ${kb(text.length)}`));
+  const card = h("details", { class: fixed ? "ctx-card ctx-fixed" : "ctx-card" }, head, pre);
+  // set the OPEN PROPERTY (not via h()'s setAttribute — a present `open`
+  // attribute opens a <details> regardless of its value, so `open:false`
+  // would still render open and ignore the persisted fold state).
+  card.open = st.open;
+  card.addEventListener("toggle", () => { st.open = card.open; });
+  body.append(card);
+};
 
-let videoWired = false;
+// SYSTEM: the persona prompt, identical every step — folded by default.
+if (system !== null) {
+  addCard("system", "SYSTEM · persona prompt", system,
+    (pre) => { pre.textContent = system; }, { fixed: true, glyph: "i-persona" });
+}
 
-function initVideo() {
-  const video = $("#video");
-  // re-entrant: undo a previous run's missing-state before loading this one
-  $(".video-box").hidden = false;
-  $("#video-missing").hidden = true;
-  $("#vmarks").replaceChildren();
-  if (!videoWired) {
-    videoWired = true;
-    video.addEventListener("error", videoMissing);
-    video.addEventListener("loadedmetadata", () => {
-      state.videoOk = true;
-      renderVideoMarks(video.duration);
-      // the user may have opened the tab (and picked a step) before metadata arrived
-      if (state.view === "video" && state.steps.length) seekVideo(state.steps[state.cur]);
-    });
+// TOOLS: the function tool(s) the actor could call this turn, also constant
+// every step — folded by default, pretty-printed JSON.
+const tools = ctx?.tools ?? null;
+if (Array.isArray(tools) && tools.length) {
+  const names = tools.map((t) => t?.function?.name ?? t?.name).filter(Boolean).join(", ");
+      const json = JSON.stringify(tools, null, 2);
+      addCard("tools", `TOOLS · ${names || "available tools"}`, json,
+        (pre) => { pre.textContent = json; }, { fixed: true, glyph: "i-token" });
+    }
+
+    // Per-step message cards: open by default.
+    for (const m of msgs) {
+      const text = ctxContentText(m.content);
+      const role = (m.role ?? "msg").toUpperCase();
+      const isSnapshot = text.startsWith("Current page snapshot");
+      const label = m.role === "user"
+        ? (isSnapshot ? `${role} · current snapshot` : `${role} · steps so far`)
+        : role;
+      addCard(label, label, text,
+        (pre) => { if (isSnapshot) colorizeSnapshot(pre, text); else pre.textContent = text; },
+        { open: true });
+    }
   }
+
+  /* ---------- stage: video ---------- */
+
+  let videoWired = false;
+
+  function initVideo() {
+    const video = $("#video");
+    // re-entrant: undo a previous run's missing-state before loading this one
+    $(".video-box").hidden = false;
+    $("#video-missing").hidden = true;
+    $("#vmarks").replaceChildren();
+    if (!videoWired) {
+      videoWired = true;
+      video.addEventListener("error", videoMissing);
+      video.addEventListener("loadedmetadata", () => {
+        state.videoOk = true;
+        renderVideoMarks(video.duration);
+        // the user may have opened the tab (and picked a step) before metadata arrived
+        if (state.view === "video" && state.steps.length) seekVideo(state.steps[state.cur]);
+      });
+    }
   const rel = state.manifest.artifacts?.video === null ? null : (state.manifest.artifacts?.video ?? "video.webm");
   // drop the previous run's <video>/track first so a re-run doesn't inherit it
   video.removeAttribute("src");
@@ -1188,19 +1533,76 @@ async function wireCaptionTrack(video) {
 }
 
 function videoMissing() {
-  state.videoOk = false;
   $(".video-box").hidden = true;
   const el = $("#video-missing");
   el.hidden = false;
   el.replaceChildren(icon("i-play", ""), "no video recorded for this run");
 }
-// [UNREADABLE lines 1592-1649: scrolled past, not captured in any frame]
+
+// The slideshow timeline (CONTRACTS §10): a new run's video.mp4 is a stills
+// slideshow paced at AUTOPLAY_MS/frame, so a step's video time is NOT its
+// wall-clock ts — it's its frame's start offset. Inlines the EXACT fold formula
+// clip.js's slideshowFrames uses (advance t += AUTOPLAY_MS for a step WITH a
+// screenshot, fold a screenshot-less step into the previous frame), so the
+// viewer's marks/seek line up with the cues and the mp4 frame boundaries.
+// Returns a Map<stepIndex, seconds>; only steps with their own frame appear.
+function slideshowStepTimes() {
+  const times = new Map();
+  let t = 0;
+  state.steps.forEach((env, i) => {
+    if (env.ts === null) return;
+    if (env.artifacts?.screenshot) {
+      times.set(i, t / 1000);
+      t += AUTOPLAY_MS;
+    } else if (times.size) {
+      // Fold a screenshot-less step into the previous frame — clip.js's
+      // slideshowFrames grows frames[last].ms by AUTOPLAY_MS here, so the mp4
+      // frame boundaries advance by the same amount. Guarded on times.size so a
+      // LEADING frameless step (no previous frame yet) advances nothing.
+      t += AUTOPLAY_MS;
+    }
+  });
+  return times;
+}
+
+// New runs have video_started_at null (slideshow) yet still carry a built mp4;
+// old runs scrub by wall-clock from a non-null video_started_at.
+const isSlideshow = () =>
+  state.manifest.video_started_at === null && state.manifest.artifacts?.video !== null;
+
+function renderVideoMarks(duration) {
+  const vsa = state.manifest.video_started_at;
+  const slideshow = isSlideshow();
+  if ((!vsa && !slideshow) || !duration) return;
+  const times = slideshow ? slideshowStepTimes() : null;
+  const marks = $("#vmarks");
+  marks.replaceChildren();
+  state.steps.forEach((env, i) => {
+    if (env.ts === null) return;
+    const t = slideshow ? times.get(i) : (env.ts - vsa) / 1000;
+    if (t == null || t < 0 || t > duration) return;
+    marks.append(h("button", {
+      class: "vmark", "data-i": i, title: `step ${env.step} @ ${fmtClock(t)}`,
+      "aria-label": `step ${env.step} @ ${fmtClock(t)}`,
+      style: `left:${(t / duration) * 100}%`,
+      onclick: () => select(i),
+    }));
+  });
+}
+
+// keep the step-marker lane exactly as wide as the rendered video
+function syncVmarks() {
+  const w = $("#video").clientWidth;
+  if (w) $("#vmarks").style.width = w + "px";
+}
+window.addEventListener("resize", () => { if (state.view === "video") syncVmarks(); });
+
 function seekVideo(env) {
   const video = $("#video");
   const vsa = state.manifest.video_started_at;
   const slideshow = isSlideshow();
   if (state.videoOk && (vsa || slideshow) && env.ts != null) {
-    // A step's video time is its caption cue's exact START—for a slideshow
+    // A step's video time is its caption cue's exact START — for a slideshow
     // run that's the step's frame offset (slideshowStepTimes); for a legacy
     // webm run it's `ts - video_started_at`. Seeking to that precise boundary
     // makes the native TextTrack render BOTH the cue ending there and the cue
@@ -1219,17 +1621,17 @@ function seekVideo(env) {
 
 /* ---------- stage: diff (standalone LCS over action signatures) ---------- */
 function isExecutable(env) {
-  const t = env.type;
+  const t = actionOf(env)?.type;
   return env.resolution && env.result?.ok && t !== "done" && t !== "give_up";
 }
 
 function signature(env) {
   const a = actionOf(env);
-  // A step's action signature (CONTRACTS §3): type, locator/url, the typed
-  // text or selected value, and the scroll direction. Collapsing a
-  // reordered step into a changed step instead of collapsing to a same. This is
+  // The action-track step signature (CONTRACTS §3): type, locator/url, the typed
+  // text or selected value, and the scroll/swipe direction — so a changed option
+  // or direction diffs as a changed step instead of collapsing to "same". This is
   // the sole implementation (the harness has no separate copy).
-  return (a?.type ?? "") + "|" + (env.resolution?.locator ?? a?.url ?? "") + "|" + (a?.text ?? a?.value ?? "") + "|" + (a?.direction ?? "");
+  return (a?.type ?? "?") + "|" + (env.resolution?.locator ?? a?.url ?? "") + "|" + (a?.text ?? a?.value ?? "") + "|" + (a?.direction ?? "");
 }
 
 function lcsDiff(A, B, sigA, sigB) {
@@ -1268,9 +1670,146 @@ function diffCell(env, op) {
     env.resolution?.locator ? h("div", { class: "d-loc" }, env.resolution.locator) : null,
   );
 }
-// [UNREADABLE lines 1723-1841: scrolled past, not captured in any frame]
-  // [reconstruction: orphaned fragment folded into this gap so the file parses; head not recoverable]
-  // [reconstruction: orphaned fragment folded into this gap so the file parses; head not recoverable]
+
+// The failed replay attempt behind a removed baseline row: not part of the
+// LCS track (it executed nothing), but it is the heal point — name it.
+function failedReplayCell(env) {
+  const idx = state.steps.indexOf(env);
+  return h("button", { class: "dcell fail-note clickable", onclick: () => { setView("stills"); select(idx); } },
+    h("div", { class: "d-act" },
+      h("span", { class: "d-num" }, String(env.step).padStart(2, "0")),
+      icon("i-x"),
+      h("span", {}, "replay attempt failed — agent took over")),
+  );
+}
+
+function renderDiff() {
+  $("#tab-diff").hidden = !state.baseline;
+  if (!state.baseline) {
+    $("#diff-body").replaceChildren();
+    if (state.view === "diff") setView("stills"); // run switched under an open diff tab
+    return;
+  }
+
+  const A = state.baseline.filter(isExecutable);
+  const B = state.steps.filter(isExecutable);
+  const ops = lcsDiff(A, B, A.map(signature), B.map(signature));
+  const sum = { same: 0, del: 0, add: 0 };
+  for (const o of ops) sum[o.op]++;
+
+  // A removed baseline row usually has a story: this run *tried* it and the
+  // replay failed (the heal point). Show that attempt in the empty cell so
+  // the strip's step numbers stay accountable in the track.
+  const failedReplayBy = new Map(
+    state.steps
+    .filter((e) => e.mode === "act" && e.result?.ok === false && e.acted_from !== null)
+      .map((e) => [e.acted_from, e]),
+  );
+
+  const body = $("#diff-body");
+  body.replaceChildren(
+    h("div", { class: "diff-head" },
+      h("span", { class: "diff-title" }, "Action track vs. baseline"),
+      h("span", { class: "diff-sub" },
+        h("span", { class: "d-same" }, `${sum.same} same`), " · ",
+        h("span", { class: "d-del" }, `${sum.del} removed`), " · ",
+        h("span", { class: "d-add" }, `${sum.add} added`),
+      " · executed UI actions only",
+        state.manifest.baseline?.run_id ? ` · baseline ${state.manifest.baseline.run_id}` : ""),
+    ),
+    h("div", { class: "diff-cols" },
+      h("div", { class: "diff-colhead" }, "baseline recording"),
+      h("div", { class: "diff-colhead" }, "this run"),
+      ...ops.flatMap((o) => [
+        diffCell(o.a, o.op === "add" ? "empty" : o.op),
+        o.op === "del" && failedReplayBy.has(o.a?.step)
+          ? failedReplayCell(failedReplayBy.get(o.a.step))
+          : diffCell(o.b, o.op === "del" ? "empty" : o.op),
+      ]),
+    ),
+);
+
+// divergence frame: first changed op that has a step in this run with a screenshot
+const frameEnv = ops.find((o) => o.op !== "same" && o.b?.artifacts?.screenshot)?.b;
+if (frameEnv) {
+  const img = h("img", {
+    src: state.base + "/" + frameEnv.artifacts.screenshot,
+    alt: "divergence frame",
+    title: "open this step in Stills",
+    onclick: () => { setView("stills"); select(state.steps.indexOf(frameEnv)); },
+  });
+  img.addEventListener("error", () => img.remove());
+    // a healed pass with no acceptCmd is not the pending candidate (a sibling
+    // superseded it, or it was already accepted/rejected) — no command then
+    const resolvedHealedPass =
+      !state.acceptCmd && state.manifest.healed && state.manifest.result?.status === "pass";
+    body.append(h("div", { class: "diff-frame" }, img,
+      h("div", {},
+        h("div", { class: "label" }, `first divergence — step ${frameEnv.step} of this run`),
+        resolvedHealedPass
+          ? h("p", {}, "The journey diverged here and survived: the baseline action no longer matched, and the agent found a new path. This run is no longer the pending changed journey — it was superseded by a later healed run or already resolved (accepted or rejected), so there is nothing to accept from here.")
+          : [
+            h("p", {}, "The journey diverges here: the baseline action no longer matched, and the agent found a new path. If the run is green, the UI changed but the journey survived — review it, then accept this run as the new saved path:"),
+            h("pre", { class: "cmds" }, state.acceptCmd ?? "playtest accept <run-dir>"),
+          ])));
+  }
+}
+
+/* ---------- inspector ---------- */
+
+function sec(iconName, title, right, ...children) {
+  return h("section", { class: "sec" },
+    h("div", { class: "sec-h" }, icon(iconName), title, right ? h("span", { class: "right" }, right) : null),
+    ...children);
+}
+
+// A model name shown as a header chip: uppercased, truncated to 10 chars (with
+// an ellipsis) so a long fully-qualified gateway name doesn't blow out the line.
+// Full name stays in the title for hover. Returns null when no model is known.
+function modelChip(name) {
+  if (!name) return null;
+  const up = String(name).toUpperCase();
+  const text = up.length > 10 ? up.slice(0, 9) + "…" : up;
+  return h("span", { class: "chip", title: String(name) }, text);
+}
+const actorModelLabel = () => modelChip(state.manifest?.pins?.actor_model);
+const graderModelLabel = () => modelChip(state.manifest?.pins?.grader_model);
+
+function stat(label, value, unit, cls = "", title = "") {
+  return h("div", { class: "stat " + cls, title },
+    h("div", { class: "v" }, value, unit ? h("small", {}, unit) : null),
+    h("div", { class: "k" }, label));
+}
+
+/* Two panes: what this step did, and how the run as a whole went. Step-level
+   sections re-render on every select(); run-level sections render once. */
+function renderInspectorStatic() {
+  const insp = $("#inspector");
+  insp.replaceChildren(
+    h("div", { class: "insp-tabs" },
+      h("button", { class: "itab", "data-itab": "step", onclick: () => setInspTab("step") }, "This step"),
+      h("button", { class: "itab", "data-itab": "run", onclick: () => setInspTab("run") }, "Run"),
+      // widen the panel for reading long grade reports (esp. discovery); the
+      // timeline + stage stay visible so report → step deep-links still work
+      h("button", { id: "insp-wide-btn", class: "insp-wide-btn", title: "widen panel",
+        "aria-label": "widen panel", "aria-pressed": String(state.inspWide),
+        onclick: () => setInspWide(!state.inspWide) }, icon("i-expand")),
+    ),
+    h("div", { id: "ipane-step" },
+      h("div", { id: "sec-step" }),
+      h("div", { id: "sec-tele" }),
+      h("div", { id: "sec-net" }),
+      h("div", { id: "sec-axe" }),
+      h("div", { id: "sec-tok" }),
+    ),
+    h("div", { id: "ipane-run" },
+      renderEnv(),
+      renderGate(),
+      renderGrade(),
+      renderA11y(),
+      h("div", { id: "sec-history" }),
+    ),
+  );
   setInspTab(state.itab);
   reflectInspWide();
 }
@@ -1350,7 +1889,7 @@ function renderInspectorStep(env) {
     failed
       ? h("span", { class: "chip fail" }, icon("i-x"), "failed")
       : h("span", { class: "chip pass" }, icon("i-check"), "succeeded"),
-    env.result?.error ? h("div", { class: "step-err" }, env.result.error) : null);
+  env.result?.error ? h("div", { class: "step-err" }, env.result.error) : null);
 
   const kv = h("dl", { class: "kv" });
   const put = (k, v, cls) => { if (v !== null && v !== "") kv.append(h("dt", { class: cls ?? "" }, k), h("dd", { class: cls ?? "" }, v)); };
@@ -1363,7 +1902,7 @@ function renderInspectorStep(env) {
   // Right slot shows the actor model (e.g. "GPT5_4_MINI") — the mode
   // (replayed / healed / agent) is still spelled out in the step-src line below.
   // A replayed step made no model call, so it gets no model chip.
-  $("#sec-step").replaceChildren(sec("i-film", `step ${env.step}`, replayed ? null : actorModelLabel(),
+  $("#sec-step").replaceChildren(sec("i-film", `step ${env.step}`, replayed ? null : actorModelLabel()),
     h("div", { class: "act-line" }, icon(d.icon), h("span", { class: "verb" }, d.verb), h("span", { class: "act-arg", title: d.arg ?? "" }, d.arg ?? "")),
     replayed
       ? h("div", { class: "step-src" }, `(no model call)`)
@@ -1371,7 +1910,7 @@ function renderInspectorStep(env) {
         ? h("div", { class: "step-src" }, "the saved recording broke — the agent took over and chose this action")
         : h("div", { class: "step-src" }, "the agent chose this action itself"),
     status,
-    kv.childElementCount ? kv : null));
+    kv.childElementCount ? kv : null);
 
   // performance
   $("#sec-tele").replaceChildren(renderPerf(env));
@@ -1388,6 +1927,7 @@ function renderInspectorStep(env) {
     useEmbedded ? renderNetRequests(embedded) : renderWaterfall(netEntries)));
 
   // accessibility (axe-core) — defensive: only renders when this step carried a
+  // capture (web); absent on non-web / done / give_up / failed-axe / drift).
   // capture (renderStepAxe returns null otherwise).
   $("#sec-axe").replaceChildren(...[renderStepAxe(env)].filter(Boolean));
 
@@ -1428,26 +1968,26 @@ function axeDocsLink(rule) {
 function axeNodeCell(node, { step = null } = {}) {
   const target = node.target?.length ? node.target.join(" ") : null;
   return h("div", { class: "a11y-node" },
-    step !== null ? h("div", { class: "a11y-node-head" }, stepLink(step)) : null,
-    node.html ? h("code", { class: "a11y-html" }, node.html) : null,
+    step != null ? h("div", { class: "a11y-node-head" }, stepLink(step)) : null,
+      node.html ? h("code", { class: "a11y-html" }, node.html) : null,
     target ? h("div", { class: "a11y-target", title: target }, target) : null);
 }
-
 /* Per-step axe-core a11y capture. Returns null when no axe data is present, so
    the section simply doesn't appear. Each violation is an expandable row listing
    every offending element + the fix guidance. The full-page violation count gates
-   accessibility_violations. */
+   the chip. */
+
 function renderStepAxe(env) {
   const axe = env.axe;
-  if (!axe || !Array.isArray(axe.violations)) return null;
+  if (!Array.isArray(axe?.violations)) return null;
   const { total = 0 } = axe.counts ?? {};
-  if (total === 0) {
-    return sec("i-check", "accessibility", h("span", { class: "chip pass" }, "0 violations"),
-      h("div", { class: "empty-note" }, "no WCAG violations on this step"));
+  if (!total) return sec("i-check", "accessibility", h("span", { class: "chip pass" }, "0 violations"),
+    h("div", { class: "empty-note" }, "no WCAG violations on this step"));
+
   const rows = axe.violations.map((v) => {
     const nodes = v.nodes ?? [];
     const head = h("summary", { class: "a11y-rule-h" },
-      icon("i-warn"),
+      icon("i-warn", "ic g-warn"),
       h("span", { class: "a11y-rule-id" }, v.id),
       v.impact ? h("span", { class: "chip warn" }, v.impact) : null,
       h("span", { class: "a11y-nodecount", title: `${nodes.length} offending element${nodes.length === 1 ? "" : "s"}` }, String(nodes.length)));
@@ -1457,19 +1997,143 @@ function renderStepAxe(env) {
       axeDocsLink(v));
     return h("details", { class: "a11y-rule" }, head, body);
   });
-  return sec("i-check", "accessibility", `${total} violation${total === 1 ? "" : "s"}`,
+  return sec("i-check", "accessibility",
     h("span", { class: "chip warn" }, `${total} violation${total === 1 ? "" : "s"}`),
     ...rows);
 }
-// [UNREADABLE lines 2053-2178: scrolled past, not captured in any frame]
+
+/* Performance of the app under test, in plain language. Four cells, no
+   disclosure — each metric makes sense on sight, with a tooltip for depth.
+   Navigation steps show Lighthouse's heavyweights (LCP, CLS); interaction
+   steps show responsiveness (INP-style) and time-to-idle. "UI blocked"
+   (long tasks) is the Total Blocking Time idea. Bands follow web vitals. */
+function renderPerf(env) {
+  const p = env.perf ?? {};
+  const band = (v, good, poor) => (v == null ? "dim" : v < good ? "" : v < poor ? "warn" : "bad");
+  const cell = (label, value, cls, title) =>
+    h("div", { class: "stat " + cls, title },
+      h("div", { class: "v" }, value),
+      h("div", { class: "k" }, label));
+
+  const cells = p.nav
+    ? [
+        cell("first paint · fcp", fmtMs(p.nav.fcp_ms), band(p.nav.fcp_ms, 1800, 3000),
+          "First Contentful Paint — when the new page first showed any content (text/image). The earliest sign the load is working (good < 1.8s)."),
+        cell("page load · lcp", fmtMs(p.nav.lcp_ms), band(p.nav.lcp_ms, 2500, 4000),
+          "Largest Contentful Paint — when the new page showed its main content. Lighthouse's headline load metric (good < 2.5s)."
+        ),
+        cell("layout shift · cls", p.nav.cls == null ? "—" : Number(p.nav.cls).toFixed(2), band(p.nav.cls, 0.1, 0.25),
+          "Cumulative Layout Shift — how much the page jumped around while loading (good < 0.1)."),
+      ]
+    : [
+        cell("reacted in", fmtMs(p.input_to_paint_ms), band(p.input_to_paint_ms, 100, 300),
+          "How long before the app visibly reacted to the click or keystroke — anything on screen changing (good < 100ms)."),
+        cell("still working for", fmtMs(settleTail(env)), "",
+          "How long the page kept changing after this action before going quiet — network and content settling — measured beyond the settle quiet-window, so it reflects the app, not the harness's wait."),
+      ];
+  const errs = p.js_errors ?? 0;
+  cells.push(
+    cell("ui frozen for", p.long_tasks_ms != null ? fmtMs(p.long_tasks_ms) : "—",
+      p.long_tasks_ms ? band(p.long_tasks_ms, 200, 600) : "dim",
+      "Total time the page couldn't respond because JavaScript was busy — the Total Blocking Time idea (good < 200ms)."),
+    cell("js errors", errs, errs > 0 ? "bad" : "dim",
+      "Uncaught exceptions and console errors during this step."),
+  );
+  return sec("i-gauge", "performance", p.nav ? "page navigation" : null,
+    h("div", { class: "stat-grid two" }, ...cells),
+    // The "js errors" cell above is a count; expand it to the actual messages
+    // captured this step (web only; absent on a clean step or legacy trajectory).
+    consoleErrorList(env.console_errors));
+}
+
+const MAX_WF_ROWS = 24;
+
+function renderWaterfall(entries) {
+  if (!entries.length) return h("div", { class: "empty-note" }, "no requests in this step's window");
+
+  const starts = entries.map((e) => Date.parse(e.startedDateTime) || 0);
+  const t0 = Math.min(...starts);
+  const total = Math.max(1, ...entries.map((e, i) => starts[i] - t0 + Math.max(0, e.time ?? 0)));
+
+  const rows = entries.slice(0, MAX_WF_ROWS).map((e, i) => {
+    const status = e.response?.status ?? 0;
+    // A request that received a response status was answered by the server; a
+    // late request failed (e.g. an aborted streamed body after a 200) must not
+    // paint a successful call red. Only a request that never got any status is
+    // truly "failed".
+    const failed = !!e._failed && status === 0;
+    const pending = !failed && status === 0 && (e.time ?? -1) < 0; // never finished within the run
+    const bad = failed || status >= 400;
+    const slow = !bad && !pending && (e.time ?? 0) > 500;
+    const left = ((starts[i] - t0) / total) * 100;
+    const width = pending
+      ? Math.max(1.5, 100 - left) // open-ended bar to the lane's edge
+      : Math.max(1.5, (Math.max(0, e.time ?? 0) / total) * 100);
+    let path;
+    try { path = new URL(e.request?.url ?? "", "http://x").pathname + (new URL(e.request?.url ?? "", "http://x").search || ""); }
+    catch { path = e.request?.url ?? "?"; }
+    return h("div", { class: "wf-row" },
+      h("div", { class: "wf-top" },
+        h("span", { class: "wf-method" }, e.request?.method ?? "GET"),
+        h("span", { class: "wf-status" + (bad ? " bad" : "") },
+          status > 0 ? String(status) : failed ? "× failed" : pending ? "… pending" : "?"),
+        h("span", { class: "wf-url", title: e.request?.url ?? "" }, "<200e>" + path),
+        h("span", { class: "wf-time" }, `${fmtBytes(e.response?.bodySize)} · ${pending ? "—" : fmtMs(Math.max(0, e.time ?? 0))}`)),
+      h("div", { class: "wf-lane" },
+        h("div", { class: "wf-bar" + (bad ? " bad" : pending ? " pending" : slow ? " slow" : ""), style: `left:${left}%;width:${width}%` })));
+  });
+  return h("div", { class: "wf" }, ...rows);
+}
+
+// Compact list for embedded network.requests (stable fields only — no
+// timings/sizes by design, so no waterfall lane): method, status, path, mime.
+function renderNetRequests(requests) {
+  const rows = requests.slice(0, MAX_WF_ROWS).map((r) => {
+    const status = r.status ?? 0;
+    const bad = status >= 400 || (r.failed && status === 0);
+    return h("div", { class: "wf-row" },
+      h("div", { class: "wf-top" },
+        h("span", { class: "wf-method" }, r.method ?? "GET"),
+        h("span", { class: "wf-status" + (bad ? " bad" : "") },
+          status > 0 ? String(status) : r.failed ? "× failed" : "… pending"),
+          h("span", { class: "wf-url", title: r.url ?? "" }, "<200e>" + (r.path ?? r.url ?? "?")),
+        h("span", { class: "wf-time" }, r.mime_type || "—")));
+  });
+  return h("div", { class: "wf" }, ...rows);
+}
+
+// what this step cost in model tokens ("tokens" alone read as jargon)
+  function renderTokens(env) {
+    if (!env.tokens) {
+      return sec("i-token", "model usage", null,
+        h("div", { class: "empty-note" }, env.mode === "act" ? "replayed step — no model call" : "no model usage recorded"));
+    }
+    // cumulative through the current step
+    const upto = state.steps.slice(0, state.cur + 1).reduce((acc, s) => {
+      if (s.tokens) { acc.in += s.tokens.in ?? 0; acc.out += s.tokens.out ?? 0; acc.cache += s.tokens.cache_read ?? 0; }
+      return acc;
+    }, { in: 0, out: 0, cache: 0 });
+    return sec("i-token", "model usage", `Σ ${fmtTokens(upto.in)} in / ${fmtTokens(upto.out)} out`,
+      h("div", { class: "stat-grid" },
+          stat("tokens in", fmtTokens(env.tokens.in), null, "",
+            "Text sent to the model this step — the instructions, the running log of prior steps, and the current page snapshot. Billed per input token."),
+          stat("tokens out", fmtTokens(env.tokens.out), null, "",
+            "Text the model wrote this step — its thought, the action it chose, and what it expected to happen. Billed per output token."),
+          stat("cache read", fmtTokens(env.tokens.cache_read), null, "")));
+}
+
+// Run-level "environment" section: what surface this run targeted — the named
+// --env overlay (omitted for the default), the base URL, and any cookies seeded
+// before the first navigation. Cookie VALUES can be session secrets, so only
+// names are shown; the full name=value rides the hover title.
 function renderEnv() {
-  const e = state.env.manifest.env ?? {};
+  const e = state.manifest.env ?? {};
   const right = e.env_name ? modelChip(e.env_name) : null; // reuse the truncating chip helper
   const kv = h("dl", { class: "kv" });
   const put = (k, v) => { if (v !== null && v !== "") kv.append(h("dt", {}, k), h("dd", {}, v)); };
   if (e.env_name) put("env", String(e.env_name));
-  if (e.base_url)
-    put("url", h("a", { href: e.base_url, target: "_blank", rel: "noopener noreferrer" }, e.base_url));
+  if (e.base_url) kv.append(h("dt", {}, "url"),
+    h("dd", {}, h("a", { href: e.base_url, target: "_blank", rel: "noopener noreferrer" }, e.base_url)));
   put("driver", e.driver);
   const cookies = e.cookies && typeof e.cookies === "object" ? Object.entries(e.cookies) : [];
   if (cookies.length) {
@@ -1478,7 +2142,7 @@ function renderEnv() {
         h("span", { class: "chip", title: `${name}=${val}` }, name))));
   }
   // before_each hook (§6): additive line, only when a hook ran this run. The
-  // returned setup context is never persisted (maybe a secret) — we only show
+  // returned setup context is never persisted (may be a secret) — we only show
   // WHETHER one was provided, plus how long the seed took.
   const setup = state.manifest.setup;
   if (setup?.ran) {
@@ -1492,7 +2156,7 @@ function renderGate() {
   const gate = state.manifest.result?.gate;
   if (!gate) return sec("i-check", "gate", null, h("div", { class: "empty-note" }, "no gate result in manifest"));
   const rows = (gate.checks ?? []).map((c) => {
-    // A failed SOFT check (console errors / perf) failed the run but didn't
+    // A failed SOFT check (console_errors / perf) failed the run but didn't
     // block the baseline — render it as a warning, not a hard fail.
     const softFail = !c.pass && c.severity === "soft";
     // An inherited check (assert / opted-in custom assertion on a clean act replay)
@@ -1520,7 +2184,7 @@ function renderGate() {
 // A folded <details> listing captured console/page errors ({type,text}[]) — the
 // gate row's run-total and the per-step perf panel both use it. Folded by default
 // so it never crowds the panel; each line is the error type + its message
-// (createTextNode keeps app-controlled text XSS-safe). Empty/absent => caller
+// (createTextNode keeps app-controlled text XSS-safe). Empty/absent → caller
 // renders nothing (defensive; legacy runs carry no errors field).
 function consoleErrorList(errors) {
   if (!errors?.length) return null;
@@ -1533,13 +2197,167 @@ function consoleErrorList(errors) {
 }
 
 // Grader prose normally carries real newlines, which `.grade-summary` /
-// [UNREADABLE lines 2250-2400: scrolled past, not captured in any frame]
-  // [reconstruction: orphaned fragment folded into this gap so the file parses; head not recoverable]
+// `.gate-detail` render via white-space:pre-wrap. But the model intermittently
+// double-escapes them, so the field arrives with literal backslash-n (and the
+// viewer paints "\n\n" verbatim). Un-escape those so pre-wrap can break them.
+function prose(s) {
+  return typeof s === "string" ? s.replace(/\\r\\n|\\r|\\n/g, "\n").replace(/\\t/g, "\t") : s;
+}
+
+// deep-link button into the step timeline (grade findings + report evidence)
+function stepLink(n) {
+  return h("button", { class: "f-step", onclick: () => {
+    const i = state.steps.findIndex((s) => s.step === n);
+    if (i >= 0) select(i);
+  } }, `→ step ${n}`);
+}
+
+function renderGrade() {
+  // A checked run has no grade of its own; fall back to the quality carried from
+  // the last graded run (loadRun), rendered identically but flagged as inherited.
+  const inherited = !state.grade && state.inheritedGrade ? state.inheritedGrade : null;
+  const g = state.grade ?? inherited?.grade ?? null;
+  if (!g) return sec("i-gauge", "grade", null, h("div", { class: "empty-note" }, "not graded — grade.json absent"));
+  const sevCls = { major: "fail", minor: "warn", info: "" };
+  const sevRank = { major: 0, minor: 1, info: 2 };
+  const findings = (g.findings ?? [])
+    .map((f, i) => [f, i])
+    .sort(([a, ai], [b, bi]) => (sevRank[a.severity] ?? 3) - (sevRank[b.severity] ?? 3) || ai - bi)
+    .map(([f]) =>
+      h("div", { class: "finding" },
+        h("span", { class: "chip " + (sevCls[f.severity] ?? "") }, f.severity),
+        h("p", {}, prose(f.note) + " ", f.step !== null ? stepLink(f.step) : null)));
+  // discovery report answers (grade.json `report`) — the study's data product
+  const report = (g.report ?? []).map((r, i) =>
+    h("div", { class: "report-entry" },
+      h("div", { class: "report-q" }, `${i + 1}. ${r.question}`),
+      h("p", { class: "report-a" }, prose(r.answer),
+        ...(r.evidence_steps ?? []).flatMap((n) => [" ", stepLink(n)]))));
+  // For a journey the score is advisory "quality", not the verdict (the gate is)
+  // — demote it to a small chip beside completion and relabel the section. For
+  // discovery the score IS the data product, so it stays the 32px headline.
+  const journey = isJourney();
+  const score = String(Math.round(g.score));
+  const scoreEl = journey
+    ? h("span", { class: "quality-wrap", tabindex: "0" },
+      h("span", { class: "chip quality" },
+        h("span", { class: "q-label" }, "quality"),
+        h("span", { class: "q-num" }, score)),
+      h("div", { class: "quality-tip", role: "tooltip" },
+        h("p", {}, "An advisory measure of how smoothly the app let the user reach the goal — fewer detours, errors, and wasted steps score higher."),
+        h("p", {}, "It reflects the journey experience, not the regression result. Pass/fail is decided by the gate above."),
+          h("div", { class: "q-bands" },
+          h("div", {}, h("b", {}, "90-100"), " smooth"),
+          h("div", {}, h("b", {}, "70-89"), " minor friction"),
+          h("div", {}, h("b", {}, "40-69"), " notable friction or partial"),
+          h("div", {}, h("b", {}, "0-39"), " broken"))))
+    : h("div", { class: "grade-score" }, score, h("small", {}, " / 100"));
+  return sec("i-gauge", journey ? "journey quality" : "grade", g.model ?? null,
+    h("div", { class: "grade-top" },
+      journey ? null : scoreEl,
+      h("div", {},
+        journey ? h("div", { style: "margin-bottom:4px" }, scoreEl) : null,
+        h("div", { style: "margin-bottom:4px" }, h("span", { class: "chip " + (g.completion === "full" ? "pass" : g.completion === "none" ? "fail" : "warn") }, "completion · " + g.completion)),
+        g.efficiency?.wasted_steps != null ? h("div", { class: "empty-note" }, `${g.efficiency.wasted_steps} wasted step${g.efficiency.wasted_steps === 1 ? "" : "s"}`) : null)),
+      inherited
+        ? h("div", { class: "grade-inherited", title: "This run was a checked replay (no model call), so it has no grade of its own. Showing the journey quality from the last graded run." },
+          icon("i-branch"),
+          h("span", {}, "carried over from the last graded run", inherited.from?.started_at ? " · " + fmtDate(inherited.from.started_at) : ""))
+        : null,
+      g.efficiency?.assessment ? h("div", { class: "gate-detail", style: "margin-bottom:6px" }, prose(g.efficiency.assessment)) : null,
+      ...(report.length ? [h("div", { class: "label", style: "margin-top:10px" }, "report"), ...report] : []),
+      ...findings,
+      g.summary ? h("p", { class: "grade-summary" }, prose(g.summary)) : null);
+}
+
+/* Aggregate this run's axe captures into per-rule element detail, keyed by rule
+   id. The run-level summary counts come from grade.a11y (the harness compliance
+   number), but the offending ELEMENTS live only on the step envelopes — gather
+   them here so the run panel can expand each rule to its concrete elements and
+   deep-link to the steps they appeared on. Elements are deduped by selector
+   path (or html when no target), remembering every step each was seen on.
+   Returns Map<id, {...}>. */
+function axeDetailByRule() {
+  const byRule = new Map();
+  for (const env of state.steps) {
+    const violations = env.axe?.violations;
+    if (!Array.isArray(violations)) continue;
+    for (const v of violations) {
+      let rule = byRule.get(v.id);
+      if (!rule) {
+        rule = { id: v.id, impact: v.impact ?? null, help: null, help_url: null, elements: new Map() };
+        byRule.set(v.id, rule);
+      }
+      // first non-null help/impact wins (identical across a rule's firings)
+      if (rule.help === null && v.help) rule.help = v.help;
+      if (rule.help_url === null && v.help_url) rule.help_url = v.help_url;
+      if (rule.impact === null && v.impact) rule.impact = v.impact;
+      for (const n of v.nodes ?? []) {
+      const target = n.target?.length ? n.target.join(" ") : null;
+      const key = target ?? n.html ?? Math.random().toString(36); // keyless nodes never merge
+        let el = rule.elements.get(key);
+        if (!el) {
+          el = { target, html: n.html ?? null, steps: new Set() };
+          rule.elements.set(key, el);
+        }
+      if (env.step != null) el.steps.add(env.step);
+      }
+    }
+  }
+  return byRule;
+}
+
+// A run-level rule row: expandable to its offending elements, each deep-linking
+// to the step(s) it was seen on, with fix guidance + the docs link. `rule` is a
+// grade.a11y.top_rules entry (authoritative id/count/impact); `detail` is the
+// aggregated element data from axeDetailByRule (may be undefined for an
+// inherited grade whose rule this run didn't reproduce — then just the count).
+function a11yRuleRow(rule, detail) {
+  const head = h("summary", { class: "a11y-rule-h" },
+    icon("i-warn", "ic g-warn"),
+    h("span", { class: "a11y-rule-id" }, rule.id),
+    rule.impact ? h("span", { class: "chip warn" }, rule.impact) : null,
+    h("span", { class: "a11y-nodecount", title: "violation nodes across the run" }, `${rule.count}`));
+  // elements sorted by earliest step
+  const els = detail ? [...detail.elements.values()] : [];
+  els.sort((a, b) => Math.min(...a.steps, Infinity) - Math.min(...b.steps, Infinity));
+  const body = h("div", { class: "a11y-rule-body" },
+    detail?.help ? h("div", { class: "a11y-help" }, detail.help) : null,
+    els.length
+      ? els.map((e) => h("div", { class: "a11y-node" },
+          h("div", { class: "a11y-node-head" },
+            ...[...e.steps].sort((x, y) => x - y).map((s) => stepLink(s))),
+          e.html ? h("code", { class: "a11y-html" }, e.html) : null,
+          e.target ? h("div", { class: "a11y-target", title: e.target }, e.target) : null))
+      : h("div", { class: "empty-note" }, "no element detail captured for this run"),
+    axeDocsLink(detail ?? rule));
+  return h("details", { class: "a11y-rule" }, head, body);
+}
+
+/* Run-level accessibility summary — the harness-computed axe-core counts spread
+   onto grade.json (grade.a11y), the high-value byproduct of the same capture the
+   compliance gate uses. The headline counts are grade.a11y's (the compliance
+   number); each top rule expands to the concrete offending elements gathered
+   from this run's step envelopes (axeDetailByRule), with step deep-links + fix
+   guidance. Defensive: returns null when no a11y data is present (non-web run,
+   or grade.json absent / pre-v6. */
+function renderA11y() {
+  const g = state.grade ?? (state.inheritedGrade?.grade ?? null);
+  const a = g?.a11y;
+  if (!a) return null;
+  const right = h("span", { class: "chip " + (a.total_violations ? "warn" : "pass") },
+    `${a.total_violations} violation${a.total_violations === 1 ? "" : "s"}`);
+  const grid = h("div", { class: "stat-grid two" },
+    stat("total violations", String(a.total_violations), "", a.total_violations ? "warn" : "dim",
+      "Total WCAG 2.0 A/AA + 2.1 AA violation nodes across the run (full-page axe runs) — what accessibility_violations gates on."
+    ),
+    stat("steps affected", String(a.steps_with_violations), "", a.steps_with_violations ? "warn" : "dim",
+      "How many steps had at least one violation."));
   const detail = axeDetailByRule();
   const rules = (a.top_rules ?? []).length
     ? h("div", {},
-      h("div", { class: "label", style: "margin-top:8px" }, "top rules"),
-      ...a.top_rules.map((r) => a11yRuleRow(r, detail.get(r.id))))
+        h("div", { class: "label", style: "margin-top:8px" }, "top rules"),
+        ...a.top_rules.map((r) => a11yRuleRow(r, detail.get(r.id))))
     : null;
   return sec("i-check", "accessibility", right, grid, rules);
 }
@@ -1553,26 +2371,26 @@ function renderBrief() {
   // (blank lines stay paragraph breaks) so the story reads as prose.
   const story = (c.story ?? "").trim().replace(/([^\n])\n(?!\n)/g, "$1 ");
   // The story can be long; clamp it so it never crowds out the per-step thought
-  // below. A "show more" toggle (only attached once the clamp actually elides
-  // anything) lets the reader expand it in place. Persona/tags stay visible.
-  const storyEl = h("p", { class: "brief-story clamped" }, story);
-  const toggle = h("button", { class: "brief-more", hidden: "", onclick: () => {
-    const on = storyEl.classList.toggle("clamped");
-    toggle.textContent = on ? "show more" : "show less";
-  } }, "show more");
-  // the whole brief collapses to just its header so the reader can focus on the
-  // per-step thought below. State survives run switches via sessionStorage,
-  // matching the inspector-tab / inspector-width prefs.
-  const brief = $("#cap-brief");
-  let collapsed = false;
-  try { collapsed = sessionStorage.getItem("playtest.briefCollapsed") === "1"; } catch {}
-  const head = h("button", { class: "label brief-toggle", "aria-expanded": String(!collapsed),
-    onclick: () => {
-      const on = brief.classList.toggle("collapsed");
-      head.setAttribute("aria-expanded", String(!on));
-      try { sessionStorage.setItem("playtest.briefCollapsed", on ? "1" : "0"); } catch {}
-    } }, h("span", { class: "brief-chevron" }), "the brief");
-  brief.classList.toggle("collapsed", collapsed);
+    // below. A "show more" toggle (only attached once the clamp actually elides
+    // anything) lets the reader expand it in place. Persona/tags stay visible.
+    const storyEl = h("p", { class: "brief-story clamped" }, story);
+    const toggle = h("button", { class: "brief-more", hidden: "", onclick: () => {
+      const on = storyEl.classList.toggle("clamped");
+      toggle.textContent = on ? "show more" : "show less";
+    } }, "show more");
+    // the whole brief collapses to just its header so the reader can focus on the
+    // per-step thought below. State survives run switches via sessionStorage,
+    // matching the inspector-tab / inspector-width prefs.
+    const brief = $("#cap-brief");
+    let collapsed = false;
+    try { collapsed = sessionStorage.getItem("playtest.briefCollapsed") === "1"; } catch {}
+    const head = h("button", { class: "label brief-toggle", "aria-expanded": String(!collapsed),
+      onclick: () => {
+        const on = brief.classList.toggle("collapsed");
+        head.setAttribute("aria-expanded", String(!on));
+        try { sessionStorage.setItem("playtest.briefCollapsed", on ? "1" : "0"); } catch {}
+      } }, h("span", { class: "brief-chevron" }, "▾"), "the brief");
+    brief.classList.toggle("collapsed", collapsed);
   // replaceChildren stringifies null to a literal "null" text node (unlike h())
   brief.replaceChildren(...[
     head,
@@ -1601,22 +2419,22 @@ function renderBrief() {
 }
 
 /* ---------- tabs + keys ---------- */
+
 function setView(view) {
   if (view === "diff" && $("#tab-diff").hidden) return;
   if (view === "context" && $("#tab-context").hidden) return;
   state.view = view;
   // stills autoplay belongs to the step-following views; video plays itself
-/* ?? */
-/* ?? */
-/* ?? */
+  // and diff is run-level, so the control hides (and stops) on both
   const canPlay = view === "stills" || view === "a11y" || view === "context";
+  $("#play").hidden = !canPlay;
   if (!canPlay) setPlaying(false);
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("on", t.dataset.view === view));
-  $("#pane-stills").hidden = view === "stills";
-  $("#pane-a11y").hidden = view === "a11y";
-  $("#pane-context").hidden = view === "context";
-  $("#pane-video").hidden = view === "video";
-  $("#pane-diff").hidden = view === "diff";
+  $("#pane-stills").hidden = view !== "stills";
+  $("#pane-a11y").hidden = view !== "a11y";
+  $("#pane-context").hidden = view !== "context";
+  $("#pane-video").hidden = view !== "video";
+  $("#pane-diff").hidden = view !== "diff";
   $("#caption").hidden = view === "diff"; // diff is run-level; the step thought panel would mislead
   if (state.steps.length) updateStage(state.steps[state.cur]);
 }
@@ -1649,8 +2467,34 @@ function initKeys() {
     if (e.key === "ArrowLeft") { select(state.cur - 1, { instant: true }); e.preventDefault(); }
     else if (e.key === "ArrowRight") { select(state.cur + 1, { instant: true }); e.preventDefault(); }
     else if (e.key === "Home") { select(0, { instant: true }); e.preventDefault(); }
-  });  // [reconstruction: tail closers appended to balance open blocks; original tail not recoverable]
+    else if (e.key === "End") { select(state.steps.length - 1, { instant: true }); e.preventDefault(); }
+    else if (e.key === "Tab") {
+      // cycle every visible stage tab (diff only exists with a baseline);
+      // shift+tab cycles backwards. This claims tab from focus traversal.
+      const views = ["stills", "a11y", "context", "video", "diff"]
+        .filter((v) => (v !== "diff" || !$("#tab-diff").hidden) && (v !== "context" || !$("#tab-context").hidden));
+      const dir = e.shiftKey ? -1 : 1;
+      setView(views[(views.indexOf(state.view) + dir + views.length) % views.length]);
+      e.preventDefault();
+    }
+    // space toggles autoplay where the control is visible — except on focused
+    // controls, where it must stay a click. A focused film-strip cell is the
+    // exception to the exception: Space there plays from the selected still
+    // (the cell's native click would just re-select the same step), so don't
+    // treat it as a plain control.
+    else if (e.key === " " && !e.target.closest("a, input, select, textarea")
+             && (!e.target.closest("button") || e.target.closest("#strip .cell"))) {
+      if (state.view === "video") {
+        // the video tab has no #play strip control; space plays/pauses the
+        // native player even when it doesn't hold focus
+        const vid = $("#video");
+        if (vid && vid.src) { vid.paused ? vid.play() : vid.pause(); e.preventDefault(); }
+      } else if (!$("#play").hidden) {
+        setPlaying(!state.playing);
+        e.preventDefault();
+      }
+    }
+  });
 }
-}
-}
-}
+
+boot();

@@ -73,7 +73,7 @@ function childEnv() {
   delete env.PLAYTEST_LLM_API_KEY;
   delete env.ANTHROPIC_API_KEY;
   delete env.OPENAI_API_KEY;
-  delete env.PLAYTEST_LLM_CACHE; // opt-in caching off for offline tests — keeps the wire bytes golden
+  env.PLAYTEST_LLM_CACHE = "0"; // keep offline prompt bytes golden
   delete env.PLAYTEST_BROWSER_CHANNEL; // measured runs must use pinned chromium
   delete env.TODO_APP_VARIANT; // fixtures get their variant as an explicit option
   env.PLAYTEST_LLM_BASE_URL = mock.url;
@@ -191,16 +191,23 @@ test("pass 1: first run records and blesses a baseline for every case (exit 0)",
     assert.ok(fs.existsSync(p.baseline), `expected blessed baseline ${p.baseline}`);
     assert.ok(fs.existsSync(p.baselineMeta), `expected baseline meta ${p.baselineMeta}`);
   }
-  // context.jsonl: one diagnostic line per actor turn, holding the exact model
-  // window (system + step log + current snapshot), advertised in the manifest.
+  // context.jsonl: one header line (system prompt/tools), then one diagnostic
+  // line per actor turn holding the step log + current snapshot, advertised in
+  // the manifest.
   for (const c of out.cases) {
     const ctxPath = path.join(c.run_dir, "context.jsonl");
     assert.ok(fs.existsSync(ctxPath), `expected context.jsonl in ${c.run_dir}`);
     const lines = fs.readFileSync(ctxPath, "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l));
-    assert.equal(lines.length, c.steps, `context.jsonl should have one line per actor turn for ${c.id}`);
-    for (const entry of lines) {
+    const [header, ...turns] = lines;
+    assert.equal(header.type, "header", "context starts with a header record");
+    assert.equal(header.model, "claude-haiku-4-5");
+    assert.equal(typeof header.system, "string", "context header captures the system prompt");
+    assert.ok(Array.isArray(header.tools) && header.tools.length > 0, "context header captures the tool schema");
+    assert.equal(turns.length, c.steps, `context.jsonl should have one turn line per actor step for ${c.id}`);
+    for (const entry of turns) {
       assert.equal(typeof entry.step, "number", "context entry has a step number");
-      assert.ok(Array.isArray(entry.messages) && entry.messages[0]?.role === "system", "captures the system prompt");
+      assert.ok(Array.isArray(entry.messages), "context entry captures messages");
+      assert.ok(!entry.messages.some((m) => m.role === "system"), "per-turn context omits the duplicated system prompt");
       const last = entry.messages.at(-1);
       const lastText = typeof last.content === "string" ? last.content : last.content.map((p) => p.text ?? "").join("");
       assert.match(lastText, /Current page snapshot/, "the current snapshot is the last message");
@@ -210,19 +217,23 @@ test("pass 1: first run records and blesses a baseline for every case (exit 0)",
   }
 });
 
-// NOTE: the original self-test spec said "zero requests hit the mock" on the act pass,
-// but docs/playtest-design.md (the stable input, §"Run modes" and §"Cost")
-// is explicit that an `assert:` success criterion "still makes one model check
-// at the gate" even on acted runs — and runner.js/gate.js implement exactly
-// that. The example suite has one assert per case, so the designed contract
-// is: zero actor ("step") calls, zero grader ("grade") calls, one "verdict"
-// call per assert criterion. That is what this test freezes.
-test("pass 2: second run acts every case — no actor/grader calls, one verdict per assert gate (exit 0)", async () => {
+// Clean act replays inherit saved assert/custom verdicts from the accepted
+// baseline (§10) instead of re-calling the grader model. The example suite has
+// one assert per case, and pass 1 saved those verdicts into baseline meta.
+test("pass 2: second run acts every case — inherited assert verdicts make no model calls (exit 0)", async () => {
   // one `- assert:` line per copied case file
   const expectedVerdicts = CASE_IDS
     .map((id) => fs.readFileSync(caseFileFor(id), "utf8"))
     .reduce((n, yaml) => n + (yaml.match(/^\s*-\s*assert:/gm) ?? []).length, 0);
   assert.ok(expectedVerdicts > 0, "the example suite is expected to carry assert criteria");
+  for (const id of CASE_IDS) {
+    const yaml = fs.readFileSync(caseFileFor(id), "utf8");
+    const expectedAssertSpecs = [...yaml.matchAll(/^\s*-\s*assert:\s*(.+)$/gm)].map((m) => `assert: ${m[1].trim()}`);
+    const meta = JSON.parse(fs.readFileSync(candidatePaths(caseFileFor(id)).baselineMeta, "utf8"));
+    for (const spec of expectedAssertSpecs) {
+      assert.ok(meta.verdicts?.some((v) => v.spec === spec), `baseline meta should save ${spec} for ${id}`);
+    }
+  }
 
   const before = {
     total: mock.requestCount(),
@@ -235,13 +246,13 @@ test("pass 2: second run acts every case — no actor/grader calls, one verdict 
   assert.equal(mock.requestCount("grade") - before.grade, 0, "act pass must never grade");
   assert.equal(
     mock.requestCount("verdict") - before.verdict,
-    expectedVerdicts,
-    "act pass makes exactly one verdict call per assert: gate criterion",
+    0,
+    "clean act pass inherits assert verdicts from the baseline",
   );
   assert.equal(
     mock.requestCount() - before.total,
-    expectedVerdicts,
-    "act pass must make no model calls beyond the assert gate checks",
+    0,
+    "act pass must make no model calls when every assert verdict is inherited",
   );
   assert.equal(res.code, 0, `act pass should exit 0${dump(res)}`);
   const out = parseRunJson(res);

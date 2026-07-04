@@ -6,13 +6,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import Ajv from "ajv";
 
 import { createDriver } from "../src/harness/driver.js";
 import { DummyConfigError } from "../src/harness/config.js";
+import { runAxeInPage } from "../src/harness/axe-source.js";
+import { createHarFlusher } from "../src/harness/drivers/har.js";
 import { overlayFor, toolParamsFor, stepSchemaFor, normalizeDriver, DRIVER_VERBS, __testing } from "../src/harness/drivers/overlay.js";
+import { processScreenshotImage } from "../src/harness/drivers/web.js";
 import { comparablePins } from "../src/shared/movement.js";
 import { SNAPSHOT_FORMAT as MOBILE_SNAPSHOT_FORMAT } from "../src/harness/drivers/mobile-snapshot.js";
 
@@ -34,7 +38,7 @@ test("createDriver rejects an unknown driver with a DummyConfigError naming it",
   );
 });
 
-// ---------- the canonical schema is flat (schema_version 3, no oneOf) ----------
+// ---------- the canonical schema is flat (schema_version 6, no oneOf) ----------
 
 test("overlayFor('web') is actor-system.md verbatim", () => {
   assert.equal(overlayFor("web").prompt, read("src/harness/prompts/actor-system.md").trim());
@@ -50,7 +54,7 @@ test("the canonical step schema is a flat action object, not a oneOf union", () 
     [...action.properties.type.enum].sort(),
     [...new Set([...WEB_VERBS, "tap", "swipe", "request"])].sort(),
   );
-  assert.ok(stepSchema.description.includes("schema_version 3"));
+  assert.ok(stepSchema.description.includes("schema_version 6"));
 });
 
 // ---------- toolParamsFor: the stripped, model-facing (SHIPPED) schema ----------
@@ -205,4 +209,83 @@ test("comparablePins: cross-driver never compares, same-driver does (full per-dr
 
   // two mobile runs share every pin, so they DO compare (true).
   assert.equal(comparablePins(mobileA, mobileB), true);
+});
+
+// ---------- P3 hot-path helpers ----------
+
+function pngWithDimensions(width, height) {
+  const png = Buffer.alloc(24);
+  png.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 0);
+  png.writeUInt32BE(13, 8);
+  png.write("IHDR", 12);
+  png.writeUInt32BE(width, 16);
+  png.writeUInt32BE(height, 20);
+  return png;
+}
+
+test("runAxeInPage avoids resending axe-core source when window.axe is already present", async () => {
+  const calls = [];
+  const page = {
+    async evaluate(_fn, arg) {
+      calls.push(arg);
+      if (calls.length === 1) return true;
+      assert.equal(arg[0], null, "source string should not cross CDP when axe is installed");
+      return { violations: [], counts: { total: 0 } };
+    },
+  };
+
+  assert.deepEqual(await runAxeInPage(page), { violations: [], counts: { total: 0 } });
+  assert.equal(calls.length, 2);
+});
+
+test("processScreenshotImage computes dHash and downscaled image in one page evaluate", async () => {
+  const original = pngWithDimensions(2000, 1000);
+  const downscaled = Buffer.from("downscaled-png");
+  let evaluateCalls = 0;
+  const page = {
+    async evaluate(_fn, arg) {
+      evaluateCalls++;
+      assert.equal(arg.downscale, true);
+      assert.match(arg.src, /^data:image\/png;base64,/);
+      return {
+        dHash: "0123456789abcdef",
+        downscaledDataUrl: `data:image/png;base64,${downscaled.toString("base64")}`,
+      };
+    },
+  };
+
+  const processed = await processScreenshotImage(page, original, 1000);
+  assert.equal(evaluateCalls, 1);
+  assert.equal(processed.screenshotHash, "0123456789abcdef");
+  assert.deepEqual(processed.screenshot, downscaled);
+});
+
+test("createHarFlusher writes the first step, batches later steps, and force-flushes current entries", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "playtest-har-"));
+  try {
+    const entries = [];
+    const flush = createHarFlusher(dir, entries, { interval: 3 });
+    const add = (n) => entries.push({ request: { method: "GET", url: `http://x/${n}` }, response: { status: 200 } });
+    const diskCount = () => JSON.parse(fs.readFileSync(path.join(dir, "har.json"), "utf8")).log.entries.length;
+
+    add(1);
+    assert.equal(flush(), true, "first step is written for crash recovery");
+    assert.equal(diskCount(), 1);
+
+    add(2);
+    assert.equal(flush(), false, "non-interval step skips the hot-path rewrite");
+    assert.equal(diskCount(), 1, "disk stays at the last flushed snapshot");
+
+    add(3);
+    assert.equal(flush(), true, "interval step rewrites the HAR");
+    assert.equal(diskCount(), 3);
+
+    add(4);
+    assert.equal(flush(), false);
+    add(5);
+    assert.equal(flush({ force: true }), true, "gate/close can force the latest entries");
+    assert.equal(diskCount(), 5);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });

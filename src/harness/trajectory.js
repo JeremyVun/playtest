@@ -18,7 +18,11 @@ export const SETTLE = { name: "settle-v1", dom_quiet_ms: 500, net_quiet_ms: 500,
 // unless the user sets the knob explicitly (drivers/web.js, drivers/mobile.js).
 export const INITIAL_SETTLE_FLOOR_MS = 500;
 export function initialQuietMs(base, override) {
-  return override !== null ? override : Math.max(2 * base, INITIAL_SETTLE_FLOOR_MS);
+  // Loose != so an absent knob (undefined — the default settle policies don't
+  // carry initial_quiet_ms) falls through to the derived window; a strict !==
+  // would return undefined and NaN the caller's Math.min, spinning the first
+  // settle to max_ms on every session.
+  return override != null ? override : Math.max(2 * base, INITIAL_SETTLE_FLOOR_MS);
 }
 
 // Default Hamming-distance threshold (over a 64-bit dHash) above which a

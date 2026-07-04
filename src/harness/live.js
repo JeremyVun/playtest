@@ -118,7 +118,6 @@ export class LiveReporter {
           startedAt: Date.now(),
         });
         this.#draw(true);
-        this.#draw(true);
         break;
       case "step_start":
         if (!c) break;
@@ -150,7 +149,6 @@ export class LiveReporter {
         if (ev.error) c.summary = `${c.summary ?? ""} — ${ev.error}`;
         this.#draw();
         break;
-      case "heal_start":
       case "heal_start":
         // The act replay drifted/failed and re-entered the record loop to recover.
         // Flip the live mode word to "healing" so the case's own spinner row shows
@@ -206,14 +204,44 @@ export class LiveReporter {
     this.#out.write(summary(results) + "\n");
     process.removeListener("SIGINT", this.#onSigint);
   }
-// [UNREADABLE lines 209-248: scrolled past, not captured in any frame]
-  // [reconstruction: the unreadable region declared the private methods #draw,
-  // #stop and #print (used above but not captured in any frame); stub
-  // declarations inserted to balance the class and satisfy parsing — the
-  // original method bodies are not recoverable]
-  #draw() {}
-  #stop() {}
-  #print() {}
+
+  #stop() {
+    clearInterval(this.#timer);
+    this.#erase();
+  }
+
+  #erase() {
+    if (!this.#drawn) return;
+    this.#out.write(`\x1b[${this.#drawn}A\x1b[J`);
+    this.#drawn = 0;
+  }
+
+  #print(text, stream = this.#out) {
+    this.#erase();
+    stream.write(text + "\n");
+    this.#draw(true);
+  }
+
+  #draw(force = false) {
+    const now = Date.now();
+    if (!force && now - this.#lastDraw < REDRAW_MS) return;
+    this.#lastDraw = now;
+    this.#frame = (this.#frame + 1) % SPINNER.length;
+
+    const cases = [...this.#active.values()];
+    const idW = Math.max(0, ...cases.map((c) => c.id.length));
+    // Mode-word column width, sized to the active rows (phase words like
+    // "evaluating gate" outgrow the old fixed "recording" width).
+    const modeW = Math.max(0, ...cases.map((c) => c.mode.length));
+    const width = this.#out.columns || 80;
+    const lines = cases.flatMap((c) => this.#line(c, idW, modeW, width));
+
+    let buf = this.#drawn > 0 ? `\x1b[${this.#drawn}A` : "";
+    for (const line of lines) buf += `\r\x1b[2K${line}\n`;
+    if (this.#drawn > lines.length) buf += "\x1b[J";
+    if (buf) this.#out.write(buf);
+    this.#drawn = lines.length;
+  }
 
   // One active case = TWO rows. Row 1 (vitals): spinner, RUN, id, mode, model,
   // step, tokens, elapsed, cost — the slow-changing telemetry. Row 2 (detail):
@@ -255,7 +283,6 @@ export class LiveReporter {
     const indent = "  "; // aligns under " RUN "
     let action = oneLine(c.retry ? retryLabel(c.retry) : (c.summary ?? ""));
     const placeholder = !action;
-    if (placeholder) action = c.phase ? `${c.mode}…` : "starting…";
     if (placeholder) action = c.phase ? `${c.mode}…` : "starting…";
     // Clip the action to the linewidth (minus the "↳ " marker + indent).
     const room = (width - 1) - indent.length - 2;

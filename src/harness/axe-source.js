@@ -1,6 +1,3 @@
-// [UNREADABLE ~lines 1-9: leading header comment block for this module]
-// self-contained and NEVER enters the actor prompt, so PROMPTS_VERSION / SNAPSHOT_FORMAT
-// are unchanged and the web golden control does not regress.
 import fs from "node:fs";
 import { createRequire } from "node:module";
 
@@ -30,11 +27,16 @@ export function axeSource() {
  * @returns {Promise<{ violations: object[], counts: { total: number } }>}
  */
 export async function runAxeInPage(page) {
+  const hasAxe = await page.evaluate(() => !!window.axe);
+  const source = hasAxe ? null : axeSource();
   return page.evaluate(
     ([axeSrc, tags, maxV, maxH, maxHelp]) => {
       // Inline the page-side runner (page.evaluate can't reference module fns).
       return (async () => {
-        if (!window.axe) new Function(axeSrc)();
+        if (!window.axe) {
+          if (!axeSrc) throw new Error("axe-core was not available in the page");
+          new Function(axeSrc)();
+        }
         const opts = { runOnly: { type: "tag", values: tags }, resultTypes: ["violations"] };
         const full = await window.axe.run(document, opts);
         const violations = full.violations.slice(0, maxV).map((v) => ({
@@ -59,7 +61,7 @@ export async function runAxeInPage(page) {
         return { violations, counts: { total } };
       })();
     },
-    [axeSource(), WCAG_TAGS, MAX_VIOLATIONS, MAX_HTML_CHARS, MAX_HELP_CHARS],
+    [source, WCAG_TAGS, MAX_VIOLATIONS, MAX_HTML_CHARS, MAX_HELP_CHARS],
   );
 }
 

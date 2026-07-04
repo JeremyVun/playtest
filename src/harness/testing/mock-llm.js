@@ -276,7 +276,7 @@ const STOPWORDS = new Set(
 // checked against the snapshot text in the prompt (grader.js checkAssertion layout).
 function verdict(messages) {
   const content = messages.filter((m) => m.role === "user").map((m) => contentText(m.content)).join("\n");
-  const claim = (content.match(/Claim:\s*([\s\S]*?)\n\s*\nFinal URL:/) ?? [, ""])[1].trim();
+  const claim = (content.match(/Claim:\s*([\s\S]*?)\n\s*\n(?:## Trajectory|Final URL:)/) ?? [, ""])[1].trim();
   const snapshot = content.split(/Final page snapshot:\s*\n/)[1] ?? "";
   const quoted = [...claim.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
   const needles = quoted.length
@@ -330,9 +330,27 @@ function serializeArgs(forced, args) {
   return JSON.stringify(args);
 }
 
+function toolNames(body) {
+  return (body.tools ?? [])
+    .map((t) => t?.function?.name ?? t?.name)
+    .filter(Boolean);
+}
+
+function autoTerminalTool(body) {
+  if (body.tool_choice !== "auto") return null;
+  const names = toolNames(body);
+  if (names.includes("grade")) return "grade";
+  if (names.includes("verdict")) return "verdict";
+  return null;
+}
+
+function requestTool(body) {
+  return body.tool_choice?.function?.name ?? autoTerminalTool(body) ?? "(none)";
+}
+
 function completion(body) {
   const messages = body.messages ?? [];
-  const forced = body.tool_choice?.function?.name ?? null;
+  const forced = body.tool_choice?.function?.name ?? autoTerminalTool(body);
   let args = null;
   if (forced === "step") args = actorStep(messages);
   else if (forced === "grade") args = gradeArgs(messages);
@@ -391,7 +409,7 @@ export async function start({ port = 0 } = {}) {
     req.on("end", () => {
       try {
         const body = JSON.parse(raw);
-        const tool = body.tool_choice?.function?.name ?? "(none)";
+        const tool = requestTool(body);
         servedByTool[tool] = (servedByTool[tool] ?? 0) + 1;
         captured.push({ tool, body });
         send(200, completion(body));

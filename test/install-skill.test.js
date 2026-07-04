@@ -44,7 +44,7 @@ const destOf = (dir, name) => path.join(dir, ".claude", "skills", name, "SKILL.m
 test("install-skill installs every packaged skill, byte-for-byte", () => {
   assert.ok(skillNames.length >= 3, `expected the three shipped skills, found ${skillNames.join(", ")}`);
   assert.ok(
-    ["playtest", "playtest-discovery", "playtest-stories"].every((n) => skillNames.includes(n)),
+    ["playtest-assertions", "playtest-ci", "playtest-discovery", "playtest-hooks", "playtest-stories"].every((n) => skillNames.includes(n)),
     `missing an expected skill among ${skillNames.join(", ")}`,
   );
   inProject((dir) => {

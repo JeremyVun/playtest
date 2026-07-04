@@ -250,6 +250,7 @@ export async function chat({ model, messages, tools = null, toolChoice = null, m
     } catch (err) {
       throwIfAborted();
       if (attempt + 1 >= MAX_ATTEMPTS_5XX) throw new LlmError(`LLM request failed: ${err.message}`);
+      const waitMs = 500 * 2 ** attempt;
       onRetry?.({ status: null, attempt: attempt + 1, maxAttempts: MAX_ATTEMPTS_5XX, waitMs });
       await sleep(waitMs, signal);
       continue;
@@ -263,7 +264,7 @@ export async function chat({ model, messages, tools = null, toolChoice = null, m
       // window. When the gateway sends Retry-After we honour the LARGER of
       // that and our own backoff so a slow upstream can ask us to wait longer,
       // but a bogus header can't stall us past RETRY_AFTER_CAP_MS.
-      const backoff = res.status === 429 ? jitter(1000 * 2 ** attempt) : 500 * 2 ** attempt;
+      const backoff = res.status === 429 ? jitter(1000 * 2 ** (attempt + 2)) : 500 * 2 ** attempt;
       const retryAfter = res.status === 429 ? parseRetryAfter(res.headers.get("retry-after")) : null;
       const waitMs = Math.min(Math.max(retryAfter, backoff), RETRY_AFTER_CAP_MS);
       onRetry?.({ status: res.status, attempt: attempt + 1, maxAttempts, waitMs });

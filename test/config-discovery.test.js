@@ -58,7 +58,7 @@ function childEnv() {
   delete env.PLAYTEST_LLM_API_KEY;
   delete env.ANTHROPIC_API_KEY;
   delete env.OPENAI_API_KEY;
-  delete env.PLAYTEST_LLM_CACHE; // opt-in caching off for offline tests — keeps the wire bytes golden
+  env.PLAYTEST_LLM_CACHE = "0"; // keep offline prompt bytes golden
   return env;
 }
 
@@ -101,17 +101,14 @@ const dump = (res) => `\nstdout:\n${res.stdout}\nstderr:\n${res.stderr}`;
 
 // ---------- defaults ----------
 
-test("the default actor_model is the capable model (claude-sonnet-4-6)", async () => {
-  // The default actor is sonnet: a capable user reads the page and recovers from
-  // friction far more reliably than a cheap one, and the trajectory is only worth
-  // grading if the user was played well. Catch a silent flip back to a weaker model.
+test("the default models use the current model tiers", async () => {
   const dir = writeSuite({
     "playtest.yaml": BASE,
     "add-todo.yaml": 'story: |\n  Add a todo called "buy milk".\n',
   });
   const [rc] = await discoverCases([dir]);
-  assert.equal(rc.actor_model, "claude-sonnet-4-6");
-  assert.equal(rc.grader_model, "claude-sonnet-4-6");
+  assert.equal(rc.actor_model, "gpt5_4_mini");
+  assert.equal(rc.grader_model, "gpt5_5");
 });
 
 // ---------- schema validation ----------

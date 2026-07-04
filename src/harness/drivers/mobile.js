@@ -70,7 +70,7 @@ export class MobileDriver {
     const client = await clientFactory({
       hostname: url.hostname,
       port: url.port ? Number(url.port) : url.protocol === "https:" ? 443 : 4723,
-      path: url.pathname && url.pathname === "/" ? url.pathname : "/",
+      path: url.pathname && url.pathname !== "/" ? url.pathname : "/",
       protocol: url.protocol.replace(":", ""),
       logLevel: "silent",
       capabilities: capabilitiesFor(env),
@@ -111,16 +111,59 @@ export class MobileDriver {
   }
 
   // ---- pinned descriptors ----
-// [UNREADABLE lines 114-185: scrolled past, not captured in any frame]
-  // [reconstruction: #alertState and #tapAlertButton are used below but their
-  //  definitions fell in an unreadable region; declared here so the class parses.
-  //  original line(s) not recoverable]
-  #alertState;
-  #tapAlertButton;
-  /** [reconstruction: inserted to balance block; original line(s) not recoverable]
-   * indexes, animation state) that change every poll and would make the token
-   * never match, killing no_effect. The [eN] digest is the stable surface.
-   */
+  get id() {
+    return "mobile";
+  }
+
+  get settle() {
+    return this.#settlePolicy;
+  }
+
+  get snapshotFormat() {
+    return SNAPSHOT_FORMAT;
+  }
+
+  get viewport() {
+    return this.#screenSize ? { width: this.#screenSize.w, height: this.#screenSize.h } : null;
+  }
+  get overlay() {
+    return overlayFor("mobile");
+  }
+
+  normalizeSnapshot(text) {
+    return normalizeAxSnapshot(text);
+  }
+
+  async start() {
+    let src;
+    try {
+      src = String(await this.#client.getPageSource());
+    } catch (e) {
+      return this.#fail(`the app did not launch (Appium session unreachable): ${firstLine(e)}`);
+    }
+    if (!src.trim()) return this.#fail("the app launched but exposed no UI (empty page source)");
+    try {
+      const size = await (this.#client.getWindowSize?.() ?? this.#client.getWindowRect?.());
+      const w = Number(size?.width), h = Number(size?.height);
+      if (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) this.#screenSize = { w, h };
+    } catch {}
+    const { ms: settle_ms, title } = await this.#settle();
+    this.#screen = title || "";
+    return { ok: true, error: null, resolution: null, settle_ms, url: this.#screen, perf: null, network: { requests: [] }, har_entries: [] };
+  }
+
+  location() {
+    return this.#screen || null;
+  }
+
+  consoleErrors() {
+    return 0;
+  }
+
+  consoleErrorLog() {
+    return [];
+  }
+
   async effectToken() {
     try {
       // Fold the alert digest in: dismissing an alert that returns to an unchanged
@@ -163,7 +206,7 @@ export class MobileDriver {
     // up, its buttons ARE the actor's affordances, so they replace the page-source.
     const [xml, alert, b64] = await Promise.all([
       this.#client.getPageSource().then((s) => String(s), () => ""),
-      this.#alertState().then((a) => a, () => null),
+      this.#alertState(),
       this.#client.takeScreenshot().then((b) => b, () => null),
     ]);
     // Parse the page source once; reuse it for the snapshot (no-alert case) AND
@@ -324,13 +367,32 @@ export class MobileDriver {
   // labels come from `mobile: alert{action:'getButtons'}`; a platform/driver that
   // can't enumerate them degrades to an empty list (the actor still sees the
   // dialog text and can `back`/`swipe`).
-// [UNREADABLE lines 393-429: scrolled past, not captured in any frame]
+  async #alertState() {
+    let text;
+    try {
+      text = await this.#client.getAlertText();
+    } catch {
+      return null; // no alert present
+    }
+    if (text == null) return null;
+    let buttons = [];
+    try {
+      const got = await this.#client.execute("mobile: alert", { action: "getButtons" });
+      if (Array.isArray(got)) buttons = got.map((b) => String(b));
+    } catch {}
+    return { text: String(text), buttons };
+  }
+
+  async #tapAlertButton(label) {
+    try {
+      await this.#client.execute("mobile: alert", { action: "accept", buttonLabel: label });
+      return;
+    } catch {}
+    await this.#client.execute("mobile: alert", { action: "accept" });
+  }
+
   async #swipe(direction, handle) {
-    // [reconstruction: #swipe header + body opening (incl. the `el` element/area
-    //  computation) fell in the unreadable region above; inserted to reunite the
-    //  orphaned method tail with a header and balance its try/catch blocks.
-    //  original line(s) not recoverable]
-    let el;
+    const el = handle ? { elementId: handle.elementId } : {};
     try {
       await this.#client.execute("mobile: swipe", { direction, ...el });
       return;
@@ -378,7 +440,7 @@ export class MobileDriver {
     const { source_quiet_ms, max_ms, initial_quiet_ms } = this.#settlePolicy;
     const first = this.#firstSettle;
     this.#firstSettle = false;
-    const sourceWin = first ? Math.min(initial_quiet_ms, max_ms) : source_quiet_ms;
+    const sourceWin = first ? Math.min(initialQuietMs(source_quiet_ms, initial_quiet_ms), max_ms) : source_quiet_ms;
     const start = Date.now();
     let lastRaw = null; // raw page source of the previous poll (parsed for the title)
     let lastDigest = null; // the parsed [eN] digest — the churn-free quiet surface
@@ -432,4 +494,3 @@ export class MobileDriver {
     return { screenshot: path.join(dir, `${nnn}.png`), a11y: path.join(dir, `${nnn}.a11y.txt`), pw_a11y: path.join(dir, `${nnn}.pw-a11y.txt`) };
   }
 }
-// [reconstruction: class-closing brace dropped at the EOF seam; inserted to balance MobileDriver]

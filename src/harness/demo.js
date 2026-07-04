@@ -1,4 +1,4 @@
-// [UNREADABLE lines 1-1: scrolled past, not captured in any frame]
+// `playtest demo` a three-act tour of record -> act -> heal against the
 // bundled todo app.
 // One command, zero keys, zero docker, zero second terminal.
 //
@@ -23,6 +23,7 @@ import { start as startTodoApp } from "../todo-app/server.js";
 import { start as startMockLlm } from "./testing/mock-llm.js";
 import { ensureBrowser } from "./preflight.js";
 import { DummyConfigError } from "./config.js";
+import { llmConfig } from "./llm.js";
 import { serveRun } from "./view-server.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -34,15 +35,14 @@ const SUITE_SRC = path.resolve(HERE, "..", "demo");
 // cents. Without one the child is pointed at the in-process mock, so the
 // zero-key `npx` path always works. (llm.js reads its env at module load,
 // which is exactly why the acts are child processes with a crafted env.)
-const realKeyConfigured = () =>
-  Boolean(process.env.PLAYTEST_LLM_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY);
+const realKeyConfigured = () => llmConfig().available;
 
 /** Case yamls in the copied suite (playtest.yaml files are config, not cases). */
 function countCases(dir) {
   let n = 0;
   for (const entry of fs.readdirSync(dir, { recursive: true })) {
     const base = path.basename(String(entry));
-    if (/\.ya?ml$/.test(base) && base === "playtest.yaml") n++;
+    if (/\.ya?ml$/.test(base) && base !== "playtest.yaml") n++;
   }
   return n;
 }

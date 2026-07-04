@@ -33,9 +33,12 @@ the tarball, then publish to a throwaway Verdaccio under `/tmp/pt-verdaccio` and
 `.claude/settings.local.json`; bump `package.json` `version` before re-publishing (Verdaccio
 rejects a duplicate version).
 
-The CLI does **not** load `.env`. Export `ANTHROPIC_API_KEY` (or `PLAYTEST_LLM_API_KEY` /
-`OPENAI_API_KEY`) into the shell to use a real model; otherwise commands fall back to the
-bundled offline mock (`src/harness/testing/mock-llm.js`), which only drives the web demo.
+The CLI does **not** load `.env`. A real model needs **both** `PLAYTEST_LLM_BASE_URL` (an
+OpenAI-compatible gateway; there is no default endpoint — never Anthropic direct) and an API
+key (`PLAYTEST_LLM_API_KEY` / `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`); a bare key alone does
+nothing. Unconfigured, `playtest demo` falls back to the bundled offline mock
+(`src/harness/testing/mock-llm.js`, web demo only) and other commands fail preflight with a
+friendly message.
 
 ## VERSION_2 state (drivers / transport seam)
 
@@ -58,7 +61,7 @@ src/todo-app/         zero-dep fixture app — the demo's and the self-test's su
 src/demo/             the suite `playtest demo` copies into its temp dir
 tests/                example suite targeting the todo app (committed saved paths)
 test/                 offline self-tests (npm test)
-skills/               agent skills: stories (interview/author), run, discovery study
+skills/               agent skills: stories (interview/author), ci, discovery, assertions, hooks
 personas/             example custom persona
 runs/                 run output (gitignored)
 ```

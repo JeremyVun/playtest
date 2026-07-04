@@ -29,6 +29,8 @@ const DEFAULTS = {
 // explicit case/defaults value still wins — these only fill an unset budget.
 const STEP_BUDGET = { journey: 50, discovery: 300 };
 const TIME_BUDGET = { journey: "4m", discovery: "30m" };
+const DISCOVERY_SKIP = new Set(["node_modules", "personas", "results"]);
+const skipDiscoveryEntry = (name) => name.startsWith(".") || DISCOVERY_SKIP.has(name);
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const loadSchema = (name) => JSON.parse(readFileSync(path.join(here, "../schemas", name), "utf8"));
@@ -178,10 +180,9 @@ export async function discoverCases(paths, { tags = [], ids = [], baseUrl = null
   }
 
   await warnStrays(strays, found);
-  // Register each suite's custom assertions once per suite root (the assertions/ dir
-// [UNREADABLE lines 182-188: scrolled past, not captured in any frame]
-  const registries = new Map(); // [reconstruction: inserted to balance block; original line(s) not recoverable]
-  const registryFor = async (caseFile) => { // [reconstruction: inserted to balance block; original line(s) not recoverable]
+
+  const registries = new Map();
+  const registryFor = async (caseFile) => {
     const root = suiteRootFor(caseFile);
     if (!registries.has(root)) registries.set(root, await loadAssertions(root));
     return registries.get(root);
@@ -260,7 +261,7 @@ async function walkCases(dir, namedRoot) {
 async function collectFrom(dir, collectRoot, cases, strays) {
   for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
     const name = entry.name;
-    if (name.startsWith(".") || name === "node_modules" || name === "personas" || name === "results") continue;
+    if (skipDiscoveryEntry(name)) continue;
     const full = path.join(dir, name);
     if (entry.isDirectory()) {
       if (name === "stories") await collectStories(full, cases);
@@ -277,7 +278,7 @@ async function collectFrom(dir, collectRoot, cases, strays) {
 async function collectStories(dir, cases) {
   for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
     const name = entry.name;
-    if (name.startsWith(".") || name === "node_modules" || name === "personas" || name === "results") continue;
+    if (skipDiscoveryEntry(name)) continue;
     const full = path.join(dir, name);
     if (entry.isDirectory()) await collectStories(full, cases);
     else if (isCaseFile(name)) cases.push(full);
@@ -408,7 +409,7 @@ async function resolveCase(file, namedRoot, baseUrl, registry = { routing: new M
   }
   // base_url is required for web/api (they reach an HTTP origin); mobile reaches
   // a device/Appium server and only needs the app binary.
-  if (driver === "mobile" && !merged.env.base_url) {
+  if (driver !== "mobile" && !merged.env.base_url) {
     // When envs are declared, name them as the recovery (the CLI also offers an
     // interactive picker off err.availableEnvs on a TTY); else the plain hint.
     const envHint = envNames.length ? ` (or pass --env <name>; available: ${envNames.join(", ")})` : "";
@@ -540,7 +541,7 @@ async function resolveCase(file, namedRoot, baseUrl, registry = { routing: new M
     // `parallel` is a defaults-only key, so it was inherited from a playtest.yaml,
     // not `file` (the case). Name the nearest chain file that actually set it so
     // the error points where the user can fix it.
-    const source = [...loadedChain].reverse().find(([, doc]) => doc?.parallel !== null)?.[0] ?? file;
+    const source = [...loadedChain].reverse().find(([, doc]) => doc?.parallel !== undefined)?.[0] ?? file;
     throw new DummyConfigError(
       `${source}: parallel.record (${par.record}) cannot exceed parallel.total (${par.total})`,
     );

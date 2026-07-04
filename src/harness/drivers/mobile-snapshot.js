@@ -49,8 +49,8 @@ function parseAttrs(blob) {
 
 function decodeEntities(s) {
   return s
-    .replace(/</g, "<").replace(/>/g, ">").replace(/"/g, '"')
-    .replace(/'/g, "'").replace(/\n/g, " ").replace(/&/g, "&");
+    .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'").replace(/&#10;/g, " ").replace(/&amp;/g, "&");
 }
 
 // Element type (iOS XCUIElementTypeButton, Android android.widget.Button) → a
@@ -87,7 +87,7 @@ function nameOf(attrs) {
 
 // Bounding box: iOS carries x/y/width/height; Android a bounds="[x1,y1][x2,y2]".
 function bboxOf(attrs) {
-  if (attrs.x !== null && attrs.width !== null) {
+  if (attrs.x != null && attrs.width != null) {
     const x = +attrs.x, y = +attrs.y, w = +attrs.width, h = +attrs.height;
     if ([x, y, w, h].every(Number.isFinite)) return { x, y, w, h };
   }
@@ -307,7 +307,7 @@ const claimed = new Set();
 const contextByRef = new Map(); // ref → [text, …]
 for (let i = 0; i < nodes.length; i++) {
   const n = nodes[i];
-  if (n.role === "text") continue;
+  if (n.role !== "text") continue;
   const name = nameOf(n.attrs);
   if (!name) continue;
   if (!(isVisible(n.attrs) || overlapsScreen(bboxOf(n.attrs), screen))) continue;
@@ -498,7 +498,6 @@ export function nativePageSourceTree(xml) {
   } catch {
     // never throw: degrade to whatever was parsed so far
   }
-  // [reconstruction: inserted to balance block; original line(s) not recoverable]
   const header = `Screen: ${title || "(app)"}`;
   return lines.length ? [header, ...lines].join("\n") : null;
 }

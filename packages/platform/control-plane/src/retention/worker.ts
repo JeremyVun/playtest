@@ -107,7 +107,7 @@ export async function runRetentionCycle(
       await ctx.store.delete(key);
       summary.orphan_objects_deleted += 1;
     }
-    summary.blob_objects_deleted += await gcSnapshotBlobs(ctx);
+    summary.blob_objects_deleted += await gcBlobs(ctx);
   });
   if (!held.acquired) return { ...summary, skipped: true };
   return summary;
@@ -478,13 +478,33 @@ async function pruneSnapshots(tx: Tx): Promise<{ deleted: number }> {
   return { deleted };
 }
 
-async function gcSnapshotBlobs(ctx: AppContext): Promise<number> {
+/**
+ * Reclaim content-addressed blobs nothing names any more.
+ *
+ * `blobs/<sha256>` holds two kinds of content that share one namespace because
+ * they share one property — the bytes ARE the key: suite-snapshot files, and
+ * environment app artifacts. A blob survives while ANY of the three referrers
+ * names it, so an artifact an environment has replaced still lives as long as a
+ * run group pinned it, and history stays re-runnable. Every referrer has to be
+ * listed here: a reader added later and forgotten here would have its objects
+ * deleted out from under it.
+ */
+async function gcBlobs(ctx: AppContext): Promise<number> {
   const keys = await ctx.store.list("blobs/");
   if (!keys.length) return 0;
   const { rows } = await ctx.db.query(`SELECT tree FROM suite_snapshots`);
   const referenced = new Set<string>();
   for (const row of rows) {
     for (const sha of Object.values(row.tree || {})) referenced.add(`blobs/${sha}`);
+  }
+  // Two statements, not a UNION: the row decoder resolves a JSON column from
+  // its ORIGIN table, which a compound select does not report.
+  for (const table of ["environments", "run_groups"]) {
+    const { rows: refs } = await ctx.db.query(`SELECT app_artifact FROM ${table} WHERE app_artifact IS NOT NULL`);
+    for (const row of refs) {
+      const sha = row.app_artifact?.sha256;
+      if (sha) referenced.add(`blobs/${sha}`);
+    }
   }
   let deleted = 0;
   for (const key of keys) {

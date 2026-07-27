@@ -68,6 +68,9 @@ export function makeClient(base: HostedDynamic, { token = null }: HostedDynamic 
     patch: (p: HostedDynamic, b: HostedDynamic) => call("PATCH", p, b),
     del: (p: HostedDynamic, b: HostedDynamic) => call("DELETE", p, b),
     postTar: (p: HostedDynamic, buf: HostedDynamic) => call("POST", p, undefined, { raw: buf, headers: { "content-type": "application/x-tar" } }),
+    /** PUT raw bytes — app-artifact upload, and anything else that is not JSON. */
+    putRaw: (p: HostedDynamic, buf: HostedDynamic) =>
+      call("PUT", p, undefined, { raw: buf, headers: { "content-type": "application/octet-stream" } }),
     withToken: (t: HostedDynamic) => makeClient(base, { token: t }),
   };
 }

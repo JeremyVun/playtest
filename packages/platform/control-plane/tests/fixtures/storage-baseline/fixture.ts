@@ -337,6 +337,9 @@ export const COLUMN_TYPES: HostedDynamic = {
   environments: {
     id: "text", project_id: "text", suite_id: "text", name: "text", config: "json", discovery_allowed: "bool",
     runner_labels: "text[]", created_at: "ts", updated_at: "ts",
+    // Uploaded app binary, by reference (0017). NULL for every web/API target
+    // and for a runner whose build is already a path on its own disk.
+    app_artifact: "json",
   },
   personas: {
     id: "text", project_id: "text", slug: "text", name: "text", description: "text",
@@ -369,6 +372,10 @@ export const COLUMN_TYPES: HostedDynamic = {
     // Per-launch placement pin (0016). NULL means "follow the environment",
     // which is every group nobody pinned.
     runner_labels: "text[]",
+    // The app artifact this launch resolved and pinned (0017). It keeps the
+    // blob alive for as long as the group can be re-run, whatever the
+    // environment holds now.
+    app_artifact: "json",
   },
   executors: {
     id: "text", run_group_id: "text", kind: "text", workflow_run_url: "text", versions: "json",
@@ -593,6 +600,17 @@ export const TABLES: HostedDynamic = {
       },
       discovery_allowed: true,
       runner_labels: ["linux", "chromium"], // Postgres text[]
+      // The build this ring currently ships to whichever runner takes its work
+      // (0017): a reference into the content-addressed blob store, never bytes
+      // and never a URL. `group1` below pins an OLDER upload, which is the
+      // whole point of pinning.
+      app_artifact: {
+        sha256: "a1".repeat(32),
+        size: 48_317_952,
+        filename: "acme-staging.apk",
+        uploaded_at: "2026-02-11T09:14:22.000Z",
+        uploaded_by: IDS.userAdmin,
+      },
       created_at: T.suiteCreated,
       updated_at: T.suiteCreated,
     },
@@ -604,6 +622,7 @@ export const TABLES: HostedDynamic = {
       config: {},
       discovery_allowed: false,
       runner_labels: [], // empty array, not NULL
+      app_artifact: null, // no build of its own
       created_at: T.suiteCreated,
       updated_at: T.suiteCreated,
     },
@@ -618,6 +637,7 @@ export const TABLES: HostedDynamic = {
       config: {},
       discovery_allowed: true,
       runner_labels: [],
+      app_artifact: null,
       created_at: T.suiteCreated,
       updated_at: T.suiteCreated,
     },
@@ -770,6 +790,16 @@ export const TABLES: HostedDynamic = {
       // A CI launch pinned its own build's runner (0016), so this group is
       // placed on these labels however the environment is edited later.
       runner_labels: ["ci-run-900100"],
+      // The build this launch actually ran, pinned at launch (0017). The
+      // environment has since taken a newer upload; this row — and the blob it
+      // keeps alive — still describes what produced the evidence below.
+      app_artifact: {
+        sha256: "b2".repeat(32),
+        size: 47_982_113,
+        filename: "acme-staging.apk",
+        uploaded_at: "2026-02-04T18:02:40.000Z",
+        uploaded_by: IDS.userAdmin,
+      },
       created_at: T.group1,
       updated_at: T.run3End,
     },
@@ -784,6 +814,7 @@ export const TABLES: HostedDynamic = {
       status: "running",
       exit_summary: null,
       runner_labels: null, // unpinned: this group follows its environment
+      app_artifact: null, // this launch resolved its target without an artifact
       created_at: T.group2,
       updated_at: T.group2,
     },

@@ -1,3 +1,4 @@
+import path from "node:path";
 import YAML from "yaml";
 import { ulid } from "../ulid.ts";
 import { audit, actorOf } from "../audit.ts";
@@ -47,6 +48,11 @@ export async function createRunGroup(ctx: HostedDynamic, { principal, project, s
   const cases = selectCases(resolved.cases, selection);
   if (!cases.length) throw badRequest("run selection matched no cases");
   requireDiscoveryAllowed(cases, environment);
+  // Which of the three sources supplies the app binary, decided HERE so a
+  // configuration the runner could never satisfy is refused at the click
+  // instead of surfacing as a crash on someone's laptop ten seconds later.
+  const app = resolveAppTarget(resolved.defaults, environment);
+  requireResolvableApp(app, { environment, snapshotTree: snapshot.tree });
 
   // The snapshot tree carries no results/ dir, so core next_run always says
   // "record" — hosted, the baselines table is the source of truth for whether
@@ -80,8 +86,8 @@ export async function createRunGroup(ctx: HostedDynamic, { principal, project, s
   await ctx.db.withTx(async (tx: HostedDynamic) => {
     await tx.query(
       `INSERT INTO run_groups
-         (id, project_id, suite_id, snapshot_id, environment_id, trigger, selection, status, runner_labels)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'queued', $8)`,
+         (id, project_id, suite_id, snapshot_id, environment_id, trigger, selection, status, runner_labels, app_artifact)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'queued', $8, $9)`,
       [
         groupId,
         project.id,
@@ -91,6 +97,10 @@ export async function createRunGroup(ctx: HostedDynamic, { principal, project, s
         triggerFor(principal, note),
         normalizeSelection(selection),
         runnerLabels,
+        // The artifact hash is pinned exactly when the artifact is what this
+        // launch resolved to — the same immutability rule the snapshot follows,
+        // and what keeps the blob alive for as long as this group can be re-run.
+        app.artifact,
       ],
     );
     for (const r of runs) {
@@ -123,6 +133,7 @@ export async function createRunGroup(ctx: HostedDynamic, { principal, project, s
         // Placement is auditable: a pin says who chose it, the environment's own
         // labels are already readable from the environment.
         ...(runnerLabels ? { runner_labels: runnerLabels } : {}),
+        ...(app.artifact ? { app_artifact: { sha256: app.artifact.sha256, filename: app.artifact.filename } } : {}),
       },
     });
     await emitPlatformEvent(tx, {
@@ -221,9 +232,85 @@ export async function previewRunGroup(ctx: HostedDynamic, { project, suite, envi
       runner_labels: runnerLabels ?? environment.runner_labels ?? [],
       labels_source: runnerLabels ? "launch" : "environment",
     },
-    target: resolveTarget(resolved.defaults, environment),
+    target: {
+      ...resolveTarget(resolved.defaults, environment),
+      // The mobile half of "say the resolution out loud": which of the three
+      // sources supplies the binary, stated before anyone launches.
+      app: resolveAppTarget(resolved.defaults, environment),
+    },
     models: resolveModels(resolved.defaults, project),
   };
+}
+
+/**
+ * Where does this launch's app binary come from? (DESIGN § Three sources for
+ * the binary.) Three sources, one precedence, mirroring the materialization the
+ * runner performs:
+ *
+ * 1. `app.envs.<name>.app` in the suite's own `playtest.yaml` — the suite has
+ *    said something specific about this environment, and specific wins;
+ * 2. the environment: its uploaded artifact if it has one, else the plain
+ *    `app` path in its overlay (a build on the runner's own disk);
+ * 3. the suite's top-level `app.app` — a file committed to the suite tree.
+ *
+ * The artifact's resolved value is its FILENAME, because the path it becomes
+ * only exists once a runner materializes it; the reference travels beside it so
+ * a console can render size and upload time without a second request.
+ */
+export function resolveAppTarget(defaultsYaml: HostedDynamic, environment: HostedDynamic) {
+  let app: HostedDynamic = {};
+  try {
+    app = YAML.parse(defaultsYaml || "")?.app || {};
+  } catch { /* unparseable defaults — the validate path reports that; preview degrades */ }
+  const str = (v: HostedDynamic) => (typeof v === "string" && v.trim() ? v.trim() : null);
+  const suiteEnvApp = str(app?.envs?.[environment.name]?.app);
+  const artifact = environment.app_artifact ?? null;
+  const envApp = str(environment.config?.app?.app);
+  const suiteApp = str(app?.app);
+  const source = suiteEnvApp ? "suite-env" : artifact ? "environment-artifact" : envApp ? "environment" : suiteApp ? "suite" : null;
+  const artifactName: HostedDynamic = artifact?.filename ?? null;
+  return {
+    resolved: suiteEnvApp || artifactName || envApp || suiteApp || null,
+    source,
+    // Present only when the artifact is what won: a group pins what it runs,
+    // and a preview shows what a launch would pin.
+    artifact: source === "environment-artifact" ? artifact : null,
+    suite_app: suiteApp,
+    environment_app: envApp,
+  };
+}
+
+/**
+ * The launch guardrail. A resolved binary that is a SUITE-RELATIVE path the
+ * pinned snapshot does not contain can never be materialized: the runner
+ * receives only the snapshot's files, so the case would die installing a file
+ * that is not there. Refuse it here, naming all three places a binary can come
+ * from, rather than letting it surface as an infrastructure failure on a
+ * machine the person who launched cannot see.
+ *
+ * An absolute path passes through untouched — that is the co-located-runner
+ * case, and this control plane has no business asserting what exists on a disk
+ * it will never see.
+ */
+function requireResolvableApp(app: HostedDynamic, { environment, snapshotTree }: HostedDynamic) {
+  if (!app.resolved || app.source === "environment-artifact") return;
+  if (path.isAbsolute(app.resolved)) return;
+  const rel = path.posix.normalize(app.resolved).replace(/^\.\//, "");
+  if (!rel.startsWith("..") && Object.hasOwn(snapshotTree || {}, rel)) return;
+  const declaredIn =
+    app.source === "suite-env"
+      ? `the suite's own app.envs.${environment.name}.app`
+      : app.source === "environment"
+        ? `environment "${environment.name}"`
+        : `the suite's top-level app.app`;
+  throw badRequest(
+    `this run needs the app binary "${app.resolved}" (${declaredIn}), but that is a path relative to the suite ` +
+      `and the pinned snapshot does not contain it — the runner would have nothing to install. A hosted mobile ` +
+      `run gets its binary from one of three places: commit the file into the suite tree (fine for a small ` +
+      `fixture app, but real builds exceed the suite upload caps); upload it to the environment ` +
+      `(PUT /api/v1/environments/${environment.id}/app-artifact), which is the usual choice; or point the ` +
+      `environment's app overlay at an ABSOLUTE path on the runner's own disk, for a runner sitting beside the build.`,
+  );
 }
 
 /**

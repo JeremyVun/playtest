@@ -14,11 +14,13 @@
 // the runner materializes either as `app.envs.<name>`. Names stay unique per
 // project across both scopes — the name IS the overlay key, so one name means
 // one target inside a project, whoever owns it.
+import { createHash } from "node:crypto";
 import { ulid } from "../ulid.ts";
 import { audit, actorOf } from "../audit.ts";
-import { created, noContent, readJsonBody } from "../http.ts";
+import { created, noContent, readJsonBody, readRawBody } from "../http.ts";
 import { requireAuth, guard, getProjectByKey, getSuite, stringField } from "./util.ts";
-import { badRequest, notFound, conflict } from "../errors.ts";
+import { AppError, badRequest, notFound, conflict } from "../errors.ts";
+import { blobKey } from "../store/object-store.ts";
 
 /**
  * GET /projects/:p/environments — every target in the project, project-owned
@@ -206,6 +208,128 @@ export async function deleteEnvironment(ctx: HostedDynamic) {
   return noContent();
 }
 
+// What an uploaded app binary may be called. The extension is not decoration:
+// the runner materializes a `.zip` by unpacking it (an iOS `.app` is a
+// directory, so it can only travel zipped) and everything else as a file, and
+// core's mobile driver reads the extension too.
+const APP_ARTIFACT_EXTENSIONS = [".apk", ".aab", ".ipa", ".zip"];
+
+/**
+ * PUT /environments/:e/app-artifact?filename=<name> [developer] — the raw bytes
+ * of the app under test.
+ *
+ * Stored content-addressed beside every other blob, so re-uploading identical
+ * bytes writes the same key and is a no-op by construction; the environment
+ * records only the reference. Nothing here touches an in-flight run: a launch
+ * pins the reference it resolved, so replacing the binary changes the NEXT
+ * launch and no earlier one.
+ */
+export async function putAppArtifact(ctx: HostedDynamic) {
+  const p = requireAuth(ctx);
+  const env = await getEnv(ctx);
+  guard(ctx, env.project_id, "developer");
+  const filename = appArtifactFilename(ctx.query.get("filename"));
+  const limit = ctx.config.uploads.appArtifactMaxBytes;
+  let bytes;
+  try {
+    bytes = await readRawBody(ctx.req, { limit });
+  } catch (e: HostedDynamic) {
+    // The generic "body exceeds N bytes" says nothing a person can act on.
+    // Name the cap in megabytes, the variable that raises it, and the way a
+    // build that genuinely cannot be uploaded still runs.
+    if (e instanceof AppError && e.code === "payload_too_large") {
+      throw new AppError(
+        "payload_too_large",
+        `"${filename}" is larger than this deployment's app-artifact cap of ${mib(limit)} MiB. ` +
+          `Raise PLAYTEST_APP_ARTIFACT_MAX_MB on the server, or leave the build on the runner's own ` +
+          `disk and point this environment's app overlay at its absolute path instead.`,
+      );
+    }
+    throw e;
+  }
+  if (!bytes.length) throw badRequest(`the request body was empty — PUT the bytes of "${filename}"`);
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  // Object first, reference second: a reference to a blob that is not there yet
+  // is the one ordering a reader can never recover from.
+  await ctx.store.put(blobKey(sha256), bytes);
+
+  const artifact = {
+    sha256,
+    size: bytes.length,
+    filename,
+    uploaded_at: new Date().toISOString(),
+    uploaded_by: p.kind === "user" ? p.userId : (p.tokenId ?? null),
+  };
+  const updated = await ctx.db.withTx(async (tx: HostedDynamic) => {
+    const { rows } = await tx.query(
+      `UPDATE environments SET app_artifact = $2, updated_at = now() WHERE id = $1 RETURNING *`,
+      [env.id, artifact],
+    );
+    await audit(tx, {
+      actor: actorOf(p),
+      action: "environment.app_artifact_set",
+      entityType: "environment",
+      entityId: env.id,
+      projectId: env.project_id,
+      detail: { name: env.name, sha256, size: artifact.size, filename, replaced: env.app_artifact?.sha256 ?? null },
+    });
+    return rows[0];
+  });
+  const owner = updated.suite_id ? await getSuite(ctx, updated.suite_id).catch(() => null) : null;
+  return envView(withSuite(updated, owner));
+}
+
+/**
+ * DELETE /environments/:e/app-artifact [developer] — clear the reference. The
+ * blob stays until retention's blob GC finds no environment and no pinned run
+ * group naming it, so clearing this never reaches back into run history.
+ * Clearing an environment that has no artifact is a no-op, not an error.
+ */
+export async function deleteAppArtifact(ctx: HostedDynamic) {
+  const p = requireAuth(ctx);
+  const env = await getEnv(ctx);
+  guard(ctx, env.project_id, "developer");
+  if (!env.app_artifact) return noContent();
+  await ctx.db.withTx(async (tx: HostedDynamic) => {
+    await tx.query(`UPDATE environments SET app_artifact = NULL, updated_at = now() WHERE id = $1`, [env.id]);
+    await audit(tx, {
+      actor: actorOf(p),
+      action: "environment.app_artifact_cleared",
+      entityType: "environment",
+      entityId: env.id,
+      projectId: env.project_id,
+      detail: { name: env.name, sha256: env.app_artifact.sha256, filename: env.app_artifact.filename ?? null },
+    });
+  });
+  return noContent();
+}
+
+/** A plain, safe base name with an extension the runner knows how to materialize. */
+function appArtifactFilename(raw: HostedDynamic) {
+  const name = typeof raw === "string" ? raw.trim() : "";
+  if (!name) {
+    throw badRequest(
+      `"filename" is required: name the file being uploaded (for example ?filename=app-release.apk) — ` +
+        `the runner installs it under that name and its extension decides how it is materialized`,
+    );
+  }
+  if (name.length > 200 || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name) || name.includes("..")) {
+    throw badRequest(
+      `"filename" must be a plain file name — letters, digits, dot, dash and underscore only, no directories (got ${JSON.stringify(name)})`,
+    );
+  }
+  const ext = APP_ARTIFACT_EXTENSIONS.find((e) => name.toLowerCase().endsWith(e));
+  if (!ext) {
+    throw badRequest(
+      `"${name}" is not an app binary this platform can materialize (expected ${APP_ARTIFACT_EXTENSIONS.join(", ")}). ` +
+        `An iOS .app is a directory, so upload it zipped — the runner unpacks it.`,
+    );
+  }
+  return name;
+}
+
+const mib = (bytes: number) => Math.round(bytes / (1024 * 1024));
+
 async function getEnv(ctx: HostedDynamic) {
   const { rows } = await ctx.db.query(`SELECT * FROM environments WHERE id = $1`, [ctx.params.e]);
   if (!rows[0]) throw notFound(`no environment "${ctx.params.e}"`);
@@ -241,5 +365,9 @@ const envView = (r: HostedDynamic) => ({
   config: r.config,
   discovery_allowed: r.discovery_allowed,
   runner_labels: r.runner_labels,
+  // The uploaded app binary, by reference only — never a URL and never bytes.
+  // Null for the ordinary case: a web or API target, or a co-located runner
+  // whose build is already a path on its own disk.
+  app_artifact: r.app_artifact ?? null,
   updated_at: r.updated_at,
 });

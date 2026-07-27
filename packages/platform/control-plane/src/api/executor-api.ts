@@ -176,6 +176,11 @@ export async function groupSpec(ctx: HostedDynamic) {
       name: environment.name,
       config: environment.config || {},
       runner_labels: environment.runner_labels || [],
+      // The artifact the LAUNCH pinned, never the environment's current one: a
+      // re-upload while this group is in flight must not change the binary its
+      // remaining cases install. Null means the binary comes from somewhere
+      // else (the suite tree, or a path on the runner's own disk).
+      app_artifact: group.app_artifact ?? null,
       resolved_secrets: await resolvedSecrets(ctx, group.project_id, environment.config || {}),
     },
     sessions: { needed: sessionRefs(environment.config || {}), current: {} },
@@ -253,6 +258,46 @@ export async function blob(ctx: HostedDynamic) {
   const sha = ctx.params.sha256;
   if (!/^[0-9a-f]{64}$/.test(sha)) throw badRequest(`invalid blob sha256 "${sha}"`);
   return new HttpResult({ buffer: await ctx.store.get(blobKey(sha)), contentType: "application/octet-stream" });
+}
+
+/**
+ * GET /runner/artifacts/:sha256 — the app binary this run group pinned at
+ * launch.
+ *
+ * Scoped, not open: a group token fetches the ONE artifact its own group
+ * pinned, so a compromised scoped bearer cannot walk the object store by
+ * guessing hashes. The runner verifies the bytes against the same hash on
+ * arrival, which is what makes the download safe to cache and the store safe to
+ * be wrong about.
+ */
+export async function appArtifact(ctx: HostedDynamic) {
+  const runner = requireRunner(ctx);
+  const sha = ctx.params.sha256;
+  if (!/^[0-9a-f]{64}$/.test(sha)) throw badRequest(`invalid app artifact sha256 "${sha}"`);
+  const group = await getGroup(ctx, runner.run_group_id);
+  const pinned = group.app_artifact;
+  if (!pinned?.sha256) {
+    throw forbidden(
+      `run group "${group.id}" pinned no app artifact — its binary comes from the suite tree or a path on this runner's own disk`,
+    );
+  }
+  if (pinned.sha256 !== sha) {
+    throw forbidden(`run group "${group.id}" pinned a different app artifact than ${sha.slice(0, 12)}`);
+  }
+  try {
+    return new HttpResult({ buffer: await ctx.store.get(blobKey(sha)), contentType: "application/octet-stream" });
+  } catch (e: HostedDynamic) {
+    // Same degradation a pruned bundle gets: say what is gone and how to get a
+    // runnable state back. Never a 500, and never a runner-side crash.
+    if (e?.code === "not_found") {
+      throw notFound(
+        `the app artifact this run group pinned (${pinned.filename ?? "app"}, sha256 ${sha.slice(0, 12)}) is no ` +
+          `longer in the object store. Upload the build to the environment again and launch a new run; this ` +
+          `group's evidence stays readable, but it cannot be re-run from the binary it used.`,
+      );
+    }
+    throw e;
+  }
 }
 
 export async function claim(ctx: HostedDynamic) {

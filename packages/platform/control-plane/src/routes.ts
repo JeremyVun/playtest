@@ -79,6 +79,9 @@ export function buildRouter() {
   r.post(`${v}/projects/:p/environments`, environments.createEnvironment);
   r.put(`${v}/environments/:e`, environments.updateEnvironment);
   r.del(`${v}/environments/:e`, environments.deleteEnvironment);
+  // The app binary an environment ships to whichever runner takes its work.
+  r.put(`${v}/environments/:e/app-artifact`, environments.putAppArtifact);
+  r.del(`${v}/environments/:e/app-artifact`, environments.deleteAppArtifact);
   r.get(`${v}/projects/:p/personas`, personasApi.listPersonas);
   r.post(`${v}/projects/:p/personas`, personasApi.createPersona);
   r.put(`${v}/personas/:id`, personasApi.updatePersona);
@@ -188,6 +191,7 @@ export function buildRouter() {
   r.get(`${v}/runner/groups/:g`, executor.groupSpec);
   r.get(`${v}/runner/snapshots/:id/tree`, executor.snapshotTree);
   r.get(`${v}/runner/blobs/:sha256`, executor.blob);
+  r.get(`${v}/runner/artifacts/:sha256`, executor.appArtifact);
   r.get(`${v}/runner/baselines/:id/trajectory`, executor.baselineTrajectory);
   r.post(`${v}/runner/sessions/claim`, executor.claim);
   r.post(`${v}/runner/sessions/:claim/fulfill`, executor.fulfill);

@@ -2,6 +2,7 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import YAML from "yaml";
+import { materializeAppArtifact } from "./app-artifact.ts";
 
 export async function materializeWorkspace({ api, spec, sessions, failedSessions = {}, workDir }: RunnerDynamic): Promise<RunnerDynamic> {
   const root = path.resolve(workDir, spec.run_group_id);
@@ -33,7 +34,24 @@ export async function materializeWorkspace({ api, spec, sessions, failedSessions
   }
 
   const materialized = await buildEnvironmentOverlay({ spec, sessions, failedSessions, envDir });
-  await mergeOverlay(suiteDir, spec.environment.name, materialized.appOverlay, materialized.authDefault, spec.project?.models);
+  // The environment's pinned app artifact becomes a real file on this disk, and
+  // its absolute path becomes the overlay's `app:` — so core keeps receiving
+  // exactly what the engine contract promises and never learns the provenance.
+  //
+  // Read the suite's own file FIRST: a suite that declares `app.envs.<name>.app`
+  // has said something more specific than the environment did and wins the
+  // merge below anyway, so downloading a build it would discard is pure waste
+  // (and these are hundreds of megabytes).
+  const suiteDoc = await readSuiteDefaults(suiteDir);
+  const suiteEnvApp = suiteDoc.app?.envs?.[spec.environment?.name]?.app;
+  if (spec.environment?.app_artifact?.sha256 && typeof suiteEnvApp !== "string") {
+    materialized.appOverlay.app = await materializeAppArtifact({
+      api,
+      artifact: spec.environment.app_artifact,
+      root,
+    });
+  }
+  await mergeOverlay(suiteDir, suiteDoc, spec.environment.name, materialized.appOverlay, materialized.authDefault, spec.project?.models);
 
   return {
     root,
@@ -110,14 +128,18 @@ function resolveRefs(value: RunnerDynamic, ctx: RunnerDynamic): RunnerDynamic {
   return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, resolveRefs(v, ctx)]));
 }
 
-async function mergeOverlay(suiteDir: string, envName: string, appOverlay: RunnerDynamic, authDefault: RunnerDynamic = null, projectModels: RunnerDynamic = null): Promise<void> {
-  const file = path.join(suiteDir, "playtest.yaml");
-  let data: RunnerDynamic = {};
+/** The materialized suite's root `playtest.yaml`, parsed; `{}` when it has none. */
+async function readSuiteDefaults(suiteDir: string): Promise<RunnerDynamic> {
   try {
-    data = YAML.parse(await fsp.readFile(file, "utf8")) || {};
+    return YAML.parse(await fsp.readFile(path.join(suiteDir, "playtest.yaml"), "utf8")) || {};
   } catch (e: RunnerDynamic) {
     if (e.code !== "ENOENT") throw e;
+    return {};
   }
+}
+
+async function mergeOverlay(suiteDir: string, data: RunnerDynamic, envName: string, appOverlay: RunnerDynamic, authDefault: RunnerDynamic = null, projectModels: RunnerDynamic = null): Promise<void> {
+  const file = path.join(suiteDir, "playtest.yaml");
   // The project's actor/grader defaults fill only UNSET top-level keys, so the
   // whole per-key precedence chain stays intact around them: a case file or a
   // deeper playtest.yaml still wins (nearest wins), the suite's own root value

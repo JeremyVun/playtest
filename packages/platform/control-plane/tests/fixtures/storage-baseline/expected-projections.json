@@ -108,8 +108,11 @@
     "suite_snapshots:01KT67Y60058AHATFD8NSC4VND:tree": "{\"hooks/reset.mjs\":\"0fc29965b0b0c5fd629ab9b9a898ac6a60bbd941b68f58bc2ed9e4e9aacce7f0\",\"personas/shopper.yaml\":\"6cfb0b324e02255a56b084e172d5076e5fd56f50541a6723883a2e3617ff9958\",\"playtest.yaml\":\"28128fd4b66f8425fbc9f652a66f06ce4f74078fb6a900b1e491c6c4c2cd8082\",\"stories/checkout.yaml\":\"11a37ab881c1876f6cf3979b78b7ff2147f1162e68a238ff516037d24775d32e\",\"stories/refund.yaml\":\"077e3b72148d12fb55dbb6072541e977b17d08c90bbdf266fd2bff8186acd2f8\"}",
     "suite_snapshots:01KT3NHF004XEVHFQ4JTB9YS40:tree": "{\"assets/logo.svg\":\"d05c5bfb2ccd524ae83bdca758f52b80c35daf8e3524f2e12d4e3b7d7afbe6f7\"}",
     "environments:01KT1A0F80QSKY5QHGKMKPJ82V:config": "{\"app\":{\"base_url\":\"https://staging.acme.test\",\"viewport\":{\"height\":720,\"width\":1280}},\"auth\":{\"identity\":\"shopper\",\"provider\":\"staging-login\"},\"secret_env\":{\"ACME_API_TOKEN\":\"API_TOKEN\",\"ACME_DB_PASSWORD\":{\"$secret_file\":\"DB_PASSWORD\"}}}",
+    "environments:01KT1A0F80QSKY5QHGKMKPJ82V:app_artifact": "{\"filename\":\"acme-staging.apk\",\"sha256\":\"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\"size\":48317952,\"uploaded_at\":\"2026-02-11T09:14:22.000Z\",\"uploaded_by\":\"01KT16JKM048Y4W817XMX2ZRN8\"}",
     "environments:01KT1A0F80ZKX68FKYVAW43T1X:config": "{}",
+    "environments:01KT1A0F80ZKX68FKYVAW43T1X:app_artifact": null,
     "environments:01KT1A0F806X1XWC7ZZ0BMPG0X:config": "{}",
+    "environments:01KT1A0F806X1XWC7ZZ0BMPG0X:app_artifact": null,
     "auth_providers:01KT1A0F807DESQVV2F3BFRJV7:config": "{\"method\":\"POST\",\"url\":\"https://staging.acme.test/api/session\"}",
     "auth_providers:01KT1A0F807DESQVV2F3BFRJV7:identities": "{\"shopper\":{\"password_secret\":\"API_TOKEN\",\"username\":\"shopper@acme.test\"}}",
     "auth_providers:01KT1A0F80S7KXHWGNNXBVXVDP:config": "{}",
@@ -117,9 +120,11 @@
     "run_groups:01KT6BC1M094RFN90TX6F4BQG8:trigger": "{\"actor\":{\"user_id\":\"01KT16JKM048Y4W817XMX2ZRN8\"},\"kind\":\"ci\",\"ref\":\"refs/heads/main\",\"sha\":\"b7f2c1d9e0a4\"}",
     "run_groups:01KT6BC1M094RFN90TX6F4BQG8:selection": "{\"mode\":\"act\",\"refresh\":false,\"stories\":[\"checkout\",\"refund\"]}",
     "run_groups:01KT6BC1M094RFN90TX6F4BQG8:exit_summary": "{\"changed\":1,\"exit_code\":1,\"fail\":1,\"infra\":0,\"pass\":2}",
+    "run_groups:01KT6BC1M094RFN90TX6F4BQG8:app_artifact": "{\"filename\":\"acme-staging.apk\",\"sha256\":\"b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2\",\"size\":47982113,\"uploaded_at\":\"2026-02-04T18:02:40.000Z\",\"uploaded_by\":\"01KT16JKM048Y4W817XMX2ZRN8\"}",
     "run_groups:01KTV8VCG0GWD48MM99GKX098W:trigger": "{\"actor\":{\"user_id\":\"01KT16JKM0V1JGHMS4X0MA8P4X\"},\"kind\":\"manual\"}",
     "run_groups:01KTV8VCG0GWD48MM99GKX098W:selection": "{\"mode\":\"explore\",\"refresh\":true,\"stories\":[\"checkout\"]}",
     "run_groups:01KTV8VCG0GWD48MM99GKX098W:exit_summary": null,
+    "run_groups:01KTV8VCG0GWD48MM99GKX098W:app_artifact": null,
     "runners:01KT1A0F80Z9DPAKMZ66HMNAVB:source": null,
     "runners:01KT1A0F80GSWXNAGC650KK42D:source": null,
     "runners:01KTV8VCG0VEM070KEP0SCHZ8D:source": "{\"ref\":\"refs/pull/42/merge\",\"repository\":\"acme/storefront\",\"run_attempt\":\"1\",\"run_id\":\"900100\",\"sha\":\"b7f2c1d9e0a4\",\"workflow_ref\":\"acme/storefront/.github/workflows/playtest.yml@refs/pull/42/merge\"}",
@@ -457,7 +462,9 @@
       "01KT67Y60058AHATFD8NSC4VND:note"
     ],
     "environments": [
+      "01KT1A0F806X1XWC7ZZ0BMPG0X:app_artifact",
       "01KT1A0F80QSKY5QHGKMKPJ82V:suite_id",
+      "01KT1A0F80ZKX68FKYVAW43T1X:app_artifact",
       "01KT1A0F80ZKX68FKYVAW43T1X:suite_id"
     ],
     "rule_cards": [
@@ -476,6 +483,7 @@
       "01KT1A0F80S7KXHWGNNXBVXVDP:updated_by"
     ],
     "run_groups": [
+      "01KTV8VCG0GWD48MM99GKX098W:app_artifact",
       "01KTV8VCG0GWD48MM99GKX098W:exit_summary",
       "01KTV8VCG0GWD48MM99GKX098W:runner_labels"
     ],

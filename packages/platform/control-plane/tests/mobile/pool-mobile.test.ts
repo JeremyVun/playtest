@@ -162,8 +162,13 @@ async function waitForServer(timeoutMs: number): Promise<void> {
   }
 }
 
-/** A project holding the mobile fixture suite, pointed at THIS machine's device. */
-async function setUp(api: HostedDynamic, key: string) {
+/**
+ * A project holding the mobile fixture suite, pointed at THIS machine's device.
+ * `withApp: false` leaves the build out of the environment overlay, which is how
+ * the artifact case (R3) declares its target: the ring names the device and the
+ * Appium endpoint, and the binary arrives as an uploaded artifact instead.
+ */
+async function setUp(api: HostedDynamic, key: string, { withApp = true }: HostedDynamic = {}) {
   const project = (await api.post("/projects", { key, name: key })).body;
   const suite = (await api.post(`/projects/${key}/suites`, { slug: "todos", name: "Todos" })).body;
   const files = loadSuiteDir(SUITE_DIR);
@@ -178,10 +183,25 @@ async function setUp(api: HostedDynamic, key: string) {
       // machine — a simulator, a locally spawned Appium server, and a build
       // sitting at an absolute path in this checkout. A remotely hosted control
       // plane could never reach any of the three, and never has to.
-      config: { app: { platform: "ios", app: appPath, device: DEVICE, appium_url: APPIUM_URL } },
+      config: {
+        app: { platform: "ios", device: DEVICE, appium_url: APPIUM_URL, ...(withApp ? { app: appPath } : {}) },
+      },
     })
   ).body;
   return { project, suite, env, files };
+}
+
+/**
+ * Zip a built `.app` the way a person would before uploading it. Info-ZIP's
+ * `zip -y` is deliberate: it records unix modes and stores symlinks as links,
+ * which is what a `.app` needs to survive the round trip and still install.
+ */
+function zipApp(app: string): Buffer {
+  const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "pool-mobile-zip-")), `${path.basename(app)}.zip`);
+  execFileSync("zip", ["-q", "-r", "-y", out, path.basename(app)], { cwd: path.dirname(app), timeout: 300_000 });
+  const bytes = fs.readFileSync(out);
+  fs.rmSync(path.dirname(out), { recursive: true, force: true });
+  return bytes;
 }
 
 /** Start the real agent in pool mode. The credential rides the environment. */
@@ -370,6 +390,102 @@ test("pool: the real agent claims a launched group and runs a mobile suite again
     }, POOL);
   } finally {
     if (agent) await agent.stop();
+    await model.close();
+  }
+});
+
+/**
+ * R3, the other half of the same benchmark: the runner does NOT have the build.
+ *
+ * The binary is uploaded to the environment as a zipped `.app`, a launch pins
+ * its hash, and the runner materializes it into its own workspace before core
+ * discovery — which is the only way a hosted control plane can serve a runner
+ * that is not the machine that produced the build (a cloud runner, a device
+ * farm, a colleague's laptop).
+ *
+ * The proof is deliberately blunt: the build is moved out of the way before the
+ * launch, so the ONE path that could install anything is the copy the runner
+ * materialized. A pass here cannot be a co-located runner quietly finding the
+ * file it already had.
+ */
+test("pool: a mobile suite runs against an environment app artifact the runner materializes into its workspace", async () => {
+  const model = await startScriptedModel(JOURNEY);
+  let agent: HostedDynamic = null;
+  const stashed = `${appPath}.stashed`;
+  try {
+    const zipped = zipApp(appPath);
+    await withApp(async ({ api, base, app }: HostedDynamic) => {
+      const { project, suite, env } = await setUp(api, "poolartifact", { withApp: false });
+
+      const uploaded = await api.putRaw(
+        `/environments/${env.id}/app-artifact?filename=${path.basename(appPath)}.zip`,
+        zipped,
+      );
+      assert.equal(uploaded.status, 200, JSON.stringify(uploaded.body));
+      const sha256 = uploaded.body.app_artifact.sha256;
+      assert.equal(uploaded.body.app_artifact.size, zipped.length);
+
+      const registered = await api.post(`/projects/${project.key}/runners`, { name: "artifact-runner", labels: LABELS });
+      assert.equal(registered.status, 201, JSON.stringify(registered.body));
+      agent = startAgent(base, registered.body.credential, model.baseUrl);
+      await until(
+        async () => (await app.db.query(`SELECT last_seen_at FROM runners WHERE project_id = $1`, [project.id])).rows[0]?.last_seen_at,
+        "the runner to check in",
+        agent,
+        120_000,
+      );
+
+      // Nothing on this machine can install the build from its own path any
+      // more. Whatever runs, runs from the artifact.
+      fs.renameSync(appPath, stashed);
+
+      const launched = await api.post(`/projects/${project.key}/run-groups`, {
+        suite_id: suite.id,
+        environment_id: env.id,
+        selection: { ids: ["seed-todos"] },
+      });
+      assert.equal(launched.status, 200, JSON.stringify(launched.body));
+      const groupId = launched.body.run_group.id;
+
+      // The launch pinned the hash, so a re-upload could not change this group.
+      const pinned = (await app.db.query(`SELECT app_artifact FROM run_groups WHERE id = $1`, [groupId])).rows[0].app_artifact;
+      const pin = typeof pinned === "string" ? JSON.parse(pinned) : pinned;
+      assert.equal(pin.sha256, sha256);
+
+      const done = await until(
+        async () => {
+          const res = await api.get(`/run-groups/${groupId}?wait=true`);
+          return res.body?.status === "done" ? res.body : null;
+        },
+        "the launched group to finish",
+        agent,
+      );
+
+      assert.equal(done.runs.length, 1);
+      assert.equal(
+        done.runs[0].status,
+        "pass",
+        `the mobile journey passed against the materialized artifact: ${done.runs[0].error ?? "no error"}\n${agent.out.stdout}\n${agent.out.stderr}`,
+      );
+      assert.equal(done.exit_summary.exit_code, 0);
+      assert.equal(done.placement.runner.name, "artifact-runner");
+
+      // The suite snapshot still carries only the two authored YAML files: an
+      // artifact is an environment's property, never a suite commit.
+      const group = (await app.db.query(`SELECT snapshot_id FROM run_groups WHERE id = $1`, [groupId])).rows[0];
+      const snapshot = (await app.db.query(`SELECT tree FROM suite_snapshots WHERE id = $1`, [group.snapshot_id])).rows[0];
+      const tree = typeof snapshot.tree === "string" ? JSON.parse(snapshot.tree) : snapshot.tree;
+      assert.deepEqual(Object.keys(tree).sort(), ["playtest.yaml", "stories/seed-todos.yaml"]);
+
+      const configured = (await app.db.query(`SELECT config FROM environments WHERE id = $1`, [env.id])).rows[0].config;
+      const envConfig = typeof configured === "string" ? JSON.parse(configured) : configured;
+      assert.equal(envConfig.app.app, undefined, "the ring named the device, never a path — the binary came from the artifact");
+
+      await agent.stop();
+    }, POOL);
+  } finally {
+    if (agent) await agent.stop();
+    if (fs.existsSync(stashed)) fs.renameSync(stashed, appPath);
     await model.close();
   }
 });

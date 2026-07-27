@@ -118,8 +118,35 @@ simulator and the trajectory lands in the console like any hosted run.
 
 The suite's own **App binary** field is optional and means something narrower: a
 small fixture app committed inside the suite. Real builds are far past the
-hosted upload caps, which is why the environment (a path on the runner today, an
-uploaded artifact in a later phase) is the usual answer.
+suite upload caps, which is why the environment is the usual answer.
+
+### Or upload the build to the environment
+
+A runner that is not the machine that produced the build — a cloud runner, a
+device farm, a colleague's laptop — gets the binary from the environment
+instead:
+
+```sh
+# an iOS .app is a directory, so zip it first (zip -y keeps symlinks and modes)
+cd /Users/ada/build && zip -q -r -y /tmp/Todos.app.zip Todos.app
+
+curl -X PUT \
+  -H "Authorization: Bearer $PLAYTEST_TOKEN" \
+  --data-binary @/tmp/Todos.app.zip \
+  "$PLAYTEST_SERVER/api/v1/environments/$ENV_ID/app-artifact?filename=Todos.app.zip"
+```
+
+Leave `app` out of the environment's config JSON when you do; the ring still
+names `platform`, `device` and `appium_url`. A launch pins the upload's hash, so
+pushing a new build never changes a run already in flight, and the runner
+verifies and unpacks it into its own workspace before the run starts. Uploads
+are capped by the deployment (`PLAYTEST_APP_ARTIFACT_MAX_MB`, 512 MiB by
+default), and `DELETE` on the same URL clears it.
+
+The launch preview says which of the three sources — the suite's
+`app.envs.<name>.app`, the environment (artifact or path), the suite's
+top-level `app` — actually supplies the binary, and a launch whose binary is a
+suite path the snapshot does not hold is refused before anything runs.
 
 ## 5. Local API: a target on `127.0.0.1`
 

@@ -243,7 +243,10 @@ Snapshot blobs are content-addressed and may be shared.
 A launch:
 
 1. resolves and selects cases through core;
-2. validates the requested environment and discovery policy;
+2. validates the requested environment and discovery policy, and resolves the
+   app binary — refusing a suite-relative path the snapshot does not hold
+   (§ The app binary), and pinning the environment's app artifact when that is
+   what won;
 3. pins the suite snapshot and current baselines;
 4. creates a run group plus one run row per selected case;
 5. creates a dispatch ledger entry;
@@ -316,7 +319,7 @@ The runner authenticates and then uses only HTTP:
 
 1. `POST /runner/exchange`
 2. `GET /runner/groups/:group`
-3. snapshot tree, blob, baseline, and session-claim reads
+3. snapshot tree, blob, app-artifact, baseline, and session-claim reads
 4. case start
 5. case progress (optional, throttled)
 6. bundle upload
@@ -335,7 +338,8 @@ scoped to exactly one run group or mint claim; group and mint tokens are not
 interchangeable.
 
 The group spec includes only the selected cases, pinned snapshot, baseline
-references, resolved environment, session requirements, execution limits,
+references, resolved environment (including the app artifact this group pinned,
+if any), session requirements, execution limits,
 concurrency policy, and model configuration needed by that group.
 `selection.max_steps` and
 `selection.timeout_ms` are optional positive-integer, per-story overrides for
@@ -767,11 +771,81 @@ runner materializes the overlay and delegates merge precedence to core.
 
 For a mobile suite the overlay also carries the device target — `config.app`'s
 `platform`, `app`, `device`, and `appium_url` — because all four belong to the
-machine the device is attached to rather than to the suite. `app` is a plain
-path on that runner's own disk: the platform never uploads, stores, or ships an
-app binary, and the suite snapshot carries only the authored suite files. A
-mobile environment is therefore only launchable on a runner whose labels reach
-the machine holding that build.
+machine the device is attached to rather than to the suite. The suite snapshot
+carries only the authored suite files; a binary is never a suite commit.
+
+### The app binary: three sources, one precedence
+
+An app binary can reach a run from exactly three places, and they resolve most
+specific first:
+
+1. the suite's own `app.envs.<name>.app` — the suite said something about this
+   environment, and specific wins;
+2. the environment — its uploaded **app artifact** if it has one, else the plain
+   `app` path in its overlay, which is a path on the runner's own disk;
+3. the suite's top-level `app.app` — a file committed to the suite tree.
+
+The launch preview states the outcome in `target.app`: `resolved`, `source`
+(`suite-env` | `environment-artifact` | `environment` | `suite` | null), the
+losing `suite_app` and `environment_app`, and the `artifact` reference when the
+artifact won — the same say-the-resolution-out-loud rule `base_url` follows.
+
+A launch whose resolved binary is a **suite-relative path the pinned snapshot
+does not contain** is refused with `400 bad_request` naming all three sources.
+The runner receives only the snapshot's files, so such a launch could only fail
+on a machine the person who launched cannot see. An absolute path is never
+checked: the control plane has no business asserting what exists on a runner's
+disk.
+
+### Environment app artifacts
+
+`PUT /api/v1/environments/:e/app-artifact?filename=<name>` (`developer`) uploads
+the raw bytes of the app under test. The file name is required, must be a plain
+base name, and must end in `.apk`, `.aab`, `.ipa`, or `.zip` — an iOS `.app` is
+a directory, so it travels zipped and the runner unpacks it. The bytes are
+stored content-addressed under `blobs/<sha256>`, the same namespace suite files
+use, so re-uploading identical bytes is a no-op by construction; the environment
+records only the reference `{sha256, size, filename, uploaded_at, uploaded_by}`,
+which every environment view carries as `app_artifact` (null when there is
+none). `DELETE` clears the reference and is idempotent. Both audit
+(`environment.app_artifact_set`, `environment.app_artifact_cleared`).
+
+The size cap is deployment configuration — `PLAYTEST_APP_ARTIFACT_MAX_MB`,
+default 512, refused at boot outside 1–4096 — and is deliberately separate from
+the fixed suite-file (4 MiB) and suite-import (64 MiB) caps, which bound text.
+Exceeding it is an actionable `413 payload_too_large` naming the cap in MiB, the
+variable that raises it, and the runner-local-path alternative; nothing partial
+is ever stored. Over-cap uploads are refused with that response rather than a
+dropped connection: the remainder of the request is drained and discarded so the
+refusal actually reaches the client.
+
+A launch **pins** the artifact reference onto the run group when the artifact is
+what it resolved to, so a re-upload cannot change what an in-flight or
+historical group tested — the same immutability rule the suite snapshot follows.
+The group spec serves the pinned reference, never the environment's current one.
+The pin is also what keeps the blob alive: retention's blob GC deletes a
+`blobs/<sha256>` object only when no suite snapshot, no environment, and no run
+group names it.
+
+`GET /runner/artifacts/:sha256` (runner bearer) serves the artifact the
+presenting token's own group pinned, and only that one — a scoped bearer cannot
+walk the object store by guessing hashes. The runner verifies the bytes against
+the pinned hash before installing anything; the control plane serves what is
+stored, so integrity is decided on the machine that will run it. A pinned
+artifact whose object is gone degrades like a pruned bundle: an actionable
+`404`, never a `500` and never a runner-side crash.
+
+The runner materializes the artifact into the case workspace — unpacking a
+zipped bundle with its unix modes and symlinks intact — and writes the resulting
+absolute path into the environment overlay's `app:` before core discovery runs.
+Core keeps receiving `app:` as an absolute local path per the engine contract
+and never learns the provenance. A suite that declares its own
+`app.envs.<name>.app` wins the merge, so the runner does not download a build
+that value would discard.
+
+A mobile environment whose binary is a runner-local path is only launchable on a
+runner whose labels reach the machine holding that build; one that ships an
+artifact is launchable on any runner in the project.
 
 An environment is owned either by the project or by one suite. A project-owned
 environment (`suite_id` null) is a deployment ring every suite may launch
@@ -1509,6 +1583,12 @@ tiers to `meta`, alongside the rest of that run's evidence. Regenerating a clip
 overwrites the previous clip at its deterministic object key, so superseded
 copies do not accumulate, and orphan-object cleanup removes any clip object no
 longer referenced by an artifact row.
+
+Content-addressed blobs (`blobs/<sha256>`) are reclaimed by their own sweep, and
+every referrer counts: a suite snapshot's tree, an environment's `app_artifact`,
+and a run group's pinned `app_artifact`. A build an environment has replaced
+therefore survives while any group that ran with it can still be re-run, and a
+build nobody ever launched against is reclaimed on the next cycle.
 
 Objects whose owning rows were dropped by a schema migration are **not** covered
 by that cleanup, and no shipped tool enumerates or retires them. The

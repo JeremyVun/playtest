@@ -123,6 +123,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     kmsKey: parseKmsKey(env.PLAYTEST_KMS_KEY),
     publicUrl: (env.PUBLIC_URL || `http://127.0.0.1:${Number(env.PORT || 4177)}`).replace(/\/$/, ""),
     logLevel: env.LOG_LEVEL || "info",
+    // Upload ceilings that are a DEPLOYMENT decision rather than a protocol
+    // constant. The suite-file (4 MiB) and suite-import (64 MiB) caps in
+    // http.ts stay fixed, because a suite is text; an environment's app
+    // artifact is a real build and needs its own, much larger, operator-set
+    // ceiling. Exceeding it is an actionable 413 naming this variable, never a
+    // truncated blob.
+    uploads: {
+      appArtifactMaxBytes: num(env.PLAYTEST_APP_ARTIFACT_MAX_MB, 512) * 1024 * 1024,
+    },
     dispatch: {
       maxActivePerProject: Number(env.PLAYTEST_DISPATCH_MAX_ACTIVE_PER_PROJECT || 4),
       // How long the reconciler waits for GitHub's 204 dispatch response to be
@@ -305,6 +314,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     throw new ServerConfigError(
       `PLAYTEST_DISPATCH_CORRELATE_DEADLINE_S must be a number of seconds >= 60 ` +
         `(got ${JSON.stringify(env.PLAYTEST_DISPATCH_CORRELATE_DEADLINE_S)})`,
+    );
+  }
+  // A whole build is buffered in memory to hash it, so the ceiling is bounded at
+  // both ends: below 1 MiB no real binary fits, and above 4 GiB the buffer is
+  // past what a Node Buffer and this deployment's memory can honestly promise.
+  const appArtifactMb = config.uploads.appArtifactMaxBytes / (1024 * 1024);
+  if (!Number.isInteger(appArtifactMb) || appArtifactMb < 1 || appArtifactMb > 4096) {
+    throw new ServerConfigError(
+      `PLAYTEST_APP_ARTIFACT_MAX_MB must be a whole number of megabytes between 1 and 4096 ` +
+        `(got ${JSON.stringify(env.PLAYTEST_APP_ARTIFACT_MAX_MB)}); leave it unset for 512`,
     );
   }
   if (!Number.isFinite(config.retention.intervalMs) || config.retention.intervalMs < 0) {

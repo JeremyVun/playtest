@@ -50,8 +50,17 @@ Plan: [`docs/backlog/self-hosted-runners/BUILD_PLAN.md`](backlog/self-hosted-run
       pins its own `runner_labels` over the environment's, and the reference
       PR-gating workflow lives in `examples/ci-github-actions/` with the recipe
       in [`docs/hosted-runners.md`](hosted-runners.md).
-- [ ] **R3 — Environment app artifacts:** content-addressed APK/.app upload
-      on environments, launch pinning, and runner materialization of `app:`.
+- [x] **R3 — Environment app artifacts:** `PUT`/`DELETE
+      /api/v1/environments/:e/app-artifact` store an APK or a zipped `.app`
+      content-addressed under a deployment cap
+      (`PLAYTEST_APP_ARTIFACT_MAX_MB`, default 512); a launch pins the hash so a
+      re-upload never changes an in-flight or historical group; the runner
+      fetches it through `GET /runner/artifacts/:sha256`, verifies the hash,
+      unpacks a zipped bundle, and writes the local path into the environment
+      overlay's `app:` before core discovery. Precedence (suite-env > environment
+      > suite) is stated in the launch preview's `target.app`, an unreachable
+      suite-relative binary is refused at launch, and an unreferenced blob enters
+      the existing GC.
 - [ ] **R4 — Console surfaces:** runners settings, artifact upload, and
       placement said out loud at launch.
 

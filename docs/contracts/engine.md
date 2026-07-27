@@ -147,7 +147,11 @@ device target (`platform`, `app`, `device`, `appium_url`). It
 shallow-overrides the merged top-level `app` after the defaults chain. The
 mobile device target is per-environment because the app binary, the device and
 the Appium endpoint all belong to the machine the device is attached to — a
-suite stays portable while each environment names its own build. The overlay
+suite stays portable while each environment names its own build. Hosted
+execution may materialize that build before the engine runs — writing the
+overlay's `app` itself from an artifact the platform stores — but the
+engine-visible value is always an absolute local path, and the engine neither
+knows nor cares where it came from. The overlay
 cannot contain driver selection, compose, API configuration, or a nested
 `envs`. Naming an unknown environment reports the available names.
 `--base-url` wins over the selected environment and forces external mode.

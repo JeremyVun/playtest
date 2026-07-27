@@ -55,15 +55,30 @@ export const tar = (buffer: Buffer, filename: string) =>
     headers: { "content-disposition": `attachment; filename="${filename}"` },
   });
 
+/**
+ * Read a body with a hard cap. Over the cap, the accumulated bytes are dropped
+ * and the rest of the request is DRAINED rather than the socket destroyed:
+ * killing the connection mid-upload reaches the client as a reset, and a caller
+ * who gets "connection closed" instead of `payload_too_large` cannot act on
+ * either the cap or the remedy. Memory stays bounded either way — nothing is
+ * kept after the cap — and a sender that keeps pushing long past it (by which
+ * point the refusal has been written) is finally cut off.
+ */
 async function collect(req: IncomingMessage, limit: number): Promise<Buffer> {
   return await new Promise<Buffer>((resolve, reject) => {
-    const chunks: Buffer[] = [];
+    let chunks: Buffer[] = [];
     let size = 0;
+    let discarded = 0;
     req.on("data", (c: Buffer) => {
+      if (size > limit) {
+        discarded += c.length;
+        if (discarded > limit) req.destroy();
+        return;
+      }
       size += c.length;
       if (size > limit) {
+        chunks = [];
         reject(new AppError("payload_too_large", `request body exceeds ${limit} bytes`));
-        req.destroy();
         return;
       }
       chunks.push(c);

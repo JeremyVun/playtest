@@ -47,7 +47,7 @@ import {
 } from "./findings.ts";
 import type { StorageProvider } from "../core/storage-provider.ts";
 
-type DynamicValue = any; // TODO(ts): Commander callbacks and legacy artifact projections remain dynamic at the CLI boundary
+type DynamicValue = any; // SAFETY: Commander callbacks and legacy artifact projections remain dynamic at the CLI boundary
 
 interface HiddenOptionConfig {
   parser?: ((value: string, previous: DynamicValue) => DynamicValue) | null;
@@ -175,11 +175,11 @@ const shellQuote = (s: string) => (/^[A-Za-z0-9@%+=:,./_-]+$/.test(s) ? s : `'${
 // DummyConfigError (exit 2 via run()) instead. `undefined` (flag absent) passes
 // through unchanged; `true` (bare `--parallel`) is the default-pool sentinel.
 const parseCount = <T extends string | number | boolean | undefined>(v: T, label: string): T extends true ? true : number | undefined => {
-  if (v === undefined || v === true) return v as unknown as T extends true ? true : number | undefined; // TODO(ts): the two sentinel branches match the conditional return
+  if (v === undefined || v === true) return v as unknown as T extends true ? true : number | undefined; // SAFETY: the two sentinel branches match the conditional return
   const n = Number(v);
   if (!Number.isInteger(n) || n < 1)
     throw new DummyConfigError(`${label} must be a positive integer (got ${JSON.stringify(v)})`);
-  return n as T extends true ? true : number | undefined; // TODO(ts): every non-sentinel value is validated into a number
+  return n as T extends true ? true : number | undefined; // SAFETY: every non-sentinel value is validated into a number
 };
 
 const parseParallel = (v: string | number | boolean | undefined) => (v === undefined ? null : v === true ? true : Number(v));
@@ -488,7 +488,7 @@ async function promptChanged(pending: DynamicValue[], opts: DynamicValue) {
             // One bad accept must not kill the others or override the run's exit code.
             try {
               acceptRun(res.runDir);
-            } catch (e: any) { // TODO(ts): the CLI preserves legacy stack/message handling for arbitrary thrown values
+            } catch (e: any) { // SAFETY: the CLI preserves legacy stack/message handling for arbitrary thrown values
               console.error(`playtest: ${e instanceof DummyConfigError ? e.message : (e.stack ?? e.message)}`);
             }
           }
@@ -628,7 +628,7 @@ function viewJson(root: string, opts: DynamicValue) {
 
 function singleRunJson(provider: StorageProvider) {
   try {
-    const m = JSON.parse(provider.readText("manifest.json") as string); // TODO(ts): JSON.parse(null) preserves the legacy empty-provider failure path
+    const m = JSON.parse(provider.readText("manifest.json") as string); // SAFETY: JSON.parse(null) preserves the legacy empty-provider failure path
     return [{
       run_id: m.run_id ?? null,
       case_id: m.case?.id ?? null,
@@ -967,8 +967,8 @@ program
       c.persona || "-",
       c.mode === "discovery" ? "explore" : readBaseline(c.file) ? "check" : "record",
     ]);
-    const widths = [0, 1, 2].map((i) => Math.max("ID TAGS PERSONA".split(" ")[i]!.length, ...rows.map((r) => r[i]!.length))); // TODO(ts): fixed headers and rows always contain these columns
-    const line = (r: string[]) => r.map((cell: string, i: number) => (i < 3 ? cell.padEnd(widths[i]!) : cell)).join("  "); // TODO(ts): widths is built for the first three columns
+    const widths = [0, 1, 2].map((i) => Math.max("ID TAGS PERSONA".split(" ")[i]!.length, ...rows.map((r) => r[i]!.length))); // SAFETY: fixed headers and rows always contain these columns
+    const line = (r: string[]) => r.map((cell: string, i: number) => (i < 3 ? cell.padEnd(widths[i]!) : cell)).join("  "); // SAFETY: widths is built for the first three columns
     console.log(line(["ID", "TAGS", "PERSONA", "NEXT-RUN"]));
     for (const r of rows) console.log(line(r));
   }));
@@ -1136,4 +1136,4 @@ program
     console.log(grade.summary);
   }));
 
-program.parseAsync().catch((e: any) => die(e.message)); // TODO(ts): Commander rejection values are treated as Error-like by the existing CLI contract
+program.parseAsync().catch((e: any) => die(e.message)); // SAFETY: Commander rejection values are treated as Error-like by the existing CLI contract

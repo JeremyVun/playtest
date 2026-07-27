@@ -86,7 +86,7 @@ export async function readJsonBody(
       throw new AppError("bad_request", "request body must be a JSON object");
     }
     return parsed;
-  } catch (e: any /* TODO(ts): JSON parse failures expose Error.message at this boundary. */) {
+  } catch (e: any /* SAFETY: JSON parse failures expose Error.message at this boundary. */) {
     if (e instanceof AppError) throw e;
     throw new AppError("bad_request", `invalid JSON body: ${e.message}`);
   }

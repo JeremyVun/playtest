@@ -227,7 +227,7 @@ async function tierFullRuns(
         toSha256: result.sha256,
         dropped: result.dropped,
         tier: "core",
-        policyDays: policy.full_days!, // TODO(ts): The null-retention branch returns before this transaction callback is created.
+        policyDays: policy.full_days!, // SAFETY: The null-retention branch returns before this transaction callback is created.
       });
     });
     count += 1;
@@ -360,7 +360,7 @@ function providerFromBuffer(buf: Buffer): BundleProvider {
   return new BundleProvider({
     readRange: (start: number, end: number) => buf.subarray(start, end + 1),
     size: buf.length
-  } as NonNullable<ConstructorParameters<typeof BundleProvider>[0]>); // TODO(ts): BundleProvider receives size explicitly, so this callback does not need duplicate .size metadata.
+  } as NonNullable<ConstructorParameters<typeof BundleProvider>[0]>); // SAFETY: BundleProvider receives size explicitly, so this callback does not need duplicate .size metadata.
 }
 
 async function recordPrune(
@@ -426,7 +426,7 @@ async function integritySweep(
         failed += 1;
         failures.push({ artifact: a, detail: { key: a.key, expected: a.sha256, actual: sha } });
       }
-  } catch (e: any /* TODO(ts): Object-store failures expose Error.message at this boundary. */) {
+  } catch (e: any /* SAFETY: Object-store failures expose Error.message at this boundary. */) {
       failed += 1;
       failures.push({ artifact: a, detail: { key: a.key, error: e.message } });
     }

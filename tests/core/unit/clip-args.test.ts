@@ -57,8 +57,8 @@ test("slideshowArgs: the list file paces every screenshotted step and repeats th
   assert.equal(frames.length, 2);
   // Two frames plus the trailing repeat the concat demuxer needs for the final
   // duration to be honored at all.
-  assert.equal(list.match(/^file /gm)!.length, 3); // TODO(ts): the fixture always contains file rows
-  assert.equal(list.match(/^duration /gm)!.length, 2); // TODO(ts): the fixture always contains duration rows
+  assert.equal(list.match(/^file /gm)!.length, 3); // SAFETY: the fixture always contains file rows
+  assert.equal(list.match(/^duration /gm)!.length, 2); // SAFETY: the fixture always contains duration rows
   assert.ok(list.includes(path.join(dir, "steps/001.png")));
 });
 

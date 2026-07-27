@@ -107,7 +107,7 @@ type GateFixture = { pass: boolean; hardPass: boolean; checks: LegacyTestValue[]
 
 async function suiteCase() {
   const [rc] = await discoverCases([SUITE], { baseUrl: BASE });
-  return rc!; // TODO(ts): the committed suite always discovers exactly one case
+  return rc!; // SAFETY: the committed suite always discovers exactly one case
 }
 
 // Some rules (the passivity refusal below) are DISCOVERY rules, so they need a
@@ -129,7 +129,7 @@ function writeCase(name: LegacyTestValue, doc: LegacyTestValue, { spec = true }:
 test("the committed web suite resolves: invariant policies and an app.openapi are valid on the web driver", async () => {
   const rc = await suiteCase();
   assert.equal(rc.env.driver, "web");
-  assert.match(rc.env.openapi!, /web-invariants[/\\]openapi\.yaml$/, "the spec resolves relative to the suite"); // TODO(ts): this committed suite declares OpenAPI
+  assert.match(rc.env.openapi!, /web-invariants[/\\]openapi\.yaml$/, "the spec resolves relative to the suite"); // SAFETY: this committed suite declares OpenAPI
   assert.equal(rc.success.filter((c: LegacyTestValue) => c.invariant).length, 4, "four Tier-1 policies gate this web journey");
   assert.equal(rc.observe.length, 1, "and one advisory Tier-2 policy rides along");
 });

@@ -37,7 +37,7 @@
 //     postcondition must actually have evaluated on the healed trajectory.
 import type { StepEnvelope } from "./trajectory.ts";
 
-type DynamicValue = any; // TODO(ts): projected response bodies are arbitrary JSON shapes
+type DynamicValue = any; // SAFETY: projected response bodies are arbitrary JSON shapes
 
 export type HealClassification = "baseline_drift" | "contract_drift" | "regression";
 

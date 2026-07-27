@@ -113,7 +113,6 @@ export {
   scriptVersion,
 } from "../api-suite-scripts/lifecycle.ts";
 export {
-  REVISION_PROMPT_VERSION,
   SCRIPT_DRIFT_REPORT_FILE,
   SCRIPT_DRIFT_REPORT_VERSION,
   SCRIPT_TRIAGE_CLASSIFICATIONS,
@@ -133,13 +132,14 @@ export {
   DEFAULT_OBSERVATION_BUDGET,
   MAX_PROPOSED_CARDS,
   MIN_PROPOSED_CARDS,
-  RULE_PROPOSAL_PROMPT_VERSION,
+  RULE_PROPOSAL_TOOL,
   approvedCardRules,
   buildProposalPrompt,
   normalizeCard,
+  normalizeProposalToolArgs,
   normalizeProposedCards,
   observableOperations,
   observeApi,
-  parseProposalReply,
   renderObservation,
+  validateProposalToolArgs,
 } from "../api-suite-scripts/proposals.ts";

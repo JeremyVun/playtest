@@ -160,8 +160,7 @@ test("two differently worded reports consolidate into one finding with both evid
       assert.equal(f.merged_into, findings[0].id, "the other member is a merge tombstone");
     }
 
-    // Provenance is recomputable: versions and the prompt pin ride on the finding.
-    assert.equal(findings[0].summary.prompt_version, "consolidate-v1");
+    // Retrieval provenance rides on the finding.
     assert.equal(findings[0].summary.shortlist_version, "shortlist-v1");
     assert.equal(findings[0].summary.consolidation_plan_id, plan.id);
   });
@@ -197,7 +196,7 @@ test("distinct defects in the same category stay separate and cost no model call
     const plan: HostedDynamic = await planConsolidation(app.ctx, { project, actor: SYSTEM, callModel: model });
     assert.equal(model.calls.length, 0, "score routing alone: no gateway call");
     assert.equal(plan.usage.calls, 0);
-    assert.equal(plan.prompt_version, null);
+    assert.equal(plan.prompt_version, null, "the legacy column is retained but no longer written");
 
     await app.db.withTx((tx: HostedDynamic) => applyConsolidationPlan(tx, { planRow: plan, decisions: acceptAll(plan), actor: SYSTEM }));
     const findings = (await app.db.query(`SELECT * FROM findings WHERE project_id = $1`, [project.id])).rows;
@@ -480,7 +479,7 @@ test("the whole flow is reachable over HTTP, and reading a plan needs only viewe
     assert.equal(preview.status, 200);
     assert.equal(preview.body.scope.clusters, 1);
     assert.equal(preview.body.scope.unassigned_candidates, 2, "both unreviewed findings are in scope");
-    assert.equal(preview.body.prompt_version, "consolidate-v1");
+    assert.equal("prompt_version" in preview.body, false);
     // The preview alone must not have written anything.
     assert.equal(
       (await app.db.query(`SELECT COUNT(*) AS n FROM consolidation_plans`)).rows[0].n, 0);

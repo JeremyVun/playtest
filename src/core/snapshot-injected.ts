@@ -150,7 +150,7 @@ function buildSnapshot(): { text: string; refCount: number; truncated: boolean }
         if (t.trim()) return clean(t);
       }
       if (el.labels && el.labels.length) {
-        const t = el.labels[0]!.textContent; // TODO(ts): labels.length proves the first associated label exists
+        const t = el.labels[0]!.textContent; // SAFETY: labels.length proves the first associated label exists
         if (t && t.trim()) return clean(t);
       }
       const ph = el.getAttribute('placeholder');
@@ -209,7 +209,7 @@ const isInteractive = (el: SnapshotElement, style: CSSStyleDeclaration): boolean
       if (parentCursor !== 'pointer') {
         let hasDirectText = false;
         for (const n of el.childNodes) {
-          if (n.nodeType === 3 && n.textContent!.trim()) { hasDirectText = true; break; } // TODO(ts): DOM text nodes always expose textContent
+          if (n.nodeType === 3 && n.textContent!.trim()) { hasDirectText = true; break; } // SAFETY: DOM text nodes always expose textContent
         }
         if (hasDirectText) return true;
       }
@@ -438,7 +438,7 @@ const isInteractive = (el: SnapshotElement, style: CSSStyleDeclaration): boolean
     if (belowFold) out.push('(page continues below the fold — scroll down to see more)');
     if (truncated) out.push('(snapshot truncated)');
     return { text: out.join('\n'), refCount, truncated };
-  } catch (e: any) { // TODO(ts): page-side code preserves the message access on arbitrary thrown values
+  } catch (e: any) { // SAFETY: page-side code preserves the message access on arbitrary thrown values
     return { text: 'Page: <snapshot failed: ' + (e && e.message) + '>', refCount: 0, truncated: false };
   }
 }

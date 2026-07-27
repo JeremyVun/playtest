@@ -158,7 +158,7 @@ export function route(
   { autoSuggest = DEFAULT_RETRIEVAL.autoSuggest }: { autoSuggest?: number } = {}
 ): "suggestion" | "new" | "cluster" {
   const findingNeighbors = neighbors.filter((n) => n.role === "finding");
-  if (findingNeighbors.length === 1 && findingNeighbors[0]!.score >= autoSuggest) return "suggestion"; // TODO(ts): The length guard proves this neighbor exists.
+  if (findingNeighbors.length === 1 && findingNeighbors[0]!.score >= autoSuggest) return "suggestion"; // SAFETY: The length guard proves this neighbor exists.
   if (neighbors.length === 0) return "new";
   return "cluster";
 }
@@ -187,9 +187,9 @@ export function clusters(candidateIds: string[], edges: Array<{ a: string; b: st
   for (const id of candidateIds) {
     const root = find(id);
     if (!groups.has(root)) groups.set(root, []);
-    groups.get(root)!.push(id); // TODO(ts): The preceding has/set branch guarantees this group exists.
+    groups.get(root)!.push(id); // SAFETY: The preceding has/set branch guarantees this group exists.
   }
-  return [...groups.values()].map((g) => [...g].sort()).sort((x, y) => x[0]!.localeCompare(y[0]!)); // TODO(ts): Candidate groups are non-empty by construction.
+  return [...groups.values()].map((g) => [...g].sort()).sort((x, y) => x[0]!.localeCompare(y[0]!)); // SAFETY: Candidate groups are non-empty by construction.
 }
 
 /**

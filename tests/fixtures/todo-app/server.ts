@@ -217,7 +217,7 @@ export async function start({ port = 0, variant = null, apiFault = null }: Legac
   const page = pageHtml(variant);
 
   const server = http.createServer(async (req, res) => {
-    const url = new URL(req.url!, "http://localhost"); // TODO(ts): Node requests always carry a URL here
+    const url = new URL(req.url!, "http://localhost"); // SAFETY: Node requests always carry a URL here
     try {
       if (req.method === "GET" && url.pathname === "/") {
         res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
@@ -270,7 +270,7 @@ export async function start({ port = 0, variant = null, apiFault = null }: Legac
     } catch (err: LegacyTestValue) {
       json(res, 400, { error: err.message });
     }
-  }) as Omit<ReturnType<typeof http.createServer>, "address"> & { address(): { port: number } }; // TODO(ts): listening fixture has an AddressInfo result
+  }) as Omit<ReturnType<typeof http.createServer>, "address"> & { address(): { port: number } }; // SAFETY: listening fixture has an AddressInfo result
 
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);

@@ -85,7 +85,7 @@ test("install-skill guards a locally-modified skill behind --force", () => {
     assert.doesNotThrow(() => installSkill({ force: true }), "--force overwrites the local edit");
     assert.equal(
       fs.readFileSync(dest, "utf8"),
-      fs.readFileSync(path.join(SKILLS_DIR, skillNames[0]!, "SKILL.md"), "utf8"), // TODO(ts): packaged skill list is asserted non-empty above
+      fs.readFileSync(path.join(SKILLS_DIR, skillNames[0]!, "SKILL.md"), "utf8"), // SAFETY: packaged skill list is asserted non-empty above
       "--force restores the packaged content",
     );
   });

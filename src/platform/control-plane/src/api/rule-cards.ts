@@ -113,7 +113,7 @@ export async function proposeCards(ctx: HostedDynamic) {
   const inserted: HostedDynamic[] = [];
   await ctx.db.withTx(async (tx: HostedDynamic) => {
     for (const card of result.cards) {
-      const row = await insertRuleCard(tx, { projectId: suite.project_id, suiteId: suite.id, card, promptVersion: result.prompt_version, taken });
+      const row = await insertRuleCard(tx, { projectId: suite.project_id, suiteId: suite.id, card, taken });
       inserted.push(row);
     }
     await audit(tx, {
@@ -122,7 +122,7 @@ export async function proposeCards(ctx: HostedDynamic) {
       entityType: "suite",
       entityId: suite.id,
       projectId: suite.project_id,
-      detail: { count: inserted.length, prompt_version: result.prompt_version, rule_ids: inserted.map((row) => row.rule_id), warnings: result.warnings },
+      detail: { count: inserted.length, rule_ids: inserted.map((row) => row.rule_id), warnings: result.warnings },
     });
     await emitPlatformEvent(tx, {
       projectId: suite.project_id,
@@ -137,7 +137,6 @@ export async function proposeCards(ctx: HostedDynamic) {
     cards: inserted.map(cardView),
     notes: result.notes,
     warnings: result.warnings,
-    prompt_version: result.prompt_version,
     usage: result.usage,
   };
 }

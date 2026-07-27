@@ -168,7 +168,7 @@ test("selectors parse with sane defaults, and every malformed shape is named", (
     { ...parseOperationSelector("response_status", { op: "POST /accounts", status: 201 }), template: undefined },
     { method: "POST", path: "/accounts", template: undefined, status: "201", match: null, occurrence: "all" },
   );
-  assert.equal(parseOperationSelector("response_matches", { op: "GET /a", match: "$.x == 1" })!.occurrence, "last", "body matching defaults to the last response"); // TODO(ts): this valid selector cannot parse to null
+  assert.equal(parseOperationSelector("response_matches", { op: "GET /a", match: "$.x == 1" })!.occurrence, "last", "body matching defaults to the last response"); // SAFETY: this valid selector cannot parse to null
 
   assert.throws(() => parseOperationSelector("response_status", { op: "/accounts", status: "201" }), /method and an OpenAPI-style path/);
   assert.throws(() => parseOperationSelector("response_status", { op: "POST /a" }), /needs a "status"/);

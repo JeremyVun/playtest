@@ -19,20 +19,21 @@ import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { chat, estimateCost } from "../../../../core/public/llm.ts";
+import { estimateCost, forcedToolCall } from "../../../../core/public/llm.ts";
 import {
   LEVEL_0_POLICIES,
-  RULE_PROPOSAL_PROMPT_VERSION,
+  RULE_PROPOSAL_TOOL,
   approvedCardRules,
   buildProposalPrompt,
   normalizeCard,
-  parseProposalReply,
+  normalizeProposalToolArgs,
   resolveSpecSource,
+  validateProposalToolArgs,
 } from "../../../../core/public/api-suite-scripts.ts";
 import { AppError, badRequest } from "../errors.ts";
 import { ulid } from "../ulid.ts";
 
-export { LEVEL_0_POLICIES, RULE_PROPOSAL_PROMPT_VERSION };
+export { LEVEL_0_POLICIES };
 
 /** Card lifecycle, mirrored by the migration's CHECK constraint. */
 export const RULE_CARD_STATES = Object.freeze(["candidate", "approved", "denied"]);
@@ -60,7 +61,6 @@ export function cardView(row: HostedDynamic) {
     note: row.note ?? null,
     edited,
     ...(edited ? { proposed_statement: row.proposed_statement } : {}),
-    prompt_version: row.prompt_version ?? null,
     decided_by: row.decided_by ?? null,
     decided_at: row.decided_at ?? null,
     created_at: row.created_at,
@@ -119,7 +119,7 @@ export function uniqueRuleId(candidate: HostedDynamic, taken: HostedDynamic) {
 }
 
 /** Insert one card. Every write goes through here so the shape is validated once. */
-export async function insertRuleCard(tx: HostedDynamic, { projectId, suiteId, card, promptVersion = null, decidedBy = null, taken }: HostedDynamic) {
+export async function insertRuleCard(tx: HostedDynamic, { projectId, suiteId, card, decidedBy = null, taken }: HostedDynamic) {
   const normalized = normalizeCard(card, { where: "rule card" });
   const ruleId = uniqueRuleId(normalized.id, taken);
   taken.add(ruleId);
@@ -127,8 +127,8 @@ export async function insertRuleCard(tx: HostedDynamic, { projectId, suiteId, ca
   const { rows } = await tx.query(
     `INSERT INTO rule_cards (id, project_id, suite_id, rule_id, state, origin, title, statement,
                              applicability, exceptions, provenance, note, proposed_statement,
-                             prompt_version, decided_by, decided_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+                             decided_by, decided_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
      RETURNING *`,
     [
       id,
@@ -144,7 +144,6 @@ export async function insertRuleCard(tx: HostedDynamic, { projectId, suiteId, ca
       normalized.provenance ?? null,
       normalized.note ?? null,
       normalized.origin === "proposed" ? normalized.statement : null,
-      promptVersion,
       normalized.state === "candidate" ? null : decidedBy,
       normalized.state === "candidate" ? null : Date.now(),
     ],
@@ -215,21 +214,22 @@ export async function proposeRuleCards(ctx: HostedDynamic, { spec, approved = []
   const prompt = buildProposalPrompt({ spec, policies: LEVEL_0_POLICIES, approved, denied, observation, focus });
   let reply;
   try {
-    reply = await chat({
+    reply = await forcedToolCall({
       model,
       messages: [
         { role: "system", content: prompt.system },
         { role: "user", content: prompt.user },
       ],
+      tool: RULE_PROPOSAL_TOOL,
+      validate: validateProposalToolArgs,
       maxTokens: MAX_TOKENS,
     });
   } catch (error: HostedDynamic) {
     throw new AppError("internal", `the model gateway did not respond (${String(error?.message ?? error).split("\n")[0]}) — try again in a moment`, { status: 502 });
   }
-  const parsed = parseProposalReply(reply.text, { deniedIds: denied.map((card: HostedDynamic) => card.id) });
+  const parsed = normalizeProposalToolArgs(reply.args, { deniedIds: denied.map((card: HostedDynamic) => card.id) });
   return {
     ...parsed,
-    prompt_version: prompt.version,
-    usage: { model, ...reply.usage, cost_usd: estimateCost(model, reply.usage) },
+    usage: { model, ...reply.tokens, cost_usd: estimateCost(model, reply.tokens) },
   };
 }

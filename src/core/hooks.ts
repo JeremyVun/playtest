@@ -38,7 +38,8 @@ const cache = new Map<string, HookRegistry>(); // suiteRoot → { beforeEach: fn
  * @returns {Promise<{ beforeEach: ((ctx: object) => unknown)|null }>}
  */
 export async function loadHooks(suiteRoot: string): Promise<HookRegistry> {
-  if (cache.has(suiteRoot)) return cache.get(suiteRoot);
+  const cached = cache.get(suiteRoot);
+  if (cached) return cached;
 
   const file = path.join(suiteRoot, "hooks", "before_each.js");
   if (!fs.existsSync(file)) {
@@ -64,7 +65,9 @@ export async function loadHooks(suiteRoot: string): Promise<HookRegistry> {
     );
   }
 
-  const registry: HookRegistry = { beforeEach };
+  const registry: HookRegistry = {
+    beforeEach: beforeEach as (context: object) => unknown,
+  };
   cache.set(suiteRoot, registry);
   return registry;
 }

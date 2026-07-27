@@ -23,5 +23,5 @@ export async function loadMemberships(db: Db, userId: string): Promise<Map<strin
   const { rows } = await db.query(`SELECT project_id, role FROM memberships WHERE user_id = $1`, [
     userId,
   ]);
-  return new Map(rows.map((r) => [r.project_id, r.role])) as Map<string, string>; // TODO(ts): The selected membership columns are both TEXT.
+  return new Map(rows.map((r) => [r.project_id, r.role])) as Map<string, string>; // SAFETY: The selected membership columns are both TEXT.
 }

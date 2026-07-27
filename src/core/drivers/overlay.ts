@@ -83,7 +83,7 @@ const here = dirname(fileURLToPath(import.meta.url)); // src/core/drivers
 const promptsDir = join(here, "..", "prompts");
 const CANON = JSON.parse(
   readFileSync(join(here, "..", "schemas", "step.schema.json"), "utf8")
-) as CanonicalStepSchema; // TODO(ts): this shipped schema is pinned by driver tests and compiled by Ajv
+) as CanonicalStepSchema; // SAFETY: this shipped schema is pinned by driver tests and compiled by Ajv
 const CANON_FIELDS = CANON.properties.action.properties;
 
 // The verb subset each driver shows the actor, in display order. wait/done/
@@ -176,7 +176,7 @@ function shippedField(id: DriverId, name: FieldName): JsonSchema {
   const { minimum, maximum, default: _default, description: _description, ...rest } = CANON_FIELDS[name];
   if (name === "direction") rest.enum = DIRECTION_ENUM[id];
   const desc = FIELD_DESC[name];
-  rest.description = typeof desc === "string" ? desc : desc[id] as string; // TODO(ts): every driver that ships a scoped field has a matching description
+  rest.description = typeof desc === "string" ? desc : desc[id] as string; // SAFETY: every driver that ships a scoped field has a matching description
   return rest;
 }
 

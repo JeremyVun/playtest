@@ -338,7 +338,7 @@ export async function startScriptProxy({
     server.once("error", reject);
     server.listen(0, "127.0.0.1", resolve as () => void);
   });
-  const { port } = server.address() as DynamicValue; // TODO(ts): the listen callback proves the server has an AddressInfo
+  const { port } = server.address() as DynamicValue; // SAFETY: the listen callback proves the server has an AddressInfo
 
   return {
     endpoint: `http://127.0.0.1:${port}`,

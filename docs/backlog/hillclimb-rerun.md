@@ -115,7 +115,7 @@ The P0 freeze records:
 
 - repository and suite commit SHAs;
 - exact actor and grader route ids plus a gateway route smoke;
-- `PROMPTS_VERSION`, `STEP_SCHEMA_VERSION`, per-driver snapshot format, harness
+- `STEP_SCHEMA_VERSION`, per-driver snapshot format, harness
   version, vision setting, settle policy, and timeout;
 - case ids/personas, repeats, seeds where supported, concurrency, and budget;
 - finding/raise/consolidation schema versions;

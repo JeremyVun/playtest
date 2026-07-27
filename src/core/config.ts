@@ -69,7 +69,7 @@ interface InternalConfig extends Omit<
   [key: string]: unknown;
   env: InternalAppConfig;
   mode: CaseMode;
-  persona?: AuthoredCaseConfig["persona"];
+  persona: Exclude<AuthoredCaseConfig["persona"], undefined>;
   story?: string;
   actor_model: string;
   grader_model: string;
@@ -346,7 +346,7 @@ export async function discoverCases(
   const registryFor = async (caseFile: string): Promise<AssertionRegistry> => {
     const root = suiteRootFor(caseFile);
     if (!registries.has(root)) registries.set(root, await loadAssertions(root));
-    return registries.get(root)!; // TODO(ts): the immediately preceding has() check proves this cache entry exists
+    return registries.get(root)!; // SAFETY: the immediately preceding has() check proves this cache entry exists
   };
 
   const cases: ResolvedCaseDraft[] = [];
@@ -391,7 +391,7 @@ export async function discoverCases(
     ids.length === 0
       ? expanded
       : expanded.filter((c) => ids.some((want) => c.id === want || c.id.startsWith(`${want}@`)));
-  return selected.sort((a, b) => a.id.localeCompare(b.id)) as unknown as ResolvedCase[]; // TODO(ts): resolveCase validates and constructs the exported post-validation union
+  return selected.sort((a, b) => a.id.localeCompare(b.id)) as unknown as ResolvedCase[]; // SAFETY: resolveCase validates and constructs the exported post-validation union
 }
 
 /**
@@ -473,7 +473,7 @@ function isCaseFile(name: string): boolean {
  * is intent). Shared by collectFrom (what to collect) and warnStrays (what to warn).
  */
 async function isCaseShaped(file: string): Promise<boolean> {
-  let doc: any; // TODO(ts): discovery probe reads untrusted YAML and narrows only the story discriminator
+  let doc: any; // SAFETY: discovery probe reads untrusted YAML and narrows only the story discriminator
   try {
     doc = YAML.parse(await fs.readFile(file, "utf8"));
   } catch {
@@ -652,14 +652,15 @@ async function resolveCase(
   let persona = merged.persona;
   let personas; // the discovery fan-out list; never lands on a final ResolvedCase
   if (Array.isArray(persona)) {
+    const authoredPersonas = persona;
     if (merged.mode === "discovery") {
-      personas = persona;
-      persona = persona[0]!; // TODO(ts): the length check above proves this authored persona list has an element
+      personas = authoredPersonas;
+      persona = authoredPersonas[0]!; // SAFETY: the schema requires at least one authored persona
     } else {
-      persona = persona[0]!; // TODO(ts): the length check above proves this inherited persona list has an element
-      if (merged.persona.length > 1) {
+      persona = authoredPersonas[0]!; // SAFETY: the schema requires at least one inherited persona
+      if (authoredPersonas.length > 1) {
         console.warn(
-          `playtest: ${path.relative(process.cwd(), file)}: a journey runs one persona — using "${persona}", ignoring ${merged.persona.slice(1).join(", ")} (set mode: discovery to run every persona).`,
+          `playtest: ${path.relative(process.cwd(), file)}: a journey runs one persona — using "${persona}", ignoring ${authoredPersonas.slice(1).join(", ")} (set mode: discovery to run every persona).`,
         );
       }
     }
@@ -737,7 +738,7 @@ async function resolveCase(
       if (kind === "response_status" || kind === "response_matches") {
         try {
           parseOperationSelector(kind, c[kind]);
-        } catch (e: any) { // TODO(ts): selector validation may throw non-Error values
+        } catch (e: any) { // SAFETY: selector validation may throw non-Error values
           throw new DummyConfigError(`${file}: ${e.message}`);
         }
       }
@@ -749,7 +750,7 @@ async function resolveCase(
         let policy;
         try {
           policy = parseInvariantPolicy(c[kind]);
-        } catch (e: any) { // TODO(ts): policy validation may throw non-Error values
+        } catch (e: any) { // SAFETY: policy validation may throw non-Error values
           throw new DummyConfigError(`${file}: ${e.message}`);
         }
         if (policyNeedsSpec(policy.policy) && !merged.env?.openapi) {
@@ -800,7 +801,7 @@ async function resolveCase(
   let timeout_ms;
   try {
     timeout_ms = parseDuration(timeout);
-  } catch (e: any) { // TODO(ts): duration validation may throw non-Error values
+  } catch (e: any) { // SAFETY: duration validation may throw non-Error values
     throw new DummyConfigError(`${file}: ${e.message}`);
   }
 
@@ -939,7 +940,7 @@ async function resolveCase(
       // input like storage_state — NOT a manifest pin.
       cookies: merged.env.cookies ?? null,
     },
-  } as ResolvedCaseDraft; // TODO(ts): Ajv and the driver checks above establish the discriminated resolved-case draft
+  } as ResolvedCaseDraft; // SAFETY: Ajv and the driver checks above establish the discriminated resolved-case draft
 }
 
 // Default web viewport. width 1280; height 720 captures viewport-only stills
@@ -995,10 +996,10 @@ async function loadYaml(
   file: string,
   validateCase: ValidateFunction = validateCaseBase
 ): Promise<YamlDocument> {
-  let doc: any; // TODO(ts): YAML.parse returns untrusted data narrowed by Ajv below
+  let doc: any; // SAFETY: YAML.parse returns untrusted data narrowed by Ajv below
   try {
     doc = YAML.parse(await fs.readFile(file, "utf8"));
-  } catch (e: any) { // TODO(ts): YAML may throw non-Error values
+  } catch (e: any) { // SAFETY: YAML may throw non-Error values
     throw new DummyConfigError(`${file}: ${e.message}`);
   }
   if (doc == null) return {};
@@ -1030,7 +1031,7 @@ async function loadYaml(
   // Relative paths resolve against the file that declared them. `app` is the
   // mobile binary, `openapi` the api spec — both path-bearing like compose/init.
   if (doc.app && typeof doc.app === "object") {
-    const resolvePaths = (obj: any, keys: string[]): void => { // TODO(ts): mutates schema-validated app and environment overlay maps
+    const resolvePaths = (obj: any, keys: string[]): void => { // SAFETY: mutates schema-validated app and environment overlay maps
       for (const k of keys)
         if (typeof obj[k] === "string") obj[k] = path.resolve(path.dirname(file), obj[k]);
     };
@@ -1064,7 +1065,7 @@ async function loadYaml(
 
 /** Ajv errors -> one friendly line naming each offending key. */
 function describeSchemaErrors(errors: ErrorObject[] | null | undefined): string {
-  const msgs = errors!.map((e) => { // TODO(ts): this formatter is only called after the corresponding Ajv validation fails
+  const msgs = errors!.map((e) => { // SAFETY: this formatter is only called after the corresponding Ajv validation fails
     const at = e.instancePath.slice(1).split("/").join(".");
     if (e.keyword === "additionalProperties") {
       // Success-item keys that aren't a built-in kind and no assertion claims get the

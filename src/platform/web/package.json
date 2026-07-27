@@ -1,0 +1,17 @@
+{
+  "name": "@jeremyvun/playtest-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Hosted Playtest browser console",
+  "type": "module",
+  "engines": {
+    "node": ">=24.18.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node build.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.build.json"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.1"
+  }
+}

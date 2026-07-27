@@ -94,7 +94,7 @@ async function briefLayout() {
   await page.waitForSelector("#strip .cell");
   const order = await page.evaluate(() => {
     // the widen control floats over the panel corner — not part of the content flow
-    const kids = [...document.querySelector("#caption")!.children] // TODO(ts): viewer shell always contains #caption
+    const kids = [...document.querySelector("#caption")!.children] // SAFETY: viewer shell always contains #caption
       .filter((c) => c.tagName !== "BUTTON")
       .map((c) => c.id);
     return { first: kids[0], hasBody: kids.includes("cap-body") };
@@ -116,7 +116,7 @@ async function thoughtOverflow() {
   const m = await page.evaluate(() => {
     const t: LegacyTestValue = document.querySelector("#cap-thought");
     t.textContent = "Lorem ipsum dolor sit amet, consectetur. ".repeat(400); // ~16k chars
-    const strip: LegacyTestValue = document.querySelector("#strip-zone")!.getBoundingClientRect(); // TODO(ts): viewer shell always contains #strip-zone
+    const strip: LegacyTestValue = document.querySelector("#strip-zone")!.getBoundingClientRect(); // SAFETY: viewer shell always contains #strip-zone
     const body: LegacyTestValue = document.querySelector("#cap-body");
     return {
       stripBottom: strip.bottom,
@@ -142,7 +142,7 @@ async function stripOverflow() {
     const strip: LegacyTestValue = document.querySelector("#strip");
     const proto: LegacyTestValue = strip.querySelector(".cell");
     for (let i = 0; i < 40; i++) strip.append(proto.cloneNode(true));
-    const insp: LegacyTestValue = document.querySelector("#inspector")!.getBoundingClientRect(); // TODO(ts): viewer shell always contains #inspector
+    const insp: LegacyTestValue = document.querySelector("#inspector")!.getBoundingClientRect(); // SAFETY: viewer shell always contains #inspector
     return {
       stripOverflows: strip.scrollWidth > strip.clientWidth + 1,
       inspRight: insp.right,
@@ -318,7 +318,7 @@ async function bundleRendering() {
   writeBundle(runDir, full);
   rewriteBundle(full, core, coreBundleKeepPath);
 
-  for (const [tier, bundle] of [["full", full], ["core", core]] as LegacyTestValue) { // TODO(ts): fixed fixture tuples carry string paths
+  for (const [tier, bundle] of [["full", full], ["core", core]] as LegacyTestValue) { // SAFETY: fixed fixture tuples carry string paths
     const bundleServer = await serveRun(bundle, { port: 0, open: false });
     const page = await browser.newPage();
     const errors: LegacyTestValue = [];

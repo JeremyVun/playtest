@@ -152,7 +152,7 @@ export function rewriteBundle(
     .filter((name) => name !== "ptrun.json" && keep(name))
     .sort()
     .map((name) => {
-      const idx = source.index.entries[name]!; // TODO(ts): name comes from Object.keys on this entries object
+      const idx = source.index.entries[name]!; // SAFETY: name comes from Object.keys on this entries object
       const raw = source.readRange(idx.offset, idx.offset + idx.csize - 1);
       return {
         name,
@@ -255,7 +255,7 @@ export class BundleProvider {
     readRange,
     index = null,
     size = readRange.size
-  }: BundleProviderOptions = {} as BundleProviderOptions) { // TODO(ts): the runtime guard preserves the historical missing-readRange error
+  }: BundleProviderOptions = {} as BundleProviderOptions) { // SAFETY: the runtime guard preserves the historical missing-readRange error
     if (typeof readRange !== "function") throw new Error("BundleProvider requires readRange(start, end)");
     this.readRange = readRange;
     this.index = index ?? rebuildIndex(readRange, size);
@@ -689,7 +689,7 @@ function findEocd(tail: Buffer): number {
 
 function crc32(buf: Buffer): number {
   let crc = 0xffffffff;
-  for (const b of buf) crc = CRC_TABLE[(crc ^ b) & 0xff]! ^ (crc >>> 8); // TODO(ts): masking to one byte bounds the lookup to the 256-entry table
+  for (const b of buf) crc = CRC_TABLE[(crc ^ b) & 0xff]! ^ (crc >>> 8); // SAFETY: masking to one byte bounds the lookup to the 256-entry table
   return (crc ^ 0xffffffff) >>> 0;
 }
 

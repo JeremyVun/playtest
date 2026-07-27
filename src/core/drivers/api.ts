@@ -404,8 +404,8 @@ export class ApiDriver implements Driver {
     try {
       const res = await fetch(url, { method: verb, headers, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
       const respHeaders = Object.fromEntries(res.headers.entries());
-      const mime = (respHeaders["content-type"] || "").split(";")[0]!.trim(); // TODO(ts): split always yields a first segment
-      const len = parseInt(respHeaders["content-length"]!, 10); // TODO(ts): parseInt historically receives undefined when the header is absent
+      const mime = (respHeaders["content-type"] || "").split(";")[0]!.trim(); // SAFETY: split always yields a first segment
+      const len = parseInt(respHeaders["content-length"]!, 10); // SAFETY: parseInt historically receives undefined when the header is absent
       const capturable = mime === "" || isTextualMime(mime);
       const tooBig = Number.isFinite(len) && len > MAX_BODY_READ;
       const text = capturable && !tooBig && verb !== "HEAD" ? await res.text().catch(() => "") : "";
@@ -473,7 +473,7 @@ export class ApiDriver implements Driver {
     }
     const body = resolved.body;
     const hasBody = body !== undefined && body !== null && method !== "GET" && method !== "HEAD";
-    const reqBodyText: string | null = hasBody ? (typeof body === "string" ? body : JSON.stringify(body) as string) : null; // TODO(ts): fetch accepts only serializable authored request bodies
+    const reqBodyText: string | null = hasBody ? (typeof body === "string" ? body : JSON.stringify(body) as string) : null; // SAFETY: fetch accepts only serializable authored request bodies
     // app.headers merge UNDER the action's own headers (case-insensitively), so
     // an explicit per-request header still wins over the suite's standing ones.
     const userHeaders = mergeHeaders(this.#headers, resolved.headers);
@@ -504,8 +504,8 @@ export class ApiDriver implements Driver {
       const res = await fetch(url, { method, headers, body: reqBodyText, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
       status = res.status;
       const respHeaders = Object.fromEntries(res.headers.entries());
-      mime = (respHeaders["content-type"] || "").split(";")[0]!.trim(); // TODO(ts): split always yields a first segment
-      const len = parseInt(respHeaders["content-length"]!, 10); // TODO(ts): parseInt historically receives undefined when the header is absent
+      mime = (respHeaders["content-type"] || "").split(";")[0]!.trim(); // SAFETY: split always yields a first segment
+      const len = parseInt(respHeaders["content-length"]!, 10); // SAFETY: parseInt historically receives undefined when the header is absent
       // Capture text/JSON only, and never buffer a body whose declared length
       // exceeds the read cap (binary + huge bodies are recorded by size alone).
       // On the api transport the body IS the actor's observable and the gate's

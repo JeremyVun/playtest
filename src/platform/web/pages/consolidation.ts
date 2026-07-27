@@ -124,7 +124,7 @@ export async function consolidationPage(projectKey: WebDynamic) {
           `thresholds: k=${s.thresholds?.k} · floor=${s.thresholds?.floor} · auto-suggest=${s.thresholds?.auto_suggest}`,
           h("br"),
           `shortlist ${preview.shortlist_version}` +
-          (preview.prompt_version ? ` · prompt ${preview.prompt_version} · model ${preview.model}` : "") +
+          (preview.model ? ` · model ${preview.model}` : "") +
           (s.prompt_bytes ? ` · ${s.prompt_bytes} prompt bytes` : ""))),
     );
 
@@ -254,7 +254,7 @@ export async function consolidationPlanPage(projectKey: WebDynamic, planId: WebD
         h("summary", { style: "cursor:pointer" }, "Technical details"),
         h("div", { style: "margin-top:6px" },
           `shortlist ${plan.shortlist_version} · match text ${plan.match_text_version}` +
-          (plan.prompt_version ? ` · prompt ${plan.prompt_version} · model ${plan.model}` : "") +
+          (plan.model ? ` · model ${plan.model}` : "") +
           ` · k=${plan.thresholds?.k} floor=${plan.thresholds?.floor} auto-suggest=${plan.thresholds?.auto_suggest}`)),
     );
 

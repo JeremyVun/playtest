@@ -48,7 +48,7 @@ function header(name: string, size: number, mtime = 0): Uint8Array {
   // checksum: sum of all bytes with the checksum field treated as spaces.
   for (let i = 148; i < 156; i++) buf[i] = 0x20;
   let sum = 0;
-  for (let i = 0; i < BLOCK; i++) sum += buf[i]!; // TODO(ts): The fixed-size header and loop bounds guarantee this byte exists.
+  for (let i = 0; i < BLOCK; i++) sum += buf[i]!; // SAFETY: The fixed-size header and loop bounds guarantee this byte exists.
   writeField(buf, 148, sum.toString(8).padStart(6, "0") + "\0 ", 8);
   return buf;
 }
@@ -60,7 +60,7 @@ function header(name: string, size: number, mtime = 0): Uint8Array {
 export function writeTar(files: Record<string, string | Buffer>): Buffer {
   const chunks: Buffer[] = [];
   for (const name of Object.keys(files).sort()) {
-    const data = Buffer.isBuffer(files[name]!) ? files[name]! : Buffer.from(files[name]!, "utf8"); // TODO(ts): Object.keys guarantees this indexed entry exists.
+    const data = Buffer.isBuffer(files[name]!) ? files[name]! : Buffer.from(files[name]!, "utf8"); // SAFETY: Object.keys guarantees this indexed entry exists.
     chunks.push(Buffer.from(header(name, data.length)));
     chunks.push(data);
     const pad = (BLOCK - (data.length % BLOCK)) % BLOCK;
@@ -94,7 +94,7 @@ export function readTar(buffer: Buffer | Uint8Array): Record<string, Buffer> {
     // Verify checksum.
     const stored = parseOctal(head.subarray(148, 156));
     let sum = 0;
-    for (let i = 0; i < BLOCK; i++) sum += i >= 148 && i < 156 ? 0x20 : head[i]!; // TODO(ts): The full-header loop guard guarantees this byte exists.
+    for (let i = 0; i < BLOCK; i++) sum += i >= 148 && i < 156 ? 0x20 : head[i]!; // SAFETY: The full-header loop guard guarantees this byte exists.
     if (sum !== stored) throw new Error("corrupt tar: header checksum mismatch");
 
     const name = fieldStr(head, 0, 100);

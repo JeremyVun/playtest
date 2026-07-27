@@ -57,9 +57,9 @@ export function scanHistory(root: string): Map<string, RunHistoryEntry[]> {
     const m = readJsonFile<RunManifest>(path.join(dir, "manifest.json"));
     if (typeof m?.case?.id !== "string" || typeof m.started_at !== "string") continue;
     if (!byCase.has(m.case.id)) byCase.set(m.case.id, []);
-    byCase.get(m.case.id)!.push(manifestToHistoryEntry(m, readJsonFile<{ score?: number }>(path.join(dir, "grade.json"))?.score)); // TODO(ts): the map entry is initialized immediately above when absent
+    byCase.get(m.case.id)!.push(manifestToHistoryEntry(m, readJsonFile<{ score?: number }>(path.join(dir, "grade.json"))?.score)); // SAFETY: the map entry is initialized immediately above when absent
   }
-  for (const list of byCase.values()) list.sort((a, b) => a.started_at!.localeCompare(b.started_at!)); // TODO(ts): only manifests with started_at are admitted to this map
+  for (const list of byCase.values()) list.sort((a, b) => a.started_at!.localeCompare(b.started_at!)); // SAFETY: only manifests with started_at are admitted to this map
   return byCase;
 }
 
@@ -77,7 +77,7 @@ export function latestRun(
     const manifest = readJsonFile<RunManifest>(path.join(dir, "manifest.json"));
     if (typeof manifest?.started_at !== "string") continue;
     if (caseId && manifest.case?.id !== caseId) continue;
-    if (!best || manifest.started_at > best.manifest.started_at!) best = { dir, manifest }; // TODO(ts): best is selected only from manifests with started_at
+    if (!best || manifest.started_at > best.manifest.started_at!) best = { dir, manifest }; // SAFETY: best is selected only from manifests with started_at
   }
   return best;
 }

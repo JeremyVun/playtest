@@ -26,7 +26,7 @@ export class GitHubDispatchClient {
   declare readonly fetch: typeof fetch;
 
   constructor(config: ControlPlaneConfig, { fetchImpl = globalThis.fetch }: { fetchImpl?: typeof fetch } = {}) {
-    this.cfg = config.dispatch.github as GitHubConfig; // TODO(ts): #requireConfigured guards every operation that consumes required GitHub credentials.
+    this.cfg = config.dispatch.github as GitHubConfig; // SAFETY: #requireConfigured guards every operation that consumes required GitHub credentials.
     this.fetch = fetchImpl;
   }
 
@@ -169,7 +169,7 @@ export class GitHubDispatchClient {
     let res: Response;
     try {
       res = await this.fetch(url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-    } catch (e: any /* TODO(ts): Network failures expose Error.message at this boundary. */) {
+    } catch (e: any /* SAFETY: Network failures expose Error.message at this boundary. */) {
       throw new AppError("storage_error", `GitHub API request failed: ${e.message}`, { cause: e });
     }
     if (!expect.includes(res.status)) {

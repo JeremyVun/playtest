@@ -153,7 +153,7 @@ function nameOf(attrs: MobileAttrs): string {
 // Bounding box: iOS carries x/y/width/height; Android a bounds="[x1,y1][x2,y2]".
 function bboxOf(attrs: MobileAttrs): MobileBoundingBox | null {
   if (attrs.x != null && attrs.width != null) {
-    const x = +attrs.x, y = +attrs.y!, w = +attrs.width, h = +attrs.height!; // TODO(ts): the iOS bbox branch historically lets missing y/height become NaN
+    const x = +attrs.x, y = +attrs.y!, w = +attrs.width, h = +attrs.height!; // SAFETY: the iOS bbox branch historically lets missing y/height become NaN
     if ([x, y, w, h].every(Number.isFinite)) return { x, y, w, h };
   }
   const m = /^\[(\d+),(\d+)\]\[(\d+),(\d+)\]$/.exec(attrs.bounds || "");
@@ -297,8 +297,8 @@ export function parsePageSource(
 // so top-level text (a stray hidden caption with no row) never leaks onto an
 // unrelated control.
 const cellOf = (i: number): number => {
-  for (let p = nodes[i]!.parent; p !== -1; p = nodes[p]!.parent) { // TODO(ts): parsed parent indices always point at an existing earlier node
-    if (nodes[p]!.role === "cell") return p; // TODO(ts): p comes from a parsed parent index
+  for (let p = nodes[i]!.parent; p !== -1; p = nodes[p]!.parent) { // SAFETY: parsed parent indices always point at an existing earlier node
+    if (nodes[p]!.role === "cell") return p; // SAFETY: p comes from a parsed parent index
   }
   return -1;
 };
@@ -313,10 +313,10 @@ const cellOf = (i: number): number => {
 // cell still exists as the tree's grouping anchor for text attachment.
 const wrapperCells = new Set<number>();
 for (let i = 0; i < nodes.length; i++) {
-  const n = nodes[i]!; // TODO(ts): loop bounds prove the indexed node exists
+  const n = nodes[i]!; // SAFETY: loop bounds prove the indexed node exists
   if (!INTERACTIVE_ROLES.includes(n.role) || !isActionableInteractive(n.attrs, screen)) continue;
-  for (let p = n.parent; p !== -1; p = nodes[p]!.parent) { // TODO(ts): parsed parent indices always point at an existing earlier node
-    if (nodes[p]!.role === "cell") wrapperCells.add(p); // TODO(ts): p comes from a parsed parent index
+  for (let p = n.parent; p !== -1; p = nodes[p]!.parent) { // SAFETY: parsed parent indices always point at an existing earlier node
+    if (nodes[p]!.role === "cell") wrapperCells.add(p); // SAFETY: p comes from a parsed parent index
   }
 }
 
@@ -329,7 +329,7 @@ let title = "";
 let truncated = false;
 const elementsByCell = new Map<number, SurfacedMobileNode[]>(); // cell index -> surfaced element nodes inside it
 for (let i = 0; i < nodes.length; i++) {
-  const n = nodes[i]!; // TODO(ts): loop bounds prove the indexed node exists
+  const n = nodes[i]!; // SAFETY: loop bounds prove the indexed node exists
   if (/Application$|Window$/.test(n.tag) && !title) title = nameOf(n.attrs) || title;
   if (!INTERACTIVE_ROLES.includes(n.role)) continue;
   if (wrapperCells.has(i)) continue; // a row container around a real control (see wrapperCells)
@@ -369,7 +369,7 @@ for (let i = 0; i < nodes.length; i++) {
 const claimed = new Set<number>();
 const contextByRef = new Map<string, string[]>(); // ref → [text, …]
 for (let i = 0; i < nodes.length; i++) {
-  const n = nodes[i]!; // TODO(ts): loop bounds prove the indexed node exists
+  const n = nodes[i]!; // SAFETY: loop bounds prove the indexed node exists
   if (n.role !== "text") continue;
   const name = nameOf(n.attrs);
   if (!name) continue;
@@ -396,7 +396,7 @@ for (let i = 0; i < nodes.length; i++) {
 // scrolling index — see collapseRuns.
 const rendered: RenderedLine[] = [];
 for (let i = 0; i < nodes.length; i++) {
-  const n = nodes[i]!; // TODO(ts): loop bounds prove the indexed node exists
+  const n = nodes[i]!; // SAFETY: loop bounds prove the indexed node exists
   if (n.role === "text") {
     if (!claimed.has(i) && isVisible(n.attrs) && nameOf(n.attrs)) {
       rendered.push({ display: `text: ${JSON.stringify(nameOf(n.attrs))}` });
@@ -451,13 +451,13 @@ const COLLAPSE_MIN = 3;
 function collapseRuns(rendered: RenderedLine[]): string[] {
   const out: string[] = [];
   for (let i = 0; i < rendered.length; ) {
-    const cur = rendered[i]!; // TODO(ts): the loop condition proves the current rendered line exists
+    const cur = rendered[i]!; // SAFETY: the loop condition proves the current rendered line exists
     let j = i + 1;
-    if (cur.key) while (j < rendered.length && rendered[j]!.key === cur.key) j++; // TODO(ts): the inner loop condition proves the indexed line exists
+    if (cur.key) while (j < rendered.length && rendered[j]!.key === cur.key) j++; // SAFETY: the inner loop condition proves the indexed line exists
     const runLen = j - i;
     out.push(cur.display);
     if (runLen >= COLLAPSE_MIN) {
-      const last = rendered[j - 1]!; // TODO(ts): every collapsed run contains at least the current line
+      const last = rendered[j - 1]!; // SAFETY: every collapsed run contains at least the current line
       const range = cur.ref && last.ref ? ` (${cur.ref}-${last.ref})` : "";
       out.push(`… ${runLen - 1} more like this${range}`);
       i = j;

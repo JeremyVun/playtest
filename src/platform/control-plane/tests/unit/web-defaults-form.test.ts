@@ -1,6 +1,6 @@
 // The Suite settings form's YAML round-trip (src/platform/web/lib/defaults-form.ts).
-// Sibling of web-caseform.test.ts: src/platform/web is buildless browser ESM that
-// also runs under Node, so this offline gate covers the settings model without a
+// Sibling of web-caseform.test.ts: the emitted browser ESM also runs under Node,
+// so this offline gate covers the settings model without a
 // browser. The contract is the same as the story form's — a form edit re-emits
 // only the key it changed, and every other byte (comments, order, unknown keys)
 // survives.

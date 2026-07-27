@@ -36,7 +36,7 @@ function harden({ scriptRoot }: DynamicValue) {
   // this ran, so removing the globals costs the script nothing it should have.
   for (const name of ["fetch", "WebSocket", "EventSource", "XMLHttpRequest", "Request", "Response", "Headers", "FormData", "navigator"]) {
     try {
-      delete globalThis[name as keyof typeof globalThis]; // TODO(ts): sandbox hardening intentionally deletes a dynamic denylist of globals
+      delete globalThis[name as keyof typeof globalThis]; // SAFETY: sandbox hardening intentionally deletes a dynamic denylist of globals
     } catch {}
   }
   // Loader escapes that bypass module hooks.
@@ -47,7 +47,7 @@ function harden({ scriptRoot }: DynamicValue) {
   } catch {}
   for (const name of ["binding", "dlopen", "_linkedBinding"]) {
     try {
-      delete process[name as keyof typeof process]; // TODO(ts): sandbox hardening intentionally deletes a dynamic denylist of process escape hatches
+      delete process[name as keyof typeof process]; // SAFETY: sandbox hardening intentionally deletes a dynamic denylist of process escape hatches
     } catch {}
   }
   // The environment. The parent already spawns the child with a minimal

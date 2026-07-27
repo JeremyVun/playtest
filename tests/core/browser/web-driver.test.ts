@@ -36,7 +36,7 @@ test("web `back` runs page.goBack(): ok, returns to the prior url, classified as
     // back-reachable history entry.
     const away = await driver.execute({ type: "navigate", url: "/?back-test=1" });
     assert.equal(away.ok, true);
-    assert.match(away.url!, /\?back-test=1$/); // TODO(ts): successful navigation records its URL
+    assert.match(away.url!, /\?back-test=1$/); // SAFETY: successful navigation records its URL
 
     // Browser back: must succeed and return to the home url.
     const back = await driver.execute({ type: "back" });
@@ -215,7 +215,7 @@ test("a ref inside a scrollable container scrolls the container, not the page", 
     const scrolled = await driver.execute({ type: "scroll", ref, direction: "down" });
     assert.equal(scrolled.ok, true, scrolled.error ?? "container-anchored scroll failed");
     const { inner, page } = await driver.page.evaluate(() => ({
-      inner: document.querySelector("#list")!.scrollTop, // TODO(ts): test markup always contains #list
+      inner: document.querySelector("#list")!.scrollTop, // SAFETY: test markup always contains #list
       page: window.scrollY,
     }));
     assert.ok(inner > 0, "the enclosing scrollable container moved");

@@ -10,9 +10,13 @@
   "bin": {
     "playtest-server": "./src/index.ts"
   },
+  "dependencies": {
+    "yaml": "^2.7.0"
+  },
   "scripts": {
     "start": "node src/index.ts",
     "migrate": "node src/index.ts migrate",
+    "typecheck": "tsc -p tsconfig.json",
     "test": "node --import ../../../tests/support/hermetic.ts --test tests/unit/*.test.ts",
     "test:integration": "node --import ../../../tests/support/hermetic.ts --test tests/integration/*.test.ts"
   }

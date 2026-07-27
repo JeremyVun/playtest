@@ -67,5 +67,5 @@ test("parsePageSource: Android bounds + content-desc, and never throws on junk",
   const snap: LegacyTestValue = parsePageSource(xml);
   assert.equal(snap.elements.find((e: LegacyTestValue) => e.role === "button").bbox.w, 60);
   assert.doesNotThrow(() => parsePageSource("<not really <xml"));
-  assert.doesNotThrow(() => parsePageSource(null as LegacyTestValue)); // TODO(ts): deliberately invalid input pins runtime tolerance
+  assert.doesNotThrow(() => parsePageSource(null as LegacyTestValue)); // SAFETY: deliberately invalid input pins runtime tolerance
 });

@@ -81,8 +81,8 @@ export function runEvaluation() {
     const spec = f.expected.exact_key;
     if (!spec) continue;
     exactChecked += 1;
-    const inc = f.candidates.find((c) => c.id === spec.incoming)!; // TODO(ts): exact-key fixture ids name candidates in the same fixture
-    const ex = f.candidates.find((c) => c.id === spec.existing)!; // TODO(ts): exact-key fixture ids name candidates in the same fixture
+    const inc = f.candidates.find((c) => c.id === spec.incoming)!; // SAFETY: exact-key fixture ids name candidates in the same fixture
+    const ex = f.candidates.find((c) => c.id === spec.existing)!; // SAFETY: exact-key fixture ids name candidates in the same fixture
     const got = keyMatch(inc, ex);
     if (got.strict !== spec.strict) note(f.id, `strict key: expected ${spec.strict}, got ${got.strict}`);
     if (got.loose !== spec.loose) note(f.id, `loose key: expected ${spec.loose}, got ${got.loose}`);
@@ -94,7 +94,7 @@ export function runEvaluation() {
   let shortlistHits = 0;
   for (const f of FIXTURES) {
     for (const s of f.expected.shortlist || []) {
-      const target = f.candidates.find((c) => c.id === s.of)!; // TODO(ts): shortlist fixture ids name candidates in the same fixture
+      const target = f.candidates.find((c) => c.id === s.of)!; // SAFETY: shortlist fixture ids name candidates in the same fixture
       const neighborIds = neighborsOf(target, idf).map((n) => n.id);
       for (const need of s.must_include || []) {
         shortlistPairs += 1;
@@ -110,7 +110,7 @@ export function runEvaluation() {
   // ---- routing (D5 step 3) ----
   for (const f of FIXTURES) {
     for (const [id, want] of Object.entries(f.expected.routing || {})) {
-      const cand = f.candidates.find((c) => c.id === id)!; // TODO(ts): routing fixture ids name candidates in the same fixture
+      const cand = f.candidates.find((c) => c.id === id)!; // SAFETY: routing fixture ids name candidates in the same fixture
       const got = computedRoute(cand, idf);
       if (got !== want) note(f.id, `routing of ${id}: expected ${want}, got ${got}`);
     }
@@ -127,8 +127,8 @@ export function runEvaluation() {
   const edges: Array<{ a: string; b: string }> = [];
   for (let i = 0; i < clustered.length; i += 1) {
     for (let j = i + 1; j < clustered.length; j += 1) {
-      if (similarity(clustered[i]!, clustered[j]!, idf) >= RETRIEVAL.floor) { // TODO(ts): loop bounds prove both clustered candidates exist
-        edges.push({ a: clustered[i]!.id, b: clustered[j]!.id }); // TODO(ts): loop bounds prove both clustered candidates exist
+      if (similarity(clustered[i]!, clustered[j]!, idf) >= RETRIEVAL.floor) { // SAFETY: loop bounds prove both clustered candidates exist
+        edges.push({ a: clustered[i]!.id, b: clustered[j]!.id }); // SAFETY: loop bounds prove both clustered candidates exist
       }
     }
   }
@@ -137,7 +137,7 @@ export function runEvaluation() {
   const clusterReport = components.map((ids) => ({
     candidate_ids: ids,
     size: ids.length,
-    input_tokens: ids.reduce((sum, id) => sum + estimateTokens(compactClaim(allCandidates().find((c) => c.id === id)!)), 0), // TODO(ts): cluster ids originate from the candidate corpus
+    input_tokens: ids.reduce((sum, id) => sum + estimateTokens(compactClaim(allCandidates().find((c) => c.id === id)!)), 0), // SAFETY: cluster ids originate from the candidate corpus
   }));
   const modelCalls = clusterReport.length;
   const candidatesPerCall = clusterReport.map((c) => c.size);

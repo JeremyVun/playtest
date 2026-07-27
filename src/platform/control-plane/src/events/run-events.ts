@@ -21,7 +21,7 @@ export async function appendRunEvent(
     projectId,
     type: "run.event",
     entity: { run_id: runDbId },
-    payload: { seq: rows[0]!.seq, type, ...payload }, // TODO(ts): INSERT ... RETURNING always produces exactly one row.
+    payload: { seq: rows[0]!.seq, type, ...payload }, // SAFETY: INSERT ... RETURNING always produces exactly one row.
   });
   return rows[0];
 }

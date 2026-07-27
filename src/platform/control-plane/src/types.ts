@@ -4,7 +4,7 @@ import type { ControlPlaneConfig } from "./config.ts";
 import type { FeedWaker } from "./events/feed.ts";
 import type { WriteRateLimiter } from "./rate-limit.ts";
 
-export type DynamicJson = Record<string, any>; // TODO(ts): Route-specific validation narrows untyped JSON request and model response objects.
+export type DynamicJson = Record<string, any>; // SAFETY: Route-specific validation narrows untyped JSON request and model response objects.
 export type LogFields = Record<string, unknown>;
 
 export interface Logger {

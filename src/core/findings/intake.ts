@@ -25,7 +25,7 @@ import { nowIso } from "./ledger.ts";
 import { CATEGORIES, VERSIONS, deriveCandidateKeys } from "./keys.ts";
 import type { Ledger, LedgerRow } from "./ledger.ts";
 
-type DynamicValue = any; // TODO(ts): intake spans validated model claims, persisted SQLite rows, and legacy evidence records
+type DynamicValue = any; // SAFETY: intake spans validated model claims, persisted SQLite rows, and legacy evidence records
 const SEVERITIES = new Set(["info", "minor", "major"]);
 const DISMISS_REASONS = new Set(["not_a_bug", "wont_fix", "duplicate"]);
 const REJECT_REASONS = new Set(["not_a_bug", "wont_fix"]);

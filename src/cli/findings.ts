@@ -30,7 +30,7 @@ import { DummyConfigError } from "../core/public/suite.ts";
 import { promptConfirm } from "./prompt.ts";
 import type { Ledger } from "../core/findings/ledger.ts";
 
-type DynamicValue = any; // TODO(ts): Commander options and findings results remain dynamic at this CLI formatting boundary
+type DynamicValue = any; // SAFETY: Commander options and findings results remain dynamic at this CLI formatting boundary
 
 const PLAN_FILENAME = "consolidation-plan.json";
 const out = (opts: DynamicValue, value: DynamicValue, human: () => void) => {
@@ -189,7 +189,7 @@ async function applyPlanFile(opts: DynamicValue) {
   let plan: DynamicValue;
   try {
     plan = JSON.parse(fs.readFileSync(file, "utf8"));
-  } catch (e: any) { // TODO(ts): JSON parse failures are Error-like values with a message
+  } catch (e: any) { // SAFETY: JSON parse failures are Error-like values with a message
     throw new DummyConfigError(`${file} is not readable JSON: ${String(e.message).split("\n")[0]}`);
   }
   return withLedger(opts, (ledger) => {
@@ -274,8 +274,8 @@ const describeActions = (actions: Record<string, number>) =>
     .join(", ") || "nothing new";
 
 function printTable(headers: string[], rows: string[][]) {
-  const widths = headers.map((h, i) => Math.max(h.length, ...rows.map((r) => r[i]!.length))); // TODO(ts): every rendered row is built with the header's fixed column count
-  const line = (cells: string[]) => cells.map((c, i) => (i === cells.length - 1 ? c : c.padEnd(widths[i]!))).join("  "); // TODO(ts): widths is derived from the same cells
+  const widths = headers.map((h, i) => Math.max(h.length, ...rows.map((r) => r[i]!.length))); // SAFETY: every rendered row is built with the header's fixed column count
+  const line = (cells: string[]) => cells.map((c, i) => (i === cells.length - 1 ? c : c.padEnd(widths[i]!))).join("  "); // SAFETY: widths is derived from the same cells
   console.log(line(headers));
   for (const r of rows) console.log(line(r));
 }

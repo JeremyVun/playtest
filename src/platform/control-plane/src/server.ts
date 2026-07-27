@@ -2,7 +2,7 @@
 // view-server.ts, with a router (routes.ts) in front. Per request: resolve the
 // principal (AuthN), match a route, run the handler, serialize its result, and map
 // any throw to the §2 error envelope (never a stack trace to a client). Non-API GETs
-// fall through to the static web app (src/platform/web), which does its own history-API
+// fall through to the bundled static web app (src/platform/web/build), which does its own history-API
 // routing, so any deep link renders index.html.
 //
 // Every buffered response leaves through response.js (ETag/304 + Accept-Encoding);
@@ -18,7 +18,7 @@ import { limiterKey } from "./rate-limit.ts";
 import { sendBuffered, serveStatic } from "./response.ts";
 import { buildRouter } from "./routes.ts";
 
-const WEB_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../web");
+const WEB_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../web/build");
 
 /**
  * Build the http.Server. `ctx` is the app context: { db, store, config, log,

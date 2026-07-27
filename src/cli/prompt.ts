@@ -79,8 +79,8 @@ export async function promptEnv(names: string[], { input = process.stdin, output
     names.forEach((name, i) => output.write(`  ${i + 1}) ${name}\n`));
     const answer = (await rl.question(`Environment [1-${names.length}, default 1]: `)).trim();
     const n = Number(answer);
-    if (answer !== "" && Number.isInteger(n) && n >= 1 && n <= names.length) return names[n - 1] as string; // TODO(ts): range check guarantees the selected name exists
-    return names[0] as string; // TODO(ts): callers provide a documented non-empty name list
+    if (answer !== "" && Number.isInteger(n) && n >= 1 && n <= names.length) return names[n - 1] as string; // SAFETY: range check guarantees the selected name exists
+    return names[0] as string; // SAFETY: callers provide a documented non-empty name list
   } finally {
     rl.close();
   }

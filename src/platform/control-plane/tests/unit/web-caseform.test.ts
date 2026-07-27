@@ -1,6 +1,6 @@
 // The web story form's YAML round-trip (src/platform/web/lib/caseform.ts). Lives in the
-// server's unit tier because src/platform/web is buildless browser ESM that also runs under
-// Node — this is the only offline gate that covers the web app's form model.
+// server's unit tier because the emitted browser ESM also runs under Node — this
+// is the only offline gate that covers the web app's form model.
 // UX principle 3: the YAML toggle shows the identical bytes a CLI user would commit;
 // a form edit may only re-emit the fields it changed.
 import { test } from "node:test";

@@ -97,7 +97,7 @@ function manifest({ runId, caseId, caseFile, mode, status, startedAt, healed = f
     started_at: startedAt,
     finished_at: new Date(Date.parse(startedAt) + 3000).toISOString(),
     duration_ms: 3000,
-    pins: { harness_version: "0.1.0", driver: "web", prompts_version: "prompts-v8" },
+    pins: { harness_version: "0.1.0", driver: "web" },
     env: { base_url: "http://127.0.0.1:1", managed: false, driver: "web" },
     result: {
       status,
@@ -165,7 +165,7 @@ function writeRun(
 ) {
   const runDir = path.join(root, runId, ...caseId.split("/"));
   fs.mkdirSync(path.join(runDir, "steps"), { recursive: true });
-  const specs = actions.map((a) => ({ ...a, action: { ...a.action } })) as [ActionSpec, ActionSpec, ActionSpec]; // TODO(ts): the fixed three-action fixture preserves tuple length through map
+  const specs = actions.map((a) => ({ ...a, action: { ...a.action } })) as [ActionSpec, ActionSpec, ActionSpec]; // SAFETY: the fixed three-action fixture preserves tuple length through map
   if (changedAction) {
     specs[1].thought = "The UI changed; use the renamed Save action.";
     specs[1].locator = "#save-button";
@@ -196,7 +196,7 @@ function writeRun(
   for (let i = 1; i <= trajectory.length; i++) {
     const n = String(i).padStart(3, "0");
     fs.writeFileSync(path.join(runDir, "steps", `${n}.png`), Buffer.from(PNG_1X1, "base64"));
-    fs.writeFileSync(path.join(runDir, "steps", `${n}.a11y.txt`), trajectory[i - 1]!.snapshot_text + "\n"); // TODO(ts): loop bounds prove the indexed trajectory step exists
+    fs.writeFileSync(path.join(runDir, "steps", `${n}.a11y.txt`), trajectory[i - 1]!.snapshot_text + "\n"); // SAFETY: loop bounds prove the indexed trajectory step exists
   }
   if (baseline) {
     const baseTrack = actions.map((a, i) => envelope(i + 1, a));

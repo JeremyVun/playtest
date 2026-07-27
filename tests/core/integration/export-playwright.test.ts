@@ -44,7 +44,7 @@ function toPlainJs(code: LegacyTestValue) {
 }
 
 function render() {
-  return exportSpec({ caseCfg: CASE, envelopes: ENVELOPES as LegacyTestValue, meta: META, sourcePath: "stories/checkout.yaml" }); // TODO(ts): frozen generator fixture predates the current envelope contract
+  return exportSpec({ caseCfg: CASE, envelopes: ENVELOPES as LegacyTestValue, meta: META, sourcePath: "stories/checkout.yaml" }); // SAFETY: frozen generator fixture predates the current envelope contract
 }
 
 test("the exported spec matches the committed golden byte for byte", () => {

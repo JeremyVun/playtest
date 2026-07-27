@@ -128,7 +128,7 @@ function literalAt(node: unknown, segments: string[]): string | null {
     if (node === undefined || node === null) return null;
     return typeof node === "object" ? JSON.stringify(node) : String(node);
   }
-  const [head, ...tail] = segments;
+  const [head = "", ...tail] = segments;
   if (head === "[*]") {
     if (!Array.isArray(node)) return null;
     for (const v of node) {

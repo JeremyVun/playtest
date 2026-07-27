@@ -28,7 +28,7 @@ import { DummyConfigError } from "../config.ts";
 import { ulid } from "../ulid.ts";
 import type { DatabaseSync } from "node:sqlite";
 
-type DynamicValue = any; // TODO(ts): SQLite rows and statement parameters vary by query at this low-level ledger seam
+type DynamicValue = any; // SAFETY: SQLite rows and statement parameters vary by query at this low-level ledger seam
 export type LedgerRow = Record<string, DynamicValue>;
 
 export interface Ledger {

@@ -34,7 +34,7 @@ const WEB_FIELDS = ["direction", "ref", "reason", "seconds", "submit", "summary"
 test("createDriver rejects an unknown driver with a DummyConfigError naming it", async () => {
   const rc: LegacyTestValue = { env: { driver: "carrier-pigeon", storage_state: null } };
   await assert.rejects(
-    () => createDriver(rc, { baseUrl: "http://x" } as LegacyTestValue, { runDir: "/tmp/x" }), // TODO(ts): incomplete environment reaches unknown-driver validation
+    () => createDriver(rc, { baseUrl: "http://x" } as LegacyTestValue, { runDir: "/tmp/x" }), // SAFETY: incomplete environment reaches unknown-driver validation
     (e) => e instanceof DummyConfigError && /carrier-pigeon/.test(e.message) && /web \| mobile \| api/.test(e.message),
   );
 });
@@ -158,7 +158,7 @@ test("VERB_FIELDS covers every canonical allOf required field (shipped subset ca
     const verbs = t.const ? [t.const] : t.enum;
     for (const verb of verbs) {
       for (const req of branch.then.required) {
-        assert.ok(VERB_FIELDS[verb as keyof typeof VERB_FIELDS].includes(req), `${verb} requires ${req} but VERB_FIELDS omits it`); // TODO(ts): assertion validates schema-derived verb
+        assert.ok(VERB_FIELDS[verb as keyof typeof VERB_FIELDS].includes(req), `${verb} requires ${req} but VERB_FIELDS omits it`); // SAFETY: assertion validates schema-derived verb
       }
     }
   }
@@ -177,7 +177,7 @@ test("normalizeDriver defaults anything unknown (and absent) to web", () => {
 
 test("driver is a comparability pin: web and mobile runs never compare", () => {
   const base = {
-    harness_version: "0.1.0", prompts_version: "prompts-v1", step_schema_version: 3,
+    harness_version: "0.1.0", step_schema_version: 3,
     snapshot_format: "a11y-text-v1", settle: { name: "settle-v1" },
     actor_model: "claude-haiku-4-5", grader_model: "claude-sonnet-4-6", headed: false, vision: false,
   };
@@ -193,7 +193,7 @@ test("driver is a comparability pin: web and mobile runs never compare", () => {
 // shared pin matches — while two runs on the same transport do.
 test("comparablePins: cross-driver never compares, same-driver does (full per-driver pin sets)", () => {
   const common = {
-    harness_version: "0.1.0", prompts_version: "prompts-v1", step_schema_version: 3,
+    harness_version: "0.1.0", step_schema_version: 3,
     actor_model: "claude-haiku-4-5", grader_model: "claude-sonnet-4-6", headed: false, vision: false,
   };
   const web = { ...common, driver: "web", snapshot_format: "a11y-text-v1", settle: { name: "settle-v1" } };

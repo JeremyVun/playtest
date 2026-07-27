@@ -133,7 +133,7 @@ interface CreateDriverOptions {
 export async function createDriver(
   rc: ResolvedCase,
   env: PreparedEnvironment,
-  { runDir, headed = false }: CreateDriverOptions = {} as CreateDriverOptions // TODO(ts): preserves the legacy optional argument while callers supply runDir
+  { runDir, headed = false }: CreateDriverOptions = {} as CreateDriverOptions // SAFETY: preserves the legacy optional argument while callers supply runDir
 ): Promise<Driver> {
   const driver = rc.env?.driver ?? "web";
   switch (driver) {

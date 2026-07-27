@@ -9,8 +9,6 @@ import { caseLine, summary, healDigest, modeDoing, PHASE_DOING } from "../core/p
 import { shortModel } from "../core/public/llm.ts";
 import type { ReportResult, RunTrend } from "../core/report.ts";
 
-type LiveEvent = any; // TODO(ts): runner event payloads do not yet expose a discriminated public event type
-
 interface RetryState {
   status: number | null;
   attempt: number;
@@ -23,6 +21,16 @@ interface TokenState {
   in: number;
   out: number;
 }
+
+type LiveEvent =
+  | { type: "case_start"; caseId: string; mode: string; graderModel?: string | null; actorModel?: string | null; maxSteps: number }
+  | { type: "step_start"; caseId: string; step: number; summary: string }
+  | { type: "retry"; caseId: string; status: number | null; attempt: number; maxAttempts: number; waitMs: number }
+  | { type: "step_result"; caseId: string; costSoFar?: number; tokens?: TokenState; error?: string }
+  | { type: "heal_start" | "heal_resume"; caseId: string }
+  | { type: "phase" | "grading"; caseId: string; phase?: string }
+  | { type: "case_end"; caseId: string; result: ReportResult }
+  | { type: "warn"; caseId: string; message: string };
 
 interface LiveCase {
   id: string;
@@ -157,7 +165,8 @@ export class LiveReporter {
           post: false, // true once a post-actor phase has cleared the summary (no actor action to show)
           tokens: null, // { ctx, in, out } once the first model turn lands
           startedAt: Date.now(),
-        } as LiveCase); // TODO(ts): cost is populated by step results before display
+          cost: 0,
+        });
         this.#draw(true);
         break;
       case "step_start":
@@ -298,7 +307,7 @@ export class LiveReporter {
   // retry countdown), which is the only part that gets clipped. Returns the
   // [vitals, detail] styled rows; #draw flattens them into the live region.
   #line(c: LiveCase, idW: number, modeW: number, width: number) {
-    const head = `${SPINNER[this.#frame] as string} `; // TODO(ts): frame is maintained modulo the non-empty spinner array
+    const head = `${SPINNER[this.#frame] as string} `; // SAFETY: frame is maintained modulo the non-empty spinner array
     const stepText = `step ${c.step}/${c.maxSteps}`;
     const elapsed = `${((Date.now() - c.startedAt) / 1000).toFixed(1)}s`;
     const dollars = c.cost > 0 ? `$${c.cost.toFixed(2)}` : null;

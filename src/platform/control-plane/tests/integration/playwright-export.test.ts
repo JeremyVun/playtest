@@ -86,7 +86,7 @@ async function insertBaseline(app: HostedDynamic, { project, suite, storyId, tra
       storyId,
       version,
       trajectoryKey,
-      JSON.stringify({ run_id: `2026-06-10T030${version}-ab12`, accepted_at: "2026-06-10T03:04:05.000Z", pins: { prompts_version: "prompts-v9" } }),
+      JSON.stringify({ run_id: `2026-06-10T030${version}-ab12`, accepted_at: "2026-06-10T03:04:05.000Z", pins: {} }),
       supersededBy,
     ],
   );

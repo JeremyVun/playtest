@@ -68,7 +68,6 @@ const PREVIEW = {
   requires_model: true,
   model: "sonnet",
   shortlist_version: "shortlist-v1",
-  prompt_version: "consolidate-v1",
   scope: {
     unassigned_candidates: 5, suggestions: 1, proposed_new: 1,
     clusters: 1, clustered_candidates: 2, est_input_tokens: 96, prompt_bytes: 412,

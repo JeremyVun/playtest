@@ -129,7 +129,7 @@ function writeGuarded(file: string, content: string | NodeJS.ArrayBufferView, fo
   }
   try {
     fs.mkdirSync(path.dirname(file), { recursive: true });
-  } catch (e: any) { // TODO(ts): filesystem exceptions are Node ErrnoException values at this boundary
+  } catch (e: any) { // SAFETY: filesystem exceptions are Node ErrnoException values at this boundary
     if (e.code === "EEXIST" || e.code === "ENOTDIR") {
       throw new DummyConfigError(`cannot create ${rel(file)}: ${rel(path.dirname(file))} is not a directory`);
     }
@@ -139,7 +139,7 @@ function writeGuarded(file: string, content: string | NodeJS.ArrayBufferView, fo
   }
   try {
     fs.writeFileSync(file, content);
-  } catch (e: any) { // TODO(ts): filesystem exceptions are Node ErrnoException values at this boundary
+  } catch (e: any) { // SAFETY: filesystem exceptions are Node ErrnoException values at this boundary
     throw new DummyConfigError(`cannot write ${rel(file)}: ${e.code ?? e.message}`);
   }
 }
@@ -265,7 +265,7 @@ function linkSkill(root: string, name: string) {
     fs.rmSync(link, { recursive: true, force: true });
     fs.mkdirSync(path.dirname(link), { recursive: true });
     fs.symlinkSync(target, link, "dir");
-  } catch (e: any) { // TODO(ts): filesystem exceptions are Node ErrnoException values at this boundary
+  } catch (e: any) { // SAFETY: filesystem exceptions are Node ErrnoException values at this boundary
     // e.g. EPERM on Windows without symlink privilege — a friendly message, not a stack.
     throw new DummyConfigError(`cannot link skill ${rel(link)}: ${e.code ?? e.message}`);
   }
@@ -317,7 +317,7 @@ function findTargetDir(): string {
   }
   const found: string[] = [];
   scanForSuites(process.cwd(), found);
-  if (found.length === 1) return found[0] as string; // TODO(ts): length check guarantees the indexed suite exists
+  if (found.length === 1) return found[0] as string; // SAFETY: length check guarantees the indexed suite exists
   if (found.length > 1) {
     throw new DummyConfigError(
       `multiple suites found: ${found.map(rel).join(", ")} — pass a directory: playtest new <name> <dir>`,

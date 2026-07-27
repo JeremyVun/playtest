@@ -216,7 +216,7 @@ export function inferBindings(
   const nameFor = (producer: BindingProducer): string => {
     const key = `${producer.step}|${producer.path}`;
     if (names.has(key)) return names.get(key) as string;
-    const leaf = snake(producer.path.split(".").pop()!.replace(/\[\d+\]$/, "")) || "value"; // TODO(ts): splitting a string always yields at least one segment
+    const leaf = snake(producer.path.split(".").pop()!.replace(/\[\d+\]$/, "")) || "value"; // SAFETY: splitting a string always yields at least one segment
     const base = `${leaf.replace(/[^a-z0-9_]/g, "_")}_${producer.step}`;
     let name = base;
     for (let n = 2; byName.has(name); n++) name = `${base}_${n}`;

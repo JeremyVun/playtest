@@ -61,7 +61,7 @@ test("local keys and match text reproduce the frozen P0 spec over the whole corp
     assert.equal(keys.strict, spec.strictKey(item), `strict key for ${item.id}`);
     assert.equal(keys.loose, spec.looseKey(item), `loose key for ${item.id}`);
     assert.equal(
-      matchText({ category: item.kind, locus: item.locus as LegacyTestValue, claim: item }), // TODO(ts): corpus fixtures include legacy scalar loci
+      matchText({ category: item.kind, locus: item.locus as LegacyTestValue, claim: item }), // SAFETY: corpus fixtures include legacy scalar loci
       spec.matchText(item),
       `match text for ${item.id}`,
     );

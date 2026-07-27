@@ -1,8 +1,8 @@
 /**
- * Transitional boundary type for runner protocol payloads, engine results, and
- * user-authored configuration. T11 can replace these with shared wire schemas.
+ * Explicit unsafe boundary for runner protocol payloads, engine results, and
+ * user-authored configuration. Consumers validate the fields they own.
  */
-type RunnerDynamic = any; // TODO(ts): Runner protocol and engine boundaries need shared validated types after the behavior-frozen conversion.
+type RunnerDynamic = any; // SAFETY: protocol compatibility includes historical payload shapes validated at their consumers.
 
 interface String {
   /** JavaScript split always returns at least one element, including for an empty string. */

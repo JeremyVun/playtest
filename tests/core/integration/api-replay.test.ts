@@ -134,19 +134,19 @@ test("an acted API journey replays against fresh instances with new ids, repeate
   const program = JSON.stringify(envelopes.map((e) => actionOf(e)));
   assert.ok(!program.includes(ACCOUNT_A), `no literal id may survive into a recorded action: ${program}`);
   const activate: LegacyTestValue = envelopes.find((e) => actionOf(e)?.path?.includes("/activate"));
-  assert.equal(actionOf<LegacyTestValue>(activate)!.path, "/accounts/{{id_1}}/activate", "a path segment binds"); // TODO(ts): fixture lookup above proves the action exists
+  assert.equal(actionOf<LegacyTestValue>(activate)!.path, "/accounts/{{id_1}}/activate", "a path segment binds"); // SAFETY: fixture lookup above proves the action exists
   assert.deepEqual(activate.bindings, [{ name: "id_1", from_step: 1, from: "$.id", into: ["path"] }], "every substitution cites its producer step and path");
   const entry: LegacyTestValue = envelopes.find((e) => actionOf(e)?.path === "/entries" && actionOf(e)?.method === "POST");
-  assert.equal(actionOf<LegacyTestValue>(entry)!.body.account_id, "{{id_1}}", "a JSON body field binds"); // TODO(ts): fixture lookup above proves the action exists
-  assert.equal(actionOf<LegacyTestValue>(entry)!.headers["X-Account-Id"], "{{id_1}}", "a header value binds"); // TODO(ts): fixture lookup above proves the action exists
+  assert.equal(actionOf<LegacyTestValue>(entry)!.body.account_id, "{{id_1}}", "a JSON body field binds"); // SAFETY: fixture lookup above proves the action exists
+  assert.equal(actionOf<LegacyTestValue>(entry)!.headers["X-Account-Id"], "{{id_1}}", "a header value binds"); // SAFETY: fixture lookup above proves the action exists
   assert.deepEqual(entry.bindings[0].into.sort(), ["body.account_id", "headers.X-Account-Id"], "each substitution site is recorded");
   const list: LegacyTestValue = envelopes.find((e) => actionOf(e)?.path?.startsWith("/entries?"));
-  assert.equal(actionOf<LegacyTestValue>(list)!.path, "/entries?account={{id_1}}", "a query value binds"); // TODO(ts): fixture lookup above proves the action exists
+  assert.equal(actionOf<LegacyTestValue>(list)!.path, "/entries?account={{id_1}}", "a query value binds"); // SAFETY: fixture lookup above proves the action exists
   assert.equal(entry.expect.status, 201, "the exact status the step observed is recorded");
   // Client-authored and non-identifier values are NOT bound: over-eager binding
   // corrupts a replay silently, which is worse than a brittle one failing loudly.
   const create: LegacyTestValue = envelopes.find((e) => actionOf(e)?.method === "POST" && actionOf(e)?.path === "/accounts");
-  assert.equal(actionOf<LegacyTestValue>(create)!.body.owner, "ada", "the client's own input stays literal"); // TODO(ts): fixture lookup above proves the action exists
+  assert.equal(actionOf<LegacyTestValue>(create)!.body.owner, "ada", "the client's own input stays literal"); // SAFETY: fixture lookup above proves the action exists
   assert.equal(create.bindings, undefined, "a step that binds nothing carries no bindings field");
 
   // --- act three times, each against a brand-new instance minting different

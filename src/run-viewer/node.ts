@@ -24,9 +24,8 @@ import {
 
 export { findManifests, manifestToHistoryEntry, readJsonFile };
 
-type ViewerValue = any; // TODO(ts): viewer projections intentionally accept legacy manifest and grade shapes
-
 interface ViewerManifest extends RunManifest {
+  score?: number | null;
   baseline_scan?: { blocked?: boolean };
   case?: {
     id?: string;
@@ -120,10 +119,10 @@ export async function serveRun(dir: string, { port = 0, open = true, query = "" 
   const server = http.createServer((req, res) => {
     try {
       handle(req, res, root, singleRun, provider);
-    } catch (e: any) { // TODO(ts): route failures preserve the existing Error-like message response
+    } catch (e: any) { // SAFETY: route failures preserve the existing Error-like message response
       res.writeHead(500, { "content-type": "text/plain" }).end(`error: ${e.message}`);
     }
-  }) as TcpServer; // TODO(ts): this server listens only on a TCP host/port, never a Unix socket
+  }) as TcpServer; // SAFETY: this server listens only on a TCP host/port, never a Unix socket
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
     // Loopback-only by default; PLAYTEST_VIEW_HOST=0.0.0.0 makes the server
@@ -141,7 +140,7 @@ function handle(req: IncomingMessage, res: ServerResponse, root: string, singleR
   if (req.method !== "GET" && req.method !== "HEAD") {
     return res.writeHead(405).end();
   }
-  const u = new URL(req.url as string, "http://localhost"); // TODO(ts): Node server requests always carry a URL
+  const u = new URL(req.url as string, "http://localhost"); // SAFETY: Node server requests always carry a URL
   let pathname;
   try {
     pathname = decodeURIComponent(u.pathname);
@@ -270,11 +269,11 @@ function findManifestsVia(provider: StorageProvider, maxDepth = 6) {
 }
 
 /** Provider-routed JSON read: null on a missing/unparseable file, never throws. */
-function readJson(provider: StorageProvider, rel: string): ViewerValue {
+function readJson(provider: StorageProvider, rel: string): ViewerManifest | null {
   const text = provider.readText(rel);
   if (text === null) return null;
   try {
-    return JSON.parse(text);
+    return JSON.parse(text) as ViewerManifest; // SAFETY: consumers project optional fields and tolerate every missing legacy field.
   } catch {
     return null;
   }

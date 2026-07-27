@@ -41,7 +41,7 @@ export async function startAuthApi({ token }: LegacyTestValue) {
   const requests: LegacyTestValue = []; // what the server actually received, for assertions
 
   const server = http.createServer(async (req, res) => {
-    const url = new URL(req.url!, "http://127.0.0.1"); // TODO(ts): Node requests always carry a URL here
+    const url = new URL(req.url!, "http://127.0.0.1"); // SAFETY: Node requests always carry a URL here
     const auth = req.headers.authorization ?? "";
     requests.push({ method: req.method, path: url.pathname, headers: { ...req.headers } });
 

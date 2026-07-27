@@ -12,7 +12,7 @@ test("initialQuietMs derives a first-settle window when override is absent", () 
 });
 
 test("manifestToHistoryEntry returns the movement history shape", () => {
-  const pins = { step_schema_version: 7, prompts_version: "prompts-v8" };
+  const pins = { step_schema_version: 7 };
   const entry = manifestToHistoryEntry(
     {
       run_id: "2026-07-04T0000-abcd",

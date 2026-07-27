@@ -30,7 +30,7 @@
 // algorithm carries an explicit version that is stored on each row.
 import crypto from "node:crypto";
 
-type DynamicValue = any; // TODO(ts): local findings accept legacy candidate payloads before schema-normalized persistence
+type DynamicValue = any; // SAFETY: local findings accept legacy candidate payloads before schema-normalized persistence
 
 export interface FindingLocus {
   route?: string | null;

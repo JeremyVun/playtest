@@ -15,7 +15,7 @@ import { findRunsRoot, latestRun } from "./runs-root.ts";
 import { readTrajectory } from "./trajectory.ts";
 import { AUTOPLAY_MS } from "./shared/timing.ts";
 
-type DynamicValue = any; // TODO(ts): legacy manifests and envelopes vary across artifact schema versions
+type DynamicValue = any; // SAFETY: legacy manifests and envelopes vary across artifact schema versions
 
 export interface ClipCue {
   start: number;

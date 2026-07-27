@@ -55,8 +55,8 @@ npm link                 # puts `playtest` on your PATH
 playtest install-skill   # optional: teach your coding agent to drive it (run inside your project)
 ```
 
-`npm install` also emits the browser JavaScript used by the trajectory viewer
-and hosted console. Run `npm run build:web` after changing their TypeScript
+`npm install` also emits the trajectory viewer's browser modules and bundles
+the hosted console. Run `npm run build:web` after changing their TypeScript
 sources if you are not entering through a test or server command that builds
 them automatically.
 
@@ -547,7 +547,7 @@ have never recorded a saved path.
 database, or Docker. It runs separately named core, CLI, run-viewer, and repository suites;
 those groups can also be run directly with `npm run test:core`, `test:cli`, `test:viewer`,
 or `test:repository`. `npm run typecheck` checks every strict TypeScript project,
-and `npm run build:web` emits the browser-served modules in place. `npm run test:browser` runs the explicit Playwright suites;
+and `npm run build:web` emits the viewer modules and bundles the hosted console. `npm run test:browser` runs the explicit Playwright suites;
 install its browser once with `npx playwright install chromium`. `npm run test:all` runs
 both tiers. The example app runs with
 `PORT=4173 node examples/todo-app/server.js`. Hosted control plane (not in the published package):
@@ -558,7 +558,8 @@ metadata is one SQLite file under `PLAYTEST_DATA_DIR` (default `.playtest-data`)
 launcher, unlike the CLI, sources a gitignored repo-root `.env` so a local server
 picks up the model gateway; it also reclaims its port from a stale server and
 reports what is configured. Its default
-test command runs unit tests; `npm --prefix src/platform/control-plane run test:integration`
+test command runs unit tests;
+`npm run test:integration --workspace=@jeremyvun/playtest-control-plane`
 boots the whole control plane against temporary SQLite data roots. Deterministic
 test applications and suites live under `tests/fixtures/`; `examples/` remains
 user-facing and independently deletable.

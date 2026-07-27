@@ -16,7 +16,7 @@ import {
   negotiateEncoding,
 } from "../../src/response.ts";
 
-const WEB_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../web");
+const WEB_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../web/build");
 
 /** A JSON body comfortably over the 1 KiB compression floor and very compressible. */
 const BIG = { items: Array.from({ length: 200 }, (_, i) => ({ id: i, note: "a repeated line of json" })) };
@@ -174,7 +174,7 @@ test("compression: a 304 carries no encoding, and small bodies ship raw", async 
   assert.equal(notModified.body.length, 0);
 });
 
-test("static: a web asset gets an etag and revalidates to a 304", async (t) => {
+test("static: bundled web assets get validators without exposing source modules", async (t) => {
   const server = await withApp(t);
   const css = await request(server, { path: "/style.css" });
   assert.equal(css.status, 200);
@@ -197,6 +197,14 @@ test("static: a web asset gets an etag and revalidates to a 304", async (t) => {
   assert.equal(deepLink.status, 200);
   assert.equal(deepLink.headers["content-type"], "text/html; charset=utf-8");
   assert.match(deepLink.headers.etag, /^"[0-9a-f]{32}"$/);
+
+  const bundle = await request(server, { path: "/app.js" });
+  assert.equal(bundle.status, 200);
+  assert.equal(bundle.headers["content-type"], "text/javascript; charset=utf-8");
+  assert.ok(bundle.body.length > 100_000);
+
+  const sourceModule = await request(server, { path: "/lib/api.js" });
+  assert.equal(sourceModule.status, 404);
 });
 
 test("head: identical headers to a GET, with no body", async (t) => {

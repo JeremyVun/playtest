@@ -9,8 +9,6 @@ import type { ResolvedCase } from "./types.ts";
 
 const execFile = promisify(execFileCb);
 
-type DynamicValue = any; // TODO(ts): node child-process failures carry platform-specific cause, code, and stderr fields
-
 export class InfraError extends Error {}
 
 let bootCounter = 0; // unique compose project per boot within this process
@@ -32,7 +30,7 @@ type ComposeCommand = (
 ) => Promise<{ stdout: string; stderr: string }>;
 
 export async function prepareEnv(resolvedCase: ResolvedCase, runId: string): Promise<PreparedEnvironment> {
-  const env: DynamicValue = resolvedCase.env;
+  const env = resolvedCase.env;
 
   // Deferred app.auth resolution (docs/contracts/engine.md#web-identity):
   // the case declares an
@@ -68,10 +66,11 @@ export async function prepareEnv(resolvedCase: ResolvedCase, runId: string): Pro
 
   if (env.compose) {
     managed = true;
+    const composeFile = env.compose;
     // compose project names must be lowercase [a-z0-9_-]
     const project = `playtest-${runId}-${++bootCounter}`.toLowerCase().replace(/[^a-z0-9_-]/g, "");
     const compose: ComposeCommand = (args, opts = {}) =>
-      execFile("docker", ["compose", "-f", env.compose, "-p", project, ...args], opts);
+      execFile("docker", ["compose", "-f", composeFile, "-p", project, ...args], opts);
     teardown = async () => {
       try {
         // `--rmi local` also removes the image compose built for this app (the
@@ -133,8 +132,10 @@ async function probe(baseUrl: string, external: { caseFile: string } | null = nu
       const res = await fetch(baseUrl, { signal: AbortSignal.timeout(5000) });
       if (res.status < 500) return;
       last = `status ${res.status}`;
-    } catch (e: DynamicValue) {
-      last = e.cause?.code || firstLine(e.cause ?? e) || firstLine(e);
+    } catch (e) {
+      const cause = errorField(e, "cause");
+      const code = errorField(cause, "code");
+      last = code ? String(code) : firstLine(cause ?? e) || firstLine(e);
     }
   }
   if (external && isLocalUrl(baseUrl)) {
@@ -215,8 +216,15 @@ async function runInit(script: string, baseUrl: string, runId: string) {
       env: { ...process.env, BASE_URL: baseUrl, RUN_ID: runId },
       timeout: 60000,
     });
-  } catch (e: DynamicValue) {
-    const stderr = e.stderr ? `: ${String(e.stderr).trim()}` : "";
+  } catch (e) {
+    const rawStderr = errorField(e, "stderr");
+    const stderr = rawStderr ? `: ${String(rawStderr).trim()}` : "";
     throw new InfraError(`init script failed (${script}): ${firstLine(e)}${stderr}`);
   }
+}
+
+function errorField(error: unknown, field: string): unknown {
+  return error !== null && typeof error === "object" && field in error
+    ? (error as Record<string, unknown>)[field]
+    : undefined;
 }

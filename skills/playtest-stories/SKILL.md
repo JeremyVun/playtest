@@ -62,14 +62,17 @@ journey — check that's what they want.
 
 Write case files straight into a suite (no separate stories document).
 
-**Always ask how much to research first** — whether they want you to *research
-the app* or write a *pure black-box test* from the story alone:
+**If the request has not already settled the research boundary, ask once before
+researching** — whether they want you to *research the app* or write a *pure
+black-box test* from the story alone:
 - **Remote URL** (`https://app.example.com`): you can't see the source, so
   research means looking at the live site itself.
 - **Local URL** (`http://localhost:3000`): the source is very likely your
   working directory, so research can also mean reading that code.
-If you read code, use it only for setup plumbing (how to boot/reset the app) —
-never to copy selectors, which the stories deliberately ignore.
+If you read code, use it for setup plumbing (how to boot/reset the app) and,
+after the user-visible goal is fixed, to identify a stable `data-testid` or ARIA
+hook for a deterministic gate. Never put selectors or implementation paths in
+the actor's story, which deliberately describes only the user's goal.
 
 **Read the schemas — the source of truth, not your memory.** This skill bundles
 them next to this file: `schemas/case.schema.json` and
@@ -100,14 +103,22 @@ the grader judges in natural language):
 | `element_exists` | `"[data-testid=basket-item]"` | web | A Playwright locator matches on the final page — CSS by default, or `xpath=` / `text=` / `role=`. |
 | `screen_shows` | `"~basket-item"` | mobile | An Appium native selector matches on the final screen — accessibility id (`~`), XPath, or predicate. The mobile analog of `element_exists`. |
 | `api_called` | `"POST /api/cart"` | web, api | Some request matched the `METHOD /path-glob`. |
-| `response_status` | `"2xx"` | api | Some response had this status — an exact code or an `Nxx` class. |
-| `response_matches` | `"$.items[0].qty == 2"` | api | A dot/bracket JSON path over the last response body compares true (`==`, `!=`). |
+| `response_status` | `"2xx"` or `{ op: "POST /items", status: 201, occurrence: all }` | api | Bare form: some response had the exact status or `Nxx` class. Object form: the selected operation's `all`, `any`, `first`, or `last` response had it. |
+| `response_matches` | `"$.items[0].qty == 2"` or `{ op: "GET /items", match: "$.items[0].qty == 2", occurrence: last }` | api | Bare form: the last response body matched. Object form: the selected operation response matched. |
+| `invariant` | `{ policy: documented_status }` | api | A deterministic API policy held over the recorded trace. Under `success`, a policy that was not exercised fails. |
 | `console_errors` | `0` | web | The run finished with at most N browser console errors. |
 | `accessibility_violations` | `0` | web | At most N axe-core (WCAG A/AA) violation nodes, summed across every step's page. Deterministic, and a hard gate. |
 | `assert` | `the basket shows one item` | web, mobile, api | The grader judges the claim true against the final page / screen / response. One model call per `assert`, even on replayed runs. |
 
 Any entry may also carry a cosmetic `label:` ("Single parent is not eligible") —
 useful to name a long `assert` in run lists; it never affects the verdict.
+
+API invariant policies can instead sit under the case's top-level `observe:`
+list, using the same `- invariant: { policy: ... }` shape. An observed policy is
+advisory: its result is recorded and shown, but never changes pass/fail. Use
+`success` for a contract that must hold and `observe` while learning or tuning
+one. Read `definitions.invariantPolicy` in the bundled case schema for the
+policy-specific fields.
 
 **Choosing gates — a few durable checks beat many brittle ones**, on the surface
 a user could point at:

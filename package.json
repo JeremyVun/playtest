@@ -5,6 +5,11 @@
   "license": "MIT",
   "author": "Jeremy Vun",
   "type": "module",
+  "workspaces": [
+    "src/platform/control-plane",
+    "src/platform/runner-agent",
+    "src/platform/web"
+  ],
   "bin": {
     "playtest": "./src/cli/cli.ts"
   },
@@ -31,8 +36,8 @@
     "docs/playtest-design.md"
   ],
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json && tsc -p src/platform/control-plane/tsconfig.json && tsc -p src/platform/runner-agent/tsconfig.json && tsc -p tsconfig.web.json --noEmit",
-    "build:web": "tsc -p tsconfig.web.json",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.web.json --noEmit && npm run typecheck --workspaces --if-present",
+    "build:web": "tsc -p tsconfig.web.json && npm run build --workspace=@jeremyvun/playtest-web",
     "prepare": "npm run build:web",
     "test": "npm run test:core && npm run test:cli && npm run test:viewer && npm run test:repository",
     "test:core": "node --import ./tests/support/hermetic.ts --test tests/core/unit/*.test.ts tests/core/integration/*.test.ts",
@@ -44,8 +49,8 @@
     "test:all": "npm test && npm run test:browser",
     "hosted": "bash scripts/hosted-server.sh",
     "hosted:migrate": "bash scripts/hosted-server.sh migrate",
-    "hosted:test": "npm run build:web && npm --prefix src/platform/control-plane test",
-    "runner:test": "npm --prefix src/platform/runner-agent test"
+    "hosted:test": "npm run build:web && npm test --workspace=@jeremyvun/playtest-control-plane",
+    "runner:test": "npm test --workspace=@jeremyvun/playtest-runner-agent"
   },
   "engines": {
     "node": ">=24.18.0"

@@ -32,7 +32,7 @@ import { prepareEnv, InfraError } from "./env.ts";
 import { junitXml } from "./report.ts";
 import { writeVideoSidecar, ffmpegPresent, buildSlideshow, FFMPEG_HINT } from "./clip.ts";
 
-type DynamicValue = any; // TODO(ts): runner coordinates driver-specific envelopes, hooks, manifests, and model payloads
+type DynamicValue = any; // SAFETY: runner coordinates driver-specific envelopes, hooks, manifests, and model payloads
 
 const HARD_TIMEOUT = Symbol("hard timeout");
 
@@ -1343,7 +1343,7 @@ async function actLoop({ driver, writer, rc, deadline, r, emit, baselineEnvelope
   // Absent (a baseline of pure actions with no terminal step) → synthesize a
   // done, as before.
   if (r.aborted) return null;
-  const terminalStep = baselineEnvelopes.findLast((e: DynamicValue) => ["done", "give_up"].includes(actionOf(e)?.type as DynamicValue)); // TODO(ts): includes intentionally treats a missing action type as a non-match
+  const terminalStep = baselineEnvelopes.findLast((e: DynamicValue) => ["done", "give_up"].includes(actionOf(e)?.type as DynamicValue)); // SAFETY: includes intentionally treats a missing action type as a non-match
   const terminalType = actionOf(terminalStep)?.type ?? "done";
   const stepNum = r.envelopes.length + 1;
   let finalUrl = null;

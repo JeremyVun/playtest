@@ -26,6 +26,10 @@
 // Model calls happen OUTSIDE any transaction (the storage rule): planning reads,
 // calls, then opens a short write transaction to record the proposal.
 import crypto from "node:crypto";
+import {
+  CONSOLIDATION_SYSTEM,
+  CONSOLIDATION_TOOL,
+} from "../../../../core/public/findings.ts";
 import { forcedToolCall, estimateCost } from "../../../../core/public/llm.ts";
 import { ulid } from "../ulid.ts";
 import { audit } from "../audit.ts";
@@ -48,90 +52,14 @@ import {
   similarity,
 } from "./shortlist.ts";
 
-/**
- * Prompt pin (engine contract convention: a prompt change bumps its own version
- * and that version is recorded as assignment provenance).
- */
-export const CONSOLIDATION_PROMPT_VERSION = "consolidate-v1";
+export {
+  CONSOLIDATION_SYSTEM,
+  CONSOLIDATION_TOOL,
+} from "../../../../core/public/findings.ts";
 
 const CONFIDENCES = new Set(["high", "medium"]);
 const MAX_REASON = 400;
 const MAX_TITLE = 180;
-
-// ---------------------------------------------------------------------------
-// Prompt + forced tool
-// ---------------------------------------------------------------------------
-
-export const CONSOLIDATION_SYSTEM = [
-  "You are consolidating unreviewed bug reports for one software project. Each report below is a typed,",
-  "cited claim that the application malfunctioned. A deterministic retrieval step already decided",
-  "these few items are worth comparing; your job is only to say which of them describe the SAME",
-  "underlying defect.",
-  "",
-  "- Group reports that describe one underlying defect, however differently they are worded.",
-  "  Different personas describe one defect in different words, and the category label is a hint,",
-  "  not identity: two reports in different categories may still be one defect.",
-  "- Two reports that merely share a category or a surface are NOT the same defect. Distinct",
-  "  failures on distinct surfaces stay in distinct groups.",
-  "- Attach a group to an existing finding by its finding_id only when that finding describes the",
-  "  same defect. Otherwise omit finding_id and give the new group a short, specific proposed_title.",
-  "- Use only the candidate_id and finding_id values listed below. Never invent an id.",
-  "- Each report belongs to at most one group. A report you cannot place at medium confidence",
-  "  or better goes in `unresolved` with a reason — there is deliberately no low confidence.",
-  "",
-  "Call the consolidation_plan tool with your answer.",
-].join("\n");
-
-export const CONSOLIDATION_TOOL: HostedDynamic = {
-  type: "function",
-  function: {
-    name: "consolidation_plan",
-    description: "Propose which of the supplied unreviewed bug reports describe the same underlying defect.",
-    parameters: {
-      type: "object",
-      properties: {
-        assignments: {
-          type: "array",
-          description: "One entry per group of reports that share an underlying defect.",
-          items: {
-            type: "object",
-            properties: {
-              candidate_ids: {
-                type: "array",
-                items: { type: "string" },
-                description: "unreviewed-finding ids from this input, each used at most once across the whole plan",
-              },
-              finding_id: {
-                type: "string",
-                description: "an existing finding id from this input; omit entirely for a new group",
-              },
-              proposed_title: {
-                type: "string",
-                description: "short, specific title; REQUIRED when finding_id is omitted",
-              },
-              confidence: { type: "string", enum: ["high", "medium"] },
-              reason: { type: "string", description: "why these reports are one defect" },
-            },
-            required: ["candidate_ids", "confidence", "reason"],
-          },
-        },
-        unresolved: {
-          type: "array",
-          description: "reports you cannot place at medium confidence or better",
-          items: {
-            type: "object",
-            properties: {
-              candidate_id: { type: "string" },
-              reason: { type: "string" },
-            },
-            required: ["candidate_id", "reason"],
-          },
-        },
-      },
-      required: ["assignments"],
-    },
-  },
-};
 
 /**
  * Which model verifies clusters for this project: the project's own
@@ -414,7 +342,6 @@ export async function previewConsolidation(ctx: HostedDynamic, { project }: Host
     scope: retrieval.scope,
     shortlist_version: SHORTLIST_VERSION,
     match_text_version: VERSIONS.match_text,
-    prompt_version: retrieval.clusters.length ? CONSOLIDATION_PROMPT_VERSION : null,
     model: retrieval.clusters.length ? consolidationModelFor(ctx, project) : null,
     // Named so the console can say exactly what a confirmation will spend.
     requires_model: retrieval.clusters.length > 0,
@@ -528,12 +455,11 @@ export async function planConsolidation(ctx: HostedDynamic, { project, actor, ca
     await tx.query(
       `INSERT INTO consolidation_plans
          (id, project_id, status, thresholds, shortlist_version, match_text_version,
-          plan, scope, usage, prompt_version, model, candidate_digest, created_by)
-       VALUES ($1,$2,'proposed',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+          plan, scope, usage, model, candidate_digest, created_by)
+       VALUES ($1,$2,'proposed',$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
       [
         id, project.id, publicThresholds(retrieval.thresholds), SHORTLIST_VERSION, VERSIONS.match_text,
         plan, retrieval.scope, usage,
-        retrieval.clusters.length ? CONSOLIDATION_PROMPT_VERSION : null,
         retrieval.clusters.length ? model : null,
         digest, actor,
       ],
@@ -547,7 +473,6 @@ export async function planConsolidation(ctx: HostedDynamic, { project, actor, ca
       detail: {
         scope: retrieval.scope,
         usage,
-        prompt_version: retrieval.clusters.length ? CONSOLIDATION_PROMPT_VERSION : null,
         model: retrieval.clusters.length ? model : null,
         shortlist_version: SHORTLIST_VERSION,
         items: items.length,
@@ -685,7 +610,6 @@ export async function applyConsolidationPlan(tx: HostedDynamic, { planRow, decis
         consolidation_confidence: a.item.confidence ?? null,
         shortlist_version: current.shortlist_version,
         match_text_version: current.match_text_version,
-        prompt_version: a.item.origin === "model_cluster" ? current.prompt_version : null,
         consolidation_model: a.item.origin === "model_cluster" ? current.model : null,
       };
       const retitled = await tx.query(
@@ -796,7 +720,6 @@ export async function applyConsolidationPlan(tx: HostedDynamic, { planRow, decis
       applied,
       skipped_items: skipped,
       unresolved: (plan.unresolved || []).map((u: HostedDynamic) => u.candidate_id),
-      prompt_version: current.prompt_version,
       model: current.model,
       shortlist_version: current.shortlist_version,
       thresholds: current.thresholds,

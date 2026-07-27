@@ -20,10 +20,20 @@ let baseUrl: HostedDynamic;
 const queue: HostedDynamic[] = [];
 const prompts: HostedDynamic[] = [];
 
-const reply = (content: HostedDynamic) => ({ choices: [{ message: { content }, finish_reason: "stop" }], usage: { prompt_tokens: 40, completion_tokens: 20 } });
-
 const cardsReply = (cards: HostedDynamic, notes = "I read the widget lifecycle.") =>
-  reply(`${notes}\n\n\`\`\`json\n${JSON.stringify({ cards }, null, 2)}\n\`\`\``);
+  ({
+    choices: [{
+      message: {
+        tool_calls: [{
+          id: "call_rule_cards",
+          type: "function",
+          function: { name: "propose_rule_cards", arguments: JSON.stringify({ notes, cards }) },
+        }],
+      },
+      finish_reason: "tool_calls",
+    }],
+    usage: { prompt_tokens: 40, completion_tokens: 20 },
+  });
 
 before(async () => {
   server = http.createServer((req: HostedDynamic, res: HostedDynamic) => {
@@ -38,7 +48,7 @@ before(async () => {
       // ever read here as "did this text reach the model".
       prompts.push(raw);
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify(queue.shift() || reply("(no scripted reply)")));
+      res.end(JSON.stringify(queue.shift() || cardsReply([], "No scripted proposal.")));
     });
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -109,12 +119,15 @@ test("rule cards: a proposal lands candidates with provenance, and never an appr
   await withApp(async ({ api }: HostedDynamic) => {
     const suite = await seedSuite(api);
     // The model claims one of its cards is already approved. It is not.
-    script(cardsReply([{ ...PROPOSED[0], state: "approved" }, PROPOSED[1]]));
+    script(
+      cardsReply([{ ...PROPOSED[0], state: "approved" }, PROPOSED[1]]),
+      cardsReply([PROPOSED[0], PROPOSED[1]], "I read the widget lifecycle."),
+    );
 
     const res = await api.post(`/suites/${suite.id}/rule-cards/propose`, { spec: { document: SPEC } });
     assert.equal(res.status, 200, JSON.stringify(res.body));
     assert.equal(res.body.cards.length, 2);
-    assert.equal(res.body.prompt_version, "rule-proposal-v1");
+    assert.equal("prompt_version" in res.body, false);
     for (const card of res.body.cards) {
       assert.equal(card.state, "candidate");
       assert.equal(card.origin, "proposed");
@@ -122,6 +135,8 @@ test("rule cards: a proposal lands candidates with provenance, and never an appr
     }
     assert.equal(res.body.cards[0].provenance, "POST /widgets/{id}/publish · 409 response");
     assert.equal(res.body.notes, "I read the widget lifecycle.");
+    assert.equal(prompts.length, 2, "the invalid lifecycle field should trigger one corrected tool-call retry");
+    assert.match(prompts[1], /previous propose_rule_cards was invalid/);
 
     // The prompt named the Level 0 set as off-limits.
     assert.match(prompts[0], /do not propose these/);

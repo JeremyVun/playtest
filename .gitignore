@@ -33,8 +33,11 @@ tests/fixtures/todo-app-swiftui/build/
 .venv-schemathesis/
 .schemathesis/
 
-# Browser ESM emitted in place from TypeScript sources.
+# Browser ESM emitted in place for the viewer and DOM-free platform unit tests.
 src/core/shared/*.js
 src/run-viewer/web/**/*.js
 src/platform/web/**/*.js
 !src/platform/web/vendor/**
+
+# Minified hosted-console bundle and copied static shell.
+src/platform/web/build/

@@ -68,7 +68,7 @@ export async function loadAssertions(suiteRoot: string): Promise<AssertionRegist
         `assertion "${name}" failed to load (assertions/${name}/assertion.js): ${firstLine(e)}`,
       );
     }
-    const assertion = mod.default as AssertionModule; // TODO(ts): runtime checks below validate the user-authored module shape
+    const assertion = mod.default as AssertionModule; // SAFETY: runtime checks below validate the user-authored module shape
     if (!assertion || typeof assertion !== "object") {
       throw new DummyConfigError(
         `assertion "${name}" (assertions/${name}/assertion.js) must default-export an object with keys()/gather()/verdict()`,

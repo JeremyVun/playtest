@@ -1,4 +1,4 @@
-type WebDynamic = any; // TODO(ts): Hosted web inputs are unvalidated API payloads and heterogeneous DOM content.
+type WebDynamic = any; // SAFETY: Hosted web inputs are unvalidated API payloads and heterogeneous DOM content.
 
 interface ParentNode {
   querySelector(selectors: string): WebDynamic;
@@ -12,4 +12,8 @@ interface Document {
 interface Element {
   dataset: WebDynamic;
   selectionStart?: WebDynamic;
+}
+
+declare module "*view/shared/movement.js" {
+  export const movement: WebDynamic;
 }

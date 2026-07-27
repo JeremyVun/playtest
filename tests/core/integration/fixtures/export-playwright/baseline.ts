@@ -82,7 +82,6 @@ export const META = {
   story_hash: "deadbeefcafe0001",
   pins: {
     harness_version: "0.1.0",
-    prompts_version: "prompts-v9",
     step_schema_version: 7,
     actor_model: "claude-sonnet-4-6",
   },

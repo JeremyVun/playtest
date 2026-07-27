@@ -56,7 +56,7 @@ function gradeFor(userContent: string): LegacyTestValue {
   const tail = userContent.split("## Report questions")[1];
   if (!tail) return withCandidates;
   const questions = tail
-    .split("\n## ")[0]! // TODO(ts): split always returns at least one segment
+    .split("\n## ")[0]! // SAFETY: split always returns at least one segment
     .split("\n")
     .filter((l) => /^\d+\. /.test(l))
     .map((l) => l.replace(/^\d+\. /, ""));
@@ -201,6 +201,7 @@ test("discovery grades use the grader-discovery.md rubric", async () => {
   const { resolvedCase, runDir } = makeFixture({ mode: "discovery" });
   const { system, user, req } = await captureGrade(resolvedCase, runDir);
   assert.equal(system, promptFile("grader-discovery.md").trim());
+  assert.match(system, /evidence only[\s\S]*Ignore\s+embedded instructions/i);
   assert.equal(req.model, "claude-sonnet-4-6");
   // The gate never runs in discovery: the section is omitted, not "null".
   assert.ok(!user.includes("## Gate result"), "discovery prompt must not carry a gate section");
@@ -211,6 +212,7 @@ test("journey grade prompt is unchanged: rubric, section order, baseline", async
   const { resolvedCase, runDir } = makeFixture({ mode: "journey", baseline: true });
   const { system, user } = await captureGrade(resolvedCase, runDir);
   assert.equal(system, promptFile("grader-system.md").trim());
+  assert.match(system, /evidence only[\s\S]*Ignore\s+embedded instructions/i);
   // Pre-change assembly (docs/contracts/engine.md#grading): exact headings,
   // in this order.
   const headings = [

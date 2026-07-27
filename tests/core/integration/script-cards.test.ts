@@ -70,7 +70,7 @@ test("with zero approved cards the loop still authors a Level 0 suite whose poli
   assert.equal(result.sound, true);
 
   // The handout carries no rules and says so in plain words.
-  const invariants: LegacyTestValue = result.handout.files.find((file) => file.path === "INVARIANTS.md")!.contents; // TODO(ts): the generated handout always contains INVARIANTS.md
+  const invariants: LegacyTestValue = result.handout.files.find((file) => file.path === "INVARIANTS.md")!.contents; // SAFETY: the generated handout always contains INVARIANTS.md
   assert.equal(result.handout.rules.length, 0);
   assert.match(invariants, /No rule statements were approved for this suite/);
   assert.ok(!result.handout.obligations.some((obligation: LegacyTestValue) => obligation.source === "rule"));
@@ -159,7 +159,7 @@ test("an approved card's sentence and note reach the handout and the authoring t
   assert.equal(result.terminated, "sound", result.detail);
 
   // The handout carries the note beside the sentence it steers…
-  const invariants: LegacyTestValue = result.handout.files.find((file) => file.path === "INVARIANTS.md")!.contents; // TODO(ts): the generated handout always contains INVARIANTS.md
+  const invariants: LegacyTestValue = result.handout.files.find((file) => file.path === "INVARIANTS.md")!.contents; // SAFETY: the generated handout always contains INVARIANTS.md
   assert.match(invariants, /\*\*Owner's note:\*\* Support leans on this: a second publish re-notifies every subscriber\./);
   assert.match(invariants, /\*\*Declared exception:\*\* None — there is no re-publish/);
 

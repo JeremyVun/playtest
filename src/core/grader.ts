@@ -93,7 +93,7 @@ const graderDiscovery = readFileSync(join(here, "prompts/grader-discovery.md"), 
 const graderAssert = readFileSync(join(here, "prompts/grader-assert.md"), "utf8").trim();
 const gradeSchema = JSON.parse(
   readFileSync(join(here, "schemas/grade.schema.json"), "utf8")
-) as Record<string, unknown>; // TODO(ts): grade.schema.json remains the runtime source of truth
+) as Record<string, unknown>; // SAFETY: grade.schema.json remains the runtime source of truth
 // @ts-expect-error -- Ajv's NodeNext declaration exposes the runtime default constructor as a module namespace.
 const ajv = new Ajv({ allErrors: true });
 const validateGrade: ValidateFunction = ajv.compile(gradeSchema);
@@ -166,7 +166,7 @@ export function a11ySummary(envelopes: StepEnvelope[]): A11ySummary | null {
   let stepsWithViolations = 0;
   const ruleCounts = new Map<string, { count: number; impact: string | null }>(); // id → { count, impact }
   for (const e of withAxe) {
-    const violations = e.axe!.violations ?? []; // TODO(ts): withAxe contains only envelopes with an axe capture
+    const violations = e.axe!.violations ?? []; // SAFETY: withAxe contains only envelopes with an axe capture
     let stepNodes = 0;
     for (const v of violations) {
       const nodes = v.nodes ?? [];
@@ -214,7 +214,7 @@ export function apiEvidence(manifest: GradingManifest | null, runDir: string): A
   const file = manifest?.artifacts?.drift_report;
   if (file && runDir) {
     try {
-      const report = JSON.parse(readFileSync(join(runDir, file), "utf8")) as DriftReportFile; // TODO(ts): the harness writes this validated artifact
+      const report = JSON.parse(readFileSync(join(runDir, file), "utf8")) as DriftReportFile; // SAFETY: the harness writes this validated artifact
       drift = {
         classification: report.classification ?? null,
         signals: report.signals ?? [],
@@ -296,7 +296,7 @@ export async function gradeRun(
   const envelopes = readTrajectory(join(runDir, "trajectory.jsonl"));
   const manifestPath = join(runDir, "manifest.json");
   const manifest = existsSync(manifestPath)
-    ? JSON.parse(readFileSync(manifestPath, "utf8")) as GradingManifest // TODO(ts): manifest fields consumed here are harness-authored
+    ? JSON.parse(readFileSync(manifestPath, "utf8")) as GradingManifest // SAFETY: manifest fields consumed here are harness-authored
     : null;
   // Step snapshots are pre-action evidence: the last envelope says what the
   // actor saw before its final action. Web captures final.a11y.txt after the
@@ -411,7 +411,7 @@ export async function gradeRun(
         messages.push({
           role: "tool",
           tool_call_id: callId,
-          content: fetchResult(toolCall.args as FetchSnapshotArgs ?? {} as FetchSnapshotArgs, { runDir, artifacts, vision }), // TODO(ts): the model-facing schema constrains fetch_snapshot arguments
+          content: fetchResult(toolCall.args as FetchSnapshotArgs ?? {} as FetchSnapshotArgs, { runDir, artifacts, vision }), // SAFETY: the model-facing schema constrains fetch_snapshot arguments
         });
         continue;
       }
@@ -448,7 +448,7 @@ export async function gradeRun(
       });
       args = forced.args;
       addUsage(forced.tokens);
-    } catch (e: any) { // TODO(ts): forcedToolCall reports terminal failures as LlmError
+    } catch (e: any) { // SAFETY: forcedToolCall reports terminal failures as LlmError
       // Persist the raw gateway tool-call bytes next to the run so a validation
       // failure (e.g. an argument the model JSON-stringified) is debuggable
       // offline instead of lost behind the parsed error message.
@@ -461,7 +461,7 @@ export async function gradeRun(
     break;
   }
   const grade = {
-    ...args as Record<string, unknown>, // TODO(ts): every loop exit above assigns validated grade arguments
+    ...args as Record<string, unknown>, // SAFETY: every loop exit above assigns validated grade arguments
     // Harness-computed exact a11y counts (compliance) — spread AFTER the model's
     // args so the LLM can never author or override them; absent on non-web runs.
     ...(a11y ? { a11y } : {}),
@@ -634,7 +634,7 @@ export async function checkAssertion(
   }
 ): Promise<{ pass: boolean; detail: string; tokens: TokenUsage }> {
   const artifacts = stepArtifacts(envelopes);
-  const lastStep = envelopes.length ? envelopes[envelopes.length - 1]!.step : null; // TODO(ts): the length guard proves the indexed envelope exists
+  const lastStep = envelopes.length ? envelopes[envelopes.length - 1]!.step : null; // SAFETY: the length guard proves the indexed envelope exists
   const fetchTool = fetchSnapshotTool(vision);
   const tools: ToolDefinition[] = [VERDICT_TOOL, fetchTool];
   const messages: ChatMessage[] = [
@@ -642,7 +642,7 @@ export async function checkAssertion(
       role: "system",
       content: graderAssert
         .replace("{{vision}}", vision ? " (accessibility text and/or screenshot)" : "")
-        .replace("{{lastStep}}", lastStep as unknown as string ?? "N"), // TODO(ts): String.replace coerces the numeric step exactly as JavaScript did
+        .replace("{{lastStep}}", lastStep as unknown as string ?? "N"), // SAFETY: String.replace coerces the numeric step exactly as JavaScript did
     },
     {
       role: "user",
@@ -690,7 +690,7 @@ export async function checkAssertion(
       messages.push({
         role: "tool",
         tool_call_id: callId,
-        content: fetchResult(toolCall.args as FetchSnapshotArgs ?? {} as FetchSnapshotArgs, { runDir, artifacts, vision }), // TODO(ts): the model-facing schema constrains fetch_snapshot arguments
+        content: fetchResult(toolCall.args as FetchSnapshotArgs ?? {} as FetchSnapshotArgs, { runDir, artifacts, vision }), // SAFETY: the model-facing schema constrains fetch_snapshot arguments
       });
       continue;
     }

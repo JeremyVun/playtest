@@ -47,11 +47,11 @@ reasoning behind them.
 
 Four principles run through everything:
 
-1. **Comparability is guarded by pins.** Every run stamps its pins — harness
-   version, prompt versions, step schema version, snapshot format, settle
-   heuristic, actor and grader models — and the harness refuses to compare
-   runs or trends across a pin boundary. Within one pin set the agent is a
-   fixed instrument, so when a score moves, it's the application that changed.
+1. **Comparability is guarded by pins.** Every run stamps its material runtime
+   and artifact pins — harness version, step schema version, snapshot format,
+   settle heuristic, and actor and grader models — and the harness refuses to
+   compare runs or trends across those boundaries. Prompt text evolves with the
+   code and is not independently versioned.
 2. **The harness does all the accounting.** The agent only ever sees a
    snapshot and decides one next action. Recording, token budgets, retries,
    timeouts, artifact capture, validation, redaction — all harness

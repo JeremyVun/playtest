@@ -75,7 +75,7 @@ export function negotiateEncoding(header: string | string[] | undefined): "br" |
   const q: Record<"br" | "gzip" | "*", number> = { br: -1, gzip: -1, "*": -1 };
   for (const part of String(header).split(",")) {
     const [nameRaw, ...params] = part.trim().split(";");
-    const name = nameRaw!.trim().toLowerCase(); // TODO(ts): Splitting a non-empty encoding token always yields its name component.
+    const name = nameRaw!.trim().toLowerCase(); // SAFETY: Splitting a non-empty encoding token always yields its name component.
     if (!(name in q)) continue;
     let weight = 1;
     for (const p of params) {
@@ -121,7 +121,7 @@ function headerKey(headers: OutgoingHttpHeaders, name: string): string | undefin
 }
 function getHeader(headers: OutgoingHttpHeaders, name: string) {
   const k = headerKey(headers, name);
-  return k === undefined ? undefined : headers[k] as string | undefined; // TODO(ts): Control-plane buffered response headers use scalar strings at these lookup sites.
+  return k === undefined ? undefined : headers[k] as string | undefined; // SAFETY: Control-plane buffered response headers use scalar strings at these lookup sites.
 }
 function setHeader(headers: OutgoingHttpHeaders, name: string, value: string | number | string[]) {
   headers[headerKey(headers, name) ?? name] = value;

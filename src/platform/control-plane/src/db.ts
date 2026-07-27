@@ -30,7 +30,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { ServerConfigError } from "./config.ts";
 import type { ControlPlaneConfig } from "./config.ts";
 
-export type DbRow = Record<string, any>; // TODO(ts): Raw SQL result schemas are dynamic until the query layer gains generated row mappings.
+export type DbRow = Record<string, any>; // SAFETY: Raw SQL result schemas are dynamic until the query layer gains generated row mappings.
 export interface QueryResult<Row extends DbRow = DbRow> {
   rows: Row[];
   rowCount: number;
@@ -187,7 +187,7 @@ export class Db {
         const dec = decoders[i];
         out[name as string] = dec ? dec(r[name as string]) : r[name as string];
       }
-      return out as Row; // TODO(ts): SQL text determines the caller-selected row shape.
+      return out as Row; // SAFETY: SQL text determines the caller-selected row shape.
     });
     return { rows, rowCount: rows.length };
   }
@@ -200,7 +200,7 @@ export class Db {
   async query<Row extends DbRow = DbRow>(text: string, params?: unknown[]): Promise<QueryResult<Row>> {
     if (this.als.getStore()) return this.#run<Row>(text, params);
     const gate = this.tail;
-    let release!: () => void; // TODO(ts): The Promise constructor synchronously assigns the release callback.
+    let release!: () => void; // SAFETY: The Promise constructor synchronously assigns the release callback.
     this.tail = new Promise((r) => (release = r));
     try {
       await gate;
@@ -240,7 +240,7 @@ export class Db {
     if (outer) return await fn(outer.tx);
 
     const gate = this.tail;
-    let release!: () => void; // TODO(ts): The Promise constructor synchronously assigns the release callback.
+    let release!: () => void; // SAFETY: The Promise constructor synchronously assigns the release callback.
     this.tail = new Promise((r) => (release = r));
     await gate;
 
@@ -310,7 +310,7 @@ export async function connect(
   try {
     fs.mkdirSync(dir, { recursive: true });
     fs.accessSync(dir, fs.constants.W_OK | fs.constants.X_OK);
-  } catch (e: any /* TODO(ts): Filesystem startup errors expose code and message. */) {
+  } catch (e: any /* SAFETY: Filesystem startup errors expose code and message. */) {
     throw new ServerConfigError(
       `the Playtest data root is not writable: ${dir} (${e.code || e.message}). ` +
         `Set PLAYTEST_DATA_DIR to a durable directory this process can write, ` +
@@ -321,7 +321,7 @@ export async function connect(
   let conn: DatabaseSync;
   try {
     conn = new DatabaseSync(file);
-  } catch (e: any /* TODO(ts): SQLite open errors expose code and message. */) {
+  } catch (e: any /* SAFETY: SQLite open errors expose code and message. */) {
     throw new ServerConfigError(
       `cannot open the Playtest database at ${file} (${e.code || e.message}). ` +
         `Set PLAYTEST_DATA_DIR to a durable, writable directory on a filesystem ` +
@@ -337,7 +337,7 @@ export async function connect(
       if (!expect(value)) {
         throw new Error(`reported ${JSON.stringify(value)}`);
       }
-    } catch (e: any /* TODO(ts): SQLite pragma failures expose Error.message. */) {
+    } catch (e: any /* SAFETY: SQLite pragma failures expose Error.message. */) {
       conn.close();
       throw new ServerConfigError(
         `SQLite rejected a required setting on ${file}: \`${sql}\` (${e.message}). ` +

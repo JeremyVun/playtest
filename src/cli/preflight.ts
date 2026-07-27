@@ -118,7 +118,7 @@ export function __setMobileClientProbe(fn: MobileClientProbe | null | undefined)
 async function preflightMobile() {
   try {
     await mobileClientProbe();
-  } catch (e: any) { // TODO(ts): lazy-import failures are Error-like objects with optional Node module codes
+  } catch (e: any) { // SAFETY: lazy-import failures are Error-like objects with optional Node module codes
     // A genuine not-installed error → the install hint. Any OTHER import failure
     // (a broken native binding, a version/syntax error in a present package) gets
     // its real cause appended, so we don't tell the user to reinstall a package

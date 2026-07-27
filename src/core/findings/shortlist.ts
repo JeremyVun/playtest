@@ -22,7 +22,7 @@
 // differently across runs, and consolidation must still converge.
 import { matchText, normalizeText } from "./keys.ts";
 
-type DynamicValue = any; // TODO(ts): shortlist consumes persisted finding summaries and candidate rows with query-specific shapes
+type DynamicValue = any; // SAFETY: shortlist consumes persisted finding summaries and candidate rows with query-specific shapes
 
 export interface RetrievalItem {
   id: string;

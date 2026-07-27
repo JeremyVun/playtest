@@ -4,11 +4,12 @@ description: >
   Author a Playtest defect-detection study — forced-risk discovery stories and
   thorough (adversarial) personas that walk dangerous corners of a real app so
   bugs actually fire. Use when the human wants to find bugs, raise defect
-  detection, stress-test a flow, run a "bug hunt" or QA risk pass, write
-  adversarial stories, or stop happy-path-only discovery from missing edge
-  failures. Not a new Playtest mode: same mode:discovery machinery. Prefer this
-  over playtest-stories when the goal is catching breakage, not UX insight or
-  regression gates.
+  detection, stress functional edge states in a flow, run a "bug hunt" or QA
+  risk pass, write adversarial stories, or stop happy-path-only discovery from
+  missing edge failures. Do not use for load, throughput, concurrency, or
+  latency testing. Not a new Playtest mode: same mode:discovery machinery.
+  Prefer this over playtest-stories when the goal is catching breakage, not UX
+  insight or regression gates.
 ---
 
 # Playtest bug hunt (authoring)
@@ -68,10 +69,14 @@ Push:
 - **Decision test:** what would they fix if the mission reports failure? Drop
   stories that change nothing.
 
-**Research:** same rule as playtest-stories — ask black-box vs look at
-staging/code for *setup only* (how to seed/reset). Never copy selectors into
-stories. Read bundled `schemas/case.schema.json` + `defaults.schema.json` (or
-`src/core/schemas/` in the Playtest repo) as the key contract.
+**Research:** use the boundary already stated in the request. If it is
+unresolved, ask once whether to stay black-box or inspect staging/code. Use code
+for setup (how to seed/reset) and, after the user-visible risk goal is fixed, to
+identify a stable `data-testid` or ARIA hook for a later regression gate. Never
+put selectors or implementation paths in actor stories, and never add a
+`success` gate to these discovery cases. Read bundled
+`schemas/case.schema.json` + `defaults.schema.json` (or `src/core/schemas/` in
+the Playtest repo) as the key contract.
 
 ## 2. Risk classes (portable checklist)
 
@@ -136,8 +141,8 @@ reference):
 | Speed / rush stress | Optional rusher persona on add-to-cart / pay cells only — not on every risk cell |
 
 Do **not** fan out every risk story across 4 personas — cost explodes for little
-detection gain. Hillclimb pattern: **risk × adversarial** (+ optional one careful
-on recognition cells).
+detection gain. Recommended coverage: **risk × adversarial** (+ optional one
+careful persona on recognition cells).
 
 ```yaml
 # personas/careful-first-timer.yaml  (optional second)

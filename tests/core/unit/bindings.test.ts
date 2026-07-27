@@ -168,17 +168,17 @@ test("resolution re-reads the FRESH response, and every failure is loud", () => 
     [
       { name: "id_2", from_step: 2, from: "$.id" },
       { name: "ent", from_step: 2, from: "$.nested.list[0].id" },
-    ] as LegacyTestValue, // TODO(ts): resolution tests deliberately omit unused `into` fields
+    ] as LegacyTestValue, // SAFETY: resolution tests deliberately omit unused `into` fields
     ledger,
   );
   assert.deepEqual(problems, []);
   assert.deepEqual([...vars], [["id_2", "acc_FRESH"], ["ent", "ent_9"]]);
 
-  const missingStep: LegacyTestValue = resolveBindings([{ name: "x", from_step: 7, from: "$.id" }] as LegacyTestValue, ledger); // TODO(ts): resolution tests deliberately omit unused `into` fields
+  const missingStep: LegacyTestValue = resolveBindings([{ name: "x", from_step: 7, from: "$.id" }] as LegacyTestValue, ledger); // SAFETY: resolution tests deliberately omit unused `into` fields
   assert.match(missingStep.problems[0], /cites step 7, which recorded no response body/);
-  const movedField: LegacyTestValue = resolveBindings([{ name: "x", from_step: 2, from: "$.identifier" }] as LegacyTestValue, ledger); // TODO(ts): resolution tests deliberately omit unused `into` fields
+  const movedField: LegacyTestValue = resolveBindings([{ name: "x", from_step: 2, from: "$.identifier" }] as LegacyTestValue, ledger); // SAFETY: resolution tests deliberately omit unused `into` fields
   assert.match(movedField.problems[0], /no longer carries a value there/);
-  const notScalar: LegacyTestValue = resolveBindings([{ name: "x", from_step: 2, from: "$.nested" }] as LegacyTestValue, ledger); // TODO(ts): resolution tests deliberately omit unused `into` fields
+  const notScalar: LegacyTestValue = resolveBindings([{ name: "x", from_step: 2, from: "$.nested" }] as LegacyTestValue, ledger); // SAFETY: resolution tests deliberately omit unused `into` fields
   assert.equal(notScalar.problems.length, 1, "an object is not a substitutable value");
 });
 

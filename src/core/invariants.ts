@@ -164,7 +164,7 @@ const POLICIES: Record<InvariantPolicyName, PolicyDefinition> = {
     evaluate: (config, ctx) => {
       const reqs = inScope(ctx.trace, config.scope);
       if (!reqs.length) return notApplicable(`no request matched ${scopeLabel(config.scope)}, so "no unexpected 5xx" was never exercised`);
-      const broken: InvariantTraceRequest[] & { 0: InvariantTraceRequest } = reqs.filter((r) => r.status >= 500) as InvariantTraceRequest[] & { 0: InvariantTraceRequest }; // TODO(ts): broken[0] is read only on the non-empty branch below
+      const broken: InvariantTraceRequest[] & { 0: InvariantTraceRequest } = reqs.filter((r) => r.status >= 500) as InvariantTraceRequest[] & { 0: InvariantTraceRequest }; // SAFETY: broken[0] is read only on the non-empty branch below
       return {
         applicable: true,
         pass: broken.length === 0,
@@ -301,7 +301,7 @@ const POLICIES: Record<InvariantPolicyName, PolicyDefinition> = {
             " — add that write to the story, or move this policy under observe:",
         );
       }
-      const create = creates[creates.length - 1]!; // TODO(ts): the non-empty check above proves the last create exists
+      const create = creates[creates.length - 1]!; // SAFETY: the non-empty check above proves the last create exists
       const sent = jsonOf(create.requestBody);
       // Passive first: a read of the same operation later in the story.
       let read = matching(ctx.trace, config.read).find((r) => r.index > create.index && r.status >= 200 && r.status < 300 && r.body != null);
@@ -431,7 +431,7 @@ const POLICIES: Record<InvariantPolicyName, PolicyDefinition> = {
             " — delete the resource in the story, or move this policy under observe:",
         );
       }
-      const gone = deletes[deletes.length - 1]!; // TODO(ts): the non-empty check above proves the last delete exists
+      const gone = deletes[deletes.length - 1]!; // SAFETY: the non-empty check above proves the last delete exists
       const reads = matching(ctx.trace, config.read).filter((r) => r.index > gone.index && samePath(r.path, gone.path));
       if (!reads.length) {
         return notApplicable(
@@ -482,7 +482,7 @@ const POLICIES: Record<InvariantPolicyName, PolicyDefinition> = {
       pages.forEach((page, i) => {
         for (const id of collectAt(jsonOf(page.body), segs)) {
           const key = JSON.stringify(id);
-          if (seen.has(key)) duplicates.push({ id, first: seen.get(key)!, again: i + 1 }); // TODO(ts): has() proves the first-seen page exists
+          if (seen.has(key)) duplicates.push({ id, first: seen.get(key)!, again: i + 1 }); // SAFETY: has() proves the first-seen page exists
           else seen.set(key, i + 1);
         }
       });
@@ -511,17 +511,17 @@ const POLICIES: Record<InvariantPolicyName, PolicyDefinition> = {
       // repeat a boundary item; only non-termination is a violation there.
       const dupFails = consistency === "snapshot" && duplicates.length > 0;
       if (dupFails) {
-        const d = duplicates[0]!; // TODO(ts): this branch is guarded by duplicates.length
+        const d = duplicates[0]!; // SAFETY: this branch is guarded by duplicates.length
         return {
           applicable: true,
           pass: false,
-          requests: [pages[d.first - 1]!, pages[d.again - 1]!], // TODO(ts): duplicate page numbers were recorded from these same array indices
+          requests: [pages[d.first - 1]!, pages[d.again - 1]!], // SAFETY: duplicate page numbers were recorded from these same array indices
           detail:
             `identity ${JSON.stringify(d.id)} appeared on page ${d.first} and again on page ${d.again} of ${opLabel(config.op)}` +
             ` — under the declared "snapshot" consistency an enumeration never repeats an item (declare consistency: eventual if it may)`,
         };
       }
-      if (cursorProblems.length) return { applicable: true, pass: false, requests: [cursorProblems[0]!.request!], detail: cursorProblems[0]!.detail }; // TODO(ts): the length guard and problem construction prove both values exist
+      if (cursorProblems.length) return { applicable: true, pass: false, requests: [cursorProblems[0]!.request!], detail: cursorProblems[0]!.detail }; // SAFETY: the length guard and problem construction prove both values exist
       const note = duplicates.length ? ` (${duplicates.length} boundary repeat(s) allowed under "eventual" consistency)` : "";
       return { applicable: true, pass: true, detail: `${pages.length} page(s), ${seen.size} distinct identities, no violation${note}` };
     },
@@ -574,7 +574,7 @@ function parseOp(raw: unknown, field: string): OperationRef {
   if (!m) {
     throw new Error(`"invariant.${field}" must be a method and an OpenAPI-style path, e.g. "POST /accounts/{accountId}/close" (got ${JSON.stringify(raw ?? null)})`);
   }
-  return { method: m[1]!.toUpperCase(), path: m[2]!, template: pathTemplateToRegExp(m[2]!) }; // TODO(ts): the successful regex match guarantees both capture groups
+  return { method: m[1]!.toUpperCase(), path: m[2]!, template: pathTemplateToRegExp(m[2]!) }; // SAFETY: the successful regex match guarantees both capture groups
 }
 
 function stringList(value: unknown, field: string): string[] {
@@ -624,10 +624,10 @@ export function parseInvariantPolicy(value: unknown): ParsedInvariantPolicy {
   if (value.fields !== undefined) out.fields = stringList(value.fields, "fields");
   if (value.require !== undefined) out.require = stringList(value.require, "require");
   if (value.ignore !== undefined) out.ignore = stringList(value.ignore, "ignore");
-  if (value.identity !== undefined) out.identity = stringList(value.identity, "identity")[0]!; // TODO(ts): stringList rejects an empty list
-  if (value.cursor !== undefined) out.cursor = stringList(value.cursor, "cursor")[0]!; // TODO(ts): stringList rejects an empty list
-  if (value.state !== undefined) out.state = stringList(value.state, "state")[0]!; // TODO(ts): stringList rejects an empty list
-  if (value.key_header !== undefined) out.key_header = stringList(value.key_header, "key_header")[0]!; // TODO(ts): stringList rejects an empty list
+  if (value.identity !== undefined) out.identity = stringList(value.identity, "identity")[0]!; // SAFETY: stringList rejects an empty list
+  if (value.cursor !== undefined) out.cursor = stringList(value.cursor, "cursor")[0]!; // SAFETY: stringList rejects an empty list
+  if (value.state !== undefined) out.state = stringList(value.state, "state")[0]!; // SAFETY: stringList rejects an empty list
+  if (value.key_header !== undefined) out.key_header = stringList(value.key_header, "key_header")[0]!; // SAFETY: stringList rejects an empty list
   if (value.after !== undefined) out.after = statusList(value.after, "after");
   if (value.exclude_status !== undefined) out.exclude_status = statusList(value.exclude_status, "exclude_status");
   if (value.compare !== undefined) {
@@ -656,7 +656,7 @@ export function parseInvariantPolicy(value: unknown): ParsedInvariantPolicy {
   if (out.observe && !out.read_from) {
     throw new Error(`invariant policy "${name}" with observe: true needs "read_from" so the observation request can be addressed, e.g. { accountId: "$.id" }`);
   }
-  return out as ParsedInvariantPolicy; // TODO(ts): policy-specific required fields were checked against the selected definition above
+  return out as ParsedInvariantPolicy; // SAFETY: policy-specific required fields were checked against the selected definition above
 }
 
 /** A stable, readable one-line spec string used as the gate check's key. */
@@ -758,7 +758,7 @@ function responseSchemaFor(
 function schemaIsValidatable(schema: unknown): schema is OpenApiSchema {
   if (!schema || typeof schema !== "object") return false;
   const seen = new Set<object>();
-  const walk = (node: any // TODO(ts): recursively traverses arbitrary OpenAPI schema nodes
+  const walk = (node: any // SAFETY: recursively traverses arbitrary OpenAPI schema nodes
   ): boolean => {
     if (!node || typeof node !== "object" || seen.has(node)) return true;
     seen.add(node);
@@ -839,7 +839,7 @@ function repeatKey(
 function headerOf(request: InvariantTraceRequest, name: string): string | null {
   const headers = request.requestHeaders ?? {};
   const key = Object.keys(headers).find((h) => h.toLowerCase() === String(name).toLowerCase());
-  return key === undefined ? null : headers[key]!; // TODO(ts): key is selected from Object.keys on this headers object
+  return key === undefined ? null : headers[key]!; // SAFETY: key is selected from Object.keys on this headers object
 }
 
 /** A response body reduced to what an idempotency comparison should see. */

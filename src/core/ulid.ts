@@ -18,7 +18,7 @@ function encodeTime(now: number): string {
   let out = "";
   for (let i = TIME_LEN - 1; i >= 0; i--) {
     const mod = now % 32;
-    out = ENCODING[mod]! + out; // TODO(ts): modulo 32 is always a valid alphabet index.
+    out = ENCODING[mod]! + out; // SAFETY: modulo 32 is always a valid alphabet index.
     now = (now - mod) / 32;
   }
   return out;
@@ -29,7 +29,7 @@ function randomDigits(): Uint8Array {
   // bits of each of 16 bytes — uniform over 0..31, which is what we want.
   const bytes = randomBytes(RAND_LEN);
   const digits = new Uint8Array(RAND_LEN);
-  for (let i = 0; i < RAND_LEN; i++) digits[i] = bytes[i]! & 0x1f; // TODO(ts): randomBytes returns exactly RAND_LEN bytes.
+  for (let i = 0; i < RAND_LEN; i++) digits[i] = bytes[i]! & 0x1f; // SAFETY: randomBytes returns exactly RAND_LEN bytes.
   return digits;
 }
 
@@ -39,8 +39,8 @@ function incrementDigits(digits: Uint8Array): Uint8Array {
   // fall back to fresh randomness (still monotone because time will have advanced by
   // the next call).
   for (let i = RAND_LEN - 1; i >= 0; i--) {
-    if (digits[i]! < 31) { // TODO(ts): the loop index is within the fixed-length digit array.
-      digits[i]!++; // TODO(ts): the loop index is within the fixed-length digit array.
+    if (digits[i]! < 31) { // SAFETY: the loop index is within the fixed-length digit array.
+      digits[i]!++; // SAFETY: the loop index is within the fixed-length digit array.
       return digits;
     }
     digits[i] = 0;
@@ -66,7 +66,7 @@ export function ulid(now: number = Date.now()): string {
   }
   lastRand = digits;
   let rand = "";
-  for (let i = 0; i < RAND_LEN; i++) rand += ENCODING[digits[i]!]!; // TODO(ts): both fixed-length array indices are in range.
+  for (let i = 0; i < RAND_LEN; i++) rand += ENCODING[digits[i]!]!; // SAFETY: both fixed-length array indices are in range.
   return encodeTime(now) + rand;
 }
 

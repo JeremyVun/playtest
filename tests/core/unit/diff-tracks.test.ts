@@ -26,8 +26,8 @@ test("identical tracks are all same", () => {
   assert.deepEqual(summary, { same: 2, del: 0, add: 0 });
   assert.deepEqual(ops.map((o) => o.op), ["same", "same"]);
   // ops carry the envelopes themselves, both sides on a "same" row
-  assert.equal(ops[0]!.a, a[0]); // TODO(ts): two identical input steps produce two diff rows
-  assert.equal(ops[0]!.b, b[0]); // TODO(ts): two identical input steps produce two diff rows
+  assert.equal(ops[0]!.a, a[0]); // SAFETY: two identical input steps produce two diff rows
+  assert.equal(ops[0]!.b, b[0]); // SAFETY: two identical input steps produce two diff rows
 });
 
 test("insertion and removal land as add/del around the common subsequence", () => {
@@ -36,8 +36,8 @@ test("insertion and removal land as add/del around the common subsequence", () =
   const { ops, summary } = diffTracks(a, b);
   assert.deepEqual(summary, { same: 2, del: 1, add: 1 });
   assert.deepEqual(ops.map((o) => o.op), ["same", "del", "add", "same"]);
-  assert.equal(ops[1]!.b, null); // TODO(ts): the asserted operation sequence proves this row exists
-  assert.equal(ops[2]!.a, null); // TODO(ts): the asserted operation sequence proves this row exists
+  assert.equal(ops[1]!.b, null); // SAFETY: the asserted operation sequence proves this row exists
+  assert.equal(ops[2]!.a, null); // SAFETY: the asserted operation sequence proves this row exists
 });
 
 test("signature: changed typed text, select value, or direction is NOT same", () => {

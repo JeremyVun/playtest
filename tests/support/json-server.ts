@@ -20,7 +20,7 @@ export async function startJsonServer(
         const payload = await respond(body, requests.length);
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify(payload));
-      } catch (error: any) { // TODO(ts): preserve legacy Error-shaped catch access without changing runtime tokens
+      } catch (error: any) { // SAFETY: preserve legacy Error-shaped catch access without changing runtime tokens
         res.writeHead(500, { "content-type": "application/json" });
         res.end(JSON.stringify({ error: { message: error.message } }));
       }
@@ -28,9 +28,9 @@ export async function startJsonServer(
   });
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
-    server.listen(0, "127.0.0.1", resolve as () => void); // TODO(ts): Node's listen callback omits the Promise resolver argument
+    server.listen(0, "127.0.0.1", resolve as () => void); // SAFETY: Node's listen callback omits the Promise resolver argument
   });
-  const { port } = server.address() as import("node:net").AddressInfo; // TODO(ts): a listening TCP server has an AddressInfo here
+  const { port } = server.address() as import("node:net").AddressInfo; // SAFETY: a listening TCP server has an AddressInfo here
   return {
     url: `http://127.0.0.1:${port}`,
     requests: () => [...requests],

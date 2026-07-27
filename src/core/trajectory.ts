@@ -135,11 +135,6 @@ export const SNAPSHOT_FORMATS = { web: SNAPSHOT_FORMAT, mobile: "ax-tree-v7", ap
 export function snapshotFormatFor(driver?: DriverId): string | null {
   return SNAPSHOT_FORMATS[driver ?? "web"] ?? null;
 }
-// Reset to v1 (2026-07-27): pre-release, no external consumers, no baseline
-// compat to preserve. History up to the reset (v10: grader rubric gained the
-// API evidence forms and the drift-report prompt) lives in git. Bump on any
-// change to actor/grader system prompt bytes.
-export const PROMPTS_VERSION = "prompts-v2";
 // The marker line that makes a persisted api response projection
 // self-identifying (docs/contracts/artifacts.md#step-envelope). It lives here
 // with the other artifact-format constants so a reader can recognize a
@@ -171,7 +166,6 @@ export const VISION_DRIFT_DEFAULT = 10;
 // Base of manifest.pins; runner adds actor_model, grader_model, gateway.
 export const PINS_BASE = {
   harness_version: HARNESS_VERSION,
-  prompts_version: PROMPTS_VERSION,
   step_schema_version: STEP_SCHEMA_VERSION,
   snapshot_format: SNAPSHOT_FORMAT,
   settle: SETTLE,
@@ -266,7 +260,7 @@ export class RunWriter {
     const file = path.join(this.#dir, "trajectory.jsonl");
     const lines: IndexedArray<string> = fs.readFileSync(file, "utf8").split("\n");
     let last = lines.length - 1;
-    while (last >= 0 && !lines[last]!.trim()) last--; // TODO(ts): last >= 0 and last starts at length - 1 prove the indexed line exists
+    while (last >= 0 && !lines[last]!.trim()) last--; // SAFETY: last >= 0 and last starts at length - 1 prove the indexed line exists
     if (last < 0) return; // nothing written yet
     lines[last] = JSON.stringify(envelope);
     // Re-add the trailing newline appendEnvelope writes after every line, so the
@@ -286,7 +280,7 @@ export function readTrajectory(jsonlPath: string): StepEnvelope[] {
 
 /** The step's action, whether agent-decided (`agent.action`) or acted (`action`). */
 export function actionOf<T extends StepAction = StepAction>(envelope: StepEnvelope): T | null {
-  return (envelope.agent?.action ?? envelope.action ?? null) as T | null; // TODO(ts): callers may refine a validated driver action
+  return (envelope.agent?.action ?? envelope.action ?? null) as T | null; // SAFETY: callers may refine a validated driver action
 }
 
 /** First line of an error's message — the shared error-formatting helper. */
@@ -338,13 +332,13 @@ export function diffTracks(
   }>;
   summary: { same: number; del: number; add: number };
 } {
-  const A: IndexedArray<StepEnvelope> = baselineTrack as IndexedArray<StepEnvelope>, B: IndexedArray<StepEnvelope> = newTrack as IndexedArray<StepEnvelope>; // TODO(ts): the indexed view records bounds guaranteed by the LCS loops
+  const A: IndexedArray<StepEnvelope> = baselineTrack as IndexedArray<StepEnvelope>, B: IndexedArray<StepEnvelope> = newTrack as IndexedArray<StepEnvelope>; // SAFETY: the indexed view records bounds guaranteed by the LCS loops
   const sigA: IndexedArray<string> = A.map(stepSignature), sigB: IndexedArray<string> = B.map(stepSignature);
   const n = A.length, m = B.length;
-  const L: IndexedArray<IndexedArray<number>> = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0)) as IndexedArray<IndexedArray<number>>; // TODO(ts): the matrix dimensions cover every index used by the bounded LCS loops
+  const L: IndexedArray<IndexedArray<number>> = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0)) as IndexedArray<IndexedArray<number>>; // SAFETY: the matrix dimensions cover every index used by the bounded LCS loops
   for (let i = n - 1; i >= 0; i--)
     for (let j = m - 1; j >= 0; j--)
-      L[i]![j] = sigA[i] === sigB[j] ? L[i + 1]![j + 1]! + 1 : Math.max(L[i + 1]![j]!, L[i]![j + 1]!); // TODO(ts): the matrix and signature indices are bounded by n and m
+      L[i]![j] = sigA[i] === sigB[j] ? L[i + 1]![j + 1]! + 1 : Math.max(L[i + 1]![j]!, L[i]![j + 1]!); // SAFETY: the matrix and signature indices are bounded by n and m
   const ops: Array<{
     op: "same" | "del" | "add";
     a: StepEnvelope | null;
@@ -352,12 +346,12 @@ export function diffTracks(
   }> = [];
   let i = 0, j = 0;
   while (i < n && j < m) {
-    if (sigA[i] === sigB[j]) ops.push({ op: "same", a: A[i++]!, b: B[j++]! }); // TODO(ts): the loop condition bounds both track indices
-    else if (L[i + 1]![j]! >= L[i]![j + 1]!) ops.push({ op: "del", a: A[i++]!, b: null }); // TODO(ts): the loop condition and matrix dimensions bound these indices
-    else ops.push({ op: "add", a: null, b: B[j++]! }); // TODO(ts): the loop condition bounds the new-track index
+    if (sigA[i] === sigB[j]) ops.push({ op: "same", a: A[i++]!, b: B[j++]! }); // SAFETY: the loop condition bounds both track indices
+    else if (L[i + 1]![j]! >= L[i]![j + 1]!) ops.push({ op: "del", a: A[i++]!, b: null }); // SAFETY: the loop condition and matrix dimensions bound these indices
+    else ops.push({ op: "add", a: null, b: B[j++]! }); // SAFETY: the loop condition bounds the new-track index
   }
-  while (i < n) ops.push({ op: "del", a: A[i++]!, b: null }); // TODO(ts): i < n proves the baseline-track element exists
-  while (j < m) ops.push({ op: "add", a: null, b: B[j++]! }); // TODO(ts): j < m proves the new-track element exists
+  while (i < n) ops.push({ op: "del", a: A[i++]!, b: null }); // SAFETY: i < n proves the baseline-track element exists
+  while (j < m) ops.push({ op: "add", a: null, b: B[j++]! }); // SAFETY: j < m proves the new-track element exists
   const summary = { same: 0, del: 0, add: 0 };
   for (const o of ops) summary[o.op]++;
   return { ops, summary };

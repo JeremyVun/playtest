@@ -31,14 +31,20 @@ Hosted Playtest has three runtime components:
 - `src/platform/web` is a static browser client served by the control plane. It
   embeds the shared viewer from `src/run-viewer/web`.
 
+Each component is a private npm workspace with its own scripts and direct
+dependency declarations. The root `@jeremyvun/playtest` CLI/core package is
+also the workspace root, and its `package-lock.json` is the only lockfile.
+
 The hosted components consume core only through `src/core/public/`. The local
 CLI remains fully functional without the hosted platform.
 
-The hosted console and embedded viewer serve JavaScript emitted beside their
-TypeScript sources. A checkout must run `npm install` (which runs
-`npm run build:web`) or run `npm run build:web` explicitly before any other
-server serves those directories. The supported hosted entry point performs
-that build itself.
+The hosted console is one minified ESM bundle served with its copied HTML and
+CSS from the generated `src/platform/web/build/` directory. Its source map is
+generated beside it. The embedded viewer and shared browser modules remain
+JavaScript emitted beside their TypeScript sources. A checkout must run
+`npm install` (which runs `npm run build:web`) or run `npm run build:web`
+explicitly before any server serves those directories. The supported hosted
+entry point performs that build itself.
 
 SQLite is the system of record for hosted metadata. The object store holds
 content-addressed suite blobs, run bundles, clips, and reports. Filesystem
@@ -396,7 +402,6 @@ One row per card in `rule_cards`, suite-scoped:
 | `provenance` | one line of what the model read. It never travels into a handout |
 | `note` | the owner's steering, rendered beside the rule as **Owner's note** |
 | `proposed_statement` | what the model originally said, kept when a person edits the sentence |
-| `prompt_version` | which instrument proposed it; cards outlive their prompt |
 | `decided_by`, `decided_at` | the human behind the current state. Never set for a `candidate` |
 
 ### Governance
@@ -976,10 +981,10 @@ proposal time; applying a plan whose findings were reviewed, merged, or re-keyed
 since fails cleanly as a conflict, as does applying a plan that was already
 applied or discarded. Nothing partial is left behind.
 
-Model and prompt metadata are recomputable assignment provenance: the plan
-records its shortlist and match-text algorithm versions, the prompt pin, the
-model, the deterministic scope shown to the reviewer before the run, and the
-gateway usage reported after it. A finding retitled by a plan carries the same
+Algorithm and model metadata are recomputable assignment provenance: the plan
+records its shortlist and match-text algorithm versions, the model, the
+deterministic scope shown to the reviewer before the run, and the gateway usage
+reported after it. A finding retitled by a plan carries the same algorithm
 versions in its summary.
 
 Routes: `GET /api/v1/projects/:p/consolidation/preview` (reviewer) returns the
@@ -1040,8 +1045,7 @@ The tiers, by what grounds the finding:
   pass verdict never proved the claim — the grader grades fresh (it is not
   shown the findings ledger) and checked act-mode runs are not graded at
   all, so absence from a later grade means "nobody looked". The sweep looks:
-  one forced-tool call (`findings/verify-fix.ts`, prompt pin
-  `resolve-verify-v1`, model `auto_resolve_model` →
+  one forced-tool call (`findings/verify-fix.ts`, model `auto_resolve_model` →
   `PLAYTEST_AUTO_RESOLVE_MODEL` → the consolidation cost tier) re-checks the
   claim against the newer run's recorded page content (the cited evidence
   steps' a11y text plus the final page) and answers **fixed / not fixed /
@@ -1199,12 +1203,11 @@ feed event, or assistant-specific commit endpoint.
 
 Rule-card proposal is the assistant's second call and the one durable-writing
 one ([Rule cards](#rule-cards)): it persists `candidate` rows, an audit entry,
-and a feed event. Its prompt is pinned at `RULE_PROPOSAL_PROMPT_VERSION`
-(`rule-proposal-v1`), built and parsed in the engine
+and a feed event. Its prompt, forced-tool schema, validation, and normalization
+are owned by the engine
 (`src/core/public/api-suite-scripts.ts`) so the CLI and a future runner-agent job share
-one instrument, and it is bumped whenever the prompt text, the card shape, or
-the reply grammar changes. Like every other model call here it decides nothing:
-a parsed card is always a candidate.
+one instrument. Like every other model call here it decides nothing:
+a proposed card is always a candidate.
 
 Discovery study synthesis is a findings operation, not a stored report.
 Triggered contextually on a finished discovery run group, it reasons across the

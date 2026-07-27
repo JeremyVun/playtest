@@ -202,7 +202,7 @@ export function loadOpenApi(
   const ctx = { at, rootDir, read, maxNodes, budget: { n: 0 }, diagnostics: [] };
 
   const root = read(abs);
-  const resolved = resolveNode(root, { ...ctx, docPath: abs, doc: root }, new Set<string>()) as OpenApiNode & { paths?: Record<string, OpenApiPathItem> }; // TODO(ts): the runtime document guard below narrows the resolved root
+  const resolved = resolveNode(root, { ...ctx, docPath: abs, doc: root }, new Set<string>()) as OpenApiNode & { paths?: Record<string, OpenApiPathItem> }; // SAFETY: the runtime document guard below narrows the resolved root
   if (!resolved || typeof resolved !== "object" || !resolved.paths || typeof resolved.paths !== "object") {
     throw new DummyConfigError(
       `${at}: no "paths" object — this does not look like an OpenAPI document (expected OpenAPI 3.x with a paths map)`,
@@ -241,7 +241,7 @@ function readDocument(
   let doc: unknown;
   try {
     doc = YAML.parse(fs.readFileSync(abs, "utf8"));
-  } catch (e: any) { // TODO(ts): YAML may throw non-Error values
+  } catch (e: any) { // SAFETY: YAML may throw non-Error values
     throw new DummyConfigError(`${at}: ${abs} is not valid YAML or JSON — ${String(e?.message ?? e).split("\n")[0]}`);
   }
   if (!doc || typeof doc !== "object") throw new DummyConfigError(`${at}: ${abs} parsed to ${doc === null ? "null" : typeof doc}, not a document`);
@@ -317,7 +317,7 @@ function pointerInto(
   if (!pointer.startsWith("/")) {
     throw new DummyConfigError(`${ctx.at}: $ref "${ref}" is not a JSON pointer — write "#/components/schemas/Name"`);
   }
-  let cur: any = doc; // TODO(ts): JSON Pointer traversal narrows each dynamic document segment at runtime
+  let cur: any = doc; // SAFETY: JSON Pointer traversal narrows each dynamic document segment at runtime
   for (const raw of pointer.slice(1).split("/")) {
     const seg = decodeURIComponent(raw).replace(/~1/g, "/").replace(/~0/g, "~");
     if (cur == null || typeof cur !== "object" || !(seg in cur)) {
@@ -342,7 +342,7 @@ function enrich(
     if (!item || typeof item !== "object") continue;
     const shared = Array.isArray(item.parameters) ? item.parameters : [];
     for (const method of METHODS) {
-      const op: OpenApiOperationSource | null | undefined = item[method] as OpenApiOperationSource | null | undefined; // TODO(ts): OpenAPI method members are dynamically keyed and narrowed below
+      const op: OpenApiOperationSource | null | undefined = item[method] as OpenApiOperationSource | null | undefined; // SAFETY: OpenAPI method members are dynamically keyed and narrowed below
       if (!op || typeof op !== "object") continue;
       const responses: Record<string, OpenApiResponseSource | null | undefined> = op.responses && typeof op.responses === "object" ? op.responses : {};
       const operation = {
@@ -389,7 +389,7 @@ function enrich(
 function mergeParameters(shared: unknown[], own: unknown): OpenApiParameter[] {
   const out: OpenApiParameter[] = [];
   const seen = new Set<string>();
-  for (const p of [...(Array.isArray(own) ? own : []), ...shared] as OpenApiParameterSource[]) { // TODO(ts): each untrusted parameter is shape-checked before its fields are consumed
+  for (const p of [...(Array.isArray(own) ? own : []), ...shared] as OpenApiParameterSource[]) { // SAFETY: each untrusted parameter is shape-checked before its fields are consumed
     if (!p || typeof p !== "object" || typeof p.name !== "string") continue;
     const key = `${p.in}:${p.name}`;
     if (seen.has(key)) continue; // an operation-level parameter overrides the path-level one

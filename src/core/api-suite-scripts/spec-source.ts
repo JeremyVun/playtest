@@ -154,7 +154,7 @@ export function specLinksFrom(headerValue: DynamicValue, baseUrl: DynamicValue) 
     const rel = (part.match(/rel\s*=\s*"?([^";]+)"?/i)?.[1] ?? "").trim().toLowerCase();
     if (!SPEC_LINK_RELS.includes(rel)) continue;
     try {
-      out.push(new URL(match[1]!.trim(), baseUrl).href); // TODO(ts): the successful regex match guarantees capture group one
+      out.push(new URL(match[1]!.trim(), baseUrl).href); // SAFETY: the successful regex match guarantees capture group one
     } catch {
       // A malformed link header is not a configuration error the user can act on.
     }

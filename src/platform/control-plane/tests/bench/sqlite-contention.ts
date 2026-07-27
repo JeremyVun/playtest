@@ -209,7 +209,7 @@ function seed(file: string, { runs = 40, findings = 60, artifacts = 80 }: SeedOp
   for (let i = 0; i < findings; i += 1) {
     insFinding.run(
       `finding-${i}`, PROJECT, `fp-${i}`, `Finding ${i}`,
-      ["info", "minor", "major"][i % 3] as string, ["new", "accepted", "resolved"][i % 3] as string, // TODO(ts): modulo indexing always selects one of these inline seed values
+      ["info", "minor", "major"][i % 3] as string, ["new", "accepted", "resolved"][i % 3] as string, // SAFETY: modulo indexing always selects one of these inline seed values
       null, Date.now() - i * 1000, i % 4,
     );
   }
@@ -218,7 +218,7 @@ function seed(file: string, { runs = 40, findings = 60, artifacts = 80 }: SeedOp
   );
   for (let i = 0; i < artifacts; i += 1) {
     insArtifact.run(
-      `artifact-${i}`, `run-${i % runs}`, ["bundle", "index", "clip", "clip_vtt"][i % 4] as string, // TODO(ts): modulo indexing always selects one of these inline seed values
+      `artifact-${i}`, `run-${i % runs}`, ["bundle", "index", "clip", "clip_vtt"][i % 4] as string, // SAFETY: modulo indexing always selects one of these inline seed values
       `runs/group/${i}.ptrun`, "0".repeat(64), 4096 + i * 17, i % 3 === 0 ? "core" : "full", PROJECT,
     );
   }
@@ -281,7 +281,7 @@ function runWorker(): void {
       if (role === "write") writeTxn(done);
       else if (role === "list") listTxn();
       else eventTxn();
-    } catch (e: any) { // TODO(ts): SQLite errors expose errstr, message, and errcode at this benchmark boundary
+    } catch (e: any) { // SAFETY: SQLite errors expose errstr, message, and errcode at this benchmark boundary
       if (String(e.errstr || e.message).includes("busy") || e.errcode === 5) {
         busy += 1;
         continue;
@@ -292,7 +292,7 @@ function runWorker(): void {
     done += 1;
   }
   db.close();
-  parentPort!.postMessage({ role, id, done, busy, latencies }); // TODO(ts): worker execution always has a parent port
+  parentPort!.postMessage({ role, id, done, busy, latencies }); // SAFETY: worker execution always has a parent port
 }
 
 // -------------------------------------------------------------------- main
@@ -410,7 +410,7 @@ async function main() {
 
   const out = {
     node: process.version,
-    sqlite: new DatabaseSync(":memory:").prepare("SELECT sqlite_version() AS v").get()!.v, // TODO(ts): SQLite always returns one row for sqlite_version()
+    sqlite: new DatabaseSync(":memory:").prepare("SELECT sqlite_version() AS v").get()!.v, // SAFETY: SQLite always returns one row for sqlite_version()
     platform: `${os.platform()} ${os.arch()}`,
     cpus: os.cpus().length,
     driver: "node:sqlite (DatabaseSync)",
@@ -425,14 +425,14 @@ async function main() {
   process.stdout.write(`node ${out.node} · sqlite ${out.sqlite} · ${out.platform} · ${out.cpus} cpus · ${out.driver}\n\n`);
   const cols: SummaryColumn[] = ["scenario", "workers", "operations", "ops_per_s", "p50_ms", "p95_ms", "p99_ms", "max_ms", "sqlite_busy_retries"];
   const widths = cols.map((c) => Math.max(c.length, ...scenarios.map((s) => String(s[c]).length)));
-  const line = (vals: Array<string | number | null>) => vals.map((v, i) => String(v).padEnd(widths[i]!)).join("  "); // TODO(ts): vals and widths are derived from the same column list
+  const line = (vals: Array<string | number | null>) => vals.map((v, i) => String(v).padEnd(widths[i]!)).join("  "); // SAFETY: vals and widths are derived from the same column list
   process.stdout.write(line(cols) + "\n");
   process.stdout.write(widths.map((w) => "-".repeat(w)).join("  ") + "\n");
   for (const s of scenarios) {
     process.stdout.write(line(cols.map((c) => s[c])) + "\n");
     if (s.writes) {
-      process.stdout.write("  " + line(cols.map((c) => (c === "scenario" ? "  ↳ writes" : s.writes![c]))) + "\n"); // TODO(ts): this branch is guarded by the writes summary
-      process.stdout.write("  " + line(cols.map((c) => (c === "scenario" ? "  ↳ reads" : s.reads![c]))) + "\n"); // TODO(ts): mixed summaries assign reads with writes
+      process.stdout.write("  " + line(cols.map((c) => (c === "scenario" ? "  ↳ writes" : s.writes![c]))) + "\n"); // SAFETY: this branch is guarded by the writes summary
+      process.stdout.write("  " + line(cols.map((c) => (c === "scenario" ? "  ↳ reads" : s.reads![c]))) + "\n"); // SAFETY: mixed summaries assign reads with writes
     }
   }
 }

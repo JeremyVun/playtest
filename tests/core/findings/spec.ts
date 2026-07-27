@@ -127,7 +127,7 @@ export function strictKey(candidate: FindingItem) {
     candidate.project_id,
     candidate.story_id,
     candidate.signal_type,
-    normalizeLocus(candidate.locus!), // TODO(ts): hasExactKeys proves the candidate has a locus
+    normalizeLocus(candidate.locus!), // SAFETY: hasExactKeys proves the candidate has a locus
   ].join(SEP));
 }
 
@@ -137,7 +137,7 @@ export function looseKey(candidate: FindingItem) {
   return sha256([
     candidate.project_id,
     candidate.signal_type,
-    normalizeLocus(candidate.locus!), // TODO(ts): hasExactKeys proves the candidate has a locus
+    normalizeLocus(candidate.locus!), // SAFETY: hasExactKeys proves the candidate has a locus
   ].join(SEP));
 }
 
@@ -254,7 +254,7 @@ export function route(
   if (strictHit) return "append";
   if (looseHit) return "suggestion";
   const findingNeighbors = neighbors.filter((n) => n.role === "finding");
-  if (findingNeighbors.length === 1 && findingNeighbors[0]!.score >= RETRIEVAL.auto_suggest) { // TODO(ts): length check proves the first neighbor exists
+  if (findingNeighbors.length === 1 && findingNeighbors[0]!.score >= RETRIEVAL.auto_suggest) { // SAFETY: length check proves the first neighbor exists
     return "suggestion";
   }
   if (neighbors.length === 0) return "new";
@@ -271,8 +271,8 @@ export function clusters(candidateIds: string[], edges: Array<{ a: string; b: st
   const parent = new Map(candidateIds.map((id) => [id, id]));
   const find = (x: string) => {
     while (parent.get(x) !== x) {
-      parent.set(x, parent.get(parent.get(x)!)!); // TODO(ts): candidate ids and their parents are initialized together
-      x = parent.get(x)!; // TODO(ts): candidate ids and their parents are initialized together
+      parent.set(x, parent.get(parent.get(x)!)!); // SAFETY: candidate ids and their parents are initialized together
+      x = parent.get(x)!; // SAFETY: candidate ids and their parents are initialized together
     }
     return x;
   };
@@ -288,9 +288,9 @@ export function clusters(candidateIds: string[], edges: Array<{ a: string; b: st
   for (const id of candidateIds) {
     const root = find(id);
     if (!groups.has(root)) groups.set(root, []);
-    groups.get(root)!.push(id); // TODO(ts): the group is initialized immediately before this lookup
+    groups.get(root)!.push(id); // SAFETY: the group is initialized immediately before this lookup
   }
-  return [...groups.values()].map((g) => g.sort()).sort((x, y) => x[0]!.localeCompare(y[0]!)); // TODO(ts): every connected component contains at least one candidate id
+  return [...groups.values()].map((g) => g.sort()).sort((x, y) => x[0]!.localeCompare(y[0]!)); // SAFETY: every connected component contains at least one candidate id
 }
 
 /** Coarse token estimate for a cluster's compact claim payload. */

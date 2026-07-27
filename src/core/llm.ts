@@ -72,7 +72,7 @@ const API_KEY_VARS = ["PLAYTEST_LLM_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_K
 // Built-in enum → fully-qualified model defaults (the gateway-specific names).
 // Shipped, never hardcoded in JS; users override per enum via PLAYTEST_<ENUM>_MODEL.
 const here = path.dirname(fileURLToPath(import.meta.url));
-const MODEL_DEFAULTS = JSON.parse(readFileSync(path.join(here, "models.json"), "utf8")) as Record<string, string>; // TODO(ts): models.json is a shipped string map
+const MODEL_DEFAULTS = JSON.parse(readFileSync(path.join(here, "models.json"), "utf8")) as Record<string, string>; // SAFETY: models.json is a shipped string map
 
 /**
  * The short model-tier enums this build ships (the keys of models.json), in
@@ -253,9 +253,9 @@ function postJson(
       res.on("end", () => {
         const text = Buffer.concat(chunks).toString("utf8");
         resolve({
-          status: res.statusCode as number, // TODO(ts): a completed Node client response always has an HTTP status
-          ok: res.statusCode as number >= 200 && res.statusCode as number < 300, // TODO(ts): a completed Node client response always has an HTTP status
-          headers: { get: (name) => res.headers[String(name).toLowerCase()] as string | null ?? null }, // TODO(ts): Retry-After is a singleton response header
+          status: res.statusCode as number, // SAFETY: a completed Node client response always has an HTTP status
+          ok: res.statusCode as number >= 200 && res.statusCode as number < 300, // SAFETY: a completed Node client response always has an HTTP status
+          headers: { get: (name) => res.headers[String(name).toLowerCase()] as string | null ?? null }, // SAFETY: Retry-After is a singleton response header
           text: async () => text,
           json: async () => JSON.parse(text),
         });
@@ -404,7 +404,7 @@ export async function chat({
     try {
       res = await postJson(`${baseUrl}/v1/chat/completions`, headers, payload,
         signal ? AbortSignal.any([signal, timeout]) : timeout);
-    } catch (err: any) { // TODO(ts): node:http rejects with Error instances
+    } catch (err: any) { // SAFETY: node:http rejects with Error instances
       throwIfAborted();
       if (attempt + 1 >= MAX_ATTEMPTS_5XX) throw new LlmError(`LLM request failed: ${err.message}`);
       const waitMs = 500 * 2 ** attempt;
@@ -423,7 +423,7 @@ export async function chat({
       // but a bogus header can't stall us past RETRY_AFTER_CAP_MS.
       const backoff = res.status === 429 ? jitter(1000 * 2 ** (attempt + 2)) : 500 * 2 ** attempt;
       const retryAfter = res.status === 429 ? parseRetryAfter(res.headers.get("retry-after")) : null;
-      const waitMs = Math.min(Math.max(retryAfter as number, backoff), RETRY_AFTER_CAP_MS); // TODO(ts): Math.max preserves the existing null-to-zero coercion
+      const waitMs = Math.min(Math.max(retryAfter as number, backoff), RETRY_AFTER_CAP_MS); // SAFETY: Math.max preserves the existing null-to-zero coercion
       onRetry?.({ status: res.status, attempt: attempt + 1, maxAttempts, waitMs });
       await sleep(waitMs, signal);
       continue;
@@ -436,8 +436,8 @@ export async function chat({
   }
   let data: ChatCompletionResponse;
   try {
-    data = await res.json() as ChatCompletionResponse; // TODO(ts): the gateway response is narrowed by defensive optional reads below
-  } catch (err: any) { // TODO(ts): JSON parse failures are Error instances
+    data = await res.json() as ChatCompletionResponse; // SAFETY: the gateway response is narrowed by defensive optional reads below
+  } catch (err: any) { // SAFETY: JSON parse failures are Error instances
     throw new LlmError(`LLM returned invalid JSON: ${err.message}`);
   }
 
@@ -448,8 +448,8 @@ export async function chat({
   if (tc) {
     let args: Record<string, unknown>;
     try {
-      args = JSON.parse(tc.function.arguments) as Record<string, unknown>; // TODO(ts): tool arguments are runtime-validated by each caller
-    } catch (err: any) { // TODO(ts): JSON parse failures are Error instances
+      args = JSON.parse(tc.function.arguments) as Record<string, unknown>; // SAFETY: tool arguments are runtime-validated by each caller
+    } catch (err: any) { // SAFETY: JSON parse failures are Error instances
       throw new LlmError(`tool call "${tc.function?.name}" has unparseable arguments: ${err.message}`);
     }
     toolCall = { name: tc.function.name, args };
@@ -566,8 +566,8 @@ export async function forcedToolCall<T extends Record<string, unknown> = Record<
       lastError = `expected a "${name}" tool call, got ${toolCall ? `"${toolCall.name}"` : "none"}`;
       continue;
     }
-    lastError = validate(toolCall.args) as string; // TODO(ts): null is deliberately assigned at runtime and handled by the following falsy check
-    if (!lastError) return { args: toolCall.args as T, tokens, retries }; // TODO(ts): caller validation establishes the requested argument shape
+    lastError = validate(toolCall.args) as string; // SAFETY: null is deliberately assigned at runtime and handled by the following falsy check
+    if (!lastError) return { args: toolCall.args as T, tokens, retries }; // SAFETY: caller validation establishes the requested argument shape
     // Some gateways stringify a nested object/array argument; if un-stringifying
     // the top-level values makes the args valid, use them without burning a retry.
     // No identity guard needed: when coerceStringifiedArgs changes nothing it returns
@@ -575,7 +575,7 @@ export async function forcedToolCall<T extends Record<string, unknown> = Record<
     // 392 — so validate(coerced) fails again and we fall through, same as before.
     const coerced = coerceStringifiedArgs(toolCall.args);
     if (!validate(coerced)) {
-      return { args: coerced as T, tokens, retries }; // TODO(ts): caller validation establishes the requested argument shape
+      return { args: coerced as T, tokens, retries }; // SAFETY: caller validation establishes the requested argument shape
     }
     continue;
   }

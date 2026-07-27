@@ -39,7 +39,7 @@ export async function scriptAuthor(file: string, options: ScriptAuthorOptions = 
   if (options.outDir) job.out_dir = path.resolve(options.outDir);
 
   if (options.prepare) {
-    const prepared = await prepareAuthoringJob(job) as PreparedAuthoringJob; // TODO(ts): authoring validates this result before returning it
+    const prepared = await prepareAuthoringJob(job) as PreparedAuthoringJob; // SAFETY: authoring validates this result before returning it
     console.log(`handout written to ${prepared.handoutDir}`);
     console.log(`  spec         ${prepared.specSource.kind}: ${prepared.specSource.detail}`);
     console.log(`  rules        ${plural(prepared.rules.length, "approved statement")}`);

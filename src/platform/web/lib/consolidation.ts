@@ -12,7 +12,7 @@
 /**
  * Human scope line shown BEFORE a reviewer confirms a consolidation run.
  * Reads as what will happen, not as counters: zero-valued middle parts are
- * dropped, and the mechanical details (prompt bytes, versions) live in the
+ * dropped, and the mechanical details live in the
  * page's technical-details fold, not the headline.
  */
 export function scopeLine(preview: WebDynamic) {

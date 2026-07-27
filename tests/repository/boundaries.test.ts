@@ -31,14 +31,14 @@ function relativeImports(file: LegacyTestValue) {
   const imports = [];
   const pattern = /(?:from\s*|import\s*\()\s*["']([^"']+)["']/g;
   for (const match of source.matchAll(pattern)) {
-    if (match[1]!.startsWith(".")) { // TODO(ts): regex capture group is required by the pattern
+    if (match[1]!.startsWith(".")) { // SAFETY: regex capture group is required by the pattern
       const matchIndex = match.index;
       const statementStart = Math.max(
         source.lastIndexOf("import", matchIndex),
         source.lastIndexOf("export", matchIndex),
       );
       const typeOnly = /^import\s+type\b/.test(source.slice(statementStart, matchIndex));
-      imports.push({ specifier: match[1], target: path.resolve(path.dirname(file), match[1]!), typeOnly }); // TODO(ts): regex capture group is required by the pattern
+      imports.push({ specifier: match[1], target: path.resolve(path.dirname(file), match[1]!), typeOnly }); // SAFETY: regex capture group is required by the pattern
     }
   }
   return imports;

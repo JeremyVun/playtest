@@ -47,13 +47,13 @@ node -e 'const [a,b]=process.versions.node.split(".").map(Number);
   if (a<22 || (a===22 && b<5)) { console.error(`hosted-server: the control plane needs Node >= 22.5 for node:sqlite; this is ${process.version}.`); process.exit(2); }'
 
 # ---- 2. dependencies -------------------------------------------------------
-if [ ! -d "$REPO/node_modules" ] || [ ! -d "$REPO/src/platform/control-plane/node_modules" ]; then
+if [ ! -d "$REPO/node_modules" ] || [ ! -e "$REPO/node_modules/@jeremyvun/playtest-control-plane" ]; then
   echo "hosted-server: installing dependencies (first run only)…" >&2
   (cd "$REPO" && npm install)
 fi
 
-# Browser modules are authored in TypeScript and emitted beside their sources.
-# Build on every entry so a checkout can never serve stale generated files.
+# Browser code is authored in TypeScript. Build on every entry so the console
+# bundle and viewer modules can never be stale relative to their sources.
 (cd "$REPO" && npm run build:web)
 
 # ---- 3. .env ---------------------------------------------------------------

@@ -28,7 +28,7 @@ function randomDigits() {
   // bits of each of 16 bytes — uniform over 0..31, which is what we want.
   const bytes = randomBytes(RAND_LEN);
   const digits = new Uint8Array(RAND_LEN);
-  for (let i = 0; i < RAND_LEN; i++) digits[i] = bytes[i]! & 0x1f; // TODO(ts): The fixed byte count guarantees this typed-array index exists.
+  for (let i = 0; i < RAND_LEN; i++) digits[i] = bytes[i]! & 0x1f; // SAFETY: The fixed byte count guarantees this typed-array index exists.
   return digits;
 }
 
@@ -38,8 +38,8 @@ function incrementDigits(digits: Uint8Array): Uint8Array {
   // fall back to fresh randomness (still monotone because time will have advanced by
   // the next call).
   for (let i = RAND_LEN - 1; i >= 0; i--) {
-    if (digits[i]! < 31) { // TODO(ts): The loop bounds guarantee this typed-array index exists.
-      digits[i]!++; // TODO(ts): The loop bounds guarantee this typed-array index exists.
+    if (digits[i]! < 31) { // SAFETY: The loop bounds guarantee this typed-array index exists.
+      digits[i]!++; // SAFETY: The loop bounds guarantee this typed-array index exists.
       return digits;
     }
     digits[i] = 0;

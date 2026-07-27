@@ -23,7 +23,7 @@ export class FsStore {
   }
 
   async put(key: string, data: Buffer | Uint8Array | string) {
-    const buf = Buffer.isBuffer(data) ? data : Buffer.from(data as string, "utf8"); // TODO(ts): Buffer.from accepts the runtime Uint8Array branch despite this overload selecting the string form.
+    const buf = Buffer.isBuffer(data) ? data : Buffer.from(data as string, "utf8"); // SAFETY: Buffer.from accepts the runtime Uint8Array branch despite this overload selecting the string form.
     const abs = this.#abs(key);
     await fsp.mkdir(path.dirname(abs), { recursive: true });
     // Write via a temp sibling + rename so a concurrent reader never sees a
@@ -37,7 +37,7 @@ export class FsStore {
   async get(key: string): Promise<Buffer> {
     try {
       return await fsp.readFile(this.#abs(key));
-    } catch (e: any /* TODO(ts): Filesystem errors expose the Node errno code. */) {
+    } catch (e: any /* SAFETY: Filesystem errors expose the Node errno code. */) {
       if (e.code === "ENOENT") throw new AppError("not_found", `object not found: ${key}`);
       throw e;
     }
@@ -50,7 +50,7 @@ export class FsStore {
       const s = fs.createReadStream(abs, { start, end });
       s.on("data", (c) => chunks.push(c as Buffer));
       s.on("end", () => resolve(Buffer.concat(chunks)));
-      s.on("error", (e: any /* TODO(ts): Filesystem stream errors expose the Node errno code. */) =>
+      s.on("error", (e: any /* SAFETY: Filesystem stream errors expose the Node errno code. */) =>
         reject(e.code === "ENOENT" ? new AppError("not_found", `object not found: ${key}`) : e),
       );
     });
@@ -68,7 +68,7 @@ export class FsStore {
   async delete(key: string): Promise<void> {
     try {
       await fsp.unlink(this.#abs(key));
-    } catch (e: any /* TODO(ts): Filesystem errors expose the Node errno code. */) {
+    } catch (e: any /* SAFETY: Filesystem errors expose the Node errno code. */) {
       if (e.code !== "ENOENT") throw e; // idempotent
     }
   }

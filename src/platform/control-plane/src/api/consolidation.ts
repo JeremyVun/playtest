@@ -133,7 +133,6 @@ function publicPlan(p: HostedDynamic) {
     thresholds: p.thresholds,
     shortlist_version: p.shortlist_version,
     match_text_version: p.match_text_version,
-    prompt_version: p.prompt_version,
     model: p.model,
     scope: p.scope,
     usage: p.usage,

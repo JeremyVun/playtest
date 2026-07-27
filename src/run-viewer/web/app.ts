@@ -6,7 +6,7 @@
 import { movement } from "./shared/movement.js";
 import { AUTOPLAY_MS } from "./shared/timing.js";
 
-type ViewerDynamic = any; // TODO(ts): Viewer inputs are unvalidated artifact JSON and heterogeneous DOM content.
+type ViewerDynamic = any; // SAFETY: Viewer inputs are unvalidated artifact JSON and heterogeneous DOM content.
 type RunMode = "record" | "act" | "heal" | "explore";
 
 const $ = (sel: ViewerDynamic): ViewerDynamic => document.querySelector(sel);
@@ -525,7 +525,7 @@ function initRunLinks() {
     const href = e.target.closest?.("a")?.getAttribute("href");
     if (!href?.startsWith("?run=") || !state.manifest) return;
     e.preventDefault();
-    navigate(new URLSearchParams(href).get("run")!.replace(/^\/+|\/+$/g, "")); // TODO(ts): The startsWith guard guarantees the run query parameter exists.
+    navigate(new URLSearchParams(href).get("run")!.replace(/^\/+|\/+$/g, "")); // SAFETY: The startsWith guard guarantees the run query parameter exists.
   });
   window.addEventListener("popstate", () => {
     const p = new URLSearchParams(location.search).get("run");
@@ -554,7 +554,7 @@ function runsTable(items: ViewerDynamic, cols: ViewerDynamic, rowsFor: ViewerDyn
   const table = h("table", { class: "runs-table" });
   const cmp = (a: ViewerDynamic, b: ViewerDynamic) => {
     const va = a[sort.key], vb = b[sort.key];
-    if (va == null || vb == null) return ((va == null) as unknown as number) - ((vb == null) as unknown as number); // TODO(ts): JavaScript boolean subtraction deliberately orders nulls last.
+    if (va == null || vb == null) return ((va == null) as unknown as number) - ((vb == null) as unknown as number); // SAFETY: JavaScript boolean subtraction deliberately orders nulls last.
     const c = typeof va === "number" && typeof vb === "number" ? va - vb : String(va).localeCompare(String(vb));
     return c * sort.dir;
   };

@@ -47,7 +47,7 @@ afterEach(async () => {
 /** Instrumented egress: every URL the proxy actually fetched. */
 const instrumented = (...args: LegacyTestValue[]) => {
   fetchCalls.push(String(args[0]));
-  return globalThis.fetch(...args as [LegacyTestValue, LegacyTestValue]); // TODO(ts): instrumented fetch forwards the legacy variadic signature
+  return globalThis.fetch(...args as [LegacyTestValue, LegacyTestValue]); // SAFETY: instrumented fetch forwards the legacy variadic signature
 };
 
 const run = (script: LegacyTestValue, options: LegacyTestValue = {}) =>

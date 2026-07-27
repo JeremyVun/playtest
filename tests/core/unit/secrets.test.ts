@@ -60,7 +60,7 @@ test("a missing secret is a DummyConfigError naming the secret and the variable 
   // An empty variable is missing, not an empty secret.
   process.env[VAR] = "";
   assert.throws(() => resolveSecret("TOKEN"), DummyConfigError);
-  assert.throws(() => resolveSecret("not a name" as LegacyTestValue), DummyConfigError); // TODO(ts): deliberately invalid secret name pins validation
+  assert.throws(() => resolveSecret("not a name" as LegacyTestValue), DummyConfigError); // SAFETY: deliberately invalid secret name pins validation
 });
 
 test("resolution registers the value, so redaction covers it everywhere", () => {
@@ -110,11 +110,11 @@ test("app.headers and redact are validated with actionable messages", () => {
   assert.throws(() => normalizeSecretHeaders({ "Bad Name": "x" }, "f.yaml"), /valid HTTP header name/);
 
   assert.throws(
-    () => normalizeRedact({ request: [{ path: "body.email" }] } as LegacyTestValue, "f.yaml"), // TODO(ts): deliberately missing secret pins validation
+    () => normalizeRedact({ request: [{ path: "body.email" }] } as LegacyTestValue, "f.yaml"), // SAFETY: deliberately missing secret pins validation
     (e) => e instanceof DummyConfigError && /needs "secret: NAME"/.test(e.message),
   );
   assert.throws(() => normalizeRedact({ request: [{ path: "$.email", secret: "E" }] }, "f.yaml"), /must start with "headers\." or "body"/);
-  assert.throws(() => normalizeRedact({ projections: [] } as LegacyTestValue, "f.yaml"), /unknown redact key/); // TODO(ts): deliberately unknown key pins validation
+  assert.throws(() => normalizeRedact({ projections: [] } as LegacyTestValue, "f.yaml"), /unknown redact key/); // SAFETY: deliberately unknown key pins validation
   assert.equal(normalizeRedact({ request: [], projection: [] }, "f.yaml"), null);
 });
 

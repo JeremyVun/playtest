@@ -29,9 +29,8 @@ frozen.
 `closure` checks strategy rule 6 before a slice starts: exit 1 with the list
 of unconverted `.js` dependencies that must join the slice.
 
-The no-argument form is the T11 debt audit: `TODO(ts)` markers,
-`@ts-expect-error` count, indicative `any` count, and a hard failure on
-`@ts-ignore`/`@ts-nocheck`.
+The no-argument form reports `@ts-expect-error` and indicative `any` counts,
+and hard-fails on `@ts-ignore`/`@ts-nocheck`.
 
 ## verify-freeze.mjs
 

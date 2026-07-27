@@ -175,7 +175,7 @@ export function describeAction(action: StepAction | null): string {
     case "back": return "back";
     // api verb:
     case "request": return `request ${action.method} ${action.path}`;
-    default: return JSON.stringify(action) as string; // TODO(ts): a step action is always a JSON object, so serialization cannot return undefined
+    default: return JSON.stringify(action) as string; // SAFETY: a step action is always a JSON object, so serialization cannot return undefined
   }
 }
 
@@ -299,7 +299,7 @@ export class Actor {
       // a non-pinned user message a before_each hook fed
       // back (e.g. "Test user acme_user_42 (password hunter2), already signed
       // up."). It lives in the message window, NOT in this.system — so it's
-      // outside the prompts_version golden pin (like the snapshot) and doesn't
+      // outside persisted replay inputs (like the snapshot) and doesn't
       // bust prompt caching. Placed before the log so it reads as standing
       // background. Absent (null) => no message => byte-identical to today.
       ...(this.setupContext ? [{ role: "user", content: `## Run setup\n\n${this.setupContext}` }] : []),

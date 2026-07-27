@@ -46,7 +46,7 @@ export async function startScriptedAuthoringModel(turns: Array<AuthoringTurn | s
     let raw = "";
     req.on("data", (chunk) => (raw += chunk));
     req.on("end", () => {
-      let parsed = null as unknown as ModelCall; // TODO(ts): preserve the legacy null initializer while JSON.parse supplies the call shape
+      let parsed = null as unknown as ModelCall; // SAFETY: preserve the legacy null initializer while JSON.parse supplies the call shape
       try {
         parsed = JSON.parse(raw);
         calls.push(parsed);
@@ -77,8 +77,8 @@ export async function startScriptedAuthoringModel(turns: Array<AuthoringTurn | s
       res.end(body);
     });
   });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve as () => void)); // TODO(ts): Node's listen callback omits the Promise resolver argument
-  const { port } = server.address() as import("node:net").AddressInfo; // TODO(ts): a listening TCP server has an AddressInfo here
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve as () => void)); // SAFETY: Node's listen callback omits the Promise resolver argument
+  const { port } = server.address() as import("node:net").AddressInfo; // SAFETY: a listening TCP server has an AddressInfo here
   return {
     baseUrl: `http://127.0.0.1:${port}`,
     calls,
@@ -120,8 +120,8 @@ export async function startScriptedModel(steps: AgentStep[]) {
       res.end(body);
     });
   });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve as () => void)); // TODO(ts): Node's listen callback omits the Promise resolver argument
-  const { port } = server.address() as import("node:net").AddressInfo; // TODO(ts): a listening TCP server has an AddressInfo here
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve as () => void)); // SAFETY: Node's listen callback omits the Promise resolver argument
+  const { port } = server.address() as import("node:net").AddressInfo; // SAFETY: a listening TCP server has an AddressInfo here
   return {
     baseUrl: `http://127.0.0.1:${port}`,
     calls,

@@ -688,10 +688,11 @@ to [Hosted: Rule cards](hosted.md#rule-cards); the engine owns three things:
 - the **card shape** — `{ id, title, statement, applicability, exceptions,
   provenance, note, state, origin }`, with `state` one of `candidate`,
   `approved`, `denied` and `origin` one of `proposed`, `authored`;
-- the **proposal prompt**, pinned at `RULE_PROPOSAL_PROMPT_VERSION`
-  (`rule-proposal-v1`), built by `buildProposalPrompt` and read back by
-  `parseProposalReply`. A parsed card is **always** `candidate` and `proposed`
-  whatever the reply claimed: a model cannot mint an approved rule;
+- the **proposal prompt**, built by `buildProposalPrompt` and returned through
+  the schema-constrained `RULE_PROPOSAL_TOOL`. Runtime validation rejects fields
+  outside the candidate-card shape, and `normalizeProposalToolArgs` pins every
+  accepted card to **`candidate`** and **`proposed`**: a model cannot mint an
+  approved rule;
 - the **governance boundary** — `approvedCardRules(cards)` is the only function
   that turns cards into handout rules, and it filters on `state === "approved"`
   in its own body. A candidate or denied sentence therefore has no path to a
@@ -699,7 +700,7 @@ to [Hosted: Rule cards](hosted.md#rule-cards); the engine owns three things:
   structural, not advisory.
 
 Three prompt rules are S0 findings rather than taste
-(`studies/api-suite/REPORT.md` §4), and changing one is a change to the pin:
+(`studies/api-suite/REPORT.md` §4):
 one rule per card; an exception narrows a rule and never cancels it; the Level 0
 set is passed in as the list not to re-propose.
 
@@ -736,7 +737,7 @@ document** where the two disagree (two of four authors lost a real defect by
 deciding the other way), and **the first execution is a recon pass** (three of
 four did this unprompted and the fourth paid for skipping it). A change to
 either asset changes what suites get authored, so it belongs in the same review
-as any prompt pin.
+as the other model-facing authoring instructions.
 
 `obligations.json` is not optional garnish. The manifest is derived
 mechanically; an author who has to guess an obligation id spends a whole turn of

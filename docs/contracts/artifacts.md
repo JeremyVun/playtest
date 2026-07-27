@@ -13,7 +13,6 @@ The current constants are exported from `src/core/trajectory.ts`:
 ```js
 HARNESS_VERSION = "0.1.0"
 STEP_SCHEMA_VERSION = 8
-PROMPTS_VERSION = "prompts-v2"
 SNAPSHOT_FORMAT = "a11y-text-v6" // web default
 SETTLE = {
   name: "settle-v1",
@@ -30,7 +29,6 @@ the pin set:
 ```js
 [
   "harness_version",
-  "prompts_version",
   "step_schema_version",
   "snapshot_format",
   "driver",
@@ -49,7 +47,7 @@ because it may contain an ephemeral port. Rendering-only inputs such as
 `device_scale_factor`, session inputs such as cookies or authentication labels,
 and mobile `preserve_session` are not comparability pins.
 
-Every deliberate model-facing prompt rewrite bumps `PROMPTS_VERSION`. Every
+Prompt text is not versioned and does not determine run comparability. Every
 incompatible step or envelope change bumps `STEP_SCHEMA_VERSION`. Every change
 to what a snapshot serializer emits — which roles receive refs, ref numbering,
 or line shape — bumps that driver's snapshot format pin: the pin is what lets
@@ -470,7 +468,6 @@ wall-clock `video.webm`, which consumers must continue to support.
     harness_version,
     actor_model,
     grader_model,
-    prompts_version,
     step_schema_version: 7,
     snapshot_format,
     driver: "web" | "mobile" | "api",

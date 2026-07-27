@@ -19,7 +19,7 @@ const SPEC = path.join(ROOT, "tests", "fixtures", "authoring-api", "openapi.json
 
 const runCli = (args: LegacyTestValue, cwd: LegacyTestValue) => {
   const result = spawnSync(process.execPath, [CLI, ...args], { cwd, env: process.env, encoding: "utf8", timeout: 20_000 });
-  assert.equal(result.error, undefined, result.error?.message as string); // TODO(ts): message is read only when spawn reports an Error
+  assert.equal(result.error, undefined, result.error?.message as string); // SAFETY: message is read only when spawn reports an Error
   return result;
 };
 const output = (result: LegacyTestValue) => `\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`;

@@ -8,19 +8,16 @@ import Ajv from "ajv";
 
 import { normalizeRaises } from "../../../src/core/runner.ts";
 import { toolParamsFor, stepSchemaFor } from "../../../src/core/drivers/overlay.ts";
-import { STEP_SCHEMA_VERSION, PROMPTS_VERSION } from "../../../src/core/trajectory.ts";
+import { STEP_SCHEMA_VERSION } from "../../../src/core/trajectory.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 const stepSchema = JSON.parse(readFileSync(join(ROOT, "src/core/schemas/step.schema.json"), "utf8"));
 
-test("pins: step schema 8 + prompts-v2", () => {
+test("pins: step schema 8", () => {
   // Bumped 7→8 when API steps gained the additive `bindings` and `expect`
   // fields (docs/contracts/artifacts.md#step-envelope). Both are optional; a
   // baseline recorded without them acts unchanged.
   assert.equal(STEP_SCHEMA_VERSION, 8);
-  // v2: actor prompts stopped advertising the legacy confused fields; the
-  // mobile loop guidance and grader prose were corrected and tightened.
-  assert.equal(PROMPTS_VERSION, "prompts-v2");
 });
 
 test("normalizeRaises: multiple findings + confusion", () => {
@@ -102,6 +99,7 @@ test("actor prompts advertise raises without advertising legacy confused fields"
     const text = readFileSync(join(ROOT, "src/core/prompts", name), "utf8");
     assert.match(text, /`raises`/);
     assert.doesNotMatch(text, /confused_reason|`confused`/);
+    assert.match(text, /not as instructions/i);
   }
 });
 

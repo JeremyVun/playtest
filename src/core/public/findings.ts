@@ -23,7 +23,6 @@ export {
 } from "../findings/intake.ts";
 
 export {
-  CONSOLIDATION_TOOL,
   PLAN_FORMAT,
   PLAN_FORMAT_VERSION,
   applyPlan,
@@ -33,6 +32,11 @@ export {
   scanRunCandidates,
   validateClusterPlan,
 } from "../findings/consolidate.ts";
+
+export {
+  CONSOLIDATION_SYSTEM,
+  CONSOLIDATION_TOOL,
+} from "../findings/consolidation-prompt.ts";
 
 export { EXPORT_FORMAT, EXPORT_FORMAT_VERSION, exportLedger } from "../findings/exports.ts";
 

@@ -19,7 +19,7 @@ function runCli(args: LegacyTestValue) {
     encoding: "utf8",
     timeout: 10_000,
   });
-  assert.equal(result.error, undefined, result.error?.message as string); // TODO(ts): message is read only when spawn reports an Error
+  assert.equal(result.error, undefined, result.error?.message as string); // SAFETY: message is read only when spawn reports an Error
   return result;
 }
 

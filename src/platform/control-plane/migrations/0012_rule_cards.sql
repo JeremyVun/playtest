@@ -18,8 +18,8 @@
 --     edits the sentence. Without it, "8 cards approved unedited" and "8 cards
 --     approved after being rewritten" look identical afterwards, and the second
 --     is the interesting one for anyone tuning the prompt.
---   * `prompt_version` pins which instrument wrote the card. Cards outlive the
---     prompt that proposed them.
+--   * `prompt_version` is a legacy nullable column retained for databases made
+--     before prompt versioning was removed. Current code does not write it.
 --
 -- `rule_id` is the obligation slug: `rule:<rule_id>` is what the handout, the
 -- manifest, and every report entry key off, so it is unique per suite and

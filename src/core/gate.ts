@@ -3,7 +3,7 @@ import { parseOperationSelector, selectorSpec } from "./openapi.ts";
 import { statusMatchesPattern } from "./match.ts";
 import { evaluateInvariant, parseInvariantPolicy, policySpec } from "./invariants.ts";
 
-type DynamicValue = any; // TODO(ts): gate context combines driver-specific envelopes, HAR, OpenAPI, and custom assertion evidence
+type DynamicValue = any; // SAFETY: gate context combines driver-specific envelopes, HAR, OpenAPI, and custom assertion evidence
 
 // Soft checks still fail the run (status "fail", exit 1) but do NOT block
 // baseline acceptance: an agent that genuinely completed the journey while the

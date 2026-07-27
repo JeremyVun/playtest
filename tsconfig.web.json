@@ -7,10 +7,6 @@
   },
   "include": [
     "src/core/shared/**/*.ts",
-    "src/run-viewer/web/**/*.ts",
-    "src/platform/web/**/*.ts"
-  ],
-  "exclude": [
-    "src/platform/web/vendor/**"
+    "src/run-viewer/web/**/*.ts"
   ]
 }

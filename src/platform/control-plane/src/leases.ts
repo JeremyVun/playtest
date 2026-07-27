@@ -111,7 +111,7 @@ export async function withLease<Result>(
 ): Promise<{ acquired: false } | { acquired: true; result: Result }> {
   if (!(await claimLease(db, name, { owner, ttlMs }))) return { acquired: false };
   const renew = setInterval(() => {
-    renewLease(db, name, { owner, ttlMs }).catch((e: any /* TODO(ts): Lease failures expose Error.stack at this boundary. */) =>
+    renewLease(db, name, { owner, ttlMs }).catch((e: any /* SAFETY: Lease failures expose Error.stack at this boundary. */) =>
       log?.error?.({ msg: `lease renewal failed for ${name}`, err: e?.stack || String(e) }),
     );
   }, Math.max(1000, Math.floor(ttlMs / 3)));

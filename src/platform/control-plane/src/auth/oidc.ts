@@ -30,7 +30,7 @@ const discoveryCache = new Map<string, OidcEndpoints>(); // issuer -> endpoints
 
 /** Fetch (and cache) the issuer's OIDC discovery document. */
 export async function discover(issuer: string, fetchImpl: typeof fetch = fetch): Promise<OidcEndpoints> {
-  if (discoveryCache.has(issuer)) return discoveryCache.get(issuer)!; // TODO(ts): The preceding cache membership check proves the endpoint exists.
+  if (discoveryCache.has(issuer)) return discoveryCache.get(issuer)!; // SAFETY: The preceding cache membership check proves the endpoint exists.
   const res = await fetchImpl(`${issuer}/.well-known/openid-configuration`);
   if (!res.ok) throw new Error(`OIDC discovery failed for ${issuer}: HTTP ${res.status}`);
   const doc: DynamicJson = await res.json();
@@ -115,13 +115,13 @@ export function verifyLoginState(
 ): DynamicJson | null {
   if (typeof cookie !== "string" || !cookie.includes(".")) return null;
   const [body, mac] = cookie.split(".");
-  const expected = b64url(createHmac("sha256", signingKey(oidc)).update(body!).digest()); // TODO(ts): The delimiter guard proves both split components exist.
-  const a = Buffer.from(mac!); // TODO(ts): The delimiter guard proves both split components exist.
+  const expected = b64url(createHmac("sha256", signingKey(oidc)).update(body!).digest()); // SAFETY: The delimiter guard proves both split components exist.
+  const a = Buffer.from(mac!); // SAFETY: The delimiter guard proves both split components exist.
   const b = Buffer.from(expected);
   if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
   let payload;
   try {
-    payload = JSON.parse(Buffer.from(body!, "base64url").toString("utf8")); // TODO(ts): The delimiter guard proves both split components exist.
+    payload = JSON.parse(Buffer.from(body!, "base64url").toString("utf8")); // SAFETY: The delimiter guard proves both split components exist.
   } catch {
     return null;
   }

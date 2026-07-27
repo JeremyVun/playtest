@@ -20,13 +20,18 @@ hosted product.
 ## Technology and migration direction
 
 - Use Node.js 24 LTS (24.18.0 or newer) and ESM.
+- The root package remains the CLI/core package and is also the npm workspace
+  root. Hosted components under `src/platform/` are private workspaces; each
+  owns its direct dependencies and scripts, while the repository has one root
+  `package-lock.json`.
 - Maintained first-party source is strict TypeScript using erasable syntax.
   Node-side `.ts` files run directly through Node's native type stripping; do
   not add emitted twins or a `dist/` tree.
-- Node-side imports name real `.ts` files. Browser-served TypeScript under
+- Node-side imports name real `.ts` files. Browser TypeScript under
   `src/platform/web/`, `src/run-viewer/web/`, and `src/core/shared/` keeps
-  browser-facing `.js` specifiers and emits JavaScript in place with
-  `npm run build:web`; generated files are gitignored.
+  browser-facing `.js` specifiers. `npm run build:web` emits viewer and shared
+  modules in place, and bundles the hosted console into
+  `src/platform/web/build/`; all generated files are gitignored.
 - Run `npm run typecheck` for every TypeScript project. Do not convert or
   hand-edit `src/platform/web/vendor/`.
 
@@ -68,10 +73,11 @@ node src/cli/cli.ts --help            # run the CLI without linking
 PORT=4173 node examples/todo-app/server.js
 ```
 
-`npm install` runs `npm run build:web`, emitting browser JavaScript beside the
-TypeScript sources. The viewer/browser test commands and hosted server rebuild
-it automatically; run `npm run build:web` directly after browser-source edits
-when using another static server.
+`npm install` runs `npm run build:web`, emitting viewer modules beside their
+TypeScript sources and the hosted-console bundle under
+`src/platform/web/build/`. The viewer/browser test commands and hosted server
+rebuild it automatically; run `npm run build:web` directly after browser-source
+edits when using another static server.
 
 Registry distribution is descoped. The supported install remains a repository
 checkout plus `npm link`; do not add publishing configuration unless that
@@ -114,7 +120,7 @@ npm run test:browser                  # explicit Playwright suites
 npm run test:mobile                   # explicit Appium / iOS Simulator suite
 npm run test:all                      # hermetic and browser suites
 npm run hosted:test                   # control-plane unit tests
-npm --prefix src/platform/control-plane run test:integration
+npm run test:integration --workspace=@jeremyvun/playtest-control-plane
 npm run runner:test
 ```
 

@@ -4,7 +4,7 @@
 // Story:        Order one "Analytical Engine" with express shipping and land on the receipt.
 // Baseline run: 2026-06-10T0300-ab12 (accepted 2026-06-10T03:04:05.000Z)
 // Story hash:   deadbeefcafe0001
-// Pins:         prompts-v9 · step_schema 7 · actor claude-sonnet-4-6
+// Pins:         step_schema 7 · actor claude-sonnet-4-6
 // Contents:     8 recorded step(s), 6 success criterion(a)
 //
 // Regenerate after any baseline change:

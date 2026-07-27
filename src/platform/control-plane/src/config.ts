@@ -57,7 +57,7 @@ function parseKmsKey(raw: string | undefined): Buffer | null {
 function resolveRetentionDays(env: NodeJS.ProcessEnv) {
   try {
     return resolveRetentionConfig(env);
-  } catch (e: any /* TODO(ts): Retention validation attaches structured details to Error. */) {
+  } catch (e: any /* SAFETY: Retention validation attaches structured details to Error. */) {
     const first = e.details?.[0];
     throw new ServerConfigError(
       first
@@ -140,7 +140,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
       mode: "dev" | "oidc";
       oidc?: { issuer: string; clientId: string; clientSecret: string; redirectUri: string; scope: string };
       devUser?: { subject: string; email: string; name: string };
-    }, // TODO(ts): The validated auth mode determines which optional branch is populated below.
+    }, // SAFETY: The validated auth mode determines which optional branch is populated below.
     // Control-plane LLM work uses the §8 gateway env (PLAYTEST_LLM_BASE_URL /
     // PLAYTEST_LLM_API_KEY, read by core llm.ts at call time). There are two
     // independent jobs — inline story drafting and discovery study synthesis —
@@ -343,9 +343,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
       );
     }
     config.auth.oidc = {
-      issuer: env.OIDC_ISSUER!.replace(/\/$/, ""), // TODO(ts): The missing-variable guard above narrows this dynamic env value.
-      clientId: env.OIDC_CLIENT_ID!, // TODO(ts): The missing-variable guard above narrows this dynamic env value.
-      clientSecret: env.OIDC_CLIENT_SECRET!, // TODO(ts): The missing-variable guard above narrows this dynamic env value.
+      issuer: env.OIDC_ISSUER!.replace(/\/$/, ""), // SAFETY: The missing-variable guard above narrows this dynamic env value.
+      clientId: env.OIDC_CLIENT_ID!, // SAFETY: The missing-variable guard above narrows this dynamic env value.
+      clientSecret: env.OIDC_CLIENT_SECRET!, // SAFETY: The missing-variable guard above narrows this dynamic env value.
       redirectUri: env.OIDC_REDIRECT_URI || `${config.publicUrl}/auth/callback`,
       scope: env.OIDC_SCOPE || "openid email profile",
     };

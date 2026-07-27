@@ -20,7 +20,7 @@ import type { ObjectStore } from "../types.ts";
 
 /** Build the configured store from config.objectStore. */
 export function makeObjectStore(cfg: ControlPlaneConfig["objectStore"]): ObjectStore {
-  if (cfg.kind === "s3") return new S3Store(cfg) as unknown as ObjectStore; // TODO(ts): The reserved S3 adapter implements the seam by throwing not_implemented for every method.
+  if (cfg.kind === "s3") return new S3Store(cfg) as unknown as ObjectStore; // SAFETY: The reserved S3 adapter implements the seam by throwing not_implemented for every method.
   return new FsStore(cfg.root);
 }
 

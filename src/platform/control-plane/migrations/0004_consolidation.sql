@@ -28,8 +28,9 @@ CREATE TABLE consolidation_plans (
   scope               TEXT_JSON NOT NULL,           -- { candidates, clusters, prompt_bytes, est_input_tokens, ... }
   usage               TEXT_JSON,                    -- { calls, in, out, cache_read, cost_usd }
 
-  -- Recomputable assignment provenance (docs/contracts/hosted.md).
-  prompt_version      TEXT,                         -- NULL when no cluster call was needed
+  -- `prompt_version` is legacy and no longer written; retained so existing
+  -- databases and storage fixtures remain readable.
+  prompt_version      TEXT,
   model               TEXT,
 
   -- Staleness guard: a digest of every referenced candidate's (id, status,

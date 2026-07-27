@@ -113,7 +113,7 @@ test("triage names a regression on a 5xx and on a vanished bound resource", () =
     "regression",
   );
   const vanished: LegacyTestValue = classifyHealFailure({
-    baselineStep: { step: 3, expect: { status: 200 }, bindings: [{ name: "id_1", from_step: 1, from: "$.id", into: ["path"] }] as LegacyTestValue }, // TODO(ts): legacy fixture binding predates the current binding contract
+    baselineStep: { step: 3, expect: { status: 200 }, bindings: [{ name: "id_1", from_step: 1, from: "$.id", into: ["path"] }] as LegacyTestValue }, // SAFETY: legacy fixture binding predates the current binding contract
     observedStatus: 404,
   });
   assert.equal(vanished.classification, "regression");

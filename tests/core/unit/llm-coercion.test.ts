@@ -54,10 +54,10 @@ test("a plain string that is not object/array JSON is left alone", () => {
 });
 
 test("non-object input is returned unchanged", () => {
-  assert.equal(coerceStringifiedArgs(null as LegacyTestValue), null); // TODO(ts): deliberately invalid input pins runtime tolerance
-  assert.equal(coerceStringifiedArgs("x" as LegacyTestValue), "x"); // TODO(ts): deliberately invalid input pins runtime tolerance
+  assert.equal(coerceStringifiedArgs(null as LegacyTestValue), null); // SAFETY: deliberately invalid input pins runtime tolerance
+  assert.equal(coerceStringifiedArgs("x" as LegacyTestValue), "x"); // SAFETY: deliberately invalid input pins runtime tolerance
   const arr = [1, 2];
-  assert.equal(coerceStringifiedArgs(arr as LegacyTestValue), arr); // TODO(ts): deliberately invalid input pins runtime tolerance
+  assert.equal(coerceStringifiedArgs(arr as LegacyTestValue), arr); // SAFETY: deliberately invalid input pins runtime tolerance
 });
 
 test("the result is a new object (no mutation of the input)", () => {

@@ -216,7 +216,7 @@ export async function processScreenshotImage(
       const { data }: { data: IndexedPixels } = dhashCtx.getImageData(0, 0, W, H);
       const gray = (x: number, y: number): number => {
         const i = (y * W + x) * 4;
-        return (data[i]! + data[i + 1]! + data[i + 2]!) / 3; // TODO(ts): calculated RGBA offsets are inside the 9x8 image data
+        return (data[i]! + data[i + 1]! + data[i + 2]!) / 3; // SAFETY: calculated RGBA offsets are inside the 9x8 image data
       };
       let hi = 0;
       let lo = 0;
@@ -236,7 +236,7 @@ export async function processScreenshotImage(
         const canvas = document.createElement("canvas");
         canvas.width = Math.round(img.width * scale);
         canvas.height = Math.round(img.height * scale);
-        canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height); // TODO(ts): a freshly created canvas provides a 2D context
+        canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height); // SAFETY: a freshly created canvas provides a 2D context
         downscaledDataUrl = canvas.toDataURL("image/png");
       }
       return { dHash: hex(hi) + hex(lo), downscaledDataUrl };
@@ -268,7 +268,7 @@ function initInstrumentation(): void {
     w.inputAt = performance.now();
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        if (window.__dummyWin === w) w.paint = performance.now() - w.inputAt!; // TODO(ts): arm assigned inputAt before scheduling this callback
+        if (window.__dummyWin === w) w.paint = performance.now() - w.inputAt!; // SAFETY: arm assigned inputAt before scheduling this callback
       });
     });
   };
@@ -285,7 +285,7 @@ function initInstrumentation(): void {
   });
   observe("largest-contentful-paint", (l) => {
     const es = l.getEntries();
-    if (es.length) d.lcp = es[es.length - 1]!.startTime; // TODO(ts): es.length proves the last performance entry exists
+    if (es.length) d.lcp = es[es.length - 1]!.startTime; // SAFETY: es.length proves the last performance entry exists
   });
   observe("paint", (l) => {
     for (const e of l.getEntries()) if (e.name === "first-contentful-paint") d.fcp = e.startTime;
@@ -311,10 +311,10 @@ function readWindowInPage(): PerfWindowResult {
   return {
     sameDoc: !!w,
     paint: w ? w.paint : null,
-    longTasksMs: d.longTasksMs! || 0, // TODO(ts): instrumentation initializes the field before this reader is installed
-    lcp: d.lcp === null ? null : d.lcp!, // TODO(ts): instrumentation initializes the field before this reader is installed
-    fcp: d.fcp === null ? null : d.fcp!, // TODO(ts): instrumentation initializes the field before this reader is installed
-    cls: d.cls! || 0, // TODO(ts): instrumentation initializes the field before this reader is installed
+    longTasksMs: d.longTasksMs! || 0, // SAFETY: instrumentation initializes the field before this reader is installed
+    lcp: d.lcp === null ? null : d.lcp!, // SAFETY: instrumentation initializes the field before this reader is installed
+    fcp: d.fcp === null ? null : d.fcp!, // SAFETY: instrumentation initializes the field before this reader is installed
+    cls: d.cls! || 0, // SAFETY: instrumentation initializes the field before this reader is installed
     ttfb: nav ? nav.responseStart : null,
   };
 }
@@ -450,7 +450,7 @@ function locatorCandidatesInPage(el: SnapshotHTMLElement): string[] {
       }
     }
     let name = semantic.getAttribute("aria-label") || "";
-    if (!name && semantic.labels && semantic.labels.length) name = semantic.labels[0]!.textContent || ""; // TODO(ts): labels.length proves the first associated label exists
+    if (!name && semantic.labels && semantic.labels.length) name = semantic.labels[0]!.textContent || ""; // SAFETY: labels.length proves the first associated label exists
     if (!name) name = semantic.getAttribute("placeholder") || semantic.getAttribute("alt") || semantic.getAttribute("title") || "";
     if (!name && semanticTag === "input" && ["button", "submit", "reset"].includes(semantic.type as string)) name = semantic.value || "";
     if (!name) name = semantic.innerText || "";
@@ -672,8 +672,8 @@ export class WebDriver implements Driver {
       const e = this.#har[info.index] as WebHarEntry;
       const headers = resp.headers();
       e.response.status = resp.status();
-      e.response.mimeType = (headers["content-type"] || "").split(";")[0]!.trim(); // TODO(ts): split always yields a first segment
-      const len = parseInt(headers["content-length"]!, 10); // TODO(ts): parseInt historically receives undefined when the header is absent
+      e.response.mimeType = (headers["content-type"] || "").split(";")[0]!.trim(); // SAFETY: split always yields a first segment
+      const len = parseInt(headers["content-length"]!, 10); // SAFETY: parseInt historically receives undefined when the header is absent
       e.response.bodySize = Number.isFinite(len) ? len : -1;
       e.response.headers = headers;
       if (isTextualMime(e.response.mimeType) && (e.response.bodySize < 0 || e.response.bodySize <= MAX_BODY_READ)) {
@@ -856,7 +856,7 @@ export class WebDriver implements Driver {
       screenshot = wrote ? processed.screenshot : null;
     }
     try {
-      const { data } = await this.#cdp!.send("Page.captureSnapshot", { format: "mhtml" }); // TODO(ts): launch initializes CDP before returning a WebDriver
+      const { data } = await this.#cdp!.send("Page.captureSnapshot", { format: "mhtml" }); // SAFETY: launch initializes CDP before returning a WebDriver
       fs.writeFileSync(p.mhtml, data);
     } catch {}
     // Debug-only: the browser's NATIVE a11y tree (Chromium's full AX tree via
@@ -1040,7 +1040,7 @@ export class WebDriver implements Driver {
       this.#finalSnapshot = { text: snap.text, url: this.#checkUrl };
     } catch {}
     try {
-      const { data } = await this.#cdp!.send("Page.captureSnapshot", { format: "mhtml" }); // TODO(ts): launch initializes CDP before returning a WebDriver
+      const { data } = await this.#cdp!.send("Page.captureSnapshot", { format: "mhtml" }); // SAFETY: launch initializes CDP before returning a WebDriver
       fs.writeFileSync(path.join(this.#runDir, "final.mhtml"), data);
     } catch {}
 
@@ -1198,22 +1198,22 @@ export class WebDriver implements Driver {
   async #perform(action: StepAction, locator: Locator | null): Promise<unknown> {
     switch (action.type) {
       case "click":
-        return locator!.click(); // TODO(ts): click actions reach #perform only after locator validation
+        return locator!.click(); // SAFETY: click actions reach #perform only after locator validation
       case "type":
-        await locator!.fill(action.text as string); // TODO(ts): type actions reach #perform only after locator validation
-        if (action.submit) await locator!.press("Enter"); // TODO(ts): type actions reach #perform only after locator validation
+        await locator!.fill(action.text as string); // SAFETY: type actions reach #perform only after locator validation
+        if (action.submit) await locator!.press("Enter"); // SAFETY: type actions reach #perform only after locator validation
         return;
       case "select": {
         // `select` is the semantic verb "choose this option", not the <select>
         // tag: an actor pointing it at a radio, option card, or menu item means
         // the same thing, and only a real <select> understands selectOption.
         // Anything else is chosen by clicking the ref itself.
-        const tag = await locator!.evaluate((el: Element) => el.tagName); // TODO(ts): select actions reach #perform only after locator validation
-        if (tag !== "SELECT") return locator!.click(); // TODO(ts): select actions reach #perform only after locator validation
+        const tag = await locator!.evaluate((el: Element) => el.tagName); // SAFETY: select actions reach #perform only after locator validation
+        if (tag !== "SELECT") return locator!.click(); // SAFETY: select actions reach #perform only after locator validation
         try {
-          await locator!.selectOption({ label: action.value }); // TODO(ts): select actions reach #perform only after locator validation
+          await locator!.selectOption({ label: action.value }); // SAFETY: select actions reach #perform only after locator validation
         } catch {
-          await locator!.selectOption(action.value as string); // TODO(ts): select actions reach #perform only after locator validation
+          await locator!.selectOption(action.value as string); // SAFETY: select actions reach #perform only after locator validation
         }
         return;
       }
@@ -1404,7 +1404,7 @@ export class WebDriver implements Driver {
       for (const id of n.childIds ?? []) visit(byId.get(id));
     };
     const childOf = new Set(nodes.flatMap((n) => n.childIds ?? []));
-    const root: AxNode = nodes.find((n) => !childOf.has(n.nodeId)) ?? nodes[0]!; // TODO(ts): the empty-node case returns above
+    const root: AxNode = nodes.find((n) => !childOf.has(n.nodeId)) ?? nodes[0]!; // SAFETY: the empty-node case returns above
     visit(root);
     if (lines.length === 0) return null;
     const header = `Page: ${clean(root.name?.value)} — ${this.page.url()}`;

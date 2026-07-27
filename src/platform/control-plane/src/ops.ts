@@ -80,7 +80,7 @@ async function queueWaitStats(ctx: AppContext, projectId: string) {
     sample: waits.length,
     p50_s: round1(at(0.5)),
     p95_s: round1(at(0.95)),
-    max_s: round1(waits[waits.length - 1]!), // TODO(ts): The empty-list branch returned above.
+    max_s: round1(waits[waits.length - 1]!), // SAFETY: The empty-list branch returned above.
   };
 }
 
@@ -116,7 +116,7 @@ async function llmSpend(ctx: AppContext, projectId: string) {
         AND r.created_at > $2`,
     [projectId, since],
   );
-  const runsUsd = Number(runs.rows[0]!.usd); // TODO(ts): The aggregate query always returns one row.
+  const runsUsd = Number(runs.rows[0]!.usd); // SAFETY: The aggregate query always returns one row.
   return {
     window_days: SPEND_WINDOW_DAYS,
     runs_usd: round4(runsUsd),

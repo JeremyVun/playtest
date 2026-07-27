@@ -390,13 +390,12 @@ rules"), no zero-knowledge claim.
 ### Contract impact
 
 `docs/contracts/hosted.md` (proposal call, card states, statement storage);
-`docs/contracts/scripts.md` (handout composition). Assistant prompt pin
-bumped.
+`docs/contracts/scripts.md` (handout composition).
 
 ### Exit gate
 
 Landed 2026-07-26 as **assisted authoring** (S0's recorded disposition). The
-engine owns the card shape, the pinned proposal prompt (`rule-proposal-v1`), the
+engine owns the card shape, the shared proposal prompt and forced-tool schema, the
 optional read-only observation pass, and `approvedCardRules` — the one function
 that turns a card into a handout rule. The hosted side owns the `rule_cards`
 table (migration `0012`), the assistant's proposal call, and

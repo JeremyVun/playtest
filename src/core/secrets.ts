@@ -118,7 +118,7 @@ export function resolveSecret(
   if (provider) {
     try {
       value = provider(name);
-    } catch (e: any) { // TODO(ts): providers may throw non-Error values
+    } catch (e: any) { // SAFETY: providers may throw non-Error values
       throw new DummyConfigError(`${at}secret "${name}" could not be resolved: ${String(e?.message ?? e).split("\n")[0]}`);
     }
   }

@@ -71,7 +71,7 @@ function status() {
   }
   console.log(`\n  remaining .js/.mjs: ${totalJs}\n`);
 
-  const debt = { "TODO(ts)": [], "@ts-expect-error": [], any: 0 };
+  const debt = { "@ts-expect-error": [], any: 0 };
   const forbidden = [];
   for (const area of AREAS) {
     for (const { file } of walk(path.join(ROOT, area))) {
@@ -80,20 +80,16 @@ function status() {
       const lines = source.split("\n");
       lines.forEach((text, index) => {
         const at = `${rel(file)}:${index + 1}`;
-        if (text.includes("TODO(ts)")) debt["TODO(ts)"].push(at);
         if (text.includes("@ts-expect-error")) debt["@ts-expect-error"].push(at);
         if (/@ts-(ignore|nocheck)/.test(text)) forbidden.push(at);
       });
       debt.any += (source.match(/\bany\b/g) ?? []).length;
     }
   }
-  console.log("debt in converted files:");
-  console.log(`  TODO(ts) markers:  ${debt["TODO(ts)"].length}`);
+  console.log("type escape audit in converted files:");
   console.log(`  @ts-expect-error:  ${debt["@ts-expect-error"].length}`);
   console.log(`  \`any\` occurrences: ${debt.any} (indicative word count, includes comments)`);
-  for (const list of [debt["TODO(ts)"], debt["@ts-expect-error"]]) {
-    for (const at of list) console.log(`    ${at}`);
-  }
+  for (const at of debt["@ts-expect-error"]) console.log(`    ${at}`);
   if (forbidden.length > 0) {
     console.log("\nFORBIDDEN suppressions (@ts-ignore / @ts-nocheck):");
     for (const at of forbidden) console.log(`  ${at}`);

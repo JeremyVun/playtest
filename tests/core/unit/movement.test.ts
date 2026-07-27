@@ -7,7 +7,6 @@ import { movement, comparablePins, median, SCORE_DELTA_BADGE } from "../../../sr
 
 const PINS = {
   harness_version: "0.1.0",
-  prompts_version: "prompts-v1",
   step_schema_version: 3,
   snapshot_format: "a11y-text-v1",
   settle: { name: "settle-v1", dom_quiet_ms: 500, net_quiet_ms: 500, max_ms: 10000 },
@@ -53,12 +52,12 @@ test("pin rule: gateway differences never sever comparability", () => {
 
 test("pin rule: a missing pin field (or whole pin set) is a wildcard, so legacy runs stay comparable", () => {
   const legacyNoPins = entry({ duration_ms: 2000, pins: null });
-  assert.equal(movement([legacyNoPins], current())!.prev.run_id, legacyNoPins.run_id); // TODO(ts): this legacy pin set is wildcard-comparable
+  assert.equal(movement([legacyNoPins], current())!.prev.run_id, legacyNoPins.run_id); // SAFETY: this legacy pin set is wildcard-comparable
 
   const legacyNoHeaded: LegacyTestValue = { ...PINS };
   delete legacyNoHeaded.headed;
   const old = entry({ duration_ms: 2000, pins: legacyNoHeaded });
-  assert.equal(movement([old], current({ pins: { ...PINS, headed: true } }))!.prev.run_id, old.run_id); // TODO(ts): the missing pin field is wildcard-comparable
+  assert.equal(movement([old], current({ pins: { ...PINS, headed: true } }))!.prev.run_id, old.run_id); // SAFETY: the missing pin field is wildcard-comparable
 
   assert.equal(comparablePins(PINS, { ...PINS, headed: true }), false, "present-and-different is a mismatch");
   assert.equal(comparablePins(PINS, legacyNoHeaded), true, "absent is a wildcard");
@@ -121,17 +120,17 @@ test("status movement and streak text", () => {
 
 test("badge thresholds: score ±5; duration deltas do not drive badges", () => {
   const base = entry({ duration_ms: 1000, score: 80 });
-  assert.equal(movement([base], current({ score: 80 - SCORE_DELTA_BADGE }))!.badge, "regression"); // TODO(ts): a comparable prior produces movement
-  assert.equal(movement([base], current({ score: 80 + SCORE_DELTA_BADGE }))!.badge, "improved"); // TODO(ts): a comparable prior produces movement
+  assert.equal(movement([base], current({ score: 80 - SCORE_DELTA_BADGE }))!.badge, "regression"); // SAFETY: a comparable prior produces movement
+  assert.equal(movement([base], current({ score: 80 + SCORE_DELTA_BADGE }))!.badge, "improved"); // SAFETY: a comparable prior produces movement
   const slower: LegacyTestValue = movement([base], current({ duration_ms: 1400, score: 80 }));
   assert.equal(slower.duration.prev, 400, "duration delta still surfaces");
   assert.equal(slower.badge, null, "duration is not a regression signal");
   const faster: LegacyTestValue = movement([base], current({ duration_ms: 700, score: 80 }));
   assert.equal(faster.duration.prev, -300, "faster runs still report duration deltas");
   assert.equal(faster.badge, null, "duration is not an improvement signal");
-  assert.equal(movement([base], current({ duration_ms: 1100, score: 81 }))!.badge, null); // TODO(ts): a comparable prior produces movement
+  assert.equal(movement([base], current({ duration_ms: 1100, score: 81 }))!.badge, null); // SAFETY: a comparable prior produces movement
   assert.equal(
-    movement([base], current({ score: 90, duration_ms: 1400 }))!.badge, // TODO(ts): a comparable prior produces movement
+    movement([base], current({ score: 90, duration_ms: 1400 }))!.badge, // SAFETY: a comparable prior produces movement
     "improved",
     "score movement wins because duration is not a badge signal",
   );

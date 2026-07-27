@@ -7,7 +7,7 @@ import { blobKey } from "../store/object-store.ts";
 import type { ObjectStore } from "../types.ts";
 
 export const sha256Hex = (data: Buffer | Uint8Array | string) =>
-  createHash("sha256").update(Buffer.isBuffer(data) ? data : Buffer.from(data as string, "utf8")).digest("hex"); // TODO(ts): Buffer.from accepts the runtime Uint8Array branch despite this overload selecting the string form.
+  createHash("sha256").update(Buffer.isBuffer(data) ? data : Buffer.from(data as string, "utf8")).digest("hex"); // SAFETY: Buffer.from accepts the runtime Uint8Array branch despite this overload selecting the string form.
 
 /** { path -> sha256 } for a { path -> content } map. */
 export function contentTree(files: Record<string, Buffer | Uint8Array | string>): Record<string, string> {

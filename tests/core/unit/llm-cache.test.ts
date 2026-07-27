@@ -46,7 +46,7 @@ test("block content at the breakpoint is left untouched", () => {
 test("short or non-array inputs are returned unchanged", () => {
   const one = [{ role: "user", content: "hi" }];
   assert.equal(applyCacheControl(one), one); // <2 messages: no stable prefix
-  assert.equal(applyCacheControl(null as LegacyTestValue), null); // TODO(ts): deliberately invalid input pins runtime tolerance
+  assert.equal(applyCacheControl(null as LegacyTestValue), null); // SAFETY: deliberately invalid input pins runtime tolerance
   const invalidBreakpoint = [
     { role: "system", content: "stable prefix" },
     { role: "user", content: "last" },
@@ -62,7 +62,7 @@ test("the result is a new array (no mutation of the input)", () => {
   ];
   const out: LegacyTestValue = applyCacheControl(messages);
   assert.notEqual(out, messages);
-  assert.equal(messages[0]!.content, "stable prefix"); // TODO(ts): the local fixture has two messages; input remains unchanged
+  assert.equal(messages[0]!.content, "stable prefix"); // SAFETY: the local fixture has two messages; input remains unchanged
 });
 
 test("chat() sends cache_control by default and omits it when PLAYTEST_LLM_CACHE=0", async () => {
@@ -79,14 +79,14 @@ test("chat() sends cache_control by default and omits it when PLAYTEST_LLM_CACHE
   try {
     delete process.env.PLAYTEST_LLM_CACHE;
     await chat({ model: "mock", messages });
-    let sent: LegacyTestValue = server.requests().at(-1)!.body.messages; // TODO(ts): the awaited request is present
+    let sent: LegacyTestValue = server.requests().at(-1)!.body.messages; // SAFETY: the awaited request is present
     assert.equal(sent[0].content, "You are a tester.\n## Your task\nadd \"buy milk\"");
     assert.deepEqual(sent[1].content[0].cache_control, EPHEMERAL);
     assert.equal(sent[1].content[0].text, "Steps so far: (none — this is your first step)");
 
     process.env.PLAYTEST_LLM_CACHE = "0";
     await chat({ model: "mock", messages });
-    sent = server.requests().at(-1)!.body.messages; // TODO(ts): the awaited request is present
+    sent = server.requests().at(-1)!.body.messages; // SAFETY: the awaited request is present
     assert.equal(sent[0].content, "You are a tester.\n## Your task\nadd \"buy milk\"");
     assert.equal(sent[1].content, "Steps so far: (none — this is your first step)");
   } finally {

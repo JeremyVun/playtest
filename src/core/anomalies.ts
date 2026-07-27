@@ -135,11 +135,11 @@ export function extractAnomalies(
     // a skipped step, not an app malfunction, so it is deliberately not surfaced.
     const ctype = env?.confusion?.type;
     if (ctype === "action_failed") {
-      signals.push({ type: "failed_action", step, detail: oneLine(env.confusion!.note || env?.result?.error || "action failed") }); // TODO(ts): this branch requires a matching confusion marker
+      signals.push({ type: "failed_action", step, detail: oneLine(env.confusion!.note || env?.result?.error || "action failed") }); // SAFETY: this branch requires a matching confusion marker
     } else if (ctype === "no_effect") {
-      signals.push({ type: "no_effect", step, detail: oneLine(env.confusion!.note || "action produced no observable effect") }); // TODO(ts): this branch requires a matching confusion marker
+      signals.push({ type: "no_effect", step, detail: oneLine(env.confusion!.note || "action produced no observable effect") }); // SAFETY: this branch requires a matching confusion marker
     } else if (ctype === "repeated_action") {
-      signals.push({ type: "repeated_action", step, detail: oneLine(env.confusion!.note || "same action repeated with no page change") }); // TODO(ts): this branch requires a matching confusion marker
+      signals.push({ type: "repeated_action", step, detail: oneLine(env.confusion!.note || "same action repeated with no page change") }); // SAFETY: this branch requires a matching confusion marker
     } else if (env?.result?.ok === false && env?.result?.error) {
       // An errored step with no confusion marker (e.g. a legacy envelope). A
       // state_drift skip has result.ok:false but error:null, so it is excluded.

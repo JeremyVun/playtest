@@ -165,7 +165,7 @@ before(async () => {
 
   // The fixture prints the absolute path of the built .app as its last stdout line.
   const built = execFileSync(path.join(FIXTURE_DIR, "build.sh"), { encoding: "utf8", timeout: 600_000 });
-  appPath = built.trim().split("\n").pop()!.trim(); // TODO(ts): fixture build prints the app path as its last line
+  appPath = built.trim().split("\n").pop()!.trim(); // SAFETY: fixture build prints the app path as its last line
   assert.ok(appPath && fs.existsSync(appPath), `the SwiftUI fixture build produced no .app:\n${built}`);
 
   preexistingSims = bootedSimulators();
@@ -181,7 +181,7 @@ before(async () => {
   await waitForServer(120_000);
 
   driver = await MobileDriver.launch({
-    env: { platform: "ios", app: appPath, device: DEVICE, appium_url: APPIUM_URL } as LegacyTestValue, // TODO(ts): focused fixture supplies only launch-relevant environment fields
+    env: { platform: "ios", app: appPath, device: DEVICE, appium_url: APPIUM_URL } as LegacyTestValue, // SAFETY: focused fixture supplies only launch-relevant environment fields
     runDir,
   });
 });
@@ -198,7 +198,7 @@ after(async () => {
   for (const udid of bootedSimulators()) {
     if (preexistingSims.has(udid)) continue;
     try {
-      execFileSync("xcrun", ["simctl", "shutdown", udid as string], { stdio: "ignore" }); // TODO(ts): simulator discovery returns UDID strings
+      execFileSync("xcrun", ["simctl", "shutdown", udid as string], { stdio: "ignore" }); // SAFETY: simulator discovery returns UDID strings
     } catch {}
   }
   if (runDir) fs.rmSync(runDir, { recursive: true, force: true });

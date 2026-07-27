@@ -62,7 +62,7 @@ export function traceFromHar(entries: DynamicValue) {
     try {
       path = new URL(request.url).pathname;
     } catch {
-      path = path.split("?")[0]!; // TODO(ts): splitting a string always yields a first segment
+      path = path.split("?")[0]!; // SAFETY: splitting a string always yields a first segment
     }
     out.push({
       index,

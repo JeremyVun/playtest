@@ -644,7 +644,7 @@ const F12 = {
   },
 };
 
-export const FIXTURES = [F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12] as unknown as CorpusFixture[]; // TODO(ts): the heterogeneous frozen corpus is consumed through its common fixture shape
+export const FIXTURES = [F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12] as unknown as CorpusFixture[]; // SAFETY: the heterogeneous frozen corpus is consumed through its common fixture shape
 
 /** Flat list of every candidate across the corpus (for shortlist pooling). */
 export function allCandidates() {
@@ -653,7 +653,7 @@ export function allCandidates() {
 
 /** Index a candidate by id. */
 export function candidateById(id: string): CorpusCandidate {
-  return allCandidates().find((c) => c.id === id)! || null; // TODO(ts): callers use ids frozen in this corpus
+  return allCandidates().find((c) => c.id === id)! || null; // SAFETY: callers use ids frozen in this corpus
 }
 
 export { PROJECT };

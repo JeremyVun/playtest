@@ -202,7 +202,7 @@ export function healDigest(results: ReportResult[]): string {
   for (const r of healed) {
     const kind = r.manifest.heal?.classification ?? r.manifest.heal?.kind ?? "drift";
     if (!groups.has(kind)) groups.set(kind, []);
-    groups.get(kind)!.push(r); // TODO(ts): the preceding branch initializes every missing group
+    groups.get(kind)!.push(r); // SAFETY: the preceding branch initializes every missing group
   }
   const idW = Math.max(...healed.map((r) => (r.manifest.case?.id ?? "?").length));
   const blocks = [];
@@ -250,7 +250,7 @@ export function junitXml(results: ReportResult[]): string {
     const id = r.manifest?.case?.id ?? "unknown";
     const suite = id.includes("/") ? id.slice(0, id.indexOf("/")) : "(root)";
     if (!suites.has(suite)) suites.set(suite, []);
-    suites.get(suite)!.push(r); // TODO(ts): the preceding branch initializes every missing suite
+    suites.get(suite)!.push(r); // SAFETY: the preceding branch initializes every missing suite
   }
 
   const totals = { tests: 0, failures: 0, errors: 0, time: 0 };

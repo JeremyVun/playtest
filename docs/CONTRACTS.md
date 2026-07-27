@@ -20,9 +20,8 @@ files specify behavior that implementations and consumers may rely on.
 - Persisted shape changes also update every applicable schema and reader.
 - Public import, CLI JSON, viewer route, and bundle changes require
   compatibility treatment.
-- Model-facing prompt changes bump the prompt pin. Incompatible step changes
-  bump the step schema version. Comparability changes update the artifact pin
-  contract.
+- Incompatible step changes bump the step schema version. Comparability changes
+  update the artifact pin contract. Prompt text is not versioned.
 - Preserve legacy behavior explicitly documented under artifact compatibility
   unless the change deliberately removes it.
 - Use file-and-heading links, not numbered section references.

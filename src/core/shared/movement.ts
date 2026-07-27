@@ -20,7 +20,7 @@ export const SCORE_DELTA_BADGE = 5;
 // every history. A field missing on either side is a wildcard, so manifests
 // from before a pin existed (headed, vision) stay comparable.
 const PIN_KEYS = [
-  "harness_version", "prompts_version", "step_schema_version", "snapshot_format",
+  "harness_version", "step_schema_version", "snapshot_format",
   "settle", "actor_model", "grader_model", "headed", "vision", "driver", "viewport",
 ];
 
@@ -64,7 +64,7 @@ export function comparablePins(a?: Record<string, unknown> | null, b?: Record<st
 export function median(vals: number[]) {
   if (!vals.length) return null;
   const s = [...vals].sort((a, b) => a - b);
-  return s.length % 2 ? s[s.length >> 1]! : (s[(s.length >> 1) - 1]! + s[s.length >> 1]!) / 2; // TODO(ts): Non-empty sorted input guarantees these midpoint indexes.
+  return s.length % 2 ? s[s.length >> 1]! : (s[(s.length >> 1) - 1]! + s[s.length >> 1]!) / 2; // SAFETY: Non-empty sorted input guarantees these midpoint indexes.
 }
 
 /**
@@ -120,7 +120,7 @@ export function movement(
   const last = comparable.at(-1);
   if (last && last.status !== current.status) {
     let n = 0;
-    while (n < comparable.length && comparable.at(-1 - n)!.status === last.status) n++; // TODO(ts): Loop bound guarantees the indexed comparable entry exists.
+    while (n < comparable.length && comparable.at(-1 - n)!.status === last.status) n++; // SAFETY: Loop bound guarantees the indexed comparable entry exists.
     mv.statusStreak = `first ${current.status} after ${n} ${last.status}${n === 1 ? "" : last.status === "pass" ? "es" : "s"}`;
   }
 

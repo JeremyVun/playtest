@@ -1,7 +1,7 @@
-// Control-plane web app entry. TypeScript emits browser ESM in place. Boots the
-// principal, loads projects, wires the routes, and starts history-API routing. In
-// OIDC mode an unauthenticated visitor gets the login screen; dev mode is always
-// signed in as the dev admin.
+// Control-plane web app entry. The platform web build bundles this graph into
+// build/app.js. Boots the principal, loads projects, wires the routes, and starts
+// history-API routing. In OIDC mode an unauthenticated visitor gets the login
+// screen; dev mode is always signed in as the dev admin.
 import { initTheme, initScopeGate, lastProject, renderFrame, page } from "./lib/shell.js";
 import { route, setNotFound, startRouter, navigate, link } from "./lib/router.js";
 import { loadMe, loadProjects, state } from "./lib/state.js";

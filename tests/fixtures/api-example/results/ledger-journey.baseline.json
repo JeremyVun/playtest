@@ -5,7 +5,6 @@
   "healed_from_run_id": null,
   "pins": {
     "harness_version": "0.1.0",
-    "prompts_version": "prompts-v2",
     "step_schema_version": 8,
     "snapshot_format": "api-text-v4",
     "settle": {

@@ -1,118 +1,104 @@
 # Hosted Playtest control plane
 
-The REST API and web-app host for hosted Playtest. It runs TypeScript directly
-on Node 24.18 or newer and owns its dependencies in this package's manifest.
-It consumes engine behavior through `@playtest/core/*` and serves only the
-completed `@playtest/web/assets` build. Cross-component behavior is defined in
-`docs/contracts/hosted.md`.
+`@playtest/control-plane` is the server for hosted Playtest. It serves the web
+console and REST API, authenticates people and runners, stores product state,
+dispatches work, and turns completed run evidence into reviewable journeys and
+durable findings.
 
-It owns the hosted API, authentication, persistence, dispatch, viewer adapter,
-inline story drafting, findings (including discovery study synthesis), and
-retention. The browser UI and runner agent are sibling components of the same
-hosted product under `packages/platform/`.
+It coordinates runs but does not execute user journeys. Execution belongs to
+the sibling runner-agent package, which calls the same `@playtest/core` engine
+as the local CLI.
 
-## Run it
+```text
+ browser
+    |
+    v
+control plane ----serves----> web console + embedded run viewer
+    |
+    +----> SQLite metadata
+    +----> run/object storage
+    +----> dispatcher ----> runner agent ----> application under test
+    ^                           |
+    +------ reports + bundles --+
+```
 
-No database service and nothing to install:
+## What it owns
+
+- The `/api/v1` HTTP API and its error, caching, and authorization conventions.
+- Development and OIDC authentication, roles, sessions, and API tokens.
+- Projects, suite snapshots, environments, personas, secrets, and rule cards.
+- Run placement, runner exchange, progress, reconciliation, and cancellation.
+- Baseline review, findings intake, consolidation, and automatic resolution.
+- Audit events, retention, health and operations status, and media export.
+- SQLite migrations and the filesystem or S3-compatible object-store seam.
+
+The server consumes engine behavior only through `@playtest/core/*` package
+exports and serves only the completed `@playtest/web/assets` build.
+
+## Run it locally
+
+Use the repository launcher from the repository root:
 
 ```sh
-scripts/hosted-server.sh         # from the repo root; same as `npm run hosted`
-# → http://127.0.0.1:4177  (web app + /api/v1)
-
-scripts/hosted-server.sh migrate # apply pending migrations and exit (deploy hook)
+npm run hosted
+# http://127.0.0.1:4177
 ```
 
-The launcher is the local path: it checks the Node version, sources the
-gitignored repo-root `.env` (anything you set on the command line still wins),
-keeps one data root and one generated KMS key, reclaims port 4177 from a Playtest
-server left running by an earlier session, and prints what is switched on —
-including whether the model gateway is configured, which is the difference
-between "Help me draft" working and answering `503 not_configured`. It is a
-convenience, not a contract: the server itself reads only the environment, so a
-deployment starts it directly.
+This is the complete local platform. It builds both browser applications,
+defaults the control plane to development auth, and uses local dispatch there
+to spawn runner-agent processes when a run is launched. Do not start the web or
+runner-agent workspaces as separate local services.
+
+The server needs no separate database service. `PLAYTEST_DATA_DIR` defaults to
+`.playtest-data` and contains both `playtest.sqlite` and the local object store.
+Only one process may write a given database file.
+
+For deployment or focused server work, the package entry point is:
 
 ```sh
-PLAYTEST_DATA_DIR=./.playtest-data \
-PLAYTEST_AUTH=dev \
-PLAYTEST_KMS_KEY=$(openssl rand -base64 32) \
-node src/index.ts
+npm start --workspace=@playtest/control-plane
+npm run migrate --workspace=@playtest/control-plane
 ```
 
-`PLAYTEST_DATA_DIR` (default `.playtest-data`) is the one storage knob: it holds
-`playtest.sqlite` and the `objects/` store on the same durable volume. Exactly one
-process may write that database — see `docs/contracts/hosted.md`, "Storage,
-deployment topology, and transactions". `OBJECT_STORE_URL` and `PLAYTEST_DB_FILE`
-are expert overrides that split state across locations.
+`src/config.ts` is the complete configuration inventory and validates all
+settings at startup. Important groups include storage, auth, dispatch, OIDC,
+model access, retention, reconciliation, and rate limits. `PLAYTEST_AUTH=dev`
+is a single-user development bypass and must not be used in production.
 
-`PLAYTEST_AUTH=dev` is a single-user bypass (a fixed dev admin, admin of every
-project) — never in production.
+## Source map
 
-`PLAYTEST_DISPATCH=local` (dev auth only, and the launcher's default there) makes
-**Launch actually execute
-locally**: instead of dispatching a GitHub workflow, the server spawns the real
-runner-agent (`packages/platform/runner-agent`, process isolation) against itself — the full
-executor protocol, browser and all. The child inherits the server's env, so set
-`PLAYTEST_LLM_BASE_URL` (+ `PLAYTEST_LLM_TIMEOUT_MS` for slow gateways) on the
-server process. Local children are tracked in-memory: restart the server and the
-reconciler declares orphaned dispatches dead, same as a vanished GHA workflow.
-OIDC mode uses `OIDC_ISSUER`, `OIDC_CLIENT_ID`, and `OIDC_CLIENT_SECRET`.
-`src/config.ts` owns the complete configuration surface and reports every
-failure as a friendly `ServerConfigError` naming the offending variable.
+```text
+src/index.ts          process entry and migration command
+src/app.ts            application assembly and background workers
+src/server.ts         HTTP server and static web host
+src/routes.ts         complete route table
+src/config.ts         environment configuration and validation
+src/db.ts             SQLite connection and transactions
+src/auth/             people, roles, sessions, tokens, and OIDC
+src/api/              human-facing API handlers
+src/dispatch/         placement, local execution, GitHub dispatch, reconciliation
+src/suites/           safe suite storage, snapshots, export, and core resolution
+src/findings/         finding intake, deduplication, synthesis, and resolution
+src/events/           event feed and outbox
+src/store/            filesystem and S3-compatible object stores
+src/retention/        evidence-retention policy and worker
+migrations/           forward-only numbered SQLite migrations
+```
 
-### Model tiers
+## Development
 
-Two control-plane jobs call the gateway: **inline story drafting** (the story
-form's Help me draft) and **discovery study synthesis** (studies becoming cited
-bug candidates in findings intake). Both default to the grader tier, `sonnet`,
-and each has its own override so pinning one never moves the other:
-
-| Variable | Job | Default |
-|---|---|---|
-| `PLAYTEST_AUTHORING_MODEL` | inline story drafting | `sonnet` |
-| `PLAYTEST_SYNTHESIS_MODEL` | discovery study synthesis | `sonnet` |
-
-Leave both unset unless a deployment has measured a reason to pin one.
-
-## Test tiers
+Run these from the repository root:
 
 ```sh
-npm test                         # unit, hermetic
-npm run test:integration         # whole control plane, no database service
+npm run typecheck --workspace=@playtest/control-plane
+npm test --workspace=@playtest/control-plane
+npm run test:integration --workspace=@playtest/control-plane
 ```
 
-- `tests/unit/` — offline, service-free (ulid, tar, router, object-store, crypto,
-  roles/paths, the core-bridge resolver, config, and the SQLite schema, constraint,
-  transaction, one-winner, and startup-failure suites, each against a temporary
-  database file under `mkdtemp`).
-- `tests/integration/` — each test boots the whole control plane on an ephemeral
-  port against its own temporary data root (one SQLite file plus its object store,
-  removed on teardown), so suites parallelize and leave no residue. No PostgreSQL,
-  no Docker. On-demand clip tests additionally need a full `ffmpeg` (with the
-  `subtitles` and `drawtext` filters). Includes an import round trip: import
-  `examples/todos` → edit → commit → export → run the exported tree with the local
-  CLI, asserting identical resolved cases (`playtest list --json` parity). There
-  is no environment gate: every integration test runs wherever `npm install` does.
+Unit and integration tests use temporary SQLite data roots and need no database
+service or Docker. A clip integration case additionally needs `ffmpeg` with the
+`drawtext` and `subtitles` filters.
 
-The root `npm test` covers core, CLI, viewer, and dependency-boundary contracts.
-
-## Module map (`src/`)
-
-```
-index.js  app.js        entrypoint + the createApp() factory (tests reuse it)
-config.ts               env → validated config, friendly failures
-db.ts  migrate.ts       SQLite connection + pragmas + withTx; plain-SQL migrations runner
-server.js  router.ts    request pipeline + pattern router; error-envelope mapping
-routes.js  http.ts      route table (§2); request/response plumbing
-errors.ts  ulid.ts  audit.ts  logging.ts
-leases.ts               named leases for background cycles: one winner, expiry, crash recovery
-store/     object-store seam: fs-store (default) + s3-store (skeleton)
-crypto/    AES-256-GCM secret encryption
-auth/      oidc + sessions + roles + api tokens + the principal resolver
-suites/    paths · tar · snapshots (content-addressed) · resolve (the core bridge)
-api/       projects · suites · environments · secrets · tokens · audit · auth-routes
-migrations/  forward-only numbered SQL migrations
-```
-
-The one place the platform meets core: `suites/resolve.js` materializes a suite's files
-to a temp dir in exact CLI layout and runs core `discoverCases`/`lintCase` — the ONE
-resolver. Everything else is storage, transport, and authz around that.
+Cross-component guarantees, deployment topology, API conventions, and the
+runner protocol are defined in
+[`docs/contracts/hosted.md`](../../../docs/contracts/hosted.md).

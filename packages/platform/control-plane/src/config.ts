@@ -164,6 +164,37 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
         // How long a claimed job may go without a heartbeat before its runner
         // counts as gone (the reconciler's existing dead-executor path).
         heartbeatTimeoutMs: num(env.PLAYTEST_POOL_HEARTBEAT_TIMEOUT_S, 120) * 1000,
+        // Ephemeral CI registration (`POST /runner/pool/register-oidc`): a CI
+        // job presents its GitHub OIDC token instead of a long-lived credential
+        // and gets a runner that expires with the job. The pins are the SAME
+        // discipline the GitHub-dispatch exchange applies, but they are their
+        // own variables, because the repository whose pipelines register runners
+        // is not necessarily the repository a deployment dispatches workflows
+        // into — and because a pool deployment configures no GITHUB_APP_* at
+        // all, so inheriting a null repository pin would accept a token from
+        // ANY repository on GitHub. The route refuses to serve without
+        // `repository` for exactly that reason (validated below, reported as
+        // `503 not_configured` at the route).
+        //
+        // Key names match `dispatch.github` so both callers hand the same shape
+        // to the one verifier (auth/github-oidc.ts).
+        oidc: {
+          repository: env.PLAYTEST_POOL_OIDC_REPOSITORY || null,
+          // Unset means "any workflow in the pinned repository". Pinning it
+          // narrows registration to one workflow file, which is what a
+          // repository with untrusted-fork or unrelated pipelines wants.
+          workflowId: env.PLAYTEST_POOL_OIDC_WORKFLOW || null,
+          ref: env.PLAYTEST_POOL_OIDC_REF || null,
+          oidcAudience: env.PLAYTEST_POOL_OIDC_AUDIENCE || env.GITHUB_OIDC_AUDIENCE || "playtest",
+          oidcIssuer: env.GITHUB_OIDC_ISSUER || "https://token.actions.githubusercontent.com",
+          // How long an ephemeral credential stays usable. It only has to
+          // outlive the pipeline's own run group, and GitHub caps a job at six
+          // hours, so an hour is a generous default and six hours is the
+          // ceiling: a credential that outlives its job is a credential nobody
+          // is watching. Expiry never interrupts work in flight — the run group
+          // already holds its own short-lived scoped bearer.
+          ttlMs: num(env.PLAYTEST_POOL_OIDC_TTL_S, 3600) * 1000,
+        },
       },
     },
     auth: { mode: authMode } as {
@@ -377,6 +408,41 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
         `present their registration credential, and the insecure exchange would let an unauthenticated ` +
         `caller take a run group's scoped token. Unset PLAYTEST_RUNNER_INSECURE_EXCHANGE, or use ` +
         `PLAYTEST_DISPATCH=local for a single-machine development loop.`,
+    );
+  }
+  // Ephemeral CI registration is opt-in, but a HALF-configured opt-in is the
+  // dangerous state: a workflow or ref pin without a repository pin would accept
+  // that workflow name from any repository on GitHub, and pins set on a
+  // deployment that does not run pool placement do nothing at all while looking
+  // like they do. Both are boot errors rather than a surprise at 3 a.m.
+  const poolOidc = config.dispatch.pool.oidc;
+  const poolOidcVars = [
+    ["PLAYTEST_POOL_OIDC_REPOSITORY", env.PLAYTEST_POOL_OIDC_REPOSITORY],
+    ["PLAYTEST_POOL_OIDC_WORKFLOW", env.PLAYTEST_POOL_OIDC_WORKFLOW],
+    ["PLAYTEST_POOL_OIDC_REF", env.PLAYTEST_POOL_OIDC_REF],
+    ["PLAYTEST_POOL_OIDC_AUDIENCE", env.PLAYTEST_POOL_OIDC_AUDIENCE],
+    ["PLAYTEST_POOL_OIDC_TTL_S", env.PLAYTEST_POOL_OIDC_TTL_S],
+  ].filter(([, value]) => value);
+  if (poolOidcVars.length && !config.dispatch.pool.enabled) {
+    throw new ServerConfigError(
+      `${poolOidcVars.map(([name]) => name).join(", ")} configure ephemeral CI runner registration, which ` +
+        `only exists under PLAYTEST_DISPATCH=pool (this deployment dispatches with "${dispatchMode}"). ` +
+        `Set PLAYTEST_DISPATCH=pool, or unset these variables.`,
+    );
+  }
+  if ((poolOidc.workflowId || poolOidc.ref) && !poolOidc.repository) {
+    throw new ServerConfigError(
+      `PLAYTEST_POOL_OIDC_${poolOidc.workflowId ? "WORKFLOW" : "REF"} needs PLAYTEST_POOL_OIDC_REPOSITORY too: ` +
+        `a workflow or ref pin without a repository pin would accept that workflow name from any repository ` +
+        `on GitHub. Name the repository whose pipelines may register runners, e.g. acme/storefront.`,
+    );
+  }
+  const MAX_OIDC_TTL_MS = 6 * 60 * 60 * 1000; // GitHub's own per-job ceiling.
+  if (!Number.isFinite(poolOidc.ttlMs) || poolOidc.ttlMs < 60_000 || poolOidc.ttlMs > MAX_OIDC_TTL_MS) {
+    throw new ServerConfigError(
+      `PLAYTEST_POOL_OIDC_TTL_S must be between 60 and ${MAX_OIDC_TTL_MS / 1000} seconds — an ephemeral ` +
+        `credential only has to outlive its own CI job, and GitHub caps a job at six hours ` +
+        `(got ${JSON.stringify(env.PLAYTEST_POOL_OIDC_TTL_S)})`,
     );
   }
   for (const [name, ms, minS] of [

@@ -1,0 +1,175 @@
+# Playtest as a pull-request gate, on GitHub Actions.
+#
+# Copy this file to `.github/workflows/playtest.yml` in your own repository and
+# edit the two clearly marked blocks (how your app builds and starts, and where
+# your Playtest checkout comes from). Nothing else should need changing.
+#
+# What the job does, in one breath: build your app, start it on localhost,
+# register a runner for THIS pipeline run with a GitHub OIDC token, launch a
+# Playtest suite pinned to that runner, wait for the verdict, exit with it.
+#
+# The point is that the control plane never has to reach your app. The runner
+# runs inside this job, beside the build, and dials out. Your `localhost:3000`
+# stays `localhost:3000`.
+#
+# The label is the whole trick: `ci-run-${{ github.run_id }}` is unique to this
+# pipeline run, the runner advertises it, and the launch pins it. Two pull
+# requests building at the same time therefore cannot claim each other's job and
+# test the wrong build — which is exactly what would happen with one shared
+# label like `ci`. See docs/hosted-runners.md § CI.
+
+name: playtest
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # Mints the OIDC token that registers the runner. Without it,
+  # ACTIONS_ID_TOKEN_REQUEST_URL is not set and the registration step fails
+  # with a message saying so.
+  id-token: write
+
+# Superseded pushes to the same PR cancel their older run. This is a cost
+# choice, not a correctness one: the unique label already keeps concurrent runs
+# from colliding.
+concurrency:
+  group: playtest-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Repository variables (Settings → Secrets and variables → Actions → Variables).
+  PLAYTEST_SERVER: ${{ vars.PLAYTEST_SERVER }}           # https://playtest.example.com
+  PLAYTEST_PROJECT: ${{ vars.PLAYTEST_PROJECT }}         # project key
+  PLAYTEST_SUITE: ${{ vars.PLAYTEST_SUITE }}             # suite id
+  PLAYTEST_ENVIRONMENT: ${{ vars.PLAYTEST_ENVIRONMENT }} # environment id
+  # The one label this pipeline run answers to.
+  PLAYTEST_LABEL: ci-run-${{ github.run_id }}
+
+jobs:
+  playtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      # ---------------------------------------------------------------- yours
+      # Replace this step with however your app builds and starts. Anything the
+      # runner can reach on this machine works: a dev server, a container, a
+      # compose stack. The health poll is what makes the gate honest — without
+      # it the suite races the app's startup and fails as a "product" bug.
+      - name: Build and start the app on localhost
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run build
+          npm start &
+          for _ in $(seq 1 60); do
+            curl -sf http://127.0.0.1:3000/health >/dev/null && exit 0
+            sleep 1
+          done
+          echo "the app never became healthy on http://127.0.0.1:3000" >&2
+          exit 1
+      # ------------------------------------------------------------ end yours
+
+      # Registry distribution is descoped, so the runner agent comes from a
+      # Playtest checkout. Pin the ref you run in production.
+      - name: Check out the Playtest runner agent
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch main https://github.com/your-org/playtest "$RUNNER_TEMP/playtest"
+          npm --prefix "$RUNNER_TEMP/playtest" ci --ignore-scripts
+
+      # No long-lived Playtest runner secret lives in this repository. The
+      # signed OIDC token GitHub mints for this job IS the registration badge,
+      # and the credential it returns expires with the job.
+      - name: Register an ephemeral runner
+        run: |
+          set -euo pipefail
+          oidc=$(curl -sSf \
+            -H "authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=playtest" | jq -r .value)
+          credential=$(curl -sSf -X POST "$PLAYTEST_SERVER/api/v1/runner/pool/register-oidc" \
+            -H "content-type: application/json" \
+            -d "$(jq -nc \
+                  --arg token "$oidc" \
+                  --arg project "$PLAYTEST_PROJECT" \
+                  --arg label "$PLAYTEST_LABEL" \
+                  '{github_oidc_token: $token, project: $project, labels: [$label]}')" \
+            | jq -r .credential)
+          # Masked in the log, written to a file, and never passed as an
+          # argument — the agent refuses a credential on argv.
+          echo "::add-mask::$credential"
+          umask 077
+          printf '%s' "$credential" > "$RUNNER_TEMP/playtest-runner-credential"
+
+      - name: Start the runner
+        run: |
+          set -euo pipefail
+          node "$RUNNER_TEMP/playtest/packages/platform/runner-agent/src/exec-group.ts" pool \
+            --server "$PLAYTEST_SERVER" \
+            --labels "$PLAYTEST_LABEL" \
+            --credential-file "$RUNNER_TEMP/playtest-runner-credential" \
+            --isolation process \
+            > "$RUNNER_TEMP/runner.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/runner.pid"
+          for _ in $(seq 1 30); do
+            grep -q "waiting for work" "$RUNNER_TEMP/runner.log" && exit 0
+            sleep 1
+          done
+          echo "the runner never checked in:" >&2
+          cat "$RUNNER_TEMP/runner.log" >&2
+          exit 1
+
+      # `runner_labels` pins THIS launch to THIS pipeline's runner, overriding
+      # whatever labels the environment normally carries. One shared CI
+      # environment therefore serves every pull request without any of them
+      # being able to run against another's build.
+      - name: Launch the suite and wait for the verdict
+        env:
+          # A project API token with the `editor` role. This one IS a repository
+          # secret: it authorizes launching, which OIDC does not.
+          PLAYTEST_API_TOKEN: ${{ secrets.PLAYTEST_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          group=$(curl -sSf -X POST \
+            "$PLAYTEST_SERVER/api/v1/projects/$PLAYTEST_PROJECT/run-groups" \
+            -H "authorization: Bearer $PLAYTEST_API_TOKEN" \
+            -H "content-type: application/json" \
+            -d "$(jq -nc \
+                  --arg suite "$PLAYTEST_SUITE" \
+                  --arg environment "$PLAYTEST_ENVIRONMENT" \
+                  --arg label "$PLAYTEST_LABEL" \
+                  --arg note "PR ${{ github.event.pull_request.number }} — ${{ github.sha }}" \
+                  '{suite_id: $suite, environment_id: $environment, runner_labels: [$label], note: $note}')" \
+            | jq -r .run_group.id)
+          echo "run group: $PLAYTEST_SERVER/projects/$PLAYTEST_PROJECT/runs/$group"
+
+          # `wait=true` asks the control plane to hold the connection until
+          # there is news; the sleep bounds a deployment that answers at once.
+          for _ in $(seq 1 120); do
+            view=$(curl -sSf "$PLAYTEST_SERVER/api/v1/run-groups/$group?wait=true" \
+              -H "authorization: Bearer $PLAYTEST_API_TOKEN")
+            [ "$(printf '%s' "$view" | jq -r .status)" = "done" ] && break
+            sleep 5
+          done
+
+          printf '%s' "$view" | jq -r '.runs[] | "\(.status)\t\(.story_id)\t\(.error // "")"'
+          code=$(printf '%s' "$view" | jq -r '.exit_summary.exit_code // 2')
+          echo "playtest exit code: $code"
+          exit "$code"
+
+      # The runner exits on its own when the job ends; stopping it explicitly
+      # keeps the log readable and lets it finish any case teardown cleanly.
+      - name: Stop the runner
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/runner.pid" ]; then
+            kill "$(cat "$RUNNER_TEMP/runner.pid")" 2>/dev/null || true
+          fi
+          cat "$RUNNER_TEMP/runner.log" 2>/dev/null || true

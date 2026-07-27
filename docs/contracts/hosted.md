@@ -249,6 +249,21 @@ A launch:
 5. creates a dispatch ledger entry;
 6. asks the configured placement adapter to start the runner agent.
 
+A launch may pin its placement: `runner_labels` on the launch request (and on
+its preview) overrides the environment's `runner_labels` for that group alone.
+It takes the role that launches (`editor`) and no other, because labels are
+routing and never authority — a runner reaches only jobs in the project its
+credential is registered to, so choosing which of that project's runners takes a
+run is the same decision scope as running it at all. Absent means "follow the
+environment"; an explicit `[]` is a decision, not an absence, and means "any
+runner in this project". The pin is recorded on the group (`runner_labels`, null
+when unpinned) and places every later attempt of that group — a continuation
+after a partial completion, an in-place retry — even if the environment's labels
+change in between. `GET /api/v1/run-groups/:id` states the outcome in
+`placement`: the attempt's `labels` and whether the launch or the environment
+chose them (`labels_source`). The launch preview reports the same pair before
+anything is created.
+
 Run-group states are `queued`, `running`, `done`, and `canceled`. Case states
 are `queued`, `running`, `uploading`, `pass`, `fail`, `infra`, `explored`,
 `canceled`, and `lost`. Modes are `record`, `act`, `heal`, and `explore`.
@@ -386,6 +401,51 @@ refused, and a group already exchanged finishes under its already-issued scoped
 bearer. Revoking twice is a no-op. Registration, revocation, and every claim
 write audit rows. Runner names are unique per project.
 
+**Ephemeral CI runners.** `POST /runner/pool/register-oidc` is the second way to
+join a project's pool: a CI job presents its GitHub Actions OIDC token instead of
+a credential it was given in advance, and receives one that expires with the job.
+No long-lived runner secret lands in repository settings.
+
+- The token is judged by the **same verifier** the GitHub-dispatch exchange uses
+  (issuer, audience, repository, workflow file, ref, expiry, signature against
+  the issuer's JWKS). The pins are their own deployment variables
+  (`PLAYTEST_POOL_OIDC_REPOSITORY`, `…_WORKFLOW`, `…_REF`, `…_AUDIENCE`) because
+  a pool deployment configures no GitHub App at all, so inheriting a null
+  repository pin would accept a token from any repository on GitHub.
+- **The route is closed until a repository is pinned.** Without
+  `PLAYTEST_POOL_OIDC_REPOSITORY` it answers `503 not_configured` naming the
+  variable, and so does a deployment not running `PLAYTEST_DISPATCH=pool`.
+  Half-configuration is a `ServerConfigError` at boot: a workflow or ref pin
+  without a repository pin, or any of these variables outside pool placement.
+  The pin is deployment-wide, so a deployment hosting projects for mutually
+  untrusting teams leaves it unset until per-project pins exist.
+- The registration is **ephemeral**: `expires_at` is `now + PLAYTEST_POOL_OIDC_TTL_S`
+  (default 3600, floor 60, ceiling 21600 — GitHub's own per-job limit, because a
+  credential outliving its job is a credential nobody is watching). An expired
+  credential is refused at poll, claim and exchange exactly like a revoked one,
+  with its own message. Expiry never interrupts work in flight: an exchanged
+  group runs on under its already-issued scoped bearer.
+- Ephemeral runners are **never listed as standing runners** —
+  `GET /api/v1/projects/:p/runners` and the console's Runners section exclude
+  them. They are pipeline scaffolding, not fleet.
+- The runner's **name comes from the verified token**
+  (`ci-<run_id>.<run_attempt>-<random>`), never from the request, so a CI job
+  cannot register under a standing runner's name. The verified claims
+  (repository, workflow ref, ref, sha, run id and attempt) are stored on the row
+  and written to the audit row, whose actor is `{"system": "github_oidc"}` and
+  whose detail is flagged `ephemeral: true`.
+- One workflow run may hold at most 8 live ephemeral registrations in a project;
+  the ninth is `409 conflict`. An OIDC token is replayable for its own short
+  lifetime, so a leaked one must not be able to fill the table.
+
+The CI recipe this enables — build, start the app on localhost, register with the
+job's OIDC token under a label unique to the pipeline run, launch pinned to that
+label, wait for the verdict — is written out in
+[`docs/hosted-runners.md`](../hosted-runners.md) with a copyable workflow under
+`examples/ci-github-actions/`. The unique label is load-bearing, not cosmetic:
+two concurrent pull requests sharing one label would claim each other's jobs and
+report green against the wrong build.
+
 **The claim board.** A `requested` dispatch row plus its labels snapshot IS the
 board entry; posting to the board performs no network call and writes no new
 entity. The labels snapshot is written in the same transaction as the ledger
@@ -452,8 +512,10 @@ what it used, so a reviewer can see what produced the evidence. The runner sends
 its real mode on the exchange (`isolation`), the control plane records it on the
 executor, and a run group states its placement: `placement` on
 `GET /api/v1/run-groups/:id` carries the newest attempt's `dispatch_id`,
-`attempt`, the `isolation` its executor reported, and the `runner` that claimed
-it (`null` for adapters that place work without a registered runner).
+`attempt`, the `isolation` its executor reported, the `runner` that claimed it
+(`null` for adapters that place work without a registered runner), and the
+`labels` that attempt was placed on with their `labels_source`
+(`launch` when the launch pinned them, `environment` otherwise).
 
 ### The pool runner process
 

@@ -13,18 +13,152 @@
 //                                        in the mutating WHERE: exactly one winner
 //   POST /runner/pool/claims/:d/heartbeat coarse liveness + the cancel signal
 //
+// A fourth route stands slightly apart: `POST /runner/pool/register-oidc` is how
+// a CI job JOINS the pool for the length of one pipeline run, presenting a
+// GitHub OIDC token rather than a credential it was given in advance.
+//
 // Claiming assigns work. It grants nothing: the runner must still exchange its
 // credential for a short-lived bearer scoped to that one group or mint claim
 // before it can read a snapshot or post a report.
 import { audit } from "../audit.ts";
-import { readJsonBody } from "../http.ts";
-import { conflict, forbidden, notFound } from "../errors.ts";
-import { requireRunnerCredential, labelsMatch } from "../auth/runner-credentials.ts";
+import { created, readJsonBody } from "../http.ts";
+import { AppError, badRequest, conflict, forbidden, notFound } from "../errors.ts";
+import {
+  newRunnerCredential,
+  normalizeLabels,
+  requireRunnerCredential,
+  labelsMatch,
+} from "../auth/runner-credentials.ts";
+import { verifyGithubOidc } from "../auth/github-oidc.ts";
+import { runnerView as registryRunnerView } from "./runners.ts";
+import { ulid } from "../ulid.ts";
+import { randomBytes } from "node:crypto";
 import { holdUntil } from "../events/hold.ts";
 import { emitPlatformEvent } from "../events/outbox.ts";
 
 /** Hold window cap, the same one the browser feed uses. */
 const MAX_WAIT_S = 25;
+
+/**
+ * How many live ephemeral runners one verified workflow run may register. A
+ * pipeline needs one; a handful of parallel jobs in the same run need a few. The
+ * cap exists because an OIDC token is replayable for its own short lifetime, so
+ * a leaked one must not be able to fill the table.
+ */
+const MAX_EPHEMERAL_PER_RUN = 8;
+
+/**
+ * POST /runner/pool/register-oidc — join the pool for one CI job.
+ *
+ * The GitHub OIDC token IS the registration badge: it is signed by GitHub,
+ * scoped to one workflow run, and validated by the same verifier the
+ * GitHub-dispatch exchange uses (`auth/github-oidc.ts`) against the deployment's
+ * pinned issuer, audience, repository, workflow file and ref. No long-lived
+ * secret lands in repository settings, and the credential this mints expires
+ * with the job rather than outliving it in someone's settings page.
+ *
+ * Three properties make it safe to expose unauthenticated:
+ *
+ *   1. **It refuses to run unpinned.** Without `PLAYTEST_POOL_OIDC_REPOSITORY`
+ *      the route is `503 not_configured`, because an unpinned check would accept
+ *      a token from any repository on GitHub. Naming which repository may
+ *      register is a deliberate deployment decision, exactly like naming the
+ *      repository GitHub dispatch places workflows into.
+ *   2. **The registration is ephemeral.** It expires (`pool.oidc.ttlMs`), it is
+ *      never listed as a standing runner, and its verified provenance is stored
+ *      beside it, so a reviewer can see which build produced a runner.
+ *   3. **It grants no more than a registration.** The credential still has to
+ *      claim a dispatch and then exchange for a scoped bearer, and it can only
+ *      ever reach jobs in the one project this call names.
+ */
+export async function registerViaOidc(ctx: HostedDynamic) {
+  const pool = ctx.config.dispatch.pool;
+  if (!pool.enabled) {
+    throw new AppError(
+      "not_configured",
+      `this deployment does not place runs on a self-hosted runner pool, so there is no board for a CI ` +
+        `runner to join — it needs PLAYTEST_DISPATCH=pool`,
+    );
+  }
+  if (!pool.oidc.repository) {
+    throw new AppError(
+      "not_configured",
+      `ephemeral CI runner registration is not enabled: set PLAYTEST_POOL_OIDC_REPOSITORY to the ` +
+        `repository whose workflows may register runners (e.g. acme/storefront). Until it names one, a ` +
+        `GitHub OIDC token from ANY repository would be accepted, so this route stays closed.`,
+    );
+  }
+
+  const body = await readJsonBody(ctx.req);
+  const projectKey = String(body.project || "").trim();
+  if (!projectKey) {
+    throw badRequest(`"project" is required: name the project this CI runner registers in`);
+  }
+  const labels = normalizeLabels(body.labels);
+  // Verified BEFORE the project is looked up, so an unauthenticated caller
+  // cannot use this route to probe which project keys exist.
+  const claims = await verifyGithubOidc(pool.oidc, body.github_oidc_token);
+
+  const { rows: projects } = await ctx.db.query(`SELECT * FROM projects WHERE key = $1`, [projectKey]);
+  const project = projects[0];
+  if (!project) throw notFound(`no project "${projectKey}"`);
+
+  const runId = String(claims.run_id || "");
+  const runAttempt = String(claims.run_attempt || "1");
+  if (!runId) throw badRequest("GitHub OIDC token has no run_id claim, so this registration cannot be bounded");
+
+  const now = Date.now();
+  const expiresAt = new Date(now + pool.oidc.ttlMs);
+  const { rows: live } = await ctx.db.query(
+    `SELECT COUNT(*) AS n FROM runners
+      WHERE project_id = $1 AND ephemeral = 1 AND revoked_at IS NULL AND expires_at > $2
+        AND json_extract(source, '$.run_id') = $3`,
+    [project.id, new Date(now), runId],
+  );
+  if (live[0].n >= MAX_EPHEMERAL_PER_RUN) {
+    throw conflict(
+      `workflow run ${runId} already has ${live[0].n} live ephemeral runners in project "${project.key}" ` +
+        `(the cap is ${MAX_EPHEMERAL_PER_RUN}) — register one runner per job, not one per step`,
+    );
+  }
+
+  // The name comes from the VERIFIED token, never from the request: a CI job
+  // must not be able to register under a standing runner's name, and run history
+  // reads better when the runner says which build it was.
+  const name = `ci-${runId}.${runAttempt}-${randomBytes(3).toString("hex")}`;
+  const source = {
+    repository: claims.repository ?? null,
+    workflow_ref: claims.job_workflow_ref ?? claims.workflow_ref ?? null,
+    ref: claims.ref ?? null,
+    sha: claims.sha ?? null,
+    run_id: runId,
+    run_attempt: runAttempt,
+  };
+  const id = ulid();
+  const { plaintext, hash } = newRunnerCredential();
+
+  const row = await ctx.db.withTx(async (tx: HostedDynamic) => {
+    const { rows } = await tx.query(
+      `INSERT INTO runners (id, project_id, name, labels, credential_hash, ephemeral, expires_at, source)
+         VALUES ($1, $2, $3, $4, $5, 1, $6, $7) RETURNING *`,
+      [id, project.id, name, labels, hash, expiresAt, source],
+    );
+    await audit(tx, {
+      // No user is behind this: the actor is the verified workflow run itself.
+      actor: { system: "github_oidc" },
+      action: "runner.registered",
+      entityType: "runner",
+      entityId: id,
+      projectId: project.id,
+      detail: { name, labels, ephemeral: true, expires_at: expiresAt.toISOString(), source },
+    });
+    return rows[0];
+  });
+
+  // The one time the credential is ever revealed — the same rule registration in
+  // the console follows, for the same reason: only a hash is stored.
+  return created({ ...registryRunnerView(row), credential: plaintext });
+}
 
 /**
  * GET /runner/pool/claims?wait=true[&labels=a,b] — check in and long-poll.

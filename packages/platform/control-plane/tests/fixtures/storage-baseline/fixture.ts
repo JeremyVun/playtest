@@ -154,6 +154,7 @@ export const IDS: HostedDynamic = {
 
   runnerLaptop: fid(T.suiteCreated, "runner:laptop"),
   runnerRevoked: fid(T.suiteCreated, "runner:retired"),
+  runnerCi: fid(T.group2, "runner:ci"),
   dispatchPool: fid(T.group2, "dispatch:pool"),
 
   artifactBundleFull: fid(T.run1End, "artifact:run1-bundle"),
@@ -365,6 +366,9 @@ export const COLUMN_TYPES: HostedDynamic = {
   run_groups: {
     id: "text", project_id: "text", suite_id: "text", snapshot_id: "text", environment_id: "text",
     trigger: "json", selection: "json", status: "text", exit_summary: "json", created_at: "ts", updated_at: "ts",
+    // Per-launch placement pin (0016). NULL means "follow the environment",
+    // which is every group nobody pinned.
+    runner_labels: "text[]",
   },
   executors: {
     id: "text", run_group_id: "text", kind: "text", workflow_run_url: "text", versions: "json",
@@ -388,6 +392,9 @@ export const COLUMN_TYPES: HostedDynamic = {
   runners: {
     id: "text", project_id: "text", name: "text", labels: "text[]", credential_hash: "text",
     ephemeral: "bool", created_by: "text", created_at: "ts", last_seen_at: "ts", revoked_at: "ts",
+    // Ephemeral CI registration (0016): when the credential stops working, and
+    // the verified GitHub claims it was minted from.
+    expires_at: "ts", source: "json",
   },
   run_events: { run_id: "text", seq: "int", ts: "ts", type: "text", payload: "json" },
   artifacts: {
@@ -760,6 +767,9 @@ export const TABLES: HostedDynamic = {
       selection: { mode: "act", stories: ["checkout", "refund"], refresh: false },
       status: "done",
       exit_summary: { pass: 2, fail: 1, infra: 0, changed: 1, exit_code: 1 },
+      // A CI launch pinned its own build's runner (0016), so this group is
+      // placed on these labels however the environment is edited later.
+      runner_labels: ["ci-run-900100"],
       created_at: T.group1,
       updated_at: T.run3End,
     },
@@ -773,6 +783,7 @@ export const TABLES: HostedDynamic = {
       selection: { mode: "explore", stories: ["checkout"], refresh: true },
       status: "running",
       exit_summary: null,
+      runner_labels: null, // unpinned: this group follows its environment
       created_at: T.group2,
       updated_at: T.group2,
     },
@@ -1003,6 +1014,8 @@ export const TABLES: HostedDynamic = {
       created_at: T.suiteCreated,
       last_seen_at: T.now,
       revoked_at: null,
+      expires_at: null, // a standing runner stops working when someone revokes it
+      source: null,
     },
     {
       id: IDS.runnerRevoked,
@@ -1015,6 +1028,31 @@ export const TABLES: HostedDynamic = {
       created_at: T.suiteCreated,
       last_seen_at: T.snapshot2,
       revoked_at: T.triage,
+      expires_at: null,
+      source: null,
+    },
+    // An ephemeral CI registration (0016): no user created it, it expires with
+    // its pipeline run, and it carries the verified claims it was minted from.
+    {
+      id: IDS.runnerCi,
+      project_id: IDS.projectMain,
+      name: "ci-900100.1-9f3ac2",
+      labels: ["ci-run-900100"],
+      credential_hash: sha256Hex("fixture-runner-credential-ci"),
+      ephemeral: true,
+      created_by: null,
+      created_at: T.group1,
+      last_seen_at: T.group1,
+      revoked_at: null,
+      expires_at: T.group2,
+      source: {
+        repository: "acme/storefront",
+        workflow_ref: "acme/storefront/.github/workflows/playtest.yml@refs/pull/42/merge",
+        ref: "refs/pull/42/merge",
+        sha: "b7f2c1d9e0a4",
+        run_id: "900100",
+        run_attempt: "1",
+      },
     },
   ],
 

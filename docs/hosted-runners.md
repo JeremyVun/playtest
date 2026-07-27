@@ -130,7 +130,81 @@ runner does, because it is the one making the request.
 
 The same is true for a web suite pointed at a `localhost` dev server.
 
-## 6. When it does not work
+## 6. CI: a runner that lives for one pipeline run
+
+A build machine is the same story as a laptop, with one difference: it is gone
+when the job ends, so it should not be carrying a credential you minted by hand
+in a console three months ago.
+
+A CI job registers itself. It presents the OIDC token GitHub already mints for
+it, and gets back a credential that expires with the job:
+
+```text
+GitHub Actions job                          Playtest control plane
+──────────────────                          ──────────────────────
+build the app; start it on localhost
+register with the job's OIDC token ───────▶ ephemeral runner, expires with
+  (labels: ci-run-<run_id>)                 the job, never listed as standing
+start the runner (long-polls) ────────────▶ claim board
+launch, pinned to ci-run-<run_id> ────────▶ dispatch posted to the board
+wait for the verdict             ─────────▶ (holds)
+                                            the runner claims it, executes
+                                            against localhost, reports
+exit 0 / 1 / 2                   ◀────────── group complete
+```
+
+The complete workflow is in
+[`examples/ci-github-actions/playtest.yml`](../examples/ci-github-actions/playtest.yml) —
+copy it into `.github/workflows/` and edit the two marked blocks.
+
+### The label is the point
+
+```yaml
+env:
+  PLAYTEST_LABEL: ci-run-${{ github.run_id }}
+```
+
+That label is unique to one pipeline run. The job's runner advertises it, and
+the job's launch pins it:
+
+```jsonc
+{ "suite_id": "…", "environment_id": "…", "runner_labels": ["ci-run-1234567"] }
+```
+
+`runner_labels` on a launch overrides the environment's labels for that run
+group only, so one shared CI environment serves every pull request.
+
+**Without it, concurrent pull requests test each other's builds.** Two jobs
+running at once, both advertising a shared label like `ci`, are two runners
+eligible for both jobs. The board hands each job to whichever runner asks first,
+so PR #41's suite can execute on PR #42's machine — against #42's build, on
+#42's `localhost`. Nothing errors. The run is green, and it is green about the
+wrong code. A per-run label makes each job's work claimable by exactly one
+runner: its own.
+
+The pin travels with the group, so a retry of that run is placed the same way
+even if the environment changed since.
+
+### What the deployment has to allow
+
+Registration is only open where an operator says which repository may use it:
+
+| Variable | Meaning |
+|---|---|
+| `PLAYTEST_POOL_OIDC_REPOSITORY` | The repository whose workflows may register runners (`acme/storefront`). Until it is set, the route answers `503` — an unpinned check would accept a token from anyone on GitHub. |
+| `PLAYTEST_POOL_OIDC_WORKFLOW` | Optional: narrow it to one workflow file. |
+| `PLAYTEST_POOL_OIDC_REF` | Optional: narrow it to one branch. |
+| `PLAYTEST_POOL_OIDC_AUDIENCE` | The audience the workflow requests (default `playtest`). |
+| `PLAYTEST_POOL_OIDC_TTL_S` | How long the credential lives: default 3600, ceiling 21600 (GitHub's own job limit). |
+
+The pin is deployment-wide. A deployment hosting projects for teams that should
+not trust each other leaves it unset.
+
+One secret remains a secret: launching a run needs a project API token with the
+`editor` role, because OIDC registers a runner — it does not authorize starting
+work. Scope that token to the one project the pipeline gates.
+
+## 7. When it does not work
 
 | What you see | What it means |
 |---|---|
@@ -139,6 +213,8 @@ The same is true for a web suite pointed at a `localhost` dev server.
 | `runner "…" claimed this run and stopped checking in` | The runner process died, slept, or lost the network mid-group. The story is reported as an infrastructure failure and the remainder is placed once more. |
 | `this runner credential is not registered` | The credential was revoked or belongs to another deployment. Register the runner again. |
 | The runner is quiet after `waiting for work` | That is the steady state. It prints when it claims something. |
+| A CI registration answers `503 not_configured` | The deployment has not named the repository allowed to register runners (`PLAYTEST_POOL_OIDC_REPOSITORY`), or it does not run pool placement at all. |
+| `registered for one CI job and that registration expired` | The ephemeral credential outlived its window (`PLAYTEST_POOL_OIDC_TTL_S`). Register again from the job that needs it; a group already running is unaffected. |
 
 ## Security notes
 
@@ -149,6 +225,10 @@ The same is true for a web suite pointed at a `localhost` dev server.
   project its credential is registered to.
 - Revoking a runner refuses its future check-ins and claims immediately; a group
   already in flight finishes under the short-lived token it was already issued.
+- An ephemeral CI registration is a smaller blast radius again: it is minted
+  from a signed GitHub token rather than a stored secret, it expires with the
+  job, and it never appears in the standing runner list. Its verified
+  provenance — repository, workflow, ref, commit, run — is recorded beside it.
 - Isolation is stated, not laundered. A persistent shared machine running
   `--isolation process` is visible as such on the runs it produced, so a reviewer
   can see what produced the evidence. Use `--isolation container` for a runner

@@ -8,16 +8,14 @@ import { ulid } from "../ulid.ts";
 import { audit, actorOf } from "../audit.ts";
 import { created, noContent, readJsonBody } from "../http.ts";
 import { requireAuth, guard, getProjectByKey, stringField } from "./util.ts";
-import { newRunnerCredential } from "../auth/runner-credentials.ts";
-import { badRequest, conflict, notFound } from "../errors.ts";
-
-const MAX_LABELS = 32;
-const MAX_LABEL_LENGTH = 64;
+import { newRunnerCredential, normalizeLabels } from "../auth/runner-credentials.ts";
+import { conflict, notFound } from "../errors.ts";
 
 /**
  * GET /projects/:p/runners [viewer] — the fleet: what each runner advertises,
  * when it last checked in, and what it is working on right now. Ephemeral CI
- * registrations (R2) are excluded; they are pipeline scaffolding, not fleet.
+ * registrations are excluded; they are pipeline scaffolding, not fleet, and one
+ * busy repository would otherwise bury the machines a person actually keeps.
  */
 export async function listRunners(ctx: HostedDynamic) {
   const project = await getProjectByKey(ctx, ctx.params.p);
@@ -46,7 +44,7 @@ export async function createRunner(ctx: HostedDynamic) {
   guard(ctx, project.id, "developer");
   const body = await readJsonBody(ctx.req);
   const name: HostedDynamic = stringField(body, "name", { required: true, max: 100 });
-  const labels = validateLabels(body.labels);
+  const labels = normalizeLabels(body.labels);
   const { plaintext, hash } = newRunnerCredential();
   const id = ulid();
 
@@ -111,18 +109,6 @@ export async function deleteRunner(ctx: HostedDynamic) {
   return noContent();
 }
 
-function validateLabels(value: HostedDynamic) {
-  const labels = value ?? [];
-  if (!Array.isArray(labels) || labels.some((l) => typeof l !== "string" || !l.trim())) {
-    throw badRequest(`"labels" must be an array of non-empty strings`);
-  }
-  if (labels.length > MAX_LABELS) throw badRequest(`a runner may advertise at most ${MAX_LABELS} labels`);
-  if (labels.some((l) => l.length > MAX_LABEL_LENGTH)) {
-    throw badRequest(`a label is at most ${MAX_LABEL_LENGTH} characters`);
-  }
-  return [...new Set(labels.map((l: string) => l.trim()))];
-}
-
 const runnerView = (r: HostedDynamic) => ({
   id: r.id,
   project_id: r.project_id,
@@ -132,6 +118,9 @@ const runnerView = (r: HostedDynamic) => ({
   created_at: r.created_at,
   last_seen_at: r.last_seen_at ?? null,
   revoked_at: r.revoked_at ?? null,
+  // Null for a standing runner: it stops working when someone revokes it, not
+  // on a clock. An ephemeral CI registration states when it stops.
+  expires_at: r.expires_at ?? null,
   // What this runner is executing right now, if anything — the console links it
   // to its run group without a second request.
   claim: r.claim_dispatch_id

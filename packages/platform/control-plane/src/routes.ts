@@ -176,6 +176,9 @@ export function buildRouter() {
 
   // --- runner claim board (runner-credential authenticated; pull-based
   //     placement, so nothing here is ever an inbound call to a runner) ---
+  // Joining the pool for one CI job: the GitHub OIDC token is the badge, so this
+  // is the one runner route that presents no runner credential (it mints one).
+  r.post(`${v}/runner/pool/register-oidc`, pool.registerViaOidc);
   r.get(`${v}/runner/pool/claims`, pool.pollClaims);
   r.post(`${v}/runner/pool/claims/:dispatch`, pool.claimDispatch);
   r.post(`${v}/runner/pool/claims/:dispatch/heartbeat`, pool.heartbeatClaim);

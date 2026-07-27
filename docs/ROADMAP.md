@@ -44,8 +44,12 @@ Plan: [`docs/backlog/self-hosted-runners/BUILD_PLAN.md`](backlog/self-hosted-run
       shapes (R0), then `runner-agent pool`, the minimal Settings → Runners
       console slice, and the laptop walkthrough
       ([`docs/hosted-runners.md`](hosted-runners.md)) (R1).
-- [ ] **R2 — Ephemeral CI runners:** OIDC-badged registration, per-launch
-      label pinning, and the reference PR-gating workflow.
+- [x] **R2 — Ephemeral CI runners:** a CI job registers itself with its GitHub
+      OIDC token (`POST /runner/pool/register-oidc`, pinned repository/workflow/
+      ref, credential expiring with the job, never listed as standing), a launch
+      pins its own `runner_labels` over the environment's, and the reference
+      PR-gating workflow lives in `examples/ci-github-actions/` with the recipe
+      in [`docs/hosted-runners.md`](hosted-runners.md).
 - [ ] **R3 — Environment app artifacts:** content-addressed APK/.app upload
       on environments, launch pinning, and runner materialization of `app:`.
 - [ ] **R4 — Console surfaces:** runners settings, artifact upload, and

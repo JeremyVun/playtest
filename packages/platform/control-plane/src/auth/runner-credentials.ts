@@ -10,7 +10,7 @@
 // credential presented to the wrong surface is refused rather than half-accepted.
 import { randomBytes } from "node:crypto";
 import { hashToken, tokenHashMatches } from "./tokens.ts";
-import { forbidden, unauthenticated } from "../errors.ts";
+import { badRequest, forbidden, unauthenticated } from "../errors.ts";
 import type { Db, DbRow } from "../db.ts";
 import type { RequestContext } from "../types.ts";
 
@@ -60,12 +60,49 @@ export async function runnerForCredential(db: Db, plaintext: unknown): Promise<D
         `register it again under Settings → Runners to get a new credential`,
     );
   }
+  // An expired ephemeral registration is refused exactly like a revoked one, and
+  // at the same three places (poll, claim, exchange), because "the CI job that
+  // owns this credential is over" and "someone revoked this runner" have the
+  // same consequence: no new work, and no new scoped bearer.
+  if (isExpired(runner)) {
+    throw forbidden(
+      `runner "${runner.name}" registered for one CI job and that registration expired — ` +
+        `register again with POST /api/v1/runner/pool/register-oidc from the job that needs it`,
+    );
+  }
   return runner;
+}
+
+/** Has this (ephemeral) registration passed its expiry? Standing runners never do. */
+export function isExpired(runner: { expires_at?: Date | number | null }, now: number = Date.now()): boolean {
+  if (!runner.expires_at) return false;
+  return new Date(runner.expires_at).getTime() <= now;
 }
 
 /** The runner behind this request, refusing anything but a live credential. */
 export async function requireRunnerCredential(ctx: RequestContext): Promise<DbRow> {
   return await runnerForCredential(ctx.db, presentedRunnerCredential(ctx.req as never));
+}
+
+const MAX_LABELS = 32;
+const MAX_LABEL_LENGTH = 64;
+
+/**
+ * Validate and de-duplicate a label list from a request body. One implementation
+ * for every surface that accepts labels — runner registration, ephemeral CI
+ * registration, and a per-launch pin — so a label a runner may advertise is
+ * exactly a label a launch may ask for.
+ */
+export function normalizeLabels(value: unknown, field = "labels"): string[] {
+  const labels = value ?? [];
+  if (!Array.isArray(labels) || labels.some((l) => typeof l !== "string" || !l.trim())) {
+    throw badRequest(`"${field}" must be an array of non-empty strings`);
+  }
+  if (labels.length > MAX_LABELS) throw badRequest(`"${field}" may hold at most ${MAX_LABELS} labels`);
+  if (labels.some((l: string) => l.length > MAX_LABEL_LENGTH)) {
+    throw badRequest(`a label is at most ${MAX_LABEL_LENGTH} characters`);
+  }
+  return [...new Set(labels.map((l: string) => l.trim()))];
 }
 
 /** Job labels ⊆ runner labels. An empty job label set matches any runner. */

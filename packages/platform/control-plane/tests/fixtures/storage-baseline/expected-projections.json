@@ -15,7 +15,7 @@
     "secrets": 2,
     "auth_providers": 2,
     "run_groups": 2,
-    "runners": 2,
+    "runners": 3,
     "executors": 3,
     "runs": 5,
     "dispatches": 4,
@@ -35,7 +35,7 @@
     "consolidation_labels": 2,
     "service_heartbeats": 1
   },
-  "totalRows": 102,
+  "totalRows": 103,
   "tables": [
     "api_tokens",
     "artifacts",
@@ -120,6 +120,9 @@
     "run_groups:01KTV8VCG0GWD48MM99GKX098W:trigger": "{\"actor\":{\"user_id\":\"01KT16JKM0V1JGHMS4X0MA8P4X\"},\"kind\":\"manual\"}",
     "run_groups:01KTV8VCG0GWD48MM99GKX098W:selection": "{\"mode\":\"explore\",\"refresh\":true,\"stories\":[\"checkout\"]}",
     "run_groups:01KTV8VCG0GWD48MM99GKX098W:exit_summary": null,
+    "runners:01KT1A0F80Z9DPAKMZ66HMNAVB:source": null,
+    "runners:01KT1A0F80GSWXNAGC650KK42D:source": null,
+    "runners:01KTV8VCG0VEM070KEP0SCHZ8D:source": "{\"ref\":\"refs/pull/42/merge\",\"repository\":\"acme/storefront\",\"run_attempt\":\"1\",\"run_id\":\"900100\",\"sha\":\"b7f2c1d9e0a4\",\"workflow_ref\":\"acme/storefront/.github/workflows/playtest.yml@refs/pull/42/merge\"}",
     "executors:01KT6BC1M05RJRPCD26WB8CDY2:versions": "{\"node\":\"20.11.1\",\"playtest\":\"0.1.0\",\"playwright\":\"1.53.0\"}",
     "executors:01KT94MFW0JBWBSZ62BPZB017D:versions": "{}",
     "executors:01KTV8VCG0PHXQ0HHBQDKBDMME:versions": "{\"playtest\":\"0.1.0\"}",
@@ -293,9 +296,15 @@
     "runners:01KT1A0F80Z9DPAKMZ66HMNAVB:created_at": 1780308000000,
     "runners:01KT1A0F80Z9DPAKMZ66HMNAVB:last_seen_at": 1781179500000,
     "runners:01KT1A0F80Z9DPAKMZ66HMNAVB:revoked_at": null,
+    "runners:01KT1A0F80Z9DPAKMZ66HMNAVB:expires_at": null,
     "runners:01KT1A0F80GSWXNAGC650KK42D:created_at": 1780308000000,
     "runners:01KT1A0F80GSWXNAGC650KK42D:last_seen_at": 1780473600000,
     "runners:01KT1A0F80GSWXNAGC650KK42D:revoked_at": 1780570800000,
+    "runners:01KT1A0F80GSWXNAGC650KK42D:expires_at": null,
+    "runners:01KTV8VCG0VEM070KEP0SCHZ8D:created_at": 1780477200000,
+    "runners:01KTV8VCG0VEM070KEP0SCHZ8D:last_seen_at": 1780477200000,
+    "runners:01KTV8VCG0VEM070KEP0SCHZ8D:revoked_at": null,
+    "runners:01KTV8VCG0VEM070KEP0SCHZ8D:expires_at": 1781179200000,
     "executors:01KT6BC1M05RJRPCD26WB8CDY2:registered_at": 1780477200000,
     "executors:01KT6BC1M05RJRPCD26WB8CDY2:last_report_at": 1780477540000,
     "executors:01KT6BC1M05RJRPCD26WB8CDY2:concluded_at": 1780477540000,
@@ -467,10 +476,17 @@
       "01KT1A0F80S7KXHWGNNXBVXVDP:updated_by"
     ],
     "run_groups": [
-      "01KTV8VCG0GWD48MM99GKX098W:exit_summary"
+      "01KTV8VCG0GWD48MM99GKX098W:exit_summary",
+      "01KTV8VCG0GWD48MM99GKX098W:runner_labels"
     ],
     "runners": [
-      "01KT1A0F80Z9DPAKMZ66HMNAVB:revoked_at"
+      "01KT1A0F80GSWXNAGC650KK42D:expires_at",
+      "01KT1A0F80GSWXNAGC650KK42D:source",
+      "01KT1A0F80Z9DPAKMZ66HMNAVB:expires_at",
+      "01KT1A0F80Z9DPAKMZ66HMNAVB:revoked_at",
+      "01KT1A0F80Z9DPAKMZ66HMNAVB:source",
+      "01KTV8VCG0VEM070KEP0SCHZ8D:created_by",
+      "01KTV8VCG0VEM070KEP0SCHZ8D:revoked_at"
     ],
     "executors": [
       "01KT94MFW0JBWBSZ62BPZB017D:concluded_at",

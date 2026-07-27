@@ -11,7 +11,22 @@ import { inClause } from "../db.ts";
 
 const ACTIVE_DISPATCHES = ["requested", "scheduled", "running"];
 
-export async function createRunGroup(ctx: HostedDynamic, { principal, project, suite, environment, selection, note = null }: HostedDynamic) {
+/**
+ * Which labels place this group. A launch may pin them (`runner_labels` on the
+ * launch request), which OVERRIDES the environment's for that group only — the
+ * CI case: two concurrent pipelines share one environment but each has to reach
+ * its own build's runner, and an environment per pipeline would be a permanent
+ * object created for a five-minute job.
+ *
+ * The pin rides the group, so every later attempt (continuation after a partial
+ * completion, in-place retry) is placed the way the original was even if someone
+ * edits the environment in between.
+ */
+export function groupDispatchLabels(group: HostedDynamic, environment: HostedDynamic): string[] {
+  return group?.runner_labels ?? environment?.runner_labels ?? [];
+}
+
+export async function createRunGroup(ctx: HostedDynamic, { principal, project, suite, environment, selection, note = null, runnerLabels = null }: HostedDynamic) {
   selection = normalizeSelection(selection);
   if (!ctx.github?.enabled) {
     // A test/local mock sets ctx.github.enabled=true. Without that or real GitHub
@@ -57,11 +72,16 @@ export async function createRunGroup(ctx: HostedDynamic, { principal, project, s
     mode: plannedMode(c, selection, baselineStories),
   }));
 
+  // Pinned at launch, or inherited from the environment. `runner_labels` on the
+  // group is NULL unless this launch pinned them, so a group reads back saying
+  // whether its placement was a launch decision or the environment's standing one.
+  const labels = runnerLabels ?? environment.runner_labels ?? [];
+
   await ctx.db.withTx(async (tx: HostedDynamic) => {
     await tx.query(
       `INSERT INTO run_groups
-         (id, project_id, suite_id, snapshot_id, environment_id, trigger, selection, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'queued')`,
+         (id, project_id, suite_id, snapshot_id, environment_id, trigger, selection, status, runner_labels)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'queued', $8)`,
       [
         groupId,
         project.id,
@@ -70,6 +90,7 @@ export async function createRunGroup(ctx: HostedDynamic, { principal, project, s
         environment.id,
         triggerFor(principal, note),
         normalizeSelection(selection),
+        runnerLabels,
       ],
     );
     for (const r of runs) {
@@ -85,7 +106,7 @@ export async function createRunGroup(ctx: HostedDynamic, { principal, project, s
     await tx.query(
       `INSERT INTO dispatches (id, project_id, kind, ref_id, attempt, status, labels)
          VALUES ($1, $2, 'group', $3, 1, 'requested', $4)`,
-      [dispatchId, project.id, groupId, environment.runner_labels || []],
+      [dispatchId, project.id, groupId, labels],
     );
     await audit(tx, {
       actor: actorOf(principal),
@@ -93,7 +114,16 @@ export async function createRunGroup(ctx: HostedDynamic, { principal, project, s
       entityType: "run_group",
       entityId: groupId,
       projectId: project.id,
-      detail: { suite_id: suite.id, snapshot_id: snapshot.id, environment_id: environment.id, cases: runs.length, note },
+      detail: {
+        suite_id: suite.id,
+        snapshot_id: snapshot.id,
+        environment_id: environment.id,
+        cases: runs.length,
+        note,
+        // Placement is auditable: a pin says who chose it, the environment's own
+        // labels are already readable from the environment.
+        ...(runnerLabels ? { runner_labels: runnerLabels } : {}),
+      },
     });
     await emitPlatformEvent(tx, {
       projectId: project.id,
@@ -109,7 +139,7 @@ export async function createRunGroup(ctx: HostedDynamic, { principal, project, s
     kind: "group",
     refId: groupId,
     attempt: 1,
-    labels: environment.runner_labels || [],
+    labels,
   });
 
   return {
@@ -142,7 +172,7 @@ function requireDiscoveryAllowed(cases: HostedDynamic, environment: HostedDynami
  * suite's own finished runs (per story+mode, falling back to per mode); a
  * story with no history estimates null, never a made-up number.
  */
-export async function previewRunGroup(ctx: HostedDynamic, { project, suite, environment, selection }: HostedDynamic) {
+export async function previewRunGroup(ctx: HostedDynamic, { project, suite, environment, selection, runnerLabels = null }: HostedDynamic) {
   selection = normalizeSelection(selection);
   const snapshot = await latestSnapshot(ctx, suite.id);
   const resolved = await resolveSnapshotCases(snapshot.id, () => loadTreeFiles(ctx.store, snapshot.tree));
@@ -184,6 +214,12 @@ export async function previewRunGroup(ctx: HostedDynamic, { project, suite, envi
     discovery: {
       runs: discovery.length,
       allowed: environment.discovery_allowed === true,
+    },
+    // Placement said out loud before launch, the way `target` says the URL: the
+    // labels this run would need and who chose them.
+    placement: {
+      runner_labels: runnerLabels ?? environment.runner_labels ?? [],
+      labels_source: runnerLabels ? "launch" : "environment",
     },
     target: resolveTarget(resolved.defaults, environment),
     models: resolveModels(resolved.defaults, project),
@@ -318,10 +354,11 @@ export async function dispatchContinuation(ctx: HostedDynamic, groupId: HostedDy
   );
   const attempt = attemptRow.rows[0].attempt;
   const dispatchId = ulid();
+  const labels = groupDispatchLabels(group, env);
   await ctx.db.query(
     `INSERT INTO dispatches (id, project_id, kind, ref_id, attempt, status, labels)
        VALUES ($1, $2, 'group', $3, $4, 'requested', $5)`,
-    [dispatchId, group.project_id, group.id, attempt, env.runner_labels || []],
+    [dispatchId, group.project_id, group.id, attempt, labels],
   );
   await dispatchAttempt(ctx, {
     dispatchId,
@@ -329,7 +366,7 @@ export async function dispatchContinuation(ctx: HostedDynamic, groupId: HostedDy
     kind: "group",
     refId: group.id,
     attempt,
-    labels: env.runner_labels || [],
+    labels,
   });
   return dispatchId;
 }
@@ -364,7 +401,7 @@ export async function getRunGroupView(ctx: HostedDynamic, id: HostedDynamic) {
   return {
     ...group,
     runs: rows.map(runView),
-    placement: await placementView(ctx, id),
+    placement: await placementView(ctx, group),
   };
 }
 
@@ -375,15 +412,15 @@ export async function getRunGroupView(ctx: HostedDynamic, id: HostedDynamic) {
  * exchange. Evidence trust is stated, not laundered: a persistent shared runner
  * without per-case containers is visible as `process` here.
  */
-async function placementView(ctx: HostedDynamic, groupId: HostedDynamic) {
+async function placementView(ctx: HostedDynamic, group: HostedDynamic) {
   const { rows } = await ctx.db.query(
-    `SELECT d.id, d.attempt, d.status, d.runner_id, r.name AS runner_name, e.isolation
+    `SELECT d.id, d.attempt, d.status, d.runner_id, d.labels, r.name AS runner_name, e.isolation
        FROM dispatches d
        LEFT JOIN runners r ON r.id = d.runner_id
        LEFT JOIN executors e ON e.id = d.executor_id
       WHERE d.kind = 'group' AND d.ref_id = $1
       ORDER BY d.attempt DESC, d.requested_at DESC LIMIT 1`,
-    [groupId],
+    [group.id],
   );
   const row = rows[0];
   if (!row) return null;
@@ -392,6 +429,11 @@ async function placementView(ctx: HostedDynamic, groupId: HostedDynamic) {
     attempt: row.attempt ?? null,
     isolation: row.isolation ?? null,
     runner: row.runner_id ? { id: row.runner_id, name: row.runner_name ?? null } : null,
+    // Which labels this attempt was placed on, and whether the launch chose them
+    // or the environment did. Placement is auditable after the fact, not only in
+    // the moment someone clicked launch.
+    labels: row.labels ?? [],
+    labels_source: group.runner_labels ? "launch" : "environment",
   };
 }
 

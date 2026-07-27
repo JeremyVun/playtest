@@ -7,8 +7,10 @@ import {
   previewRunGroup,
   getRunGroup,
   getRunGroupView,
+  groupDispatchLabels,
   dispatchAttempt,
 } from "../dispatch/dispatcher.ts";
+import { normalizeLabels } from "../auth/runner-credentials.ts";
 import { normalizeClipRequest, startClip } from "../media/clip.ts";
 import { ulid } from "../ulid.ts";
 import { inClause } from "../db.ts";
@@ -30,7 +32,23 @@ export async function createGroup(ctx: HostedDynamic) {
     environment,
     selection: body.selection || {},
     note: body.note ?? null,
+    runnerLabels: pinnedLabels(body),
   });
+}
+
+/**
+ * The optional per-launch placement pin. Absent means "follow the environment";
+ * present — including an explicit `[]`, which means "any runner in the project" —
+ * overrides the environment's labels for this group alone.
+ *
+ * It carries no authorization of its own. Labels are routing, not authority: a
+ * runner only ever reaches jobs in the project its credential is registered to,
+ * so choosing which of that project's runners takes a run is the same decision
+ * scope as launching the run at all (`editor`).
+ */
+function pinnedLabels(body: HostedDynamic): string[] | null {
+  if (!("runner_labels" in body) || body.runner_labels == null) return null;
+  return normalizeLabels(body.runner_labels, "runner_labels");
 }
 
 /**
@@ -46,7 +64,13 @@ export async function previewGroup(ctx: HostedDynamic) {
   if (!body.suite_id) throw badRequest(`"suite_id" is required`);
   if (!body.environment_id) throw badRequest(`"environment_id" is required`);
   const { suite, environment } = await resolveLaunchTarget(ctx, project, body);
-  return await previewRunGroup(ctx, { project, suite, environment, selection: body.selection || {} });
+  return await previewRunGroup(ctx, {
+    project,
+    suite,
+    environment,
+    selection: body.selection || {},
+    runnerLabels: pinnedLabels(body),
+  });
 }
 
 /**
@@ -308,6 +332,9 @@ export async function retryGroup(ctx: HostedDynamic) {
   const group = await getRunGroup(ctx, ctx.params.g);
   guard(ctx, group.project_id, "editor");
   const environment = await getEnvironment(ctx, group.environment_id);
+  // A retry is the same group, so it is placed the way the group was: a launch
+  // that pinned its labels keeps them even if the environment changed since.
+  const labels = groupDispatchLabels(group, environment);
   const dispatchId = ulid();
   let attempt = 0;
   let retried = 0;
@@ -355,7 +382,7 @@ export async function retryGroup(ctx: HostedDynamic) {
     await tx.query(
       `INSERT INTO dispatches (id, project_id, kind, ref_id, attempt, status, labels)
        VALUES ($1, $2, 'group', $3, $4, 'requested', $5)`,
-      [dispatchId, group.project_id, group.id, attempt, environment.runner_labels || []],
+      [dispatchId, group.project_id, group.id, attempt, labels],
     );
     await tx.query(
       `UPDATE run_groups SET status = 'queued', exit_summary = NULL, updated_at = now()
@@ -384,7 +411,7 @@ export async function retryGroup(ctx: HostedDynamic) {
     kind: "group",
     refId: group.id,
     attempt,
-    labels: environment.runner_labels || [],
+    labels,
   });
   return { run_group: await getRunGroupView(ctx, group.id), retried };
 }

@@ -1,11 +1,9 @@
 # Self-hosted runners and environment app artifacts
 
-**Status:** proposed. Implementation phases and gates live in
-[`BUILD_PLAN.md`](./BUILD_PLAN.md). Until those phases land,
-[`docs/contracts/hosted.md`](../../contracts/hosted.md) remains authoritative:
-the shipped placement adapters are GitHub workflow dispatch and the local
-child-process adapter, and `app:` in a mobile environment is a path on the
-executor's own filesystem.
+**Status:** implemented. All phases (R0–R4) landed 2026-07-27; see
+[`BUILD_PLAN.md`](./BUILD_PLAN.md) for the phases and gates.
+[`docs/contracts/hosted.md`](../../contracts/hosted.md) is authoritative for
+the shipped behavior; this document records the design and its rationale.
 
 ## Problem
 

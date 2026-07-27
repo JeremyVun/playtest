@@ -32,6 +32,7 @@
 // driver-owned shape as the `snapshotFormat`/`settle` pins. Pure (no I/O); kept
 // as an exported helper per driver for unit test.
 import { DummyConfigError } from "./config.ts";
+import { PerfSidecar } from "./perf.ts";
 import { WebDriver } from "./drivers/web.ts";
 import type { StepAction, StepEnvelope } from "./trajectory.ts";
 import type { DriverId, ResolvedCase, ResolvedEnvironment } from "./types.ts";
@@ -128,12 +129,15 @@ interface PreparedEnvironment {
 interface CreateDriverOptions {
   runDir: string;
   headed?: boolean;
+  // The run's diagnostic timing sidecar (perf.ts). Absent => the shared no-op
+  // recorder, so a driver constructed outside a run times nothing.
+  perf?: PerfSidecar;
 }
 
 export async function createDriver(
   rc: ResolvedCase,
   env: PreparedEnvironment,
-  { runDir, headed = false }: CreateDriverOptions = {} as CreateDriverOptions // SAFETY: preserves the legacy optional argument while callers supply runDir
+  { runDir, headed = false, perf = PerfSidecar.off() }: CreateDriverOptions = {} as CreateDriverOptions // SAFETY: preserves the legacy optional argument while callers supply runDir
 ): Promise<Driver> {
   const driver = rc.env?.driver ?? "web";
   switch (driver) {
@@ -152,6 +156,7 @@ export async function createDriver(
         // requests against. case_file names the file if the spec won't load.
         openapi: rc.env.openapi ?? null,
         caseFile: rc.file,
+        perf,
       });
     case "mobile": {
       // Dynamic import keeps the Appium/webdriverio module graph out of web/api
@@ -159,7 +164,8 @@ export async function createDriver(
       const { MobileDriver } = await import("./drivers/mobile.ts");
       return MobileDriver.launch({
         env: rc.env as Extract<ResolvedEnvironment, { driver: "mobile" }>,
-        runDir
+        runDir,
+        perf,
       });
     }
     case "api": {
@@ -170,6 +176,7 @@ export async function createDriver(
       return ApiDriver.launch({
         env: { ...rc.env, base_url: env.baseUrl, case_file: rc.file, redact: rc.redact ?? null, match: rc.match ?? null, bind: rc.bind ?? null },
         runDir,
+        perf,
       });
     }
     default:

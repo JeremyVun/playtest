@@ -9,6 +9,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { hasKnownSecrets, redactSecrets } from "../secrets.ts";
+import { PerfSidecar } from "../perf.ts";
 
 export const MAX_BODY_CHARS = 64 * 1024; // stored cap per body
 export const MAX_BODY_READ = 1024 * 1024; // don't buffer responses larger than this
@@ -93,7 +94,10 @@ export function flushHar(runDir: string, entries: unknown[]): void {
 export function createHarFlusher(
   runDir: string,
   entries: unknown[],
-  { interval = HAR_FLUSH_INTERVAL_STEPS }: { interval?: number } = {}
+  {
+    interval = HAR_FLUSH_INTERVAL_STEPS,
+    perf = PerfSidecar.off()
+  }: { interval?: number; perf?: PerfSidecar } = {}
 ): ({ force }?: { force?: boolean }) => boolean {
   const parsedInterval = Math.floor(Number(interval));
   const every = Number.isFinite(parsedInterval) && parsedInterval > 0 ? parsedInterval : HAR_FLUSH_INTERVAL_STEPS;
@@ -102,7 +106,12 @@ export function createHarFlusher(
   return ({ force = false } = {}) => {
     if (!force) completedSteps++;
     if (!force && wrote && completedSteps % every !== 0) return false;
+    // Timed here rather than at the call sites: this is the one place a HAR
+    // write actually happens, so the span counts real writes (the skipped
+    // between-interval calls above cost nothing and record nothing).
+    const started = perf.now();
     flushHar(runDir, entries);
+    perf.span("har_flush", started, null, { entries: entries.length, forced: force });
     wrote = true;
     return true;
   };

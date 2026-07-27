@@ -20,6 +20,7 @@ import { firstLine, actionOf, initialQuietMs } from "../trajectory.ts";
 import { parsePageSource, alertSnapshot, nativePageSourceTree, normalizeSnapshot as normalizeAxSnapshot, SNAPSHOT_FORMAT, ALERT_LOCATOR_PREFIX } from "./mobile-snapshot.ts";
 import { overlayFor } from "./overlay.ts";
 import { DummyConfigError } from "../config.ts";
+import { PerfSidecar } from "../perf.ts";
 import type { Browser as WebdriverBrowser, ChainablePromiseElement, remote as webdriverRemote } from "webdriverio";
 import type { Driver, DriverResolution, DriverResult, DriverSnapshot } from "../driver.ts";
 import type { StepAction, StepEnvelope } from "../trajectory.ts";
@@ -80,8 +81,68 @@ export function capabilitiesFor(env: MobileEnvironment): Record<string, string |
   return caps;
 }
 
+// Client members left untouched by the timing proxy — see timedClient below.
+const UNWRAPPED_CLIENT_COMMANDS = new Set(["$", "$$"]);
+
+/**
+ * Time every Appium command this driver issues, centrally, by proxying the
+ * WebDriver client once (perf.ts). Appium round-trips are the mobile driver's
+ * dominant cost and the thing Phase 1 removes, so the sidecar records one
+ * `appium` span per command with `meta.command` — count and duration by name
+ * fall straight out of the JSONL.
+ *
+ * Only plain CLIENT commands are wrapped. `$`/`$$` return webdriverio's own
+ * chainable element thenables, which resolve on first `then` by rules the
+ * library owns — timing those would mean intercepting them, and an instrument
+ * must never risk changing behavior. Element lookups and element commands
+ * (click, setValue, isExisting, getLocation) are therefore attributed to the
+ * enclosing action_dispatch / snapshot span instead.
+ *
+ * A disabled sidecar returns the client untouched: no proxy, no overhead.
+ */
+function timedClient(client: WebdriverBrowser, perf: PerfSidecar): WebdriverBrowser {
+  if (!perf.enabled) return client;
+  return new Proxy(client, {
+    get(target, prop) {
+      // `target` (not the proxy) is the receiver so any accessor on the client
+      // still sees its own instance.
+      const value = Reflect.get(target, prop, target);
+      if (typeof value !== "function" || typeof prop !== "string") return value;
+      if (UNWRAPPED_CLIENT_COMMANDS.has(prop)) return value.bind(target);
+      return function timed(this: unknown, ...args: unknown[]) {
+        const at = perf.now();
+        // `execute("mobile: swipe", …)` and friends all arrive as `execute`, so
+        // fold the mobile-command name in: it is the part that identifies the
+        // round-trip. Nothing else about the call is recorded.
+        const command = prop === "execute" && typeof args[0] === "string" ? `execute ${args[0]}` : prop;
+        let result: unknown;
+        try {
+          result = value.apply(target, args);
+        } catch (e) {
+          perf.span("appium", at, null, { command, ok: false });
+          throw e;
+        }
+        if (result && typeof (result as Promise<unknown>).then === "function") {
+          return (result as Promise<unknown>).then(
+            (v) => {
+              perf.span("appium", at, null, { command, ok: true });
+              return v;
+            },
+            (e) => {
+              perf.span("appium", at, null, { command, ok: false });
+              throw e;
+            },
+          );
+        }
+        perf.span("appium", at, null, { command, ok: true });
+        return result;
+      };
+    },
+  });
+}
+
 export class MobileDriver implements Driver {
-  static async launch({ env, runDir }: { env: MobileEnvironment; runDir: string }): Promise<MobileDriver> {
+  static async launch({ env, runDir, perf = PerfSidecar.off() }: { env: MobileEnvironment; runDir: string; perf?: PerfSidecar }): Promise<MobileDriver> {
     fs.mkdirSync(path.join(runDir, "steps"), { recursive: true });
     const url = new URL(env.appium_url || "http://127.0.0.1:4723");
     const client = await clientFactory({
@@ -92,7 +153,7 @@ export class MobileDriver implements Driver {
       logLevel: "silent",
       capabilities: capabilitiesFor(env),
     });
-    return new MobileDriver({ client, runDir, settle: env.settle });
+    return new MobileDriver({ client, runDir, settle: env.settle, perf });
   }
 
   #client: WebdriverBrowser;
@@ -121,8 +182,13 @@ export class MobileDriver implements Driver {
   // The first #settle() of a session (initial screen load) uses a longer quiet
   // window (initialQuietMs) so a lagging app doesn't settle on a half-built screen.
   #firstSettle = true;
-  constructor({ client, runDir, settle = null }: { client: WebdriverBrowser; runDir: string; settle?: SettleConfig | null }) {
-    this.#client = client;
+  // The run's diagnostic timing sidecar (perf.ts); no-op outside a run.
+  #perf: PerfSidecar;
+  constructor({ client, runDir, settle = null, perf = PerfSidecar.off() }: { client: WebdriverBrowser; runDir: string; settle?: SettleConfig | null; perf?: PerfSidecar }) {
+    this.#perf = perf;
+    // Every Appium round-trip this driver makes goes through the timed client;
+    // wrapping here is the single central seam the plan asks for.
+    this.#client = timedClient(client, perf);
     this.#runDir = runDir;
     this.#settlePolicy = settle ? { ...SETTLE_MOBILE, ...settle } : SETTLE_MOBILE;
   }
@@ -221,35 +287,47 @@ export class MobileDriver implements Driver {
     // on iOS) and never appears in the page source — the actor would see only the
     // dimmed, inert screen behind it and have no affordance to answer. When one is
     // up, its buttons ARE the actor's affordances, so they replace the page-source.
+    const perf = this.#perf;
+    let at = perf.now();
     const [xml, alert, b64] = await Promise.all([
       this.#client.getPageSource().then((s) => String(s), () => ""),
       this.#alertState(),
       this.#client.takeScreenshot().then((b) => b, () => null),
     ]);
+    // One span for the concurrent fetch trio; the per-command `appium` spans
+    // from timedClient break out which of the three actually cost the wait.
+    perf.span("snapshot_source", at, stepNum, { chars: xml.length, alert: Boolean(alert) });
     // Parse the page source once; reuse it for the snapshot (no-alert case) AND
     // for the cached digest effectToken reads. Even under an alert we cache the
     // (inert) behind-screen digest so an effectToken AFTER the alert is dismissed
     // compares against the right underlying screen without a fresh getPageSource.
+    at = perf.now();
     const parsed = this.#parse(xml);
+    perf.span("snapshot_parse", at, stepNum);
     this.#lastSourceDigest = parsed.text;
     const snap = alert ? alertSnapshot(alert) : parsed;
     this.#screen = snap.title || this.#screen;
     this.#refs = new Map(snap.elements.map((e) => [e.ref, e]));
     const p = this.#stepPaths(stepNum);
+    at = perf.now();
     try {
       fs.writeFileSync(p.a11y, snap.text + "\n");
     } catch {}
+    perf.span("snapshot_write", at, stepNum, { artifact: "a11y" });
     // Debug-only: the FULL, unfiltered Appium page-source tree (the mobile analog
     // of the web driver's native AX tree, web.ts#nativeAxTree). Reuse the `xml`
     // already fetched — no second getPageSource(). Flattened to the same
     // `role "name"` shape so the viewer diffs it against our custom snapshot;
     // never seen by the agent. Best-effort — a throw is swallowed, no artifact.
+    at = perf.now();
     try {
       const tree = nativePageSourceTree(xml);
       if (tree) fs.writeFileSync(p.pw_a11y, tree + "\n");
     } catch {}
+    perf.span("snapshot_native_ax", at, stepNum);
     // Screenshot fetched above (concurrently with the source); just decode + write.
     let screenshot: Buffer | null = null;
+    at = perf.now();
     try {
       if (b64) {
         const buf = Buffer.from(b64, "base64");
@@ -260,6 +338,7 @@ export class MobileDriver implements Driver {
         screenshot = buf;
       }
     } catch {}
+    perf.span("snapshot_write", at, stepNum, { artifact: "png", bytes: screenshot?.length ?? 0 });
     // screenshotHash: explicit null documents the visual_regression Driver seam
     // (web-only); the runner already guards on its presence.
     return { text: snap.text, url: this.#screen || null, title: this.#screen, refCount: snap.refCount, truncated: snap.truncated, screenshot, screenshotHash: null };
@@ -454,9 +533,19 @@ export class MobileDriver implements Driver {
   // window (initialQuietMs, capped at max_ms) so a lagging app doesn't settle on
   // a half-built screen.
   async #settle(): Promise<{ ms: number; title: string }> {
-    const { source_quiet_ms, max_ms, initial_quiet_ms } = this.#settlePolicy;
     const first = this.#firstSettle;
     this.#firstSettle = false;
+    const perfAt = this.#perf.now();
+    try {
+      return await this.#settleLoop(first);
+    } finally {
+      this.#perf.span("settle", perfAt, null, { first });
+    }
+  }
+
+  /** The settle poll itself; #settle wraps it only to time the whole wait. */
+  async #settleLoop(first: boolean): Promise<{ ms: number; title: string }> {
+    const { source_quiet_ms, max_ms, initial_quiet_ms } = this.#settlePolicy;
     const sourceWin = first ? Math.min(initialQuietMs(source_quiet_ms, initial_quiet_ms), max_ms) : source_quiet_ms;
     const start = Date.now();
     let lastRaw: string | null = null; // raw page source of the previous poll (parsed for the title)

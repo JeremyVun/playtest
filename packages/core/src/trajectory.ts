@@ -3,6 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { PerfSidecar } from "./perf.ts";
 import type { DriverId, JsonValue, PersonaReference } from "./types.ts";
 
 export interface StepAction {
@@ -216,11 +217,21 @@ export class RunWriter {
   constructor(runsRoot: string, runId: string, caseId: string) {
     this.#dir = path.resolve(runsRoot, runId, caseId);
     fs.mkdirSync(path.join(this.#dir, "steps"), { recursive: true });
+    this.#perf = new PerfSidecar(this.#dir);
   }
   #dir: string;
+  // The run's diagnostic timing sidecar (perf.ts). Owned here because the run
+  // dir is: the runner hands the SAME instance to the driver, the grader, and
+  // the HAR flusher so perf.jsonl stays in emission order. Not an artifact —
+  // nothing lists it in a manifest or envelope.
+  #perf: PerfSidecar;
 
   get dir() {
     return this.#dir;
+  }
+
+  get perf(): PerfSidecar {
+    return this.#perf;
   }
 
   appendEnvelope(envelope: StepEnvelope): void {

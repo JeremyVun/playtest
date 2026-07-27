@@ -19,6 +19,7 @@ import { isSecretRef, redactSecrets, resolveSecretRefs, secretNameForValue } fro
 import { applyMatchRules, canonicalStatus, existsAt, pathSegments, replaceAt, shapeOf } from "../match.ts";
 import { applyBindings, indexProducers, inferBindings, requestLiterals, resolveBindings } from "../bindings.ts";
 import { loadOpenApi, operationLine } from "../openapi.ts";
+import { PerfSidecar } from "../perf.ts";
 import type { ApiRequestAction, BindingProducer, BindingRecord } from "../bindings.ts";
 import type { Driver, DriverContext, DriverNetworkRequest, DriverResolution, DriverResult, DriverSnapshot } from "../driver.ts";
 import type { MatchNode } from "../match.ts";
@@ -80,7 +81,7 @@ export const OBSERVATION_METHODS = ["GET", "HEAD"];
 export const SETTLE_API = { name: "settle-api-v1", max_ms: REQUEST_TIMEOUT_MS };
 
 export class ApiDriver implements Driver {
-  static async launch({ env, runDir }: { env: ApiLaunchEnvironment; runDir: string }): Promise<ApiDriver> {
+  static async launch({ env, runDir, perf = PerfSidecar.off() }: { env: ApiLaunchEnvironment; runDir: string; perf?: PerfSidecar }): Promise<ApiDriver> {
     fs.mkdirSync(path.join(runDir, "steps"), { recursive: true });
     // Spec ingestion is CONFIGURATION (docs/contracts/engine.md#openapi-ingestion):
     // a declared app.openapi that cannot be resolved is a DummyConfigError naming
@@ -101,6 +102,7 @@ export class ApiDriver implements Driver {
       redact: env.redact ?? null,
       match: env.match ?? null,
       bind: env.bind ?? null,
+      perf,
     });
   }
 
@@ -124,6 +126,8 @@ export class ApiDriver implements Driver {
   #producers = new Map<string, BindingProducer>();
   #names = new Map<string, string>(); // "step|path" -> variable name
   #byName = new Map<string, BindingProducer>(); // variable name -> { step, path }
+  // The run's diagnostic timing sidecar (perf.ts); no-op outside a run.
+  #perf: PerfSidecar;
 
   constructor({
     baseUrl,
@@ -134,7 +138,8 @@ export class ApiDriver implements Driver {
     headers = null,
     redact = null,
     match = null,
-    bind = null
+    bind = null,
+    perf = PerfSidecar.off()
   }: {
     baseUrl: string;
     runDir: string;
@@ -145,8 +150,10 @@ export class ApiDriver implements Driver {
     redact?: ResolvedRedact | null;
     match?: ResolvedMatch | null;
     bind?: string[] | null;
+    perf?: PerfSidecar;
   }) {
     this.#baseUrl = baseUrl;
+    this.#perf = perf;
     this.#runDir = runDir;
     this.#spec = spec ?? null;
     this.#operations = operations ?? spec?.operations ?? [];
@@ -164,7 +171,7 @@ export class ApiDriver implements Driver {
         this.#allowedOrigins.add(new URL(o).origin);
       } catch {}
     }
-    this.#harFlusher = createHarFlusher(runDir, this.#har);
+    this.#harFlusher = createHarFlusher(runDir, this.#har, { perf });
   }
 
   get id(): "api" {
@@ -313,9 +320,11 @@ export class ApiDriver implements Driver {
     // actor: a server that echoes a credential back must not leak it into
     // steps/NNN.a11y.txt, the actor's context, or the drift oracle.
     const text = redactSecrets(lines.join("\n"));
+    const writeAt = this.#perf.now();
     try {
       fs.writeFileSync(path.join(this.#runDir, "steps", `${String(stepNum).padStart(3, "0")}.a11y.txt`), text + "\n");
     } catch {}
+    this.#perf.span("snapshot_write", writeAt, stepNum, { artifact: "a11y" });
     // screenshotHash: explicit null documents the visual_regression Driver seam
     // (web-only); the runner already guards on its presence.
     return { text, url: this.location(), title: this.#baseUrl, refCount: this.#operations.length, truncated: false, screenshot: null, screenshotHash: null };
@@ -496,6 +505,7 @@ export class ApiDriver implements Driver {
     this.#har.push(entry);
 
     const started = Date.now();
+    const performAt = this.#perf.now();
     let error: string | null = null;
     let status = 0;
     let mime = "";
@@ -522,6 +532,9 @@ export class ApiDriver implements Driver {
       entry._failed = true;
     }
     entry.time = Date.now() - started;
+    // The api transport's analog of the web driver's action_perform: one HTTP
+    // round-trip plus the bounded body read. There is no settle on api.
+    this.#perf.span("action_perform", performAt, ctx.step ?? null, { method, status, ok: !error });
     this.#flushHar();
     this.#lastResponse = { status, mime, body: respBody, url: pathnameOf(url) };
     this.#ledgerResponse(ctx.step, respBody, action);

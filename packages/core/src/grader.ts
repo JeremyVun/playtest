@@ -16,6 +16,7 @@ import type {
 import { readTrajectory, readBaseline } from "./trajectory.ts";
 import type { StepEnvelope } from "./trajectory.ts";
 import { describeStep } from "./actor.ts";
+import { PerfSidecar } from "./perf.ts";
 import { extractAnomalies, formatSignals } from "./anomalies.ts";
 import type { ResolvedCase } from "./types.ts";
 
@@ -286,11 +287,13 @@ export async function gradeRun(
   {
     signal = null,
     onRetry = null,
-    onFetch = null
+    onFetch = null,
+    perf = PerfSidecar.off()
   }: {
     signal?: AbortSignal | null;
     onRetry?: RetryCallback | null;
     onFetch?: SnapshotFetchCallback | null;
+    perf?: PerfSidecar;
   } = {}
 ): Promise<Record<string, unknown>> {
   const envelopes = readTrajectory(join(runDir, "trajectory.jsonl"));
@@ -387,6 +390,7 @@ export async function gradeRun(
   for (let turn = 0; turn < MAX_GRADE_TURNS && args === null; turn++) {
     const lastTurn = turn === MAX_GRADE_TURNS - 1;
     if (!lastTurn) {
+      const requestAt = perf.now();
       const { toolCall, text, usage } = await chat({
         model: resolvedCase.grader_model,
         messages,
@@ -395,6 +399,10 @@ export async function gradeRun(
         maxTokens,
         signal,
         onRetry,
+      });
+      perf.span("grader_request", requestAt, null, {
+        phase: "grade", turn, tool: toolCall?.name ?? null,
+        tokens_in: usage?.in ?? 0, tokens_out: usage?.out ?? 0, cache_read: usage?.cache_read ?? 0,
       });
       addUsage(usage);
       if (toolCall?.name === "fetch_snapshot") {
@@ -435,6 +443,7 @@ export async function gradeRun(
     // self-produced grade failed validation. forcedToolCall coerces +
     // reattempts; its failure writes grade.error.json below.
     onFetch?.(null); // no longer fetching — the spinner returns to "grading"
+    const forcedAt = perf.now();
     try {
       const forced = await forcedToolCall({
         model: resolvedCase.grader_model,
@@ -445,6 +454,10 @@ export async function gradeRun(
         maxTokens,
         signal,
         onRetry,
+      });
+      perf.span("grader_request", forcedAt, null, {
+        phase: "grade", turn, forced: true, validation_retries: forced.retries.length,
+        tokens_in: forced.tokens.in, tokens_out: forced.tokens.out, cache_read: forced.tokens.cache_read,
       });
       args = forced.args;
       addUsage(forced.tokens);
@@ -621,7 +634,8 @@ export async function checkAssertion(
     envelopes = [],
     vision = false,
     signal = null,
-    onRetry = null
+    onRetry = null,
+    perf = PerfSidecar.off()
   }: {
     snapshotText: string;
     finalUrl: string;
@@ -631,6 +645,7 @@ export async function checkAssertion(
     vision?: boolean;
     signal?: AbortSignal | null;
     onRetry?: RetryCallback | null;
+    perf?: PerfSidecar;
   }
 ): Promise<{ pass: boolean; detail: string; tokens: TokenUsage }> {
   const artifacts = stepArtifacts(envelopes);
@@ -657,6 +672,7 @@ export async function checkAssertion(
   for (let turn = 0; turn < MAX_VERDICT_TURNS; turn++) {
     // On the last allowed turn, force a verdict so we always end with one.
     const lastTurn = turn === MAX_VERDICT_TURNS - 1;
+    const requestAt = perf.now();
     const { toolCall, text, usage } = await chat({
       model,
       messages,
@@ -664,6 +680,10 @@ export async function checkAssertion(
       toolChoice: lastTurn ? "verdict" : "auto",
       signal,
       onRetry,
+    });
+    perf.span("grader_request", requestAt, null, {
+      phase: "assert", turn, tool: toolCall?.name ?? null,
+      tokens_in: usage?.in ?? 0, tokens_out: usage?.out ?? 0, cache_read: usage?.cache_read ?? 0,
     });
     tokens.in += usage?.in ?? 0;
     tokens.out += usage?.out ?? 0;

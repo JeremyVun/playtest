@@ -21,6 +21,7 @@ import { collectSecretRefNames } from "./secrets.ts";
 import { statusesEquivalent } from "./match.ts";
 import { loadHooks, validateSetupContext } from "./hooks.ts";
 import { createDriver } from "./driver.ts";
+import { PerfSidecar } from "./perf.ts";
 import { visualDriftReason } from "./drivers/web.ts";
 import { Actor, loadPersona, describeAction } from "./actor.ts";
 import { evaluateGate, isInheritable } from "./gate.ts";
@@ -236,6 +237,11 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
   // act/heal loop without a browser. Production callers never pass it.
   const { runsRoot, runId, mode = "auto", grade = true, headed = false, refresh = false, onEvent = () => {}, driverFactory = createDriver } = opts;
   const writer = new RunWriter(runsRoot, runId, rc.id);
+  // The run's diagnostic timing sidecar (perf.ts). Diagnostic only: it never
+  // appears in a manifest, an envelope, or trajectory.jsonl, and every call is a
+  // single null check when PLAYTEST_PERF_SIDECAR=0.
+  const perf = writer.perf;
+  const caseStartedAt = perf.now();
   const startedAt = new Date();
   const llm = llmConfig();
   // A throwing progress listener must not break the case
@@ -372,8 +378,16 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
   // keeps the process listener registered exactly once across concurrent cases.
   try {
     const finishInfra = async (error: DynamicValue, { driver = null, env = null }: DynamicValue = {}) => {
-      if (driver) await driver.close().catch(() => {});
-      if (env) await env.teardown();
+      if (driver) {
+        const closeAt = perf.now();
+        await driver.close().catch(() => {});
+        perf.span("driver_close", closeAt);
+      }
+      if (env) {
+        const teardownAt = perf.now();
+        await env.teardown();
+        perf.span("env_teardown", teardownAt);
+      }
       // The manifest must carry the infra cause: result.error is the only place
       // a later reader (viewer, fix-loop skill) can find it — the in-memory
       // result doesn't survive the process, and --json/stderr stay silent here.
@@ -416,7 +430,7 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
 
     let driver: DynamicValue;
     try {
-      driver = await driverFactory(rc, env, { runDir: writer.dir, headed });
+      driver = await driverFactory(rc, env, { runDir: writer.dir, headed, perf });
     } catch (e) {
       return finishInfra(`driver launch failed: ${firstLine(e)}`, { env });
     }
@@ -817,6 +831,7 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
               runDir: writer.dir,
               envelopes: r.envelopes,
               vision: rc.vision,
+              perf,
               signal: r.signal,
               onRetry: ({ status, attempt, maxAttempts, waitMs }) =>
                 emit("retry", { phase: "grading", status, attempt, maxAttempts, waitMs }),
@@ -908,8 +923,12 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
   });
   writer.writeManifest(manifest);
   finalManifestWritten = true; // the SIGINT flusher must not clobber this now
+  const closeAt = perf.now();
   await driver.close().catch(() => {});
+  perf.span("driver_close", closeAt);
+  const teardownAt = perf.now();
   await env.teardown();
+  perf.span("env_teardown", teardownAt);
 
   // The shareable video is a post-run slideshow stitched from the per-step
   // stills (pure stills now on disk), not a live screencast. Emit the caption
@@ -919,7 +938,10 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
   // video.mp4 and point the manifest at it; absent, leave artifacts.video null
   // (the stills + .vtt remain, the viewer shows "no video recorded") and print
   // a one-line install hint. Best-effort — a build hiccup never fails the run.
+  const vttAt = perf.now();
   try { writeVideoSidecar(writer.dir); } catch { /* sidecar is best-effort */ }
+  perf.span("vtt", vttAt);
+  const slideshowAt = perf.now();
   try {
     if (ffmpegPresent()) {
       buildSlideshow(writer.dir, r.envelopes, path.join(writer.dir, "video.mp4"));
@@ -929,15 +951,20 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
       emit("warn", { message: `note: no shareable video built (ffmpeg not found) — ${FFMPEG_HINT}` });
     }
   } catch { /* slideshow is best-effort; the stills + .vtt are the fallback */ }
+  // spawnSync ffmpeg blocks the whole event loop, so in a parallel suite this
+  // span is charged to every in-flight case, not just this one (Phase 4).
+  perf.span("slideshow", slideshowAt, null, { steps: r.envelopes.length });
 
   // The score rides on the result so trend lines and --json need not re-read
   // grade.json.
     let score = null;
     if (willGrade) {
       emit("grading");
+      const gradeAt = perf.now();
       try {
         const grade = await gradeRun(writer.dir, rc, {
           signal: r.signal,
+          perf,
           onRetry: ({ status, attempt, maxAttempts, waitMs }) =>
             emit("retry", { phase: "grading", status, attempt, maxAttempts, waitMs }),
         });
@@ -953,6 +980,7 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
         emit("warn", { message: `warning: grading ${rc.id} failed: ${firstLine(e)}` });
         manifest.artifacts.grade = null;
       }
+      perf.span("grade_total", gradeAt, null, { score });
       // The manifest was written before grading; fold the grade's tokens into the
       // merged run totals now (assert verdicts were already counted in the gate
       // phase, before the first write). On a grade failure gradeRun throws without
@@ -1014,10 +1042,18 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
     return result;
   } finally {
     _sigintFlushers.delete(writePlaceholderManifest);
+    perf.span("case_total", caseStartedAt, null, {
+      driver: rc.env?.driver ?? "web",
+      start_mode: startMode,
+      steps: r.envelopes.length,
+      end_reason: r.endReason,
+    });
+    perf.flush();
   }
 }
 
 async function recordLoop({ driver, writer, rc, persona, deadline, r, emit, anchor = null }: DynamicValue) {
+  const perf = writer.perf; // diagnostic timing sidecar (perf.ts)
   const actor = new Actor(rc, persona);
   actor.setupContext = r.setupContext;
   const costSoFar = () => estimateCost(rc.actor_model, r.tokens);
@@ -1034,7 +1070,11 @@ async function recordLoop({ driver, writer, rc, persona, deadline, r, emit, anch
       return;
     }
     const stepNum = r.envelopes.length + 1;
+    // `snapshot` is the whole capture, timed here so it is driver-agnostic; each
+    // driver reports its own snapshot_* sub-splits from the inside.
+    const snapshotAt = perf.now();
     const snap = await driver.captureSnapshot(stepNum);
+    perf.span("snapshot", snapshotAt, stepNum);
     if (r.aborted) return;
     r.lastSnapshot = snap.text;
     // Re-anchor (docs/contracts/engine.md#act-and-heal): the snapshot is already
@@ -1046,6 +1086,12 @@ async function recordLoop({ driver, writer, rc, persona, deadline, r, emit, anch
       if (match) return match;
     }
     let agentStep, tokens, llmRetries;
+    // actor_request covers the whole turn INCLUDING a validation retry and any
+    // 429/5xx backoff, because that is what the step actually waits for; the
+    // meta separates the two so a slow gateway reads differently from a model
+    // that had to be asked twice.
+    const actorAt = perf.now();
+    let httpRetries = 0;
     try {
       ({ agentStep, tokens, retries: llmRetries } = await actor.nextStep({
         history: r.envelopes,
@@ -1067,10 +1113,13 @@ async function recordLoop({ driver, writer, rc, persona, deadline, r, emit, anch
             });
           } catch {}
         },
-        onRetry: ({ status, attempt, maxAttempts, waitMs }) =>
-          emit("retry", { phase: "acting", step: stepNum, status, attempt, maxAttempts, waitMs }),
+        onRetry: ({ status, attempt, maxAttempts, waitMs }) => {
+          httpRetries += 1;
+          emit("retry", { phase: "acting", step: stepNum, status, attempt, maxAttempts, waitMs });
+        },
       }));
     } catch (e) {
+      perf.span("actor_request", actorAt, stepNum, { ok: false, http_retries: httpRetries });
       if (r.aborted) return;
       const message = firstLine(e);
       const envelope = baseEnvelope(stepNum, {
@@ -1089,6 +1138,14 @@ async function recordLoop({ driver, writer, rc, persona, deadline, r, emit, anch
       r.runError = message;
       return;
     }
+    perf.span("actor_request", actorAt, stepNum, {
+      ok: true,
+      tokens_in: tokens.in, tokens_out: tokens.out, cache_read: tokens.cache_read,
+      // One extra model call per entry: the actor retries once on a schema
+      // rejection, and the retry pays for a second full prompt.
+      validation_retries: llmRetries?.length ?? 0,
+      http_retries: httpRetries,
+    });
     if (r.aborted) return;
     addTokens(r.tokens, tokens);
     // The trajectory persists the REDACTED action, and the driver executes that
@@ -1121,7 +1178,11 @@ async function recordLoop({ driver, writer, rc, persona, deadline, r, emit, anch
     });
     const type = agentStep.action.type;
     if (type === "done" || type === "give_up") {
+      // Web-only hook; timing an absent one would file a 0 ms row on every
+      // api/mobile terminal step and dilute the span's p50.
+      const axeAt = driver.captureAxe ? perf.now() : 0;
       const axe = await driver.captureAxe?.();
+      if (driver.captureAxe) perf.span("axe", axeAt, stepNum, { terminal: true });
       Object.assign(envelope, {
         result: { ok: true, error: null, settle_ms: 0, url: snap.url },
         perf: emptyPerf(),
@@ -1141,8 +1202,12 @@ async function recordLoop({ driver, writer, rc, persona, deadline, r, emit, anch
       return;
     }
 
+    const tokenAt = perf.now();
     const before = await driver.effectToken();
+    perf.span("effect_token", tokenAt, stepNum, { when: "before", type });
+    const dispatchAt = perf.now();
     const exec = await driver.execute(agentStep.action, { step: stepNum, bindings });
+    perf.span("action_dispatch", dispatchAt, stepNum, { mode: "record", type, ok: exec.ok });
     Object.assign(envelope, {
       ...(exec.resolution ? { resolution: exec.resolution } : {}),
       // The exact response status this step observed, when the transport reports
@@ -1158,7 +1223,7 @@ async function recordLoop({ driver, writer, rc, persona, deadline, r, emit, anch
       tokens,
       ...(llmRetries?.length ? { llm_retries: llmRetries } : {}),
     });
-    const confusion = await detectConfusion(envelope, r.envelopes, exec, before, driver);
+    const confusion = await detectConfusion(envelope, r.envelopes, exec, before, driver, perf);
     if (r.aborted) return; // do not append past the hard-timeout cut
     // Harness-detected confusion is objective evidence and wins the single
     // confusion slot; actor raises (and legacy confused sugar) fall back into
@@ -1206,6 +1271,7 @@ export function isStuck(envelopes: DynamicValue[]) {
  * point) or null when the track completed / deadline hit.
  */
 async function actLoop({ driver, writer, rc, deadline, r, emit, baselineEnvelopes, track = null, actedFrom = new Map(), baselineBase = null, liveBase = null }: DynamicValue) {
+  const perf = writer.perf; // diagnostic timing sidecar (perf.ts)
   // `track` is the (remaining) action track to walk — the caller passes a tail
   // slice when replay resumes after a re-anchored heal — and `actedFrom` maps
   // baseline step -> the run step that acted it. A binding's `from_step` cites a
@@ -1223,7 +1289,9 @@ async function actLoop({ driver, writer, rc, deadline, r, emit, baselineEnvelope
     const stepNum = r.envelopes.length + 1;
     // Acted steps replay a known action: the summary is known up front.
     emit("step_start", { step: stepNum, summary: describeAction(actionOf(baseStep)) });
+    const snapshotAt = perf.now();
     const snap = await driver.captureSnapshot(stepNum);
+    perf.span("snapshot", snapshotAt, stepNum);
     r.lastSnapshot = snap.text;
     // Snapshot drift (docs/contracts/engine.md#act-and-heal): the actor chose
     // this action against baseStep's
@@ -1281,7 +1349,9 @@ async function actLoop({ driver, writer, rc, deadline, r, emit, baselineEnvelope
       return baseStep;
     }
     const bindings = remapBindings(baseStep.bindings, actedFrom);
+    const dispatchAt = perf.now();
     const exec = await driver.executeLocator(baseStep, { step: stepNum, bindings });
+    perf.span("action_dispatch", dispatchAt, stepNum, { mode: "act", type: actionOf(baseStep)?.type, ok: exec.ok });
     if (r.aborted) return null; // do not append past the hard-timeout cut
     actedFrom.set(baseStep.step, stepNum);
     const envelope = baseEnvelope(stepNum, {
@@ -1348,17 +1418,21 @@ async function actLoop({ driver, writer, rc, deadline, r, emit, baselineEnvelope
   const stepNum = r.envelopes.length + 1;
   let finalUrl = null;
   let snap = null;
+  const finalSnapshotAt = perf.now();
   try {
     snap = await driver.captureSnapshot(stepNum);
     r.lastSnapshot = snap.text;
     finalUrl = snap.url;
   } catch {}
+  perf.span("snapshot", finalSnapshotAt, stepNum);
   if (r.aborted) return null;
   // Same always-on WCAG capture the record loop's done/give_up branch takes: the
   // final acted page is a real, gradeable surface. Web-only (optional chaining),
   // full-page, best-effort (null → no `axe`, keeping non-web / capture-failure
   // envelopes byte-identical).
+  const terminalAxeAt = driver.captureAxe ? perf.now() : 0;
   const axe = snap ? await driver.captureAxe?.() : null;
+  if (driver.captureAxe) perf.span("axe", terminalAxeAt, stepNum, { terminal: true });
   const envelope = baseEnvelope(stepNum, {
     mode: "act",
     ...(terminalStep ? { acted_from: terminalStep.step } : {}),
@@ -1566,7 +1640,7 @@ function applyActorRaises(envelope: DynamicValue, agentStep: DynamicValue, harne
 // Confusion heuristics (docs/contracts/engine.md#record-and-explore): action_failed,
 // repeated_action (same action twice running against the SAME page state),
 // no_effect.
-export async function detectConfusion(envelope: DynamicValue, prior: DynamicValue[], exec: DynamicValue, beforeToken: DynamicValue, driver: DynamicValue) {
+export async function detectConfusion(envelope: DynamicValue, prior: DynamicValue[], exec: DynamicValue, beforeToken: DynamicValue, driver: DynamicValue, perf: PerfSidecar = PerfSidecar.off()) {
   if (!exec.ok) return { type: "action_failed", note: exec.error };
   const sig = (e: DynamicValue) => {
     const a = actionOf(e) ?? {};
@@ -1602,7 +1676,9 @@ export async function detectConfusion(envelope: DynamicValue, prior: DynamicValu
     // driver.effectToken() is the transport's "did anything change" fingerprint
     // (web: last DOM-mutation time + form values + URL); the no_effect rule
     // ("0 requests AND token unchanged") generalizes across drivers.
+    const afterAt = perf.now();
     const after = await driver.effectToken();
+    perf.span("effect_token", afterAt, envelope.step ?? null, { when: "after", type: actionOf(envelope)?.type });
     if (after !== null && after === beforeToken) {
       return { type: "no_effect", note: "no requests, no DOM or input changes, url unchanged" };
     }

@@ -10,6 +10,7 @@ import { SNAPSHOT_SOURCE } from "../snapshot-injected.ts";
 import { runAxeInPage } from "../axe-source.ts";
 import { overlayFor } from "./overlay.ts";
 import { loadOpenApi } from "../openapi.ts";
+import { PerfSidecar } from "../perf.ts";
 import { MAX_BODY_CHARS, MAX_BODY_READ, capBody, isTextualMime, pathnameOf, createHarFlusher, relativizeUrls, stripRefLines } from "./har.ts";
 import type { AxeCapture } from "../axe-source.ts";
 import type { Driver, DriverResolution, DriverResult, DriverSnapshot } from "../driver.ts";
@@ -497,7 +498,8 @@ export class WebDriver implements Driver {
     deviceScaleFactor = null,
     cookies = null,
     openapi = null,
-    caseFile = null
+    caseFile = null,
+    perf = PerfSidecar.off()
   }: {
     baseUrl: string;
     runDir: string;
@@ -509,6 +511,7 @@ export class WebDriver implements Driver {
     cookies?: Record<string, string> | null;
     openapi?: string | null;
     caseFile?: string | null;
+    perf?: PerfSidecar;
   }): Promise<WebDriver> {
     fs.mkdirSync(path.join(runDir, "steps"), { recursive: true });
     // Spec ingestion is CONFIGURATION, exactly as on the api driver
@@ -553,7 +556,7 @@ export class WebDriver implements Driver {
       await context.tracing.start({ screenshots: true, snapshots: true });
       await context.addInitScript(initInstrumentation);
       const page = await context.newPage();
-      const session = new WebDriver({ baseUrl, runDir, browser, context, page, settle, viewport: vp, spec });
+      const session = new WebDriver({ baseUrl, runDir, browser, context, page, settle, viewport: vp, spec, perf });
       // When cookies route to a blue/green slot, the FIRST cold document hit can
       // serve a stale edge-cached HTML referencing chunk hashes that 404 (the
       // page renders unstyled and never hydrates); a warm second hit is correct.
@@ -621,6 +624,10 @@ export class WebDriver implements Driver {
   // snapshot, and the pins are all unchanged by configuring one.
   #spec: EnrichedOpenApi | null = null;
 
+  // The run's diagnostic timing sidecar (perf.ts); the shared no-op recorder
+  // when the driver is constructed outside a run (unit tests, external callers).
+  #perf: PerfSidecar;
+
   constructor({
     baseUrl,
     runDir,
@@ -629,7 +636,8 @@ export class WebDriver implements Driver {
     page,
     settle = null,
     viewport = DEFAULT_VIEWPORT,
-    spec = null
+    spec = null,
+    perf = PerfSidecar.off()
   }: {
     baseUrl: string;
     runDir: string;
@@ -639,6 +647,7 @@ export class WebDriver implements Driver {
     settle?: SettleConfig | null;
     viewport?: ResolvedViewport;
     spec?: EnrichedOpenApi | null;
+    perf?: PerfSidecar;
   }) {
     this.baseUrl = baseUrl;
     this.page = page;
@@ -646,7 +655,8 @@ export class WebDriver implements Driver {
     this.#browser = browser;
     this.#context = context;
     this.#runDir = runDir;
-    this.#harFlusher = createHarFlusher(runDir, this.#har);
+    this.#perf = perf;
+    this.#harFlusher = createHarFlusher(runDir, this.#har, { perf });
     this.#settlePolicy = settle ? { ...SETTLE, ...settle } : SETTLE;
     this.#viewport = viewport;
 
@@ -825,17 +835,28 @@ export class WebDriver implements Driver {
   }
 
   async captureSnapshot(stepNum: number): Promise<DriverSnapshot> {
+    // Timing sub-splits (perf.ts): the runner records the `snapshot` total, and
+    // each independent piece of capture work reports its own span so a later
+    // phase can see which one it moved. Diagnostic only — no behavior changes,
+    // and a disabled sidecar makes every perf call a single null check.
+    const perf = this.#perf;
+    let at = perf.now();
     const snap = await this.page.evaluate(SNAPSHOT_SOURCE) as PageSnapshot;
     const url = this.page.url();
     const title = await this.page.title().catch(() => "");
+    perf.span("snapshot_source", at, stepNum, { refs: snap.refCount, truncated: snap.truncated });
     const p = this.#stepPaths(stepNum);
+    at = perf.now();
     fs.writeFileSync(p.a11y, snap.text + "\n");
+    perf.span("snapshot_write", at, stepNum, { artifact: "a11y" });
     // Capture mode follows app.viewport.height: a null height => fullPage (the
     // whole scrollable page - good for debugging scroll / marketing shots); a
     // number => viewport-only (exactly what the user saw, content below the fold
     // cut off). Drives BOTH this on-disk PNG and the vision image returned below.
     const fullPage = this.#viewport.height == null;
+    at = perf.now();
     let screenshot = await this.page.screenshot({ fullPage }).catch(() => null);
+    perf.span("snapshot_screenshot", at, stepNum, { full_page: fullPage, bytes: screenshot?.length ?? 0 });
     // The perceptual hash (visual regression's pixel oracle) is computed from the
     // FULL-SIZE bytes BEFORE #capImage downscales them, so the hash is stable
     // regardless of whether a vision run also shrinks the model-facing image.
@@ -846,29 +867,37 @@ export class WebDriver implements Driver {
       // (runner.ts) doesn't claim artifacts/screenshots for a file that isn't on
       // disk — otherwise the viewer/clip would seek to a missing frame.
       let wrote = true;
+      at = perf.now();
       try {
         fs.writeFileSync(p.screenshot, screenshot);
       } catch {
         wrote = false;
       }
+      perf.span("snapshot_write", at, stepNum, { artifact: "png", bytes: screenshot.length });
+      at = perf.now();
       const processed = await processScreenshotImage(this.page, screenshot);
+      perf.span("snapshot_image", at, stepNum);
       screenshotHash = processed.screenshotHash;
       screenshot = wrote ? processed.screenshot : null;
     }
+    at = perf.now();
     try {
       const { data } = await this.#cdp!.send("Page.captureSnapshot", { format: "mhtml" }); // SAFETY: launch initializes CDP before returning a WebDriver
       fs.writeFileSync(p.mhtml, data);
     } catch {}
+    perf.span("snapshot_mhtml", at, stepNum);
     // Debug-only: the browser's NATIVE a11y tree (Chromium's full AX tree via
     // CDP — nothing filtered, so gaps in OUR custom snapshot show up). Flattened
     // into the SAME `role "name"` line shape as snap.text so the viewer can diff
     // the two side-by-side. Never seen by the agent, never part of snap.text or
     // the return value — best-effort, never breaks a run. (page.accessibility was
     // removed in modern Playwright, hence CDP.)
+    at = perf.now();
     try {
       const tree = await this.#nativeAxTree();
       if (tree) fs.writeFileSync(p.pw_a11y, tree + "\n");
     } catch {}
+    perf.span("snapshot_native_ax", at, stepNum);
     return { text: snap.text, url, title, refCount: snap.refCount, truncated: snap.truncated, screenshot, screenshotHash };
   }
 
@@ -891,6 +920,10 @@ export class WebDriver implements Driver {
     const ref = String(action.ref ?? "");
     if (!/^e\d+$/.test(ref)) return this.#fail(`invalid ref "${ref}"`);
     const loc = this.page.locator(`[data-dummy-ref="${ref}"]`);
+    // action_resolve (perf.ts): the serial browser round-trips that validate the
+    // ref and derive the durable locator + bbox, measured as one span so the
+    // grouping candidate in the plan (T2.3) can be judged against the settle floor.
+    const resolveAt = this.#perf.now();
     try {
       if ((await loc.count()) === 0) return this.#fail(`unknown ref "${ref}": not in the latest snapshot`);
       if (!(await loc.isVisible())) return this.#fail(`ref "${ref}" is not visible`);
@@ -900,6 +933,7 @@ export class WebDriver implements Driver {
       return this.#fail(`validation failed for ref "${ref}": ${firstLine(e)}`);
     }
     const resolution = { ref, locator: await this.#durableLocator(loc, ref), bbox: await this.#bbox(loc) };
+    this.#perf.span("action_resolve", resolveAt, null, { mode: "record", type });
     return this.#run(action, loc, resolution);
   }
 
@@ -917,6 +951,7 @@ export class WebDriver implements Driver {
     }
     const loc = this.page.locator(locatorStr);
     let act = loc; // the surface #perform acts on (label redirection below)
+    const resolveAt = this.#perf.now();
     try {
       const count = await loc.count();
       if (count === 0) return this.#fail(`baseline locator matched nothing: ${locatorStr}`);
@@ -947,7 +982,9 @@ export class WebDriver implements Driver {
       if (this.page.isClosed()) throw e;
       return this.#fail(`baseline locator failed: ${firstLine(e)}`);
     }
-    return this.#run(action, act, { locator: locatorStr, bbox: await this.#bbox(act) });
+    const resolution = { locator: locatorStr, bbox: await this.#bbox(act) };
+    this.#perf.span("action_resolve", resolveAt, null, { mode: "act", type: action.type });
+    return this.#run(action, act, resolution);
   }
 
   /**
@@ -984,10 +1021,15 @@ export class WebDriver implements Driver {
    * @returns {Promise<{ violations: object[], counts: { total: number } }|null>}
    */
   async captureAxe(): Promise<AxeCapture | null> {
+    const axeAt = this.#perf.now();
     try {
       const result = await runAxeInPage(this.page);
       if (result && Array.isArray(result.violations)) return result;
-    } catch {}
+    } catch {
+      // best-effort, as before: a failed capture simply yields no `axe`
+    } finally {
+      this.#perf.span("axe", axeAt, null, { terminal: true });
+    }
     return null;
   }
 
@@ -1077,9 +1119,13 @@ export class WebDriver implements Driver {
 
   async close(): Promise<void> {
     this.#flushHar(true);
+    const traceAt = this.#perf.now();
     try {
       await this.#context.tracing.stop({ path: path.join(this.#runDir, "trace.zip") });
     } catch {}
+    // The single biggest artifact in a retained web run (3.7 MB p50 / 18.9 MB
+    // p90); Phase 3 makes it conditional and is accepted against this span.
+    this.#perf.span("trace_stop", traceAt);
     await this.#checkContext?.close().catch(() => {});
     await this.#context.close().catch(() => {});
     await this.#browser.close().catch(() => {});
@@ -1110,12 +1156,14 @@ export class WebDriver implements Driver {
       } catch {}
 
       let error: string | null = null;
+      const performAt = this.#perf.now();
       try {
         await this.#perform(action, locator);
       } catch (e) {
         if (this.page.isClosed()) throw e;
         error = firstLine(e);
       }
+      this.#perf.span("action_perform", performAt, null, { type: action.type });
 
       const settle_ms = await this.#settle();
       // Always-on a11y capture: run axe-core full-page against the freshly-settled
@@ -1124,10 +1172,12 @@ export class WebDriver implements Driver {
       // actor prompt, so the web golden control stays byte-identical (axe rides
       // only the ExecResult, attached by the runner).
       let axe: AxeCapture | null = null;
+      const axeAt = this.#perf.now();
       try {
         const result = await runAxeInPage(this.page);
         if (result && Array.isArray(result.violations)) axe = result;
       } catch {}
+      this.#perf.span("axe", axeAt, null, { violations: axe?.violations?.length ?? null });
       const win = await this.#readWindow();
       // A back that actually changed documents is nav-attributed via !sameDoc; a
       // no-op / same-document back keeps windowed perf (no stale page-load vitals).
@@ -1259,9 +1309,19 @@ export class WebDriver implements Driver {
    * the blank shell.
    */
   async #settle(): Promise<number> {
-    const { dom_quiet_ms, net_quiet_ms, max_ms, initial_quiet_ms } = this.#settlePolicy;
     const first = this.#firstSettle;
     this.#firstSettle = false;
+    const perfAt = this.#perf.now();
+    try {
+      return await this.#settleLoop(first);
+    } finally {
+      this.#perf.span("settle", perfAt, null, { first });
+    }
+  }
+
+  /** The settle poll itself; #settle wraps it only to time the whole wait. */
+  async #settleLoop(first: boolean): Promise<number> {
+    const { dom_quiet_ms, net_quiet_ms, max_ms, initial_quiet_ms } = this.#settlePolicy;
     const domWin = first ? Math.min(initialQuietMs(dom_quiet_ms, initial_quiet_ms), max_ms) : dom_quiet_ms;
     const netWin = first ? Math.min(initialQuietMs(net_quiet_ms, initial_quiet_ms), max_ms) : net_quiet_ms;
     const start = Date.now();

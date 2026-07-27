@@ -5,5 +5,5 @@
     "allowImportingTsExtensions": true,
     "types": ["node"]
   },
-  "include": ["src/build.ts", "src/assets.ts"]
+  "include": ["vite.config.ts", "src/assets.ts"]
 }

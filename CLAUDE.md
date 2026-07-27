@@ -30,8 +30,10 @@ hosted product.
   `packages/platform/web/src/`, `packages/run-viewer/src/web/`, and
   `packages/core/src/shared/` keep browser-facing `.js` specifiers; cross-package
   imports use package exports.
-  `npm run build:web` creates self-contained, gitignored builds under the
-  run-viewer and platform-web packages; it does not emit twins beside source.
+  The two browser packages build with their package-local Vite configs;
+  keep `envDir: false` so Vite never loads `.env` files. `npm run build:web`
+  creates self-contained, gitignored builds under the run-viewer and
+  platform-web packages; it does not emit twins beside source.
 - Run `npm run typecheck` for every TypeScript project. Do not convert or
   hand-edit `packages/platform/web/src/vendor/`.
 
@@ -98,9 +100,14 @@ Node 24.18 floor applies. `PLAYTEST_DATA_DIR` is the single storage knob and
 defaults to `.playtest-data`.
 
 ```sh
+npm run hosted                        # complete local platform at http://127.0.0.1:4177
 npm run hosted:migrate                # optional; the server migrates on boot
-npm run hosted                        # http://127.0.0.1:4177
 ```
+
+`npm run hosted` is the sole local startup command. It builds both Vite
+applications, starts the control plane that serves the API and web UI, and uses
+local dispatch so the control plane spawns runner-agent jobs on demand. Do not
+start the web or runner-agent workspaces as separate services.
 
 The CLI does not load `.env`. Never read any `.env` file without the user's
 explicit permission.

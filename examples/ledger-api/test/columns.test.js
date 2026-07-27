@@ -374,7 +374,7 @@ test("the legacy agent-suite report shape scores on the second column", () => {
 });
 
 test("the S1 script report shape scores natively", () => {
-  // src/core/schemas/script-report.schema.json: checks carry `pass` +
+  // packages/core/src/schemas/script-report.schema.json: checks carry `pass` +
   // `exercised` rather than a status string, and cite `evidence.har_entries` as
   // bare indices. The study's substrate may be this or the v0 shape, and the
   // preregistration pins exactly one — the bench must not be what forces the

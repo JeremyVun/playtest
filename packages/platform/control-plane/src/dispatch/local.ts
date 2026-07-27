@@ -12,6 +12,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { ChildProcess } from "node:child_process";
 import type { ControlPlaneConfig } from "../config.ts";
 import type { Logger } from "../types.ts";
@@ -24,7 +25,25 @@ interface LocalRun {
   logFile: string;
 }
 
-const RUNNER_AGENT_BIN = process.env.PLAYTEST_RUNNER_AGENT_BIN || "runner-agent";
+// Local placement is a repository-development adapter, so start the sibling
+// runner module with this Node process instead of depending on npm's
+// node_modules/.bin symlink. The latter gives the module a different argv[1]
+// from import.meta.url and can make its import-safe main guard treat a real
+// launch as an import. The future pull-based pool starts a long-lived runner
+// independently; this adapter remains the short-lived local equivalent.
+const RUNNER_AGENT_ENTRY = fileURLToPath(
+  new URL("../../../runner-agent/src/exec-group.ts", import.meta.url),
+);
+
+export function localRunnerInvocation(
+  args: string[],
+  env: NodeJS.ProcessEnv = process.env,
+): { command: string; args: string[] } {
+  const override = env.PLAYTEST_RUNNER_AGENT_BIN;
+  return override
+    ? { command: override, args }
+    : { command: process.execPath, args: [RUNNER_AGENT_ENTRY, ...args] };
+}
 
 export class LocalDispatchClient {
   enabled: boolean = true;
@@ -55,7 +74,8 @@ export class LocalDispatchClient {
     // The child inherits this server's env, so PLAYTEST_LLM_* flow through to
     // the actor/grader exactly as the GHA job env would carry them.
     const out = fs.openSync(logFile, "w");
-    const child = spawn(RUNNER_AGENT_BIN, args, { env: process.env, stdio: ["ignore", out, out] });
+    const runner = localRunnerInvocation(args);
+    const child = spawn(runner.command, runner.args, { env: process.env, stdio: ["ignore", out, out] });
     const entry: LocalRun = { child, dispatchId, status: "in_progress", conclusion: null, logFile };
     this.#runs.set(id, entry);
     child.on("exit", (code) => {

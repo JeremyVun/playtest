@@ -99,6 +99,7 @@ export function buildRouter() {
   r.post(`${v}/projects/:p/run-groups`, runs.createGroup);
   r.get(`${v}/projects/:p/run-groups`, runs.listGroups);
   r.get(`${v}/run-groups/:g`, runs.getGroup);
+  r.post(`${v}/run-groups/:g/retry`, runs.retryGroup);
   r.post(`${v}/run-groups/:g/cancel`, runs.cancelGroup);
   r.get(`${v}/runs`, runs.listRuns);
   r.get(`${v}/runs/:r`, runs.getRun);

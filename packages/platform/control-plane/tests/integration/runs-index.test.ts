@@ -28,7 +28,7 @@ class MockGitHub {
 
 test("runs index: per-run stats, story rows, and the needs-attention filter", async () => {
   const github = new MockGitHub();
-  await withApp(async ({ api, base }: HostedDynamic) => {
+  await withApp(async ({ api, base, app }: HostedDynamic) => {
     const project = (await api.post("/projects", { key: "runsidx", name: "Runs index" })).body;
     const suite = (await api.post(`/projects/${project.key}/suites`, { slug: "todos", name: "Todos" })).body;
     const tar = writeTar(loadSuiteDir(`${REPO_ROOT}/tests/fixtures/todos`));
@@ -178,6 +178,38 @@ test("runs index: per-run stats, story rows, and the needs-attention filter", as
       [["fail", "complete-todo"]],
       "the suites overview raises attention again when the story's latest verdict is red",
     );
+
+    // A run group can have several bounded dispatch attempts. The Suites
+    // overview alerts on the run, not on each placement attempt: one broken run
+    // must not repeat the same row for every retry the reconciler made.
+    const requestedAt = new Date();
+    for (const [attempt, url, age] of [
+      [8, "https://gha.invalid/dead-old", 1000],
+      [9, "https://gha.invalid/dead-new", 0],
+    ] as const) {
+      await app.db.query(
+        `INSERT INTO dispatches
+           (id, project_id, kind, ref_id, attempt, workflow_run_id, workflow_run_url,
+            status, requested_at, concluded_at, error)
+         VALUES ($1, $2, 'group', $3, $4, $5, $6, 'reconciled_dead', $7, $7, 'runner stopped')`,
+        [
+          `dead-attempt-${attempt}`,
+          project.id,
+          mixed,
+          attempt,
+          `dead-workflow-${attempt}`,
+          url,
+          new Date(requestedAt.getTime() - age),
+        ],
+      );
+    }
+    const deadOverview = await api.get(`/projects/${project.key}/health`);
+    const infraAttention = deadOverview.body.attention.filter((item: HostedDynamic) => item.kind === "infra");
+    assert.equal(infraAttention.length, 1, "one run group produces one infrastructure attention row");
+    assert.equal(infraAttention[0].run_group_id, mixed);
+    assert.equal(infraAttention[0].workflow_run_url, "https://gha.invalid/dead-new",
+      "the row keeps the newest dispatch attempt");
+    assert.equal(infraAttention[0].note, "runner stopped before the run finished");
 
     // --- a canceled run is never attention, even holding a failed story ---
     // Cancellation is a decision the person already made; a story that failed

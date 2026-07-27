@@ -8,7 +8,7 @@
   "include": [
     "src/node/**/*.ts",
     "src/assets.ts",
-    "src/build.ts",
+    "vite.config.ts",
     "tests/node/**/*.ts",
     "tests/browser/**/*.ts",
     "../../tests/support/**/*.ts"

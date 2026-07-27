@@ -1,11 +1,18 @@
 import { audit, actorOf } from "../audit.ts";
 import { HttpResult, readJsonBody } from "../http.ts";
-import { badRequest, notFound } from "../errors.ts";
+import { badRequest, conflict, notFound } from "../errors.ts";
 import { requireAuth, guard, getProjectByKey, getSuite, parsePagination } from "./util.ts";
-import { createRunGroup, previewRunGroup, getRunGroup, getRunGroupView } from "../dispatch/dispatcher.ts";
+import {
+  createRunGroup,
+  previewRunGroup,
+  getRunGroup,
+  getRunGroupView,
+  dispatchAttempt,
+} from "../dispatch/dispatcher.ts";
 import { normalizeClipRequest, startClip } from "../media/clip.ts";
 import { ulid } from "../ulid.ts";
 import { inClause } from "../db.ts";
+import { emitPlatformEvent } from "../events/outbox.ts";
 
 export async function createGroup(ctx: HostedDynamic) {
   const principal = requireAuth(ctx);
@@ -286,6 +293,99 @@ export async function cancelGroup(ctx: HostedDynamic) {
     });
   });
   return await getRunGroupView(ctx, group.id);
+}
+
+/**
+ * Retry a placement failure inside the existing run group. Only stories that
+ * never started are reset: a product verdict or saved evidence is immutable
+ * history, while an infra/lost row with no started_at is work the run never
+ * performed. The group-status precondition and dispatch insert share one
+ * transaction, so double-clicks produce one attempt and one 409.
+ */
+export async function retryGroup(ctx: HostedDynamic) {
+  const principal = requireAuth(ctx);
+  const group = await getRunGroup(ctx, ctx.params.g);
+  guard(ctx, group.project_id, "editor");
+  const environment = await getEnvironment(ctx, group.environment_id);
+  const dispatchId = ulid();
+  let attempt = 0;
+  let retried = 0;
+
+  await ctx.db.withTx(async (tx: HostedDynamic) => {
+    const current = await tx.query(`SELECT status FROM run_groups WHERE id = $1`, [group.id]);
+    if (current.rows[0]?.status !== "done") {
+      throw conflict(`run "${group.id}" is already active or cannot be retried`);
+    }
+    const active = await tx.query(
+      `SELECT COUNT(*) AS n FROM dispatches
+        WHERE project_id = $1 AND status IN ('requested','scheduled','running')`,
+      [group.project_id],
+    );
+    if (active.rows[0].n >= ctx.config.dispatch.maxActivePerProject) {
+      throw conflict(`project already has ${active.rows[0].n} active dispatches`);
+    }
+    const retryable = await tx.query(
+      `SELECT id FROM runs
+        WHERE run_group_id = $1 AND status IN ('infra','lost') AND started_at IS NULL
+        ORDER BY case_id`,
+      [group.id],
+    );
+    retried = retryable.rows.length;
+    if (!retried) {
+      throw conflict("only stories that never started can be retried in place");
+    }
+    const ids = retryable.rows.map((r: HostedDynamic) => r.id);
+    await tx.query(
+      `UPDATE runs
+          SET status = 'queued', healed = 0, changed = 0, manifest = NULL,
+              totals = NULL, score = NULL, gate = NULL, pins = NULL,
+              duration_ms = NULL, started_at = NULL, finished_at = NULL,
+              executor_id = NULL, error = NULL, progress = NULL, updated_at = now()
+        WHERE id IN (${inClause(ids, 1)})
+          AND status IN ('infra','lost') AND started_at IS NULL`,
+      ids,
+    );
+    const attempts = await tx.query(
+      `SELECT COALESCE(MAX(attempt), 0) + 1 AS attempt
+         FROM dispatches WHERE kind = 'group' AND ref_id = $1`,
+      [group.id],
+    );
+    attempt = attempts.rows[0].attempt;
+    await tx.query(
+      `INSERT INTO dispatches (id, project_id, kind, ref_id, attempt, status)
+       VALUES ($1, $2, 'group', $3, $4, 'requested')`,
+      [dispatchId, group.project_id, group.id, attempt],
+    );
+    await tx.query(
+      `UPDATE run_groups SET status = 'queued', exit_summary = NULL, updated_at = now()
+        WHERE id = $1 AND status = 'done'`,
+      [group.id],
+    );
+    await audit(tx, {
+      actor: actorOf(principal),
+      action: "run_group.retried",
+      entityType: "run_group",
+      entityId: group.id,
+      projectId: group.project_id,
+      detail: { dispatch_id: dispatchId, attempt, stories: retried },
+    });
+    await emitPlatformEvent(tx, {
+      projectId: group.project_id,
+      type: "run.status",
+      entity: { run_group_id: group.id },
+      payload: { status: "queued", retry: true, cases: retried },
+    });
+  });
+
+  await dispatchAttempt(ctx, {
+    dispatchId,
+    projectId: group.project_id,
+    kind: "group",
+    refId: group.id,
+    attempt,
+    labels: environment.runner_labels || [],
+  });
+  return { run_group: await getRunGroupView(ctx, group.id), retried };
 }
 
 export async function listRuns(ctx: HostedDynamic) {

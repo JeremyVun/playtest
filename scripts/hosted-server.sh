@@ -52,8 +52,8 @@ if [ ! -d "$REPO/node_modules" ] || [ ! -e "$REPO/node_modules/@playtest/control
   (cd "$REPO" && npm install)
 fi
 
-# Browser code is authored in TypeScript. Build on every entry so the console
-# bundle and viewer modules can never be stale relative to their sources.
+# Build both Vite applications on every entry so the hosted console and its
+# embedded viewer can never be stale relative to their sources.
 (cd "$REPO" && npm run build:web)
 
 # ---- 3. .env ---------------------------------------------------------------

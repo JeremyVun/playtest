@@ -9,6 +9,7 @@
     "types": ["node"]
   },
   "include": [
+    "vite.config.ts",
     "src/**/*.ts",
     "tests/**/*.ts"
   ],

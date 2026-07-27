@@ -56,7 +56,7 @@
 // ## The other two shapes this reads
 //
 // **The S1 script report** (`script_report_version: 1`,
-// `src/core/schemas/script-report.schema.json`): checks carry `pass` +
+// `packages/core/src/schemas/script-report.schema.json`): checks carry `pass` +
 // `exercised` instead of a status string, and cite evidence as
 // `evidence.har_entries: [index]`. It is read natively, because the study's
 // substrate may be either this or the v0 above and the preregistration pins

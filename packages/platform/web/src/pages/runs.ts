@@ -45,6 +45,7 @@ import { parseYaml } from "../lib/caseform.js";
 import { resolveEnvTarget } from "../lib/defaults-form.js";
 import { subscribeFeed } from "../lib/feed.js";
 import { launchLimitPlaceholders } from "../lib/launch-limits.js";
+import { canRetryRun, retryableStoryCount } from "../lib/run-retry.js";
 
 export async function runsPage(projectKey: WebDynamic, groupId: WebDynamic = null, query: WebDynamic = null) {
   const main = renderFrame({ projectKey, nav: "runs" });
@@ -596,7 +597,8 @@ async function runsIndex(main: WebDynamic, projectKey: WebDynamic, project: WebD
 
     /**
      * The one action a run row carries, at its right edge: Cancel while it is
-     * spending, Synthesize once a discovery run has trajectories to mine.
+     * spending, Retry when it needs attention, or Synthesize once a discovery
+     * run has trajectories to mine.
      *
      * These used to live inside the expanded block, which was fine while every
      * live run expanded itself. Now that none do, "stop this run" cannot be a
@@ -613,6 +615,19 @@ async function runsIndex(main: WebDynamic, projectKey: WebDynamic, project: WebD
           "data-fk": `cancel:${g.id}`,
           onclick: () => cancelGroup(projectKey, g.id, rows),
         }, "Cancel");
+      }
+      const stats = runStats(g);
+      if (canRetryRun(g, stats)) {
+        return h("button.row-act", {
+          "aria-label": `Retry ${runTitle(g)}${g.created_at ? ` from ${ago(g.created_at)}` : ""}`,
+          "data-fk": `retry:${g.id}`,
+          onclick: (e: WebDynamic) => retryGroup(
+            projectKey,
+            g,
+            envName.get(g.environment_id),
+            e.currentTarget,
+          ),
+        }, "Retry");
       }
       const exploredCount = rows.filter((r: WebDynamic) => r.status === "explored").length;
       if (!exploredCount) return null;
@@ -1010,7 +1025,7 @@ function stopLive() {
     node: the row's now-line and the expanded block frame them differently. */
 function narration(group: WebDynamic, feedNote: WebDynamic, stats: WebDynamic) {
   if (group.status === "queued" || feedNote === "provisioning") {
-    return "provisioning capacity… GitHub is scheduling the workflow job";
+    return "provisioning capacity… waiting for a runner to connect";
   }
   if (group.status === "running" && stats.queued === stats.total) {
     return "executor connected — signing in and starting cases…";
@@ -1478,6 +1493,32 @@ const isProdName = (name: WebDynamic) => /prod|live/i.test(String(name || ""));
     carries the meaning (two local services differ only there). */
 function hostOf(url: WebDynamic) {
   try { return new URL(url).host; } catch { return url; }
+}
+
+async function retryGroup(
+  projectKey: WebDynamic,
+  group: WebDynamic,
+  environmentName: WebDynamic,
+  btn: WebDynamic,
+) {
+  const stories = retryableStoryCount(group);
+  const target = environmentName ? ` against ${environmentName}` : "";
+  const ok = await confirmModal({
+    title: "Retry this run?",
+    body: `Retries the ${stories} ${stories === 1 ? "story" : "stories"} that never started${target}, inside this run. Stories that already produced a verdict stay untouched. Only one retry can be active, and it may incur model cost.`,
+    confirmLabel: "Retry in place",
+    cancelLabel: "Keep this result",
+  });
+  if (!ok) return;
+  if (btn) { btn.disabled = true; btn.textContent = "Retrying…"; }
+  try {
+    await api.post(`/run-groups/${group.id}/retry`, {});
+    toast("Run retrying", `${stories} ${stories === 1 ? "story" : "stories"} queued`, "ok");
+    runsPage(projectKey, group.id);
+  } catch (err: WebDynamic) {
+    toastError(err);
+    if (btn) { btn.disabled = false; btn.textContent = "Retry"; }
+  }
 }
 
 // Synthesize a finished discovery group into cited findings. New claims land

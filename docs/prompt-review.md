@@ -20,7 +20,7 @@ compliance.
 
 ## Completed since the review
 
-- The four skill-bundled schemas now match `src/core/schemas/`.
+- The four skill-bundled schemas now match `packages/core/src/schemas/`.
   `tests/repository/skill-resources.test.ts` enforces schema and persona parity.
 - Bughunt no longer suggests invalid inherited tag defaults, and its worked
   example now keeps one risk per case.

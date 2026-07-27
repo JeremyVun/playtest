@@ -701,13 +701,35 @@ export async function health(ctx: HostedDynamic) {
     });
   }
   const dead = await db.query(
-    `SELECT id, ref_id, workflow_run_url FROM dispatches
-      WHERE project_id = $1 AND status = 'reconciled_dead' AND requested_at > $2
+    `WITH latest_dead AS (
+       SELECT d.id, d.ref_id, d.workflow_run_url, d.requested_at,
+              row_number() OVER (
+                PARTITION BY d.ref_id
+                ORDER BY d.requested_at DESC, d.id DESC
+              ) AS rn
+         FROM dispatches d
+         JOIN run_groups g ON g.id = d.ref_id
+        WHERE d.project_id = $1 AND d.kind = 'group'
+          AND d.status = 'reconciled_dead' AND d.requested_at > $2
+          AND g.status = 'done'
+          AND EXISTS (
+            SELECT 1 FROM runs r
+             WHERE r.run_group_id = g.id AND r.status IN ('infra','lost')
+          )
+     )
+     SELECT id, ref_id, workflow_run_url
+       FROM latest_dead
+      WHERE rn = 1
       ORDER BY requested_at DESC LIMIT 3`,
     [project.id, sevenDaysAgo],
   );
   for (const d of dead.rows) {
-    attention.push({ kind: "infra", run_group_id: d.ref_id, note: "workflow died; see dispatches", workflow_run_url: d.workflow_run_url });
+    attention.push({
+      kind: "infra",
+      run_group_id: d.ref_id,
+      note: "runner stopped before the run finished",
+      workflow_run_url: d.workflow_run_url,
+    });
   }
 
   const graded = rate.rows[0].pass + rate.rows[0].fail;

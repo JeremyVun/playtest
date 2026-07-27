@@ -263,7 +263,7 @@ cost. Offline, no model calls, no dependencies.
 | A directory of them | Walked recursively; every run directory and `.har` file under it is scored. |
 | Plain HAR file | HAR 1.2 (`log.entries[]`, `headers` as `[{name,value}]`, `postData.text`, `content.text`). The flattened shape Playtest's api driver writes is also accepted. |
 | Schemathesis cassette | The HAR cassette from `--cassette-path out.har --cassette-format har`. Recognised by `log.creator.name`. |
-| **Suite report** | The arm's own named checks and their evidence, in any of three shapes: `playtest.suite-report/v0`, Playtest's script report (`script_report_version: 1`, `src/core/schemas/script-report.schema.json`), or the P1 agent-suite's own data model. Found automatically at `suite-report.json` / `script-report.json` / `report.json` in a run directory or `<name>.report.json` beside a HAR, or attached with `--report <traceId\|label>=<file>`. |
+| **Suite report** | The arm's own named checks and their evidence, in any of three shapes: `playtest.suite-report/v0`, Playtest's script report (`script_report_version: 1`, `packages/core/src/schemas/script-report.schema.json`), or the P1 agent-suite's own data model. Found automatically at `suite-report.json` / `script-report.json` / `report.json` in a run directory or `<name>.report.json` beside a HAR, or attached with `--report <traceId\|label>=<file>`. |
 
 The Schemathesis HAR cassette is the format the bench expects because it is the
 one machine-readable Schemathesis output that carries full request *and*

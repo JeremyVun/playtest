@@ -56,8 +56,22 @@ playtest install-skill   # optional: teach your coding agent to drive it (run in
 ```
 
 `npm install` also builds the self-contained trajectory viewer and hosted
-console. Run `npm run build:web` after changing their TypeScript sources if you
-are not entering through a test or server command that builds them automatically.
+console with Vite. Run `npm run build:web` after changing their TypeScript
+sources if you are not entering through a test or server command that builds
+them automatically.
+
+To use the complete hosted web platform locally, run one command from the
+repository root:
+
+```sh
+npm run hosted
+# → http://127.0.0.1:4177
+```
+
+This builds both Vite applications, starts the control-plane API and web host,
+and enables local dispatch. Runner-agent processes start automatically when
+jobs are launched; the web and runner workspaces are not separate services to
+start manually.
 
 ## Quickstart
 
@@ -546,12 +560,13 @@ have never recorded a saved path.
 database, or Docker. It runs separately named core, CLI, run-viewer, and repository suites;
 those groups can also be run directly with `npm run test:core`, `test:cli`, `test:viewer`,
 or `test:repository`. `npm run typecheck` checks every strict TypeScript project,
-and `npm run build:web` emits the viewer modules and bundles the hosted console. `npm run test:browser` runs the explicit Playwright suites;
+and `npm run build:web` runs both package-local Vite builds, then embeds the
+completed viewer under the hosted console's `/viewer/` path. `npm run test:browser` runs the explicit Playwright suites;
 install its browser once with `npx playwright install chromium`. `npm run test:all` runs
 both tiers. The example app runs with
 `PORT=4173 node examples/todo-app/server.js`. Hosted control plane (not in the published package):
-`npm run hosted` (or `scripts/hosted-server.sh` — API + static web on
-http://127.0.0.1:4177) — no database service;
+`npm run hosted` starts the API, static web platform, and on-demand local runners
+on http://127.0.0.1:4177 — no database service;
 metadata is one SQLite file under `PLAYTEST_DATA_DIR` (default `.playtest-data`), and
 `npm run hosted:migrate` applies migrations without starting the server. That
 launcher, unlike the CLI, sources a gitignored repo-root `.env` so a local server

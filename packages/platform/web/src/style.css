@@ -636,9 +636,9 @@ textarea.prose-input { font-family: var(--sans); font-size: var(--fs-base); line
 .launch-name .rowtag { margin-left: 0; }
 
 /* The one action a run row carries, at its right edge: Cancel while it spends,
-   Synthesize once a discovery run has trajectories to mine. Quiet at rest — six
-   red buttons down a busy page is an alarm, and both of these confirm before
-   they do anything — and named on hover by the colour of what they are. */
+   Retry when it needs attention, or Synthesize once a discovery run has
+   trajectories to mine. Quiet at rest — a column of loud buttons down a busy
+   page is an alarm, and every action confirms before it does anything. */
 .row-act {
   padding: 3px 8px; border-radius: 6px; font-size: var(--fs-xs); color: var(--dim);
   border: 1px solid transparent; white-space: nowrap;

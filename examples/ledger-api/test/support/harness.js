@@ -2,7 +2,7 @@
 // over real HTTP. No external network, no dependencies, no fixtures on disk.
 //
 // The client records every exchange in the same HAR shape Playtest's api driver
-// writes (`src/core/drivers/har.js`), so a test can hand its own traffic
+// writes (`packages/core/src/drivers/har.ts`), so a test can hand its own traffic
 // straight to the bench without a second recording path.
 
 import { startServer } from "../../src/http.js";

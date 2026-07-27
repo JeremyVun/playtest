@@ -15,6 +15,7 @@ import { assistantConfigured } from "../authoring/assistant.ts";
 import { autoDedupeEnabledFor, scheduleAutoDedupe } from "../findings/auto-dedupe.ts";
 import { autoResolveEnabledFor, scheduleAutoResolve } from "../findings/auto-resolve.ts";
 import { modelTiers, defaultModels } from "@playtest/core/llm";
+import { checkInWindowMs } from "../dispatch/pool.ts";
 
 /** True when the principal is admin of at least one project (or a dev/admin token). */
 function isAdminSomewhere(p: HostedDynamic) {
@@ -30,12 +31,13 @@ function isAdminSomewhere(p: HostedDynamic) {
  * `capabilities` describes the SERVER, not the person: it is what this
  * deployment was configured to do, so the console can present a capability it
  * does not have as unavailable-and-why instead of a live button that fails.
- * Today there is one: `llm`, the platform LLM gateway behind story drafting,
- * study synthesis and candidate consolidation. It is never an authorization
+ * The first was `llm`, the platform LLM gateway behind story drafting, study
+ * synthesis and candidate consolidation. It is never an authorization
  * signal — every one of those routes still enforces its own role.
  */
 export async function me(ctx: HostedDynamic) {
   const p = requireAuth(ctx);
+  const pool = ctx.config.dispatch.pool;
   // `auto_dedupe` tells the console whether unreviewed findings are being
   // semantically deduped automatically after runs, so it can present manual
   // "Find duplicates" as the fallback it is rather than the routine path.
@@ -48,6 +50,19 @@ export async function me(ctx: HostedDynamic) {
     // Verification itself needs the gateway (`llm`); without one the keyless
     // tier degrades to graded-pass suggestions whatever the mode says.
     auto_resolve_mode: ctx.config.autoResolve.mode,
+    // Does this deployment place runs on self-hosted runners at all? Under any
+    // other adapter the whole pool — registration, presence, placement labels —
+    // is machinery nobody here can use, and the routes that serve it answer
+    // `503 not_configured`. Offering the setup anyway would turn a deployment
+    // choice into what looks like a broken feature, so the console asks first.
+    pool_dispatch: pool.enabled,
+    // How long since a runner's last check-in still counts as online, derived
+    // server-side (dispatch/pool.ts) so the console's presence dot and the
+    // reconciler's patience are the same number.
+    runner_check_in_window_s: Math.round(checkInWindowMs(pool) / 1000),
+    // The environment app-artifact ceiling, so the upload control can state the
+    // cap before someone spends four minutes uploading past it.
+    app_artifact_max_mb: Math.round(ctx.config.uploads.appArtifactMaxBytes / (1024 * 1024)),
   };
   if (p.kind === "token") {
     return { kind: "token", project_id: p.projectId, role: p.role, capabilities };

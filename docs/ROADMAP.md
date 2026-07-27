@@ -61,8 +61,18 @@ Plan: [`docs/backlog/self-hosted-runners/BUILD_PLAN.md`](backlog/self-hosted-run
       > suite) is stated in the launch preview's `target.app`, an unreachable
       suite-relative binary is refused at launch, and an unreferenced blob enters
       the existing GC.
-- [ ] **R4 — Console surfaces:** runners settings, artifact upload, and
-      placement said out loud at launch.
+- [x] **R4 — Console surfaces:** the front door for all of it. Settings →
+      Runners shows presence and the run each runner is executing, repainted
+      from a new `runner.status` feed edge rather than a poll and gated on
+      `capabilities.pool_dispatch`; Test targets gains first-class mobile device
+      fields and app-artifact upload/replace/clear with the cap stated up front;
+      the New suite dialog asks identity only, with a skippable driver-aware
+      "where does this app run?" card on the empty suite that picks or creates a
+      ring; the launch dialog says placement out loud and warns when no matching
+      runner is checked in; a run's provenance names the runner and isolation
+      that produced it, and an unclaimed run gets the runner-setup remedy.
+      `GET /run-groups/:id?wait=true` now actually holds, as the automation
+      contract always said.
 
 ### Seeded-fault hill-climb rerun
 

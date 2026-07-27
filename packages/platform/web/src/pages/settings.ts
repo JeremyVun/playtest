@@ -3,17 +3,22 @@
 // Retention were removed from the UI in the P1 simplification.
 import { api } from "../lib/api.js";
 import { h, mount } from "../lib/dom.js";
-import { link, navigate } from "../lib/router.js";
+import { link, navigate, onPageLeave } from "../lib/router.js";
 import { renderFrame, page } from "../lib/shell.js";
 import { state, hasRole, loadMe, loadProjects } from "../lib/state.js";
 import { toast, toastError, confirmModal, formModal, emptyState, formField, enhanceSelect, copyText } from "../lib/ui.js";
-import { SETTINGS_SECTIONS } from "../lib/settings-sections.js";
+import { visibleSections } from "../lib/settings-sections.js";
 import { modelField } from "../lib/model-select.js";
 import { MASK, maskSecretEnv, literalSecretKeys } from "../lib/secret-mask.js";
 import { parseCookieList, formatCookieList } from "../lib/defaults-form.js";
 import { humanize as words, categoryLabel } from "../lib/vocab.js";
-import { startCommand, oneShot, runnerLabelsText } from "../lib/runners.js";
+import { startCommand, oneShot, runnerLabelsText, runnerPresence } from "../lib/runners.js";
+import { subscribeFeed } from "../lib/feed.js";
 import { ago } from "../lib/labels.js";
+import {
+  PLATFORMS, readEnvApp, applyEnvApp, hasMobileConfig,
+  artifactSummary, appArtifactProblem, APP_ARTIFACT_EXTENSIONS, fmtBytes,
+} from "../lib/env-config.js";
 
 const RENDER: WebDynamic = {
   "test-targets": testTargetsTab,
@@ -29,8 +34,7 @@ export function settingsPage(projectKey: WebDynamic, tab?: WebDynamic) {
   const project = state.projectByKey.get(projectKey);
   if (!project) return mount(main, page({ title: "Settings", body: emptyState("Not found", "No such project.") }));
 
-  const tabs = SETTINGS_SECTIONS
-    .filter((t: WebDynamic) => hasRole(project.id, t.min))
+  const tabs = visibleSections((min: WebDynamic) => hasRole(project.id, min), state.me?.capabilities || {})
     .map((t: WebDynamic) => ({ ...t, render: RENDER[t.id] }));
 
   if (!tabs.length) return mount(main, page({ title: "Settings", body: emptyState("No settings access", "Ask a project admin for a role.") }));
@@ -143,48 +147,116 @@ async function testTargetsTab(projectKey: WebDynamic, project: WebDynamic, slot:
 // hands out an identity and never reaches back: register → paste one command on
 // that machine → give an environment the labels it advertises.
 //
-// R1 keeps this deliberately small — register, list, revoke. Live presence, the
-// claim a runner is executing, and launch-time placement warnings are R4.
+// The section is LIVE, and it is live the way the rest of the console is: the
+// event feed carries the edges (a runner arriving, coming back, taking a claim,
+// being revoked) and this page refetches once when one lands. Nothing here
+// polls. Between edges, presence is arithmetic on `last_seen_at` against the
+// window the server publishes, re-read on a slow local clock that makes no
+// request at all — which is how a laptop that closed its lid goes quiet on this
+// page without anything having told anybody.
 async function runnersTab(projectKey: WebDynamic, project: WebDynamic, slot: WebDynamic) {
-  let items: WebDynamic = [];
-  try { ({ items } = await api.get(`/projects/${projectKey}/runners`)); } catch (err: WebDynamic) { return toastError(err); }
-  const refresh = () => runnersTab(projectKey, project, slot);
-  const add = h("button.btn.primary", { onclick: () => registerRunnerModal(projectKey, refresh) }, "+ Register runner");
-  const live = items.filter((r: WebDynamic) => !r.revoked_at);
+  const ctl: WebDynamic = { items: [], sig: null };
+  const windowS = state.me?.capabilities?.runner_check_in_window_s ?? 120;
+  const load = async () => { ctl.items = (await api.get(`/projects/${projectKey}/runners`)).items || []; };
+  try { await load(); } catch (err: WebDynamic) { return toastError(err); }
 
-  const body = items.length
-    ? h("div", { style: "display:flex;flex-direction:column;gap:12px" }, ...items.map((r: WebDynamic) => h("div.card.pad", {},
-        h("div", { style: "display:flex;align-items:center;gap:10px;flex-wrap:wrap" },
-          h("span.id", {}, r.name),
-          r.revoked_at ? h("span.chip", {}, "revoked") : null,
-          h("div", { style: "flex:1" }),
-          // Every row repeats one verb, so the accessible name carries the runner.
-          r.revoked_at
-            ? null
-            : h("button.btn.btn-sm.danger", { "aria-label": `Revoke runner ${r.name}`, onclick: () => revokeRunner(projectKey, r, refresh) }, "Revoke"),
-        ),
-        fieldLine("labels", runnerLabelsText(r.labels)),
-        fieldLine("last seen", r.last_seen_at ? `${ago(r.last_seen_at)} (${new Date(r.last_seen_at).toLocaleString()})` : "never — it has not checked in yet"),
-        r.revoked_at ? fieldLine("revoked", new Date(r.revoked_at).toLocaleString()) : null,
-      )))
-    : emptyState(
-        "No runners registered",
-        "A self-hosted runner runs your suites on a machine you control — your laptop, a build box, a CI job — so a run can reach an app on localhost, a device simulator, or anything behind your firewall. It dials out to Playtest; nothing ever connects to it.",
-      );
+  // One subscription and one slow repaint clock, both torn down on navigation.
+  let debounce: WebDynamic = null;
+  const sub = subscribeFeed(projectKey, {
+    // `runner.status` is presence and claims; `run.status` is how a claim ENDS —
+    // a group finishing releases its runner, and no runner event says so.
+    types: ["runner.status", "run.status"],
+    onEvent: () => {
+      clearTimeout(debounce);
+      debounce = setTimeout(async () => {
+        try { await load(); paint(); } catch { /* the next edge retries */ }
+      }, 250);
+    },
+  });
+  // Not a poll: no request, no server. It re-reads the clock so "online" can
+  // become "offline" when the truth is that nothing has been heard.
+  const tick = setInterval(() => paint(), 15_000);
+  const stop = () => { sub.stop(); clearInterval(tick); clearTimeout(debounce); };
+  onPageLeave(stop);
 
-  mount(slot, h("div.stack", {},
-    h("section", {},
-      h("h3.section-title", { style: "margin-top:0" }, "Runners"),
-      h("p.dim", { style: "font-size:12.5px;margin:-4px 0 12px" },
-        "Machines that execute this project's runs. Register one here, start it with the command shown, then give an environment the same labels under Test targets — a run is placed on a runner advertising every label its environment asks for."),
-      h("div", { style: "display:flex;justify-content:flex-end;margin-bottom:12px" }, add),
-      body,
-      live.length
-        ? null
-        : h("p.faint", { style: "font-size:11.5px;margin-top:12px" },
-            "Until a runner is checked in, runs placed on this project wait on the board and then fail with the labels nothing served."),
-    ),
-  ));
+  const refresh = async () => { try { await load(); paint(); } catch (err: WebDynamic) { toastError(err); } };
+  paint(true);
+
+  function paint(first = false) {
+    const now = Date.now();
+    const rows = ctl.items.map((r: WebDynamic) => ({ r, presence: runnerPresence(r, { now, windowS }) }));
+    // Nothing moved ⇒ nothing repaints: a rebuild costs focus and any menu the
+    // person had open, and this paints itself every 15 seconds.
+    const sig = JSON.stringify(rows.map(({ r, presence }: WebDynamic) =>
+      [r.id, presence.state, r.labels, r.claim?.run_group_id ?? null, r.last_seen_at]));
+    if (!first && sig === ctl.sig) return;
+    ctl.sig = sig;
+
+    const add = h("button.btn.primary", { "data-fk": "runner:add", onclick: () => registerRunnerModal(projectKey, refresh) }, "+ Register runner");
+    const here = rows.filter(({ presence }: WebDynamic) => presence.tone !== "off").length;
+
+    const body = rows.length
+      ? h("div", { style: "display:flex;flex-direction:column;gap:12px" }, ...rows.map(({ r, presence }: WebDynamic) =>
+          h("div.card.pad", {},
+            h("div", { style: "display:flex;align-items:center;gap:10px;flex-wrap:wrap" },
+              h("span.id", {}, r.name),
+              presenceChip(presence),
+              h("div", { style: "flex:1" }),
+              // Every row repeats one verb, so the accessible name carries the runner.
+              r.revoked_at
+                ? null
+                : h("button.btn.btn-sm.danger", {
+                    "aria-label": `Revoke runner ${r.name}`,
+                    "data-fk": `runner:revoke:${r.id}`,
+                    onclick: () => revokeRunner(projectKey, r, refresh),
+                  }, "Revoke"),
+            ),
+            fieldLine("labels", runnerLabelsText(r.labels)),
+            fieldLine("last seen", r.last_seen_at
+              ? `${ago(r.last_seen_at)} (${new Date(r.last_seen_at).toLocaleString()})`
+              : "never — it has not checked in yet"),
+            // What it is doing right now, as a link to the run itself: a busy
+            // runner without a way to see the run it is busy with is a dead end.
+            r.claim?.run_group_id
+              ? h("div.dim", { style: "margin-top:6px;font-size:12px" },
+                  "running: ",
+                  link(`/p/${projectKey}/runs/${r.claim.run_group_id}`, "this run"),
+                  r.claim.claimed_at ? h("span.faint", {}, ` · claimed ${ago(r.claim.claimed_at)}`) : null)
+              : r.claim
+                ? fieldLine("running", "minting an auth session")
+                : null,
+            r.revoked_at ? fieldLine("revoked", new Date(r.revoked_at).toLocaleString()) : null,
+          )))
+      : emptyState(
+          "No runners registered",
+          "A self-hosted runner runs your suites on a machine you control — your laptop, a build box, a CI job — so a run can reach an app on localhost, a device simulator, or anything behind your firewall. It dials out to Playtest; nothing ever connects to it.",
+        );
+
+    const focusKey = document.activeElement?.dataset?.fk || null;
+    mount(slot, h("div.stack", {},
+      h("section", {},
+        h("h3.section-title", { style: "margin-top:0" }, "Runners"),
+        h("p.dim", { style: "font-size:12.5px;margin:-4px 0 12px" },
+          "Machines that execute this project's runs. Register one here, start it with the command shown, then give an environment the same labels under Test targets — a run is placed on a runner advertising every label its environment asks for."),
+        h("div", { style: "display:flex;justify-content:flex-end;margin-bottom:12px" }, add),
+        body,
+        rows.length && !here
+          ? h("p.faint", { style: "font-size:11.5px;margin-top:12px" },
+              `Nothing is checked in. Runs placed on this project wait on the board and then fail with the labels nothing served — start a runner with its command, or check that the process is still up. A runner counts as here if it checked in within ${Math.round(windowS / 60) >= 1 ? `${Math.round(windowS / 60)} minutes` : `${windowS} seconds`}.`)
+          : null,
+      ),
+    ));
+    if (focusKey) slot.querySelector(`[data-fk="${focusKey}"]`)?.focus();
+  }
+}
+
+/** Presence as a dot AND a word — the dot is the scan target, the word is what
+    a screen reader (and a person who doesn't know the palette) reads. */
+function presenceChip(presence: WebDynamic) {
+  return h(`span.runner-presence.${presence.tone}`, { title: presence.detail },
+    h("span.runner-dot", { "aria-hidden": "true" }),
+    presence.label,
+    h("span.visually-hidden", {}, ` — ${presence.detail}`));
 }
 
 /**
@@ -421,7 +493,17 @@ async function environmentsTab(projectKey: WebDynamic, project: WebDynamic, slot
           : null,
         e.suite_id ? fieldLine("owned by", e.suite?.name || e.suite_id) : null,
         fieldLine("discovery", e.discovery_allowed ? "allowed" : "not allowed"),
-        fieldLine("runner labels", (e.runner_labels || []).join(", ") || "—"),
+        // What a run against this ring installs, when it installs anything. An
+        // uploaded build wins over a path the ring names, exactly as at launch.
+        e.app_artifact
+          ? fieldLine("app binary", `${artifactSummary(e.app_artifact, ago)} (uploaded)`)
+          : e.config?.app?.app
+            ? fieldLine("app binary", `${e.config.app.app} — on the runner's own disk`)
+            : null,
+        e.config?.app?.platform || e.config?.app?.appium_url
+          ? fieldLine("device", [e.config?.app?.platform, e.config?.app?.appium_url].filter(Boolean).join(" · "))
+          : null,
+        fieldLine("runner labels", runnerLabelsText(e.runner_labels)),
         fieldLine("secret references", secretRefSummary(e.config) || "—"),
         h("details.advanced", { style: "margin-top:8px" },
           h("summary", {}, "Advanced — raw config JSON"),
@@ -434,6 +516,23 @@ async function environmentsTab(projectKey: WebDynamic, project: WebDynamic, slot
 
 const fieldLine = (k: WebDynamic, v: WebDynamic) => h("div.dim", { style: "margin-top:6px;font-size:12px" }, `${k}: `, h("span.mono", {}, v));
 
+/**
+ * Set a select's value from code without firing `change`.
+ *
+ * Two reasons it moves the `selected` ATTRIBUTE rather than only the property:
+ * the themed dropdown (lib/ui.ts enhanceSelect) relabels its button from a
+ * mutation observer, which a property assignment never trips; and a `change`
+ * event here would be the document writing back into the field that is writing
+ * into the document.
+ */
+function setSelect(sel: WebDynamic, value: WebDynamic) {
+  sel.value = value;
+  for (const option of sel.options) {
+    if (option.value === sel.value) option.setAttribute("selected", "");
+    else option.removeAttribute("selected");
+  }
+}
+
 /** Readable one-liner of an environment's secret_env references (never values). */
 function secretRefSummary(config: WebDynamic) {
   const entries = Object.entries(config?.secret_env || {});
@@ -444,34 +543,87 @@ function secretRefSummary(config: WebDynamic) {
       : `${k}=${MASK}`).join(", ");
 }
 
+/**
+ * One environment, as a form.
+ *
+ * The named fields and the raw document are two views of ONE document, the way
+ * the suite-defaults editor treats YAML: every field writes into the JSON, the
+ * JSON is what saves, and a key no field knows about survives verbatim. They
+ * therefore cannot disagree — there is no second source of truth to reconcile
+ * at save time, and opening Advanced always shows what the fields above just did.
+ */
 function envModal(projectKey: WebDynamic, existing: WebDynamic, refresh: WebDynamic) {
   const close = formModal(existing ? `Edit ${existing.name}` : "New environment", () => {
+    // `current` is the environment as the server last confirmed it — replaced
+    // wholesale by an artifact upload, which returns the full view.
+    let current = existing;
     const name = h("input", { type: "text", value: existing?.name || "", placeholder: "staging" });
     if (existing) name.disabled = true;
-    const baseUrl = h("input", { type: "text", value: existing?.config?.app?.base_url || "", placeholder: "https://staging.example.com" });
+    const baseUrl = h("input", { type: "text", value: existing?.config?.app?.base_url || "", placeholder: "https://staging.example.com", onchange: flush });
     // Cookies are first-class ring config: a blue/green slot or feature-flag
-    // cookie is often the whole difference between two rings. Folded into
-    // config.app.cookies like the URL; untouched, the raw JSON keeps its say.
-    const cookiesInitial = formatCookieList(existing?.config?.app?.cookies);
-    const cookies = h("input", { type: "text", value: cookiesInitial, placeholder: "slot=blue; feature_x=on" });
+    // cookie is often the whole difference between two rings.
+    const cookies = h("input", { type: "text", value: formatCookieList(existing?.config?.app?.cookies), placeholder: "slot=blue; feature_x=on", onchange: flush });
     const config = h("textarea.code", { style: "min-height:160px" }, JSON.stringify(maskSecretEnv(existing?.config) || { app: { base_url: "https://staging.example.com" } }, null, 2));
-    const labels = h("input", { type: "text", value: (existing?.runner_labels || []).join(", "), placeholder: "self-hosted, playtest" });
+    const labels = h("input", { type: "text", value: (existing?.runner_labels || []).join(", "), placeholder: "macos, ios-sim" });
     const disc = h("input", { type: "checkbox", checked: existing?.discovery_allowed || false });
     const literalWarn = h("div.preview-warn", { style: "display:none;margin:-6px 0 10px" });
+    const jsonWarn = h("div.preview-warn", { style: "display:none;margin:-6px 0 10px" });
+
+    // --- the device half of a ring, for mobile. First-class, because a
+    // benchmark mobile ring should never require hand-written JSON.
+    const platform = h("select", { "aria-label": "Device platform", onchange: flush },
+      h("option", { value: "" }, "— not a mobile environment"),
+      ...PLATFORMS.map((p: WebDynamic) => h("option", { value: p, selected: existing?.config?.app?.platform === p || undefined },
+        p === "ios" ? "iOS — simulator or device" : "Android — emulator or device")));
+    const appPath = h("input", { type: "text", value: existing?.config?.app?.app || "", placeholder: "/Users/you/builds/app-release.apk", onchange: flush });
+    const appiumUrl = h("input", { type: "text", value: existing?.config?.app?.appium_url || "", placeholder: "http://127.0.0.1:4723", onchange: flush });
+    const artifactSlot = h("div");
+    const openDevice = hasMobileConfig(existing?.config) || !!existing?.app_artifact;
+
     config.addEventListener("input", () => {
-      let keys: WebDynamic = [];
-      try { keys = literalSecretKeys(JSON.parse(config.value)); } catch { /* not JSON yet — the submit path reports that */ }
+      let parsed: WebDynamic = null;
+      try { parsed = JSON.parse(config.value); } catch { /* mid-edit — submit reports it */ }
+      jsonWarn.style.display = parsed ? "none" : "";
+      jsonWarn.textContent = parsed ? "" : "This isn't valid JSON yet — the fields above can't write into it until it is.";
+      if (!parsed) return;
+      // The document moved, so the fields re-read it. One direction each way,
+      // and both through the same helpers, so neither view can drift.
+      const app = readEnvApp(parsed);
+      baseUrl.value = app.base_url;
+      appPath.value = app.app;
+      appiumUrl.value = app.appium_url;
+      setSelect(platform, PLATFORMS.includes(app.platform) ? app.platform : "");
+      cookies.value = formatCookieList(parsed?.app?.cookies);
+      const keys = literalSecretKeys(parsed);
       literalWarn.style.display = keys.length ? "" : "none";
       literalWarn.textContent = keys.length
         ? `${keys.join(", ")}: pasted values are stored readable by anyone with this page. Prefer {"$secret": "name"} — add the name under Settings → Secrets.`
         : "";
     });
+
+    paintArtifact();
     return h("form", { onsubmit: submit },
       fld("Name", name),
-      fld("Runner labels", labels),
+      fld("Runner labels", labels,
+        "Runs against this environment go to runners advertising ALL of these labels — that is the whole matching rule. Leave blank to let any runner in this project take them."),
       fld("Cookies", cookies,
         "Browser cookies set before the first navigation, on every web run against this environment — name=value pairs separated by semicolons. A suite can override them on its own settings page."),
       h("label.check", { style: "margin:6px 0 12px" }, disc, "Allow discovery studies on this environment"),
+      // The device belongs to the ring, not the suite: which simulator, which
+      // build, which Appium server are all facts about the machine the device
+      // is attached to. Folded away until a ring actually has one.
+      h("details.advanced", { open: openDevice || undefined },
+        h("summary", {}, "Mobile device — platform, app binary, Appium"),
+        h("div", { style: "margin-top:10px" },
+          h("p.dim", { style: "font-size:12.5px;margin:0 0 10px" },
+            "For a suite driven by Appium. The runner that takes this environment's runs is the machine holding the simulator or device."),
+          fld("Platform", platform, "Which mobile driver core starts."),
+          fld("App binary path", appPath,
+            "An absolute path on the runner's own disk — the usual answer when the runner is the machine that built the app. Nothing is uploaded."),
+          fld("Appium server", appiumUrl, "Where Appium listens on that machine. Blank uses core's default."),
+          artifactSlot,
+        ),
+      ),
       // An environment is a RING: credentials, runner pool and discovery
       // permission, shared by every suite in the project. WHERE a given suite's
       // app lives inside that ring belongs to the suite (Suite settings →
@@ -484,6 +636,7 @@ function envModal(projectKey: WebDynamic, existing: WebDynamic, refresh: WebDyna
           fld("Fallback base URL", baseUrl,
             "Used by any suite that doesn't set its own URL for this environment. Leave blank when suites declare their own."),
           fld("Config JSON", config),
+          jsonWarn,
           literalWarn,
           h("div.faint", { style: "font-size:11.5px;margin:-6px 0 10px" },
             'Reference stored secrets instead of pasting values: "secret_env": { "TOKEN": { "$secret": "secret-name" } } — add names under Secret references. Stored values show as ' + MASK + " and are kept unless you replace them.",
@@ -492,22 +645,114 @@ function envModal(projectKey: WebDynamic, existing: WebDynamic, refresh: WebDyna
       ),
       h("div.modal-actions", {}, h("button.btn.ghost", { type: "button", onclick: () => close() }, "Cancel"), h("button.btn.primary", { type: "submit" }, "Save")),
     );
+
+    /** The named fields, written into the one document they are views of. */
+    function flush() {
+      let cfg: WebDynamic;
+      try { cfg = JSON.parse(config.value); } catch { return; }
+      let parsedCookies;
+      try { parsedCookies = parseCookieList(cookies.value); }
+      catch (err: WebDynamic) { return toast("Cookies don't parse", String(err.message || err), "err"); }
+      const next = applyEnvApp(cfg, {
+        base_url: baseUrl.value.trim(),
+        platform: platform.value,
+        app: appPath.value.trim(),
+        appium_url: appiumUrl.value.trim(),
+      });
+      if (parsedCookies) next.app = { ...(next.app || {}), cookies: parsedCookies };
+      else if (next.app) delete next.app.cookies;
+      if (next.app && !Object.keys(next.app).length) delete next.app;
+      config.value = JSON.stringify(next, null, 2);
+    }
+
+    /**
+     * The uploaded build: what is stored, how to replace it, how to remove it —
+     * and the cap said UP FRONT, because finding out after a 400 MB upload is
+     * the one failure this control exists to prevent.
+     */
+    function paintArtifact() {
+      const maxMb = state.me?.capabilities?.app_artifact_max_mb ?? 512;
+      const maxBytes = maxMb * 1024 * 1024;
+      const picker: WebDynamic = h("input", {
+        type: "file",
+        accept: APP_ARTIFACT_EXTENSIONS.join(","),
+        style: "display:none",
+        onchange: () => upload(picker.files?.[0] || null),
+      });
+      const uploadBtn = h("button.btn.btn-sm", {
+        type: "button",
+        disabled: current ? undefined : true,
+        title: current ? undefined : "Save this environment first — an upload needs somewhere to go",
+        onclick: () => picker.click(),
+      }, current?.app_artifact ? "Replace…" : "Upload a build…");
+      const summary = current?.app_artifact
+        ? h("div.dim", { style: "font-size:12px" },
+            h("span.mono", {}, artifactSummary(current.app_artifact, ago)),
+            h("div.faint", { style: "font-size:11.5px;margin-top:2px" },
+              "Every run installs exactly these bytes until you replace them; a run already in flight keeps the build it started with."))
+        : h("div.faint", { style: "font-size:11.5px" },
+            current
+              ? `No build uploaded. Use this when the runner is not the machine that built the app — ${APP_ARTIFACT_EXTENSIONS.join(", ")}, up to ${maxMb} MB. An iOS .app is a directory, so zip it first.`
+              : "Save this environment, then upload a build here.");
+      mount(artifactSlot, h("div.field", {},
+        h("div.field-label", {}, "Uploaded build"),
+        summary,
+        h("div", { style: "display:flex;gap:8px;margin-top:8px" },
+          uploadBtn,
+          current?.app_artifact
+            ? h("button.btn.btn-sm.danger", { type: "button", onclick: clearArtifact }, "Remove")
+            : null,
+          picker),
+      ));
+
+      async function upload(file: WebDynamic) {
+        picker.value = "";
+        if (!file) return;
+        const problem = appArtifactProblem(file, maxBytes);
+        if (problem) return toast("That file can't be uploaded", problem, "err");
+        uploadBtn.disabled = true;
+        uploadBtn.textContent = `Uploading ${fmtBytes(file.size)}…`;
+        try {
+          current = await api.putRaw(
+            `/environments/${current.id}/app-artifact?filename=${encodeURIComponent(file.name)}`,
+            await file.arrayBuffer(),
+            "application/octet-stream",
+          );
+          toast("Build uploaded", `${file.name} — runs against ${current.name} install it`, "ok");
+          refresh();
+        } catch (err: WebDynamic) {
+          // The 413 already names the cap, the variable that raises it, and the
+          // runner-local alternative — show it, never "upload failed".
+          toastError(err);
+        }
+        paintArtifact();
+      }
+
+      async function clearArtifact() {
+        const ok = await confirmModal({
+          title: "Remove the uploaded build?",
+          body: `Runs against ${current.name} stop installing it. Runs that already used it keep their evidence, and this environment falls back to the app path below — or to whatever the suite declares.`,
+          confirmLabel: "Remove build",
+          danger: true,
+        });
+        if (!ok) return;
+        try {
+          await api.del(`/environments/${current.id}/app-artifact`);
+          current = { ...current, app_artifact: null };
+          toast("Build removed", current.name, "ok");
+          refresh();
+        } catch (err: WebDynamic) { return toastError(err); }
+        paintArtifact();
+      }
+    }
+
     async function submit(e: WebDynamic) {
       e.preventDefault();
+      // The fields are views of the document; make sure the last one edited has
+      // landed in it before the document is what we save.
+      flush();
       let cfg;
       try { cfg = JSON.parse(config.value); } catch { return toast("Config isn't valid JSON", "", "err"); }
-      // The Base URL field is the primary control; fold it into config.app.
-      const url = baseUrl.value.trim();
-      if (url) { cfg.app = { ...(cfg.app || {}), base_url: url }; }
-      // The Cookies field owns config.app.cookies once touched; untouched, a
-      // cookie map living only in the raw JSON stays exactly as typed there.
-      if (cookies.value !== cookiesInitial) {
-        let parsed;
-        try { parsed = parseCookieList(cookies.value); }
-        catch (err: WebDynamic) { return toast("Cookies don't parse", String(err.message || err), "err"); }
-        if (parsed) cfg.app = { ...(cfg.app || {}), cookies: parsed };
-        else if (cfg.app) delete cfg.app.cookies;
-      }
       // An untouched mask keeps the stored value; the browser never round-trips
       // the literal through the textarea.
       for (const [k, v] of Object.entries(cfg?.secret_env || {})) {

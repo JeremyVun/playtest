@@ -163,6 +163,21 @@ and `capabilities.auto_dedupe`, whether that gateway plus the
 console uses them to present those affordances as unavailable-and-why instead of
 offering a control the server cannot answer; the routes still enforce roles.
 
+Three more describe placement and uploads, for the same reason:
+
+- `capabilities.pool_dispatch` — whether this deployment places runs on
+  self-hosted runners (`PLAYTEST_DISPATCH=pool`). Under any other adapter there
+  is no claim board to serve, so every pool-only console surface — the Runners
+  section, runner-label fields, the launch dialog's placement line — is absent
+  rather than present and then explained away, and the pool routes keep their
+  `503 not_configured` discipline.
+- `capabilities.runner_check_in_window_s` — how long since a runner's last
+  check-in still counts as present (§ Runner pool). Published so a console's
+  presence and the reconciler's patience are one number, not two.
+- `capabilities.app_artifact_max_mb` — the environment app-artifact ceiling, so
+  an upload control can state the cap before someone spends four minutes
+  reaching a `413`.
+
 Project roles are cumulative:
 
 ```text
@@ -292,8 +307,13 @@ retry while another attempt is active returns `409 conflict` and creates no
 second attempt.
 
 `GET /api/v1/run-groups/:id?wait=true` is the long-polling surface for
-automation clients. Its completed result preserves the hosted run-group
-projection.
+automation clients. The request is **held** — on the same discipline as the
+event feed and the claim board (post-commit wake, bounded rescan, correctness
+from the committed row) — until the group reaches `done` or `canceled`, or the
+hold window elapses. `wait` accepts `true` (the 25-second maximum) or a number
+of seconds, capped there. An unsettled answer at the deadline is normal, not an
+error: the body is the same run-group projection either way, so a caller reads
+`status` and asks again with its next `wait`.
 
 `GET /api/v1/projects/:p/run-groups` is the Runs index projection, and every row
 carries `stats`: per-status story counts (`pass`, `fail`, `infra`, `explored`,
@@ -475,6 +495,30 @@ runner-credential-authenticated routes are:
 3. `POST /runner/pool/claims/:dispatch/heartbeat` — coarse group-level liveness
    between claim and completion, on the order of tens of seconds. Case-level
    telemetry remains the progress route. Only the claim holder may heartbeat it.
+
+**Presence is an edge on the feed, never a poll.** Every poll and every
+heartbeat stamps `runners.last_seen_at`, which is far too often to publish: a
+fleet of ten idle runners would emit an event every two and a half seconds
+forever. So the feed carries only what a reader sees CHANGE, as
+`runner.status` events with `entity.runner_id` and a payload naming the runner
+and its `state`:
+
+- `registered` and `revoked` — the registry moved;
+- `online` — a runner that was absent (never seen, or silent past the window
+  below) has checked in, or has re-advertised its labels, which the payload
+  then carries;
+- `claimed` — it took a dispatch, with `dispatch_id` and `run_group_id`.
+
+A runner that simply keeps polling emits nothing, and a runner going quiet
+emits nothing either, because both are derivable: whether a runner counts as
+present is arithmetic on `last_seen_at` against
+`capabilities.runner_check_in_window_s` from `GET /api/v1/me` — the same
+silence at which the pool adapter itself stops believing in a claim, floored so
+an idle runner may miss two of its 25-second polls. Publishing that number is
+what keeps a console's presence dot and the reconciler's patience the same
+fact. A console therefore refetches the runner list when a `runner.status` (or
+a `run.status`, which is how a claim ENDS) event lands, and re-reads the clock
+in between without asking the server anything.
 
 Delivery order is oldest-first per project; v1 makes no stronger fairness
 promise. One runner executes one group at a time: holding an active claim is
@@ -1697,9 +1741,10 @@ author stories, run them, inspect evidence, make a human decision.
   sent on every web run against the ring), auth identities, and secret
   references, with the fallback base URL, provider, and raw environment JSON
   behind Advanced; a suite's own environments are listed here too, marked with the
-  suite that owns them), **Runners** (`developer`: register a self-hosted runner,
-  list what each advertises and when it last checked in, revoke), **Runs**
-  (project concurrency), **Models**
+  suite that owns them), **Runners** (`developer` **and**
+  `capabilities.pool_dispatch`: register a self-hosted runner, list what each
+  advertises, whether it is here right now and what it is executing, revoke),
+  **Runs** (project concurrency), **Models**
   (project model and finding-dedupe policy), **Team**
   (members, roles, and permanent project deletion for admins), and **Audit**.
   Secret values are never rendered. Project API tokens remain supported through
@@ -1710,10 +1755,49 @@ author stories, run them, inspect evidence, make a human decision.
   stored hashed and is unreachable afterwards, so the console cannot show it a
   second time either and says so. The credential appears in the command as an
   environment assignment, never as an argument.
-- A suite's mobile **App binary** field is optional and means a file inside the
-  suite tree (a small fixture app). Real builds exceed the suite upload caps, so
-  the copy directs the usual case to the environment instead — a path on the
-  runner that executes the suite.
+- Each runner row states whether it is **here**, as a dot and a word (never a
+  colour alone): online, running a job — linked to the run group it claimed —
+  offline with how long the silence has been, never started, revoked, or
+  expired. The section repaints on `runner.status` and `run.status` from the
+  event feed and re-reads the clock on a slow local interval that makes no
+  request, so a laptop that closed its lid goes quiet on the page without
+  anything having reported it. Nothing on this surface polls.
+- **Test targets** carries a ring's device as first-class fields — platform,
+  the app-binary path on the runner's own disk, and the Appium server — folded
+  away until a ring has one, so a mobile ring never requires hand-written JSON.
+  The named fields and the raw config document are two views of ONE document
+  (the suite-defaults discipline applied to JSON): the fields write into it, it
+  is what saves, and a key no field knows about survives verbatim. The same
+  section uploads, replaces and clears the environment's **app artifact**,
+  stating the deployment's cap and the accepted extensions before the upload
+  and rendering the server's `413` verbatim after it.
+- **A suite is created with an identity only** — a name and a driver. Where its
+  app runs is asked once the suite exists, on its own empty page, by a
+  skippable driver-aware card: pick a ring the project already has, or create
+  one inline (suite-owned by default, with a promote-to-project toggle; names
+  are unique per project across both scopes, and a collision is surfaced in the
+  form naming what holds it). `web` and `api` accept a bare URL, which lands in
+  the suite's own `playtest.yaml` — the top-level `app.base_url` for the
+  `default` ring, `app.envs.<name>.base_url` for any other. `mobile` asks which
+  of the three binary sources applies and writes each to its owner: a
+  runner-local path and the device fields to the environment, an upload to the
+  environment's app artifact, a fixture path to the suite's own `app.app`.
+  Skipping is safe by construction — the launch dialog states the resolved
+  target and its source, and a launch with nothing to install is refused.
+- The launch dialog states **placement** beside the target: which labels this
+  run needs and whether the launch or the environment chose them, and — from
+  the runner list it already holds, never a new poll — whether anything
+  advertising them is checked in, warning in the words the unclaimed-timeout
+  failure would have used. For a mobile launch it also states the resolved
+  binary and which of the three sources supplied it, blocks a launch that
+  resolves none, and warns on a suite-relative path.
+- A run that never ran because nothing claimed it is explained as **placement,
+  not the app**: the four pool failures (no runners registered, none
+  advertising the labels, none polling, the claim holder went silent) each get
+  their remedy and a link to Settings → Runners, instead of a sentence about
+  the app under test. A run's provenance line states the runner that claimed it
+  and the isolation that runner reported, so a reviewer can see what produced
+  the evidence.
 - Every page's `nav:` value resolves to exactly one rail item through
   `railFor` (`packages/platform/web/src/lib/nav.ts`). Surfaces that live under a rail
   item say so: the suite page, story editor, suite settings, Versions and run
@@ -1812,11 +1896,13 @@ author stories, run them, inspect evidence, make a human decision.
   until a name is typed); with no catalog the field degrades to plain text.
   The launch dialog names the resolved model per role, and whose choice it was,
   under the mode control that decides how hard those models will work.
-- `app.base_url` is a suite-level setting and the New suite dialog collects it
-  (or, for the mobile driver, the app binary), because core resolves every case
-  against the suite's defaults: until one exists no story in the suite can be
-  saved or run. A suite that lacks one says so on the suite page and in the
-  story editor's checks, with a link to Suite settings.
+- `app.base_url` is a suite-level setting, and core resolves every case against
+  the suite's defaults: until one exists no story in the suite can be saved or
+  run. It is collected by the empty suite's target card rather than by the New
+  suite dialog, because where an app runs is a ring's question and the caps a
+  suite tree lives under cannot hold a real mobile build. A suite that still
+  lacks one after that says so on the suite page and in the story editor's
+  checks, with a link to Suite settings.
 - Machine identifiers are derived, not requested. Creating a project or a suite
   asks only for a name; the key/slug is slugified from it, made unique by a
   numeric suffix on 409, and is immutable thereafter. A project's key is shown
@@ -1950,10 +2036,19 @@ reports no wall clock, and that a run holding a failure never reads as a plain
 "done". `tests/unit/web-statusbar.test.ts` does the same for the
 status bar's vocabulary — including the rule that every unhealthy state (a
 silent reconciler, a queue at its cap) is legible as words and not only as a
-colour. `tests/web-runners.test.ts` pins the runner surface's two load-bearing
+colour. `tests/web-runners.test.ts` pins the runner surface's load-bearing
 properties: the exact start command (credential in the environment, never in an
-argument) and the one-time reveal. Treat any claim of verified accessibility as unmade until
-such a harness exists.
+argument), the one-time reveal, presence derived from the last check-in against
+the server's published window rather than asked for, the claim board's subset
+matching, the no-matching-runner launch warning in the words the failure would
+have used, and which placement failures earn the runner remedy.
+`tests/web-target-setup.test.ts` pins where an app runs: that the environment
+form's fields and its raw document are one document, that the artifact cap and
+accepted extensions are stated before an upload, that a new suite commits
+identity only, and that each answer on the empty suite's target card writes to
+whichever owner it belongs to — including the name collisions the form must
+surface. Treat any claim of verified accessibility as unmade until such a
+harness exists.
 
 `tools/ux-lab` is the manual counterpart: it boots the control plane against a
 throwaway data root, seeds it through the public API and the real runner

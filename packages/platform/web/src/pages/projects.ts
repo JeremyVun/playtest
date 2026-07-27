@@ -10,7 +10,7 @@ import { state, loadProjects, hasRole } from "../lib/state.js";
 import { toast, toastError, emptyState, formModal, statusChip, sparkline, formField } from "../lib/ui.js";
 import { ago } from "../lib/labels.js";
 import { findingStateLabel } from "../lib/finding-buckets.js";
-import { DRIVERS, driverLabel, initialDefaultsYaml, baseUrlProblem } from "../lib/defaults-form.js";
+import { DRIVERS, driverLabel, initialDefaultsYaml } from "../lib/defaults-form.js";
 
 export async function projectsList() {
   const main = renderFrame({});
@@ -272,7 +272,7 @@ function firstRunChecklist(projectKey: WebDynamic, project: WebDynamic, suites: 
     {
       done: suites.length > 0,
       title: "Create a suite",
-      why: "A set of user-journey stories for one app. Creating it asks where that app runs.",
+      why: "A set of user-journey stories for one app. It asks where that app runs once it exists.",
       action: canEdit ? h("button.btn.btn-sm", { onclick: () => newSuiteModal(projectKey) }, "New suite") : null,
     },
     {
@@ -426,42 +426,33 @@ function lastRunCell(projectKey: WebDynamic, s: WebDynamic) {
 }
 
 /**
- * New suite: a name and the app the suite tests.
+ * New suite: identity only — what these stories are called, and what they drive.
  *
- * The URL is asked for HERE because a suite without one is not merely
- * incomplete — core cannot resolve any case in it, so the first story fails to
- * save with a config error about a file the web app never showed you. Creating
- * the suite commits its playtest.yaml in the same gesture; it stays editable in
- * Suite settings, and an environment picked at launch can still override it.
+ * Where the app runs is deliberately NOT here. The platform's own model says a
+ * deployment ring answers that, and a ring is a thing with credentials, a
+ * runner pool and a discovery permission — none of which belong in a dialog
+ * about naming a suite. Worse, the field this dialog used to carry ("App
+ * binary") promised something hosted cannot hold: a real `.apk` is many times
+ * the suite upload cap. So the target question moves one step later, to the
+ * empty suite's own page, where it can be asked in the words of the driver
+ * chosen here and answered with a ring — and where it is skippable, because the
+ * launch dialog states the resolved target and the launch itself refuses a run
+ * with no app to point at.
  */
 export function newSuiteModal(projectKey: WebDynamic) {
   const close = formModal("New suite", () => {
     const name = h("input", { type: "text", placeholder: "Checkout journeys" });
     const where = urlPreview(name, "checkout-journeys", (k: WebDynamic) => `/p/${projectKey}/suites/${k}`);
-    const baseUrl = h("input", { type: "text", placeholder: "https://staging.example.com" });
-    const appBinary = h("input", { type: "text", placeholder: "/Users/you/builds/app.apk" });
     const driver = h("select", { "aria-label": "Driver" },
       ...DRIVERS.map((d: WebDynamic) => h("option", { value: d }, driverLabel(d))));
-    const targetSlot = h("div");
     const err = h("div", { style: "font-size:var(--fs-sm)" });
     const submitBtn = h("button.btn.primary", { type: "submit" }, "Create");
 
-    const paintTarget = () => {
-      mount(targetSlot, driver.value === "mobile"
-        // Optional on purpose: a real .apk is far past the upload caps, so the
-        // usual answer is a path on the machine that runs the suite, set on the
-        // environment. Only a small fixture app belongs in the suite tree.
-        ? field("App binary", appBinary,
-            "Optional. The .app/.ipa/.apk to install — an absolute path on the runner that executes this suite, or a path inside the suite for a small fixture app. Leave blank to provide it from the environment.")
-        : field("Base URL", baseUrl, "Where these stories run by default. An environment picked at launch can override it."));
-    };
-    driver.addEventListener("change", paintTarget);
-    paintTarget();
-
     return h("form", { onsubmit: submit },
       field("Name", name, where),
-      field("Driver", driver),
-      targetSlot,
+      field("Driver", driver, "What these stories drive. It can be changed later on Suite settings."),
+      h("p.faint", { style: "font-size:11.5px;margin:-4px 0 12px" },
+        "Where the app runs comes next, on the suite itself — and can wait until you have a story to run."),
       err,
       h("div.modal-actions", {},
         h("button.btn.ghost", { type: "button", onclick: () => close() }, "Cancel"),
@@ -470,29 +461,29 @@ export function newSuiteModal(projectKey: WebDynamic) {
     );
     async function submit(e: WebDynamic) {
       e.preventDefault();
-      const isMobile = driver.value === "mobile";
-      // A mobile suite may legitimately leave the binary to its environment, so
-      // the field no longer blocks creation — the launch path is what refuses a
-      // run with no resolvable app.
-      const problem = isMobile ? null : baseUrlProblem(baseUrl.value);
-      if (problem) {
-        mount(err, h("span.status.fail", {}, h("span.glyph", {}, "✗"), problem));
-        return (isMobile ? appBinary : baseUrl).focus();
+      if (!name.value.trim()) {
+        mount(err, h("span.status.fail", {}, h("span.glyph", {}, "✗"), "Name this suite — it is how it reads everywhere else."));
+        return name.focus();
       }
       clear(err);
       submitBtn.disabled = true;
       try {
         const s = await createUnique(slugify(name.value) || "suite",
           (slug: WebDynamic) => api.post(`/projects/${projectKey}/suites`, { slug, name: name.value.trim() }));
-        // The suite exists either way; a failed defaults commit must not read as
-        // a failed create, so it lands the person on Settings with the reason.
-        const content = initialDefaultsYaml({ driver: driver.value, baseUrl: baseUrl.value, appBinary: appBinary.value });
-        try {
-          await api.put(`/suites/${s.id}/files/playtest.yaml`, { content, note: "suite created" });
-        } catch (commitErr: WebDynamic) {
-          close();
-          toastError(commitErr);
-          return navigate(`/p/${projectKey}/suites/${s.slug}/settings`);
+        // Only a non-default driver is worth committing here; a web suite with
+        // nothing configured yet is better off with NO defaults file than with
+        // an empty one, which is exactly what "not set up yet" means to core.
+        const content = initialDefaultsYaml({ driver: driver.value });
+        if (content) {
+          // The suite exists either way; a failed defaults commit must not read
+          // as a failed create, so it lands the person on Settings with the reason.
+          try {
+            await api.put(`/suites/${s.id}/files/playtest.yaml`, { content, note: "suite created" });
+          } catch (commitErr: WebDynamic) {
+            close();
+            toastError(commitErr);
+            return navigate(`/p/${projectKey}/suites/${s.slug}/settings`);
+          }
         }
         close();
         toast("Suite created", s.name, "ok");

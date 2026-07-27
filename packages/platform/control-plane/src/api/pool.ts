@@ -30,11 +30,12 @@ import {
   labelsMatch,
 } from "../auth/runner-credentials.ts";
 import { verifyGithubOidc } from "../auth/github-oidc.ts";
-import { runnerView as registryRunnerView } from "./runners.ts";
+import { runnerView as registryRunnerView, emitRunnerStatus } from "./runners.ts";
 import { ulid } from "../ulid.ts";
 import { randomBytes } from "node:crypto";
 import { holdUntil } from "../events/hold.ts";
 import { emitPlatformEvent } from "../events/outbox.ts";
+import { checkInWindowMs } from "../dispatch/pool.ts";
 
 /** Hold window cap, the same one the browser feed uses. */
 const MAX_WAIT_S = 25;
@@ -174,10 +175,7 @@ export async function registerViaOidc(ctx: HostedDynamic) {
 export async function pollClaims(ctx: HostedDynamic) {
   const runner = await requireRunnerCredential(ctx);
   const labels = advertisedLabels(ctx, runner);
-  await ctx.db.query(
-    `UPDATE runners SET last_seen_at = now(), labels = $2 WHERE id = $1`,
-    [runner.id, labels],
-  );
+  await checkIn(ctx, runner, labels);
 
   // One runner executes one group at a time (v1). A runner that already holds a
   // claim is told which one instead of being offered more work — that is also
@@ -215,6 +213,37 @@ export async function pollClaims(ctx: HostedDynamic) {
   if (!rows.length && wait > 0) rows = await holdUntil(ctx, runner.project_id, wait, load);
   const offer = rows[0];
   return { runner: runnerView(runner, labels), claim: offer ? offerView(offer) : null, current: null };
+}
+
+/**
+ * Record a check-in, and tell the project when one CHANGES what a reader sees.
+ *
+ * Every poll and every heartbeat lands here, which is far too often to put on
+ * the event feed: a fleet of ten idle runners would emit an event every two and
+ * a half seconds forever, and a console watching the feed would repaint for
+ * nothing each time. What a reader actually sees move is the EDGE — a runner
+ * that was absent (never seen, or silent past the window the platform itself
+ * stops believing in) is now here. That is rare, so it rides the feed; staying
+ * online is silence, and going offline is arithmetic on `last_seen_at` the
+ * console can do without asking. Re-advertised labels are the same kind of
+ * edge, so they emit too.
+ *
+ * @returns whether this check-in was the runner coming back.
+ */
+async function checkIn(ctx: HostedDynamic, runner: HostedDynamic, labels: string[]) {
+  const windowMs = checkInWindowMs(ctx.config.dispatch.pool);
+  const last = runner.last_seen_at ? new Date(runner.last_seen_at).getTime() : 0;
+  const returning = !(Date.now() - last < windowMs);
+  const relabelled = JSON.stringify(runner.labels || []) !== JSON.stringify(labels);
+  if (!returning && !relabelled) {
+    await ctx.db.query(`UPDATE runners SET last_seen_at = now() WHERE id = $1`, [runner.id]);
+    return false;
+  }
+  await ctx.db.withTx(async (tx: HostedDynamic) => {
+    await tx.query(`UPDATE runners SET last_seen_at = now(), labels = $2 WHERE id = $1`, [runner.id, labels]);
+    await emitRunnerStatus(tx, runner, { state: "online", labels });
+  });
+  return returning;
 }
 
 /** The dispatch this runner is already executing, if any. */
@@ -296,6 +325,14 @@ export async function claimDispatch(ctx: HostedDynamic) {
         payload: { status: "provisioning", dispatch_id: row.id, workflow_run_url: null, runner: { id: runner.id, name: runner.name } },
       });
     }
+    // The fleet moved: this runner is busy now, and the console's Runners
+    // section links the claim to the run it is executing.
+    await emitRunnerStatus(tx, runner, {
+      state: "claimed",
+      dispatch_id: row.id,
+      kind: row.kind,
+      run_group_id: row.kind === "group" ? row.ref_id : null,
+    });
     await audit(tx, {
       actor: { system: "runner" },
       action: "runner.claimed",

@@ -14,6 +14,7 @@ import { didNotRunLabel } from "../lib/vocab.js";
 import { findingStateLabel, findingStateTone } from "../lib/finding-buckets.js";
 import { runName } from "../lib/run-stats.js";
 import { subscribeFeed } from "../lib/feed.js";
+import { poolPlacementCause } from "../lib/runners.js";
 import { launchModal } from "./runs.js";
 
 let live: WebDynamic = null;
@@ -195,6 +196,17 @@ export async function runDetailPage(projectKey: WebDynamic, groupId: WebDynamic,
       r.duration_ms != null ? h("span.m.num", {}, fmtMs(r.duration_ms)) : null,
       limits?.max_steps != null ? h("span.m.num", {}, `limit ${limits.max_steps} steps`) : null,
       limits?.timeout_ms != null ? h("span.m.num", {}, `timeout ${fmtMs(limits.timeout_ms)}`) : null,
+      // What produced this evidence. A self-hosted fleet makes that a real
+      // question — a persistent shared runner without per-case containers is
+      // weaker evidence than a fresh one, and the contract's rule is that this
+      // is stated, not laundered. Absent for adapters that place work without a
+      // registered runner, which is most of them.
+      group.placement?.runner?.name
+        ? h("span.m", { title: placementTitle(group.placement) }, "ran on ", h("span.mono", {}, group.placement.runner.name))
+        : null,
+      group.placement?.isolation
+        ? h("span.m", { title: ISOLATION_GLOSS[group.placement.isolation] || null }, `${group.placement.isolation} isolation`)
+        : null,
       h("span.m", {}, artifactLine(r, groupRun)),
       retentionLine(r) ? h("span.m", {}, retentionLine(r)) : null,
       r.totals?.cost_usd != null ? h("span.m.num", {}, `cost ${fmtCost(Number(r.totals.cost_usd))}`) : null,
@@ -439,7 +451,7 @@ export async function runDetailPage(projectKey: WebDynamic, groupId: WebDynamic,
     return h("div.rd-didnt-run", {},
       h("div.why", {},
         // The chip above already says "didn't run" — this line says WHY.
-        infraCause(r, envUrl),
+        infraCause(r, envUrl, projectKey),
         r.error
           ? h("details.advanced", { style: "margin-top:6px" },
               h("summary", {}, "what the runner reported"),
@@ -575,6 +587,19 @@ export async function runDetailPage(projectKey: WebDynamic, groupId: WebDynamic,
 /** A run that ended without a verdict — never a product failure. */
 const neverRan = (r: WebDynamic) => ["infra", "canceled", "lost"].includes(r.status);
 
+/** What each isolation mode means for how much this evidence is worth. */
+const ISOLATION_GLOSS: WebDynamic = {
+  process: "a process on the runner's own machine — fine for a developer laptop or a fresh CI job, weaker on a persistent shared runner",
+  container: "a fresh container per case",
+};
+
+/** Which labels this attempt was placed on, and whose decision that was. */
+function placementTitle(placement: WebDynamic) {
+  const labels = (placement.labels || []).join(", ");
+  if (!labels) return "claimed from the board by this runner — the environment asked for no particular labels";
+  return `claimed from the board by this runner, placed on ${labels} (${placement.labels_source === "launch" ? "pinned by the launch" : "the environment's labels"})`;
+}
+
 /**
  * Interleave provenance cells with dot separators. The dots are drawn in the
  * hairline colour, so they read as rules between facts rather than as more
@@ -600,10 +625,40 @@ const stateChip = (s: WebDynamic) =>
  * The likely cause of an infra failure, in words a person can act on. The raw
  * errno stays available behind the disclosure; this line says what to check.
  */
-function infraCause(r: WebDynamic, envUrl: WebDynamic) {
+function infraCause(r: WebDynamic, envUrl: WebDynamic, projectKey: WebDynamic = null) {
   const err = String(r.error || "");
   const target = envUrl ? h("span.mono", {}, envUrl) : "the app under test";
   if (r.status === "canceled") return h("span", {}, "Someone stopped this run before it finished.");
+  // Placement, not the app: nothing ever picked this story up, so nothing here
+  // says anything about the software. The remedy is the runner, and it is one
+  // click away rather than a sentence about a settings page.
+  const pool = poolPlacementCause(err);
+  if (pool) {
+    const setup = projectKey
+      ? link(`/p/${projectKey}/settings/runners`, "Settings → Runners")
+      : "Settings → Runners";
+    if (pool.kind === "no-runners") {
+      return h("span", {},
+        "Runs in this deployment execute on self-hosted runners, and this project has none registered — so nothing could take this one. Register one under ",
+        setup, " and start it on the machine that can reach the target.");
+    }
+    if (pool.kind === "unmatched") {
+      return h("span", {},
+        `Nothing was advertising ${pool.labels.length === 1 ? "the label" : "the labels"} `,
+        h("span.mono", {}, pool.labels.join(", ")),
+        " that this environment asks for, so this run waited on the board and then gave up. Either give a running runner ",
+        pool.labels.length === 1 ? "that label" : "those labels", " under ", setup,
+        ", or change the environment's runner labels under Settings → Test targets.");
+    }
+    if (pool.kind === "idle") {
+      return h("span", {},
+        "A runner with the right labels is registered, but it was not checking in — the process is probably not running. Start it again with its command from ",
+        setup, "; the run can be retried straight after.");
+    }
+    return h("span", {},
+      "The runner took this run and then stopped checking in, so Playtest gave up on it. Check that machine is awake and its runner process is alive (",
+      setup, "), then retry.");
+  }
   if (r.status === "lost") return h("span", {}, "The runner stopped reporting, so Playtest can't say what happened. Running it again is safe.");
   if (/ECONNREFUSED|ERR_CONNECTION_REFUSED/i.test(err)) {
     return h("span", {}, "Playtest couldn't reach ", target, " — nothing was listening. Check the environment's base URL under Settings, and that the app is up.");

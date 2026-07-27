@@ -10,6 +10,7 @@ import { created, noContent, readJsonBody } from "../http.ts";
 import { requireAuth, guard, getProjectByKey, stringField } from "./util.ts";
 import { newRunnerCredential, normalizeLabels } from "../auth/runner-credentials.ts";
 import { conflict, notFound } from "../errors.ts";
+import { emitPlatformEvent } from "../events/outbox.ts";
 
 /**
  * GET /projects/:p/runners [viewer] — the fleet: what each runner advertises,
@@ -72,6 +73,9 @@ export async function createRunner(ctx: HostedDynamic) {
       projectId: project.id,
       detail: { name, labels },
     });
+    // Someone else's console is looking at this list too; the feed is how it
+    // learns, without a timer (docs/contracts/hosted.md, "Runner pool").
+    await emitRunnerStatus(tx, rows[0], { state: "registered", labels });
     return rows[0];
   });
 
@@ -105,8 +109,26 @@ export async function deleteRunner(ctx: HostedDynamic) {
       projectId: project.id,
       detail: { name: runner.name, labels: runner.labels },
     });
+    await emitRunnerStatus(tx, runner, { state: "revoked" });
   });
   return noContent();
+}
+
+/**
+ * `runner.status` — the fleet moved. Emitted when a runner joins, comes back
+ * from silence, re-advertises its labels, takes a claim, or is revoked; never
+ * on the steady state, which is what keeps this an edge signal rather than a
+ * poll with extra steps. A console repaints its Runners section from it and
+ * reads presence off `last_seen_at` in between (docs/contracts/hosted.md,
+ * "Runner pool").
+ */
+export async function emitRunnerStatus(q: HostedDynamic, runner: HostedDynamic, payload: HostedDynamic = {}) {
+  await emitPlatformEvent(q, {
+    projectId: runner.project_id,
+    type: "runner.status",
+    entity: { runner_id: runner.id },
+    payload: { runner_id: runner.id, name: runner.name, ...payload },
+  });
 }
 
 const runnerView = (r: HostedDynamic) => ({

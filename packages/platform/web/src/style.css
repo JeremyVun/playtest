@@ -1193,21 +1193,31 @@ a.quiet-link:hover .tile, a.quiet-link:hover .att-row { border-color: var(--acce
 
 /* The resolved target hangs off the environment select like a hint, because
    that is exactly what it is: the answer to what "production" means here. */
-.launch-target {
+.launch-target,
+.launch-placement {
   display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px;
   align-items: baseline;
   margin-top: -8px; padding: 8px 11px; border-radius: 7px;
   background: var(--bg2); font-size: var(--fs-sm);
 }
-.launch-target:empty { display: none; }
-.launch-target.warn { background: var(--warn-soft); color: var(--warn); }
-.launch-target.warn .preview-key { color: var(--warn); }
+/* Placement is the other half of "where does this happen", so it sits directly
+   under the target it belongs to and shares its anatomy. */
+.launch-placement { margin-top: 6px; }
+.launch-placement > span { display: contents; }
+.launch-target:empty,
+.launch-placement:empty { display: none; }
+.launch-target.warn,
+.launch-placement.warn { background: var(--warn-soft); color: var(--warn); }
+.launch-target.warn .preview-key,
+.launch-placement.warn .preview-key { color: var(--warn); }
 .launch-target-main { min-width: 0; overflow-wrap: anywhere; }
 .launch-target-url { font-family: var(--mono); font-size: var(--fs-sm); color: var(--ink); }
-.launch-target.warn .launch-target-url { color: var(--warn); }
+.launch-target.warn .launch-target-url,
+.launch-placement.warn .launch-target-url { color: var(--warn); }
 .launch-source { margin-left: 8px; color: var(--dim); font-size: var(--fs-xs); white-space: nowrap; }
 .launch-source::before { content: "· "; }
-.launch-target.warn .launch-source { color: var(--warn); }
+.launch-target.warn .launch-source,
+.launch-placement.warn .launch-source { color: var(--warn); }
 
 /* Mode is two options with different bills. Both are on the surface with what
    they do; the chosen one spells out what that costs you. */
@@ -1270,3 +1280,24 @@ pre.code { background: var(--bg2); border: 1px solid var(--line); border-radius:
   .ev-hero { grid-template-columns: 1fr; }
   .ev-hero .shot { border-right: none; border-bottom: 1px solid var(--line); }
 }
+
+/* ---------- R4: self-hosted runners in the console ---------- */
+/* Presence is a dot AND a word: the dot is the scan target on a list of
+   machines, the word is what anyone not fluent in the palette actually reads. */
+.runner-presence { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-xs); color: var(--dim); }
+.runner-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+.runner-presence.on { color: var(--pass); }
+.runner-presence.busy { color: var(--accent); }
+.runner-presence.off { color: var(--faint); }
+/* A working runner's dot breathes, at the same rate a live run's meter does. */
+.runner-presence.busy .runner-dot { animation: live-pulse 1.8s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .runner-presence.busy .runner-dot { animation: none; } }
+
+/* The empty suite's "where does this app run?" card. Three binary sources need
+   three columns; the launch dialog's two-column mode grid is the same control. */
+.target-card-title { margin: 0; font-size: var(--fs-md); font-weight: var(--fw-semi); color: var(--ink); }
+.target-card .launch-modes { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.target-card .field { margin-bottom: 12px; }
+.target-card .preview-warn { margin-bottom: 10px; }
+.target-card .preview-warn:empty { display: none; }
+@media (max-width: 760px) { .target-card .launch-modes { grid-template-columns: 1fr; } }

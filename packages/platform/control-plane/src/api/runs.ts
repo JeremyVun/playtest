@@ -276,11 +276,46 @@ async function groupRunRows(ctx: HostedDynamic, ids: HostedDynamic) {
   return out;
 }
 
+/**
+ * GET /run-groups/:id[?wait=true] [viewer] — the run group.
+ *
+ * `wait` is the automation long-poll (`hosted.md`, § Run groups and runs): a CI
+ * job launches, then asks for the verdict and is held until there is one,
+ * instead of asking again every few seconds. It is the same held read the event
+ * feed and the claim board use — woken by the post-commit signal, re-scanned on
+ * a bounded interval, correct from the committed row alone — so a group that
+ * settles between two scans is answered at once and one that never settles is
+ * answered at the deadline with whatever it is doing. Callers must therefore
+ * still read `status`: an unsettled answer is normal, not an error.
+ */
 export async function getGroup(ctx: HostedDynamic) {
   const group = await getRunGroup(ctx, ctx.params.g);
   guard(ctx, group.project_id, "viewer");
+  const wait = waitSeconds(ctx.query.get("wait"));
+  if (wait > 0 && !SETTLED.has(group.status)) {
+    await holdUntil(ctx, group.project_id, wait, async () => {
+      const { rows } = await ctx.db.query(`SELECT status FROM run_groups WHERE id = $1`, [group.id]);
+      // A held read ends on non-empty rows, so "still running" must read as
+      // empty here — the group's own row is the truth either way.
+      return SETTLED.has(rows[0]?.status) ? rows : [];
+    });
+  }
   return await getRunGroupView(ctx, group.id);
 }
+
+/** A run group nothing more will happen to. */
+const SETTLED = new Set(["done", "canceled"]);
+
+/** The hold window a caller asked for, capped at the feed's own maximum. */
+function waitSeconds(raw: unknown): number {
+  if (raw == null || raw === "" || raw === "false" || raw === "0") return 0;
+  if (raw === "true") return MAX_WAIT_S;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.min(n, MAX_WAIT_S);
+}
+
+const MAX_WAIT_S = 25;
 
 export async function cancelGroup(ctx: HostedDynamic) {
   const principal = requireAuth(ctx);

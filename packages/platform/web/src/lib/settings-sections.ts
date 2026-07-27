@@ -13,7 +13,12 @@ export const SETTINGS_SECTIONS: WebDynamic = [
   // Runners is the other half of "where does a run happen": Test targets says
   // what a run points at, Runners says which machine executes it. Registering
   // and revoking are developer acts, like the environments they serve.
-  { id: "runners", label: "Runners", min: "developer" },
+  //
+  // `requires` is a DEPLOYMENT capability, not a role: under any placement
+  // adapter but the pool nothing here can ever be used — the claim board is not
+  // served and the runner would have nothing to claim — so the section is not
+  // offered at all rather than offered and then explained away.
+  { id: "runners", label: "Runners", min: "developer", requires: "pool_dispatch" },
   { id: "runs", label: "Runs", min: "admin" },
   { id: "models", label: "Models", min: "admin" },
   { id: "team", label: "Team", min: "admin" },
@@ -21,9 +26,13 @@ export const SETTINGS_SECTIONS: WebDynamic = [
 ];
 
 /**
- * The sections a principal may see, given a role predicate `has(minRole)`.
+ * The sections a principal may see: their role, and what this DEPLOYMENT can
+ * do (`/me` capabilities). A section naming a capability the server was never
+ * configured for is not shown — offering it would turn an operator's choice
+ * into what looks like a broken feature.
  * @param {(minRole: string) => boolean} has
+ * @param {Record<string, unknown>} capabilities
  */
-export function visibleSections(has: WebDynamic) {
-  return SETTINGS_SECTIONS.filter((s: WebDynamic) => has(s.min));
+export function visibleSections(has: WebDynamic, capabilities: WebDynamic = {}) {
+  return SETTINGS_SECTIONS.filter((s: WebDynamic) => has(s.min) && (!s.requires || capabilities[s.requires] === true));
 }

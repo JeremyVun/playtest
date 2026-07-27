@@ -46,6 +46,9 @@ import { resolveEnvTarget } from "../lib/defaults-form.js";
 import { subscribeFeed } from "../lib/feed.js";
 import { launchLimitPlaceholders } from "../lib/launch-limits.js";
 import { canRetryRun, retryableStoryCount } from "../lib/run-retry.js";
+import { placementReadiness } from "../lib/runners.js";
+import { appSourceWords, appTargetProblem } from "../lib/suite-target.js";
+import { fmtBytes } from "../lib/env-config.js";
 
 export async function runsPage(projectKey: WebDynamic, groupId: WebDynamic = null, query: WebDynamic = null) {
   const main = renderFrame({ projectKey, nav: "runs" });
@@ -1109,6 +1112,11 @@ export function launchModal(projectKey: WebDynamic, suites: WebDynamic = null, p
     // form control on a value nobody can change.
     const contextSlot = suiteFixed ? h("p.launch-context", {}) : null;
     const targetSlot = h("div.launch-target", {});
+    // Where this run would be PLACED, beside where it would point. Under pool
+    // placement a run goes to a machine somebody has to have started, and the
+    // failure mode this line exists to prevent is a run that sits on the board
+    // for ten minutes and then fails naming labels nothing served.
+    const placementSlot = h("div.launch-placement", {});
     const modelsSlot = h("p.launch-models", {});
     const warnSlot = h("div.launch-warnings", {});
     const planSlot = h("div.launch-plan", {}, h("span.dim", {}, "sizing this run…"));
@@ -1123,6 +1131,11 @@ export function launchModal(projectKey: WebDynamic, suites: WebDynamic = null, p
     let groups: WebDynamic = [];
     let envTouched = false;
     let modeValue = "auto";
+    // The fleet, for the placement line. Only on a deployment that HAS a fleet:
+    // elsewhere there is no runner to be checked in and the line would be
+    // machinery talking about itself. Read through the shared cache, so opening
+    // the dialog twice in a minute costs one request, and never polled.
+    let runners: WebDynamic = [];
     // The chosen suite's committed defaults, so the picker can say where each
     // target actually points. Cached per suite: switching back and forth is a
     // normal thing to do while deciding, and this file is small.
@@ -1143,6 +1156,7 @@ export function launchModal(projectKey: WebDynamic, suites: WebDynamic = null, p
       contextSlot,
       suiteFixed ? fld("Environment", env) : h("div.launch-where", {}, fld("Suite", suite), fld("Environment", env)),
       targetSlot,
+      placementSlot,
       h("div.field", {},
         h("div.field-label", {}, "Run mode"),
         modeGroup,
@@ -1267,12 +1281,16 @@ export function launchModal(projectKey: WebDynamic, suites: WebDynamic = null, p
       try {
         // Recent runs are how we know where this suite usually goes. Best
         // effort: without them the default falls through to the safety rules.
-        const [{ items }, recent] = await Promise.all([
+        const [{ items }, recent, fleet] = await Promise.all([
           api.cached(`/projects/${projectKey}/environments`),
           api.get(`/projects/${projectKey}/run-groups?limit=50`).catch(() => ({ items: [] })),
+          state.me?.capabilities?.pool_dispatch === true
+            ? api.cached(`/projects/${projectKey}/runners`, { ttl: 15_000 }).catch(() => ({ items: [] }))
+            : Promise.resolve({ items: [] }),
         ]);
         envs = items;
         groups = recent.items || [];
+        runners = fleet.items || [];
         paintEnvs();
         preview();
         await loadSuiteDefaults(suite.value);
@@ -1421,6 +1439,47 @@ export function launchModal(projectKey: WebDynamic, suites: WebDynamic = null, p
           : h("span.launch-target-main", {}, "No app URL for this environment — set one in Suite settings."),
       );
 
+      // A mobile launch installs a file, and which of the three sources supplies
+      // it is exactly as load-bearing as which URL a web run opens — so it is
+      // said here, in the same place, with the same honesty about who won.
+      const appTarget = t.app || null;
+      const suiteDriver = defaultsBySuite.get(suite.value)?.driver || "web";
+      const appProblem = appTargetProblem(appTarget, suiteDriver);
+      if (appTarget && suiteDriver === "mobile") {
+        targetSlot.append(
+          h("span.preview-key", {}, "App"),
+          h("span.launch-target-main", {},
+            h("span.launch-target-url", {}, appTarget.resolved || "nothing resolves"),
+            h("span.launch-source", {}, appSourceWords(appTarget.source)),
+            appTarget.artifact?.size ? h("span.launch-source", {}, fmtBytes(appTarget.artifact.size)) : null),
+        );
+      }
+
+      // Placement, said out loud before anyone spends money: which labels this
+      // run needs, whose decision that was, and whether anything advertising
+      // them is actually checked in. All of it from what this dialog already
+      // holds — the preview and the runner list — never a new poll.
+      const placement = p.placement || null;
+      const readiness = placement && state.me?.capabilities?.pool_dispatch === true
+        ? placementReadiness({
+            labels: placement.runner_labels || [],
+            runners,
+            windowS: state.me?.capabilities?.runner_check_in_window_s ?? 120,
+          })
+        : null;
+      placementSlot.className = `launch-placement${readiness && readiness.state !== "ready" ? " warn" : ""}`;
+      mount(placementSlot, readiness
+        ? h("span", {},
+            h("span.preview-key", {}, "Runs on"),
+            h("span.launch-target-main", {},
+              h("span.launch-target-url", {},
+                placement.runner_labels?.length
+                  ? `a runner advertising ${placement.runner_labels.join(", ")}`
+                  : "any runner in this project"),
+              h("span.launch-source", {},
+                placement.labels_source === "launch" ? "pinned by this launch" : "the environment's labels")))
+        : null);
+
       // Which models the launch will use, and whose choice each one was —
       // server-resolved (suite beats project beats engine default).
       mount(modelsSlot, p.models
@@ -1447,7 +1506,23 @@ export function launchModal(projectKey: WebDynamic, suites: WebDynamic = null, p
         h("div.launch-plan-cost", {}, est != null ? `est. ${fmtCost(est)}${coverage}` : "no cost history yet"),
       );
 
+      // A run nothing can claim is a ten-minute wait ending in a failure, and
+      // everything needed to say so is already on this screen. It is a warning,
+      // not a block: a runner started thirty seconds from now still takes it.
+      const placementWarn = readiness && readiness.state !== "ready" && readiness.state !== "busy"
+        ? h("div.preview-warn", {},
+            readiness.message, " ",
+            hasRole(state.projectByKey.get(projectKey)?.id, "developer")
+              ? link(`/p/${projectKey}/settings/runners`, "Set up a runner")
+              : null)
+        : null;
+      // A mobile launch with nothing to install cannot pass, so it stops here
+      // rather than failing on a machine the person who launched cannot see.
+      if (appProblem?.severity === "blocking") launchBtn.disabled = true;
+
       mount(warnSlot,
+        placementWarn,
+        appProblem ? h("div.preview-warn", {}, appProblem.message) : null,
         // Discovery is blocked on a non-discovery environment, but a plain
         // journey run against production is allowed — and is worth saying out
         // loud, because these runs really click the buttons they find.

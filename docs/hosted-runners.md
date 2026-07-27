@@ -34,6 +34,12 @@ Registering mints a credential and shows it **once**, with the exact command to
 start the runner. Playtest stores only a hash of the credential and cannot show
 it again; if you lose it, register the runner again and revoke the old one.
 
+The section is only there on a deployment that runs `PLAYTEST_DISPATCH=pool` —
+elsewhere there is no claim board for a runner to poll. Once a runner exists,
+its row says whether it is here right now (online, running a job with a link to
+that run, offline with how long the silence has been, or never started), kept
+current by the event feed rather than by a page that reloads itself.
+
 ## 2. Start it on that machine
 
 Copy the command from the dialog and paste it into a terminal in your Playtest
@@ -98,7 +104,13 @@ the project.
 ## 4. Mobile: an app binary on your own disk
 
 Build the app as you normally would and note the absolute path of the
-`.app`/`.apk`. In the environment's **Advanced → Config JSON**:
+`.app`/`.apk`. In the console it is three fields: **Settings → Test targets →
+Edit → Mobile device** takes the platform, that path, and the Appium server. A
+brand-new suite is asked the same question on its own page — "where does this
+app run?" offers the three sources and can create the environment for you.
+
+The fields write this, which the **Advanced → Config JSON** disclosure shows
+and still accepts directly (they are two views of one document):
 
 ```json
 {
@@ -116,15 +128,17 @@ uploaded, and no size cap applies. Start Appium on that machine, then launch the
 suite from the console against this environment: the run executes on your own
 simulator and the trajectory lands in the console like any hosted run.
 
-The suite's own **App binary** field is optional and means something narrower: a
-small fixture app committed inside the suite. Real builds are far past the
-suite upload caps, which is why the environment is the usual answer.
+The suite's own app path (Suite settings → **App binary**) means something
+narrower: a small fixture app committed inside the suite. Real builds are far
+past the suite upload caps, which is why the environment is the usual answer.
 
 ### Or upload the build to the environment
 
 A runner that is not the machine that produced the build — a cloud runner, a
 device farm, a colleague's laptop — gets the binary from the environment
-instead:
+instead. **Settings → Test targets → Edit → Mobile device → Upload a build**
+does it from the console, states the deployment's size cap before you pick a
+file, and replaces or removes what is stored. The same thing over the API:
 
 ```sh
 # an iOS .app is a directory, so zip it first (zip -y keeps symlinks and modes)

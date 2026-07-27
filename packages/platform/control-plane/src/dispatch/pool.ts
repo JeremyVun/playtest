@@ -22,6 +22,21 @@ import type { ControlPlaneConfig } from "../config.ts";
 import type { Db, DbRow } from "../db.ts";
 import type { DynamicJson, Logger } from "../types.ts";
 
+/**
+ * How long since a runner's last check-in still counts as present.
+ *
+ * A runner checks in two ways and never more slowly than these: an idle one
+ * long-polls the board (25 s), and a busy one heartbeats its claim (a quarter
+ * of the heartbeat timeout). The window is the heartbeat timeout — the same
+ * silence at which this adapter itself stops believing in a claim — floored so
+ * that an idle runner may miss two polls to a slow network before a console
+ * calls it offline. One number, derived once, so the server and the console
+ * cannot disagree about what "online" means.
+ */
+export function checkInWindowMs(pool: { heartbeatTimeoutMs: number }): number {
+  return Math.max(3 * 25_000, pool.heartbeatTimeoutMs);
+}
+
 /** A pool dispatch's `workflow_run_id`: the board entry, not a workflow. */
 export const POOL_RUN_PREFIX = "pool:";
 export const poolRunId = (dispatchId: string) => `${POOL_RUN_PREFIX}${dispatchId}`;

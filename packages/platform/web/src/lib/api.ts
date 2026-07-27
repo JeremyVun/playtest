@@ -72,6 +72,9 @@ export const api: WebDynamic = {
   patch: (p: WebDynamic, body: WebDynamic) => request("PATCH", p, { body }),
   del: (p: WebDynamic, body: WebDynamic) => request("DELETE", p, { body }),
   postRaw: (p: WebDynamic, raw: WebDynamic, contentType: WebDynamic) => request("POST", p, { raw, headers: { "content-type": contentType } }),
+  // The same for a PUT — an environment's app artifact is raw bytes with its
+  // file name in the query, never a JSON envelope with a build inside it.
+  putRaw: (p: WebDynamic, raw: WebDynamic, contentType: WebDynamic) => request("PUT", p, { raw, headers: { "content-type": contentType } }),
   // A binary GET (tar export) — returns a Blob for download.
   async blob(p: WebDynamic) {
     const res = await fetch(`/api/v1${p}`);

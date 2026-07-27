@@ -167,6 +167,24 @@ export class MobileDriver implements Driver {
   // digest is current. Saves two full source dumps per step — the heaviest Appium
   // round-trip. null before the first read (effectToken then falls back to a fetch).
   #lastSourceDigest: string | null = null;
+  // The page source #settle() finished on, kept so the captureSnapshot that
+  // immediately follows does not refetch and reparse the very screen settle just
+  // proved stable (docs/backlog/perf/BUILD_PLAN.md, T1.1). `seq` is the device
+  // operation counter (#seq) at the moment settle returned: the entry is
+  // consumable only while it still matches, so ANY device command in between
+  // (tap, type, swipe, back, alert action) invalidates it. Consumed at most once
+  // — cleared on read — because a second capture of the same step is a fresh
+  // question about a screen that may have moved on its own since.
+  // Never covers alert state: a system alert is drawn by another process and is
+  // absent from page source, so captureSnapshot always probes for one live.
+  #settleSource: { seq: number; raw: string; parsed: MobileSnapshot } | null = null;
+  // Monotonic count of device-MUTATING operations this driver has issued. Every
+  // one of them runs through #run() (execute/executeLocator are the only callers
+  // and both funnel there), which bumps this before performing; a future direct
+  // device command must bump it too or #settleSource could go stale unnoticed.
+  // Read-only traffic (getPageSource, screenshots, alert probes, finalPageCheck,
+  // bbox reads) deliberately does not bump: it cannot change the screen.
+  #seq = 0;
   // Device window size in POINTS ({ w, h }), read once at start() from Appium's
   // getWindowSize. Two uses: (1) bounds the visibility rescue to on-screen
   // controls (parsePageSource screen — a scrolled-out list row has a real but
@@ -230,7 +248,10 @@ export class MobileDriver implements Driver {
       const w = Number(size?.width), h = Number(size?.height);
       if (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) this.#screenSize = { w, h };
     } catch {}
-    const { ms: settle_ms, title } = await this.#settle();
+    // Seed the first settle with the source just read: the launch probe and the
+    // first settle poll are the same question about the same screen, microseconds
+    // apart, so fetching twice only paid for one page source that is thrown away.
+    const { ms: settle_ms, title } = await this.#settle(src);
     this.#screen = title || "";
     return { ok: true, error: null, resolution: null, settle_ms, url: this.#screen, perf: null, network: { requests: [] }, har_entries: [] };
   }
@@ -287,23 +308,27 @@ export class MobileDriver implements Driver {
     // on iOS) and never appears in the page source — the actor would see only the
     // dimmed, inert screen behind it and have no affordance to answer. When one is
     // up, its buttons ARE the actor's affordances, so they replace the page-source.
+    // When settle already holds this exact screen (no device operation since), its
+    // source and parse are reused and only the alert probe and screenshot go to
+    // the device — the two things that genuinely cannot be cached.
+    const reused = this.#takeSettleSource();
     const perf = this.#perf;
     let at = perf.now();
     const [xml, alert, b64] = await Promise.all([
-      this.#client.getPageSource().then((s) => String(s), () => ""),
+      reused ? reused.raw : this.#client.getPageSource().then((s) => String(s), () => ""),
       this.#alertState(),
       this.#client.takeScreenshot().then((b) => b, () => null),
     ]);
     // One span for the concurrent fetch trio; the per-command `appium` spans
     // from timedClient break out which of the three actually cost the wait.
-    perf.span("snapshot_source", at, stepNum, { chars: xml.length, alert: Boolean(alert) });
+    perf.span("snapshot_source", at, stepNum, { chars: xml.length, alert: Boolean(alert), reused: Boolean(reused) });
     // Parse the page source once; reuse it for the snapshot (no-alert case) AND
     // for the cached digest effectToken reads. Even under an alert we cache the
     // (inert) behind-screen digest so an effectToken AFTER the alert is dismissed
     // compares against the right underlying screen without a fresh getPageSource.
     at = perf.now();
-    const parsed = this.#parse(xml);
-    perf.span("snapshot_parse", at, stepNum);
+    const parsed = reused ? reused.parsed : this.#parse(xml);
+    perf.span("snapshot_parse", at, stepNum, { reused: Boolean(reused) });
     this.#lastSourceDigest = parsed.text;
     const snap = alert ? alertSnapshot(alert) : parsed;
     this.#screen = snap.title || this.#screen;
@@ -424,6 +449,26 @@ export class MobileDriver implements Driver {
     return parsePageSource(xml, { screen: this.#screenSize });
   }
 
+  /**
+   * Publish what settle finished holding: the digest effectToken compares
+   * against, plus the source and its parse for the captureSnapshot that follows.
+   */
+  #settled(digest: string | null, raw: string | null, parsed: MobileSnapshot | null): void {
+    this.#lastSourceDigest = digest; // reused by effectToken (after) — no fresh read
+    this.#settleSource = raw !== null && parsed !== null ? { seq: this.#seq, raw, parsed } : null;
+  }
+
+  /**
+   * The settle source, if it is still the current screen. Always clears the
+   * entry: a retained source is good for exactly one capture, and a stale one
+   * (some device command ran since) is good for none.
+   */
+  #takeSettleSource(): { raw: string; parsed: MobileSnapshot } | null {
+    const held = this.#settleSource;
+    this.#settleSource = null;
+    return held && held.seq === this.#seq ? held : null;
+  }
+
   async #perform(action: StepAction, handle: ChainablePromiseElement): Promise<unknown> {
     switch (action.type) {
       case "tap":
@@ -501,6 +546,7 @@ export class MobileDriver implements Driver {
 
   /** Run one action inside the mobile settle window; always an ExecResult. */
   async #run(perform: () => unknown | Promise<unknown>, resolution: DriverResolution): Promise<DriverResult> {
+    this.#seq += 1; // the screen is about to change: any retained settle source is now stale
     let error: string | null = null;
     try {
       await perform();
@@ -532,31 +578,42 @@ export class MobileDriver implements Driver {
   // The FIRST settle (initial screen load, in start()) requires a longer quiet
   // window (initialQuietMs, capped at max_ms) so a lagging app doesn't settle on
   // a half-built screen.
-  async #settle(): Promise<{ ms: number; title: string }> {
+  async #settle(seed: string | null = null): Promise<{ ms: number; title: string }> {
     const first = this.#firstSettle;
     this.#firstSettle = false;
     const perfAt = this.#perf.now();
     try {
-      return await this.#settleLoop(first);
+      return await this.#settleLoop(first, seed);
     } finally {
       this.#perf.span("settle", perfAt, null, { first });
     }
   }
 
-  /** The settle poll itself; #settle wraps it only to time the whole wait. */
-  async #settleLoop(first: boolean): Promise<{ ms: number; title: string }> {
+  /**
+   * The settle poll itself; #settle wraps it only to time the whole wait.
+   * `seed`, when given, is a page source the caller has ALREADY read (start()'s
+   * launch probe) and stands in for the first poll's fetch.
+   */
+  async #settleLoop(first: boolean, seed: string | null): Promise<{ ms: number; title: string }> {
     const { source_quiet_ms, max_ms, initial_quiet_ms } = this.#settlePolicy;
     const sourceWin = first ? Math.min(initialQuietMs(source_quiet_ms, initial_quiet_ms), max_ms) : source_quiet_ms;
     const start = Date.now();
     let lastRaw: string | null = null; // raw page source of the previous poll (parsed for the title)
     let lastDigest: string | null = null; // the parsed [eN] digest — the churn-free quiet surface
+    let lastParsed: MobileSnapshot | null = null; // the parse behind lastDigest, retained for the next captureSnapshot
     let title = this.#screen;
     let quietSince = Date.now();
+    let pending = seed; // the caller's already-read source; stands in for the first fetch
     for (;;) {
       let raw: string = lastRaw ?? ""; // a transient getPageSource failure counts as "no change", not a reset
-      try {
-        raw = String(await this.#client.getPageSource());
-      } catch {}
+      if (pending !== null) {
+        raw = pending;
+        pending = null;
+      } else {
+        try {
+          raw = String(await this.#client.getPageSource());
+        } catch {}
+      }
       const now = Date.now();
       // Compare the PARSED [eN] digest, NOT raw XML: raw page source carries
       // volatile attributes (focus, indexes, animation state) that change every
@@ -570,16 +627,17 @@ export class MobileDriver implements Driver {
         digest = snap.text;
         title = snap.title || title;
         lastRaw = raw;
+        lastParsed = snap;
       }
       if (digest !== lastDigest) {
         lastDigest = digest;
         quietSince = now;
       } else if (now - quietSince >= sourceWin) {
-        this.#lastSourceDigest = lastDigest; // reused by effectToken (after) — no fresh read
+        this.#settled(lastDigest, lastRaw, lastParsed); // digest for effectToken, source+parse for captureSnapshot
         return { ms: now - start, title };
       }
       if (now - start >= max_ms) {
-        this.#lastSourceDigest = lastDigest;
+        this.#settled(lastDigest, lastRaw, lastParsed);
         return { ms: now - start, title };
       }
       await sleep(POLL_MS);

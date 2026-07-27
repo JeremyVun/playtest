@@ -1202,9 +1202,19 @@ async function recordLoop({ driver, writer, rc, persona, deadline, r, emit, anch
       return;
     }
 
-    const tokenAt = perf.now();
-    const before = await driver.effectToken();
-    perf.span("effect_token", tokenAt, stepNum, { when: "before", type });
+    // Only click/tap/type can ever consume a pre-action token: detectConfusion's
+    // no_effect rule gates on exactly those types and reads a null before-token
+    // as "no signal" (so a skipped token is not a changed verdict, it is the same
+    // verdict without the round-trip). Every other action type — scroll, swipe,
+    // wait, back, navigate, select, request — was paying a live transport call
+    // for a value nothing reads; on mobile that call is an Appium alert probe.
+    const tokenable = type === "click" || type === "tap" || type === "type";
+    let before: string | null = null;
+    if (tokenable) {
+      const tokenAt = perf.now();
+      before = await driver.effectToken();
+      perf.span("effect_token", tokenAt, stepNum, { when: "before", type });
+    }
     const dispatchAt = perf.now();
     const exec = await driver.execute(agentStep.action, { step: stepNum, bindings });
     perf.span("action_dispatch", dispatchAt, stepNum, { mode: "record", type, ok: exec.ok });
@@ -1671,7 +1681,9 @@ export async function detectConfusion(envelope: DynamicValue, prior: DynamicValu
   const type = actionOf(envelope)?.type;
   // tap is the mobile click analog; (exec.perf?.requests ?? 0) tolerates a null
   // perf (mobile has no web vitals) — for web, perf.requests is always numeric,
-  // so this is a no-op there.
+  // so this is a no-op there. recordLoop only fetches a before-token for these
+  // same three types, so every other type arrives here with beforeToken null and
+  // stops at this gate — the null branch is load-bearing, not defensive.
   if ((type === "click" || type === "tap" || type === "type") && (exec.perf?.requests ?? 0) === 0 && beforeToken !== null) {
     // driver.effectToken() is the transport's "did anything change" fingerprint
     // (web: last DOM-mutation time + form values + URL); the no_effect rule

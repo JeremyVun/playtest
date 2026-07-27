@@ -15,6 +15,14 @@ export const MAX_BODY_CHARS = 64 * 1024; // stored cap per body
 export const MAX_BODY_READ = 1024 * 1024; // don't buffer responses larger than this
 export const HAR_FLUSH_INTERVAL_STEPS = 5;
 
+/**
+ * The append-only mid-run journal beside har.json (BUILD_PLAN T5.1). Transient
+ * and DIAGNOSTIC: it is not in any manifest, envelope, or artifact contract, and
+ * it is deleted the moment har.json catches up with it — so a run that ends
+ * normally never leaves one behind. See createHarFlusher for what it buys.
+ */
+export const HAR_JOURNAL_FILE = "har.journal.jsonl";
+
 // HTML page documents are textual but huge and never read by the gate
 // (response_matches/assert work over JSON/text-data) — skip their bodies so
 // har.json stays small. We still record their headers + bodySize.
@@ -87,9 +95,33 @@ export function flushHar(runDir: string, entries: unknown[]): void {
   fs.writeFileSync(path.join(runDir, "har.json"), (hasKnownSecrets() ? redactSecrets(json) : json) + "\n");
 }
 
+/** One journal line: the same at-write-time scrub flushHar applies, per entry. */
+function journalLine(entry: unknown): string {
+  const json = JSON.stringify(entry);
+  return (hasKnownSecrets() ? redactSecrets(json) : json) + "\n";
+}
+
 /**
- * Step-counted HAR writer for hot paths. It writes the first completed step for
- * crash recovery, then every Nth step, and any forced call (gate/close).
+ * Step-counted HAR writer for hot paths. har.json is the artifact and is always
+ * written in full — but rewriting the WHOLE accumulated HAR every Nth step is
+ * quadratic in a long request-heavy run, so between full writes the new entries
+ * are APPENDED to har.journal.jsonl instead (BUILD_PLAN T5.1):
+ *
+ * - the first completed step writes har.json, so an early crash still leaves a
+ *   valid (if short) HAR and any mid-run reader finds the file where it expects;
+ * - later interval steps append only the entries added since the last write —
+ *   O(new) instead of O(all);
+ * - a FORCED call (the pre-gather/pre-gate flush in runner.ts, and driver close)
+ *   writes the complete har.json from memory, then deletes the journal, whose
+ *   contents har.json now supersedes. So a run that finishes normally leaves the
+ *   run directory exactly as it was before this change, byte for byte.
+ *
+ * har.json is always serialized from the live `entries` array, never rebuilt
+ * from the journal: the web driver fills a response body into an entry AFTER
+ * pushing it (#captureBody), so an already-journaled line can be a stale copy of
+ * an entry memory has since completed. That makes the journal a crash-recovery
+ * TAIL — `har.json ++ journal` reconstructs a crashed run's traffic — and never
+ * an input to the finished artifact.
  */
 export function createHarFlusher(
   runDir: string,
@@ -101,8 +133,11 @@ export function createHarFlusher(
 ): ({ force }?: { force?: boolean }) => boolean {
   const parsedInterval = Math.floor(Number(interval));
   const every = Number.isFinite(parsedInterval) && parsedInterval > 0 ? parsedInterval : HAR_FLUSH_INTERVAL_STEPS;
+  const journalPath = path.join(runDir, HAR_JOURNAL_FILE);
   let completedSteps = 0;
   let wrote = false;
+  let journaled = 0; // entries already on disk (in har.json, or appended past it)
+  let hasJournal = false; // the journal holds entries har.json does not
   return ({ force = false } = {}) => {
     if (!force) completedSteps++;
     if (!force && wrote && completedSteps % every !== 0) return false;
@@ -110,8 +145,29 @@ export function createHarFlusher(
     // write actually happens, so the span counts real writes (the skipped
     // between-interval calls above cost nothing and record nothing).
     const started = perf.now();
-    flushHar(runDir, entries);
-    perf.span("har_flush", started, null, { entries: entries.length, forced: force });
+    const full = force || !wrote; // forced, or the first-step crash-recovery write
+    if (full) {
+      flushHar(runDir, entries);
+      if (hasJournal) {
+        // har.json now contains everything the journal did.
+        try {
+          fs.rmSync(journalPath, { force: true });
+        } catch {}
+        hasJournal = false;
+      }
+    } else if (entries.length > journaled) {
+      let lines = "";
+      for (let i = journaled; i < entries.length; i++) lines += journalLine(entries[i]);
+      try {
+        fs.appendFileSync(journalPath, lines);
+        hasJournal = true;
+      } catch {
+        // A journal failure is diagnostic-only: the next forced flush still
+        // writes the complete har.json from memory.
+      }
+    }
+    journaled = entries.length;
+    perf.span("har_flush", started, null, { entries: entries.length, forced: force, mode: full ? "har" : "journal" });
     wrote = true;
     return true;
   };

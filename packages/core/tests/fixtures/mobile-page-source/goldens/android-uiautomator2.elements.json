@@ -1,0 +1,114 @@
+[
+  {
+    "ref": "e1",
+    "role": "textfield",
+    "name": "New todo",
+    "value": "",
+    "locator": "~New todo",
+    "bbox": {
+      "x": 40,
+      "y": 220,
+      "w": 720,
+      "h": 100
+    },
+    "typable": true
+  },
+  {
+    "ref": "e2",
+    "role": "button",
+    "name": "Add",
+    "value": "",
+    "locator": "~Add",
+    "bbox": {
+      "x": 800,
+      "y": 220,
+      "w": 240,
+      "h": 100
+    },
+    "typable": false
+  },
+  {
+    "ref": "e3",
+    "role": "switch",
+    "name": "Toggle",
+    "value": "",
+    "locator": "(//android.widget.CheckBox[@content-desc=\"Toggle\"])[1]",
+    "bbox": {
+      "x": 40,
+      "y": 400,
+      "w": 90,
+      "h": 90
+    },
+    "typable": false
+  },
+  {
+    "ref": "e4",
+    "role": "button",
+    "name": "Delete",
+    "value": "",
+    "locator": "(//android.widget.ImageButton[@content-desc=\"Delete\"])[1]",
+    "bbox": {
+      "x": 940,
+      "y": 400,
+      "w": 100,
+      "h": 90
+    },
+    "typable": false
+  },
+  {
+    "ref": "e5",
+    "role": "switch",
+    "name": "Toggle",
+    "value": "",
+    "locator": "(//android.widget.CheckBox[@content-desc=\"Toggle\"])[2]",
+    "bbox": {
+      "x": 40,
+      "y": 560,
+      "w": 90,
+      "h": 90
+    },
+    "typable": false
+  },
+  {
+    "ref": "e6",
+    "role": "button",
+    "name": "Delete",
+    "value": "",
+    "locator": "(//android.widget.ImageButton[@content-desc=\"Delete\"])[2]",
+    "bbox": {
+      "x": 940,
+      "y": 560,
+      "w": 100,
+      "h": 90
+    },
+    "typable": false
+  },
+  {
+    "ref": "e7",
+    "role": "button",
+    "name": "Show completed",
+    "value": "",
+    "locator": "~Show completed",
+    "bbox": {
+      "x": 40,
+      "y": 2160,
+      "w": 480,
+      "h": 120
+    },
+    "typable": false
+  },
+  {
+    "ref": "e8",
+    "role": "button",
+    "name": "Clear completed",
+    "value": "",
+    "locator": "~Clear completed",
+    "bbox": {
+      "x": 560,
+      "y": 2160,
+      "w": 480,
+      "h": 120
+    },
+    "typable": false
+  }
+]

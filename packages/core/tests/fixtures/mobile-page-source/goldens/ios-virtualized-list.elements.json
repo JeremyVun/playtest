@@ -1,0 +1,100 @@
+[
+  {
+    "ref": "e1",
+    "role": "button",
+    "name": "Back",
+    "value": "",
+    "locator": "~BackButton",
+    "bbox": {
+      "x": 8,
+      "y": 55,
+      "w": 60,
+      "h": 28
+    },
+    "typable": false
+  },
+  {
+    "ref": "e2",
+    "role": "button",
+    "name": "Next",
+    "value": "",
+    "locator": "~NextButton",
+    "bbox": {
+      "x": 322,
+      "y": 55,
+      "w": 60,
+      "h": 28
+    },
+    "typable": false
+  },
+  {
+    "ref": "e3",
+    "role": "button",
+    "name": "Pay now",
+    "value": "due",
+    "locator": "~RepaymentTilePayButton0",
+    "bbox": {
+      "x": 260,
+      "y": 120,
+      "w": 110,
+      "h": 40
+    },
+    "typable": false
+  },
+  {
+    "ref": "e4",
+    "role": "button",
+    "name": "Pay now",
+    "value": "due",
+    "locator": "~RepaymentTilePayButton1",
+    "bbox": {
+      "x": 260,
+      "y": 208,
+      "w": 110,
+      "h": 40
+    },
+    "typable": false
+  },
+  {
+    "ref": "e5",
+    "role": "button",
+    "name": "Pay now",
+    "value": "due",
+    "locator": "~RepaymentTilePayButton2",
+    "bbox": {
+      "x": 260,
+      "y": 296,
+      "w": 110,
+      "h": 40
+    },
+    "typable": false
+  },
+  {
+    "ref": "e6",
+    "role": "button",
+    "name": "Pay now",
+    "value": "overdue",
+    "locator": "~RepaymentTilePayButton3",
+    "bbox": {
+      "x": 260,
+      "y": 384,
+      "w": 110,
+      "h": 40
+    },
+    "typable": false
+  },
+  {
+    "ref": "e7",
+    "role": "button",
+    "name": "Pay all",
+    "value": "",
+    "locator": "~PayAllButton",
+    "bbox": {
+      "x": 16,
+      "y": 797,
+      "w": 358,
+      "h": 40
+    },
+    "typable": false
+  }
+]

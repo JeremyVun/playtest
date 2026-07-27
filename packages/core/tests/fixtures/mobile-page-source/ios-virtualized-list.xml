@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<AppiumAUT>
+  <XCUIElementTypeApplication type="XCUIElementTypeApplication" name="au.com.bank.app" label="Repayments" enabled="true" visible="true" x="0" y="0" width="390" height="844">
+    <XCUIElementTypeWindow type="XCUIElementTypeWindow" label="Repayments" enabled="true" visible="true" x="0" y="0" width="390" height="844">
+      <XCUIElementTypeNavigationBar type="XCUIElementTypeNavigationBar" name="RepaymentsNavBar" label="Repayments" enabled="true" visible="true" x="0" y="47" width="390" height="44">
+        <XCUIElementTypeButton type="XCUIElementTypeButton" name="BackButton" label="Back" enabled="true" visible="false" x="8" y="55" width="60" height="28"/>
+        <XCUIElementTypeButton type="XCUIElementTypeButton" name="NextButton" label="Next" enabled="true" visible="false" x="322" y="55" width="60" height="28"/>
+        <XCUIElementTypeButton type="XCUIElementTypeButton" name="HelpButton" label="Help" enabled="false" visible="false" x="260" y="55" width="50" height="28"/>
+      </XCUIElementTypeNavigationBar>
+      <XCUIElementTypeScrollView type="XCUIElementTypeScrollView" enabled="true" visible="true" x="0" y="91" width="390" height="700">
+        <XCUIElementTypeCell type="XCUIElementTypeCell" name="repaymentCell" label="Repayment" enabled="true" visible="true" x="0" y="100" width="390" height="88">
+          <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" name="merchant0" label="Coles Supermarket" enabled="true" visible="false" x="16" y="108" width="200" height="18"/>
+          <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" name="amount0" label="$42.10" enabled="true" visible="true" x="16" y="130" width="80" height="18"/>
+          <XCUIElementTypeButton type="XCUIElementTypeButton" name="RepaymentTilePayButton0" label="Pay now" value="due" enabled="true" visible="true" x="260" y="120" width="110" height="40"/>
+        </XCUIElementTypeCell>
+        <XCUIElementTypeCell type="XCUIElementTypeCell" name="repaymentCell" label="Repayment" enabled="true" visible="true" x="0" y="188" width="390" height="88">
+          <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" name="merchant1" label="Coles Supermarket" enabled="true" visible="false" x="16" y="196" width="200" height="18"/>
+          <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" name="amount1" label="$42.10" enabled="true" visible="true" x="16" y="218" width="80" height="18"/>
+          <XCUIElementTypeButton type="XCUIElementTypeButton" name="RepaymentTilePayButton1" label="Pay now" value="due" enabled="true" visible="true" x="260" y="208" width="110" height="40"/>
+        </XCUIElementTypeCell>
+        <XCUIElementTypeCell type="XCUIElementTypeCell" name="repaymentCell" label="Repayment" enabled="true" visible="true" x="0" y="276" width="390" height="88">
+          <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" name="merchant2" label="Coles Supermarket" enabled="true" visible="false" x="16" y="284" width="200" height="18"/>
+          <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" name="amount2" label="$42.10" enabled="true" visible="true" x="16" y="306" width="80" height="18"/>
+          <XCUIElementTypeButton type="XCUIElementTypeButton" name="RepaymentTilePayButton2" label="Pay now" value="due" enabled="true" visible="true" x="260" y="296" width="110" height="40"/>
+        </XCUIElementTypeCell>
+        <XCUIElementTypeCell type="XCUIElementTypeCell" name="repaymentCell" label="Repayment" enabled="true" visible="true" x="0" y="364" width="390" height="88">
+          <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" name="merchant3" label="Woolworths Metro" enabled="true" visible="false" x="16" y="372" width="200" height="18"/>
+          <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" name="amount3" label="$7.85" enabled="true" visible="true" x="16" y="394" width="80" height="18"/>
+          <XCUIElementTypeButton type="XCUIElementTypeButton" name="RepaymentTilePayButton3" label="Pay now" value="overdue" enabled="true" visible="true" x="260" y="384" width="110" height="40"/>
+        </XCUIElementTypeCell>
+        <XCUIElementTypeCell type="XCUIElementTypeCell" name="transactionCell" label="Scrolled out" enabled="true" visible="false" x="0" y="1200" width="390" height="88">
+          <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" name="merchant99" label="Off screen merchant" enabled="true" visible="false" x="16" y="1208" width="200" height="18"/>
+          <XCUIElementTypeButton type="XCUIElementTypeButton" name="RepaymentTilePayButton99" label="Pay now" value="due" enabled="true" visible="false" x="260" y="1220" width="110" height="40"/>
+        </XCUIElementTypeCell>
+        <XCUIElementTypeCell type="XCUIElementTypeCell" name="ghostCell" label="Zero box" enabled="true" visible="false" x="0" y="0" width="0" height="0"/>
+      </XCUIElementTypeScrollView>
+      <XCUIElementTypeToolbar type="XCUIElementTypeToolbar" label="Actions" enabled="true" visible="true" x="0" y="791" width="390" height="53">
+        <XCUIElementTypeButton type="XCUIElementTypeButton" name="PayAllButton" label="Pay all" enabled="false" visible="true" x="16" y="797" width="358" height="40"/>
+      </XCUIElementTypeToolbar>
+    </XCUIElementTypeWindow>
+  </XCUIElementTypeApplication>
+</AppiumAUT>

@@ -1,0 +1,15 @@
+Screen: Edge & Cases
+text: "Line one line two"
+text: "Line one line two"
+text: "<b>bold</b> & \"quoted\""
+[e1] button "Say hello"
+[e2] button "First duplicate"
+[e3] button "Second duplicate"
+[e4] button "Third duplicate"
+[e5] button "No identifier at all"
+[e6] switch "Dark mode" (1)
+[e7] textfield "password" value="••••"
+[e8] searchfield "Search" value=""
+[e9] link "Terms & conditions"
+text: "A very long accessibility label that runs well past the hundred and twenty character cap this parser applies to every re"
+[e10] button "Home"

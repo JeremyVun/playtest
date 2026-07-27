@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<AppiumAUT>
+  <XCUIElementTypeApplication type="XCUIElementTypeApplication" name="TodoFixture" label="TodoFixture" enabled="true" visible="true" x="0" y="0" width="390" height="844">
+    <XCUIElementTypeWindow type="XCUIElementTypeWindow" enabled="true" visible="true" x="0" y="0" width="390" height="844">
+      <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" x="0" y="0" width="390" height="844">
+        <XCUIElementTypeNavigationBar type="XCUIElementTypeNavigationBar" name="Playtest Todos" label="Playtest Todos" enabled="true" visible="true" x="0" y="47" width="390" height="44">
+          <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" name="app-title" label="Playtest Todos" value="" enabled="true" visible="true" x="16" y="55" width="180" height="28"/>
+          <XCUIElementTypeButton type="XCUIElementTypeButton" name="edit-button" label="Edit" enabled="true" visible="false" x="330" y="55" width="44" height="28"/>
+        </XCUIElementTypeNavigationBar>
+        <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" name="remaining-count" label="2 remaining" value="" enabled="true" visible="true" x="16" y="103" width="120" height="20"/>
+        <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" x="16" y="135" width="358" height="44">
+          <XCUIElementTypeTextField type="XCUIElementTypeTextField" name="todo-input" label="" value="Buy oat milk" enabled="true" visible="true" x="16" y="139" width="270" height="36"/>
+          <XCUIElementTypeButton type="XCUIElementTypeButton" name="add-button" label="Add" enabled="true" visible="true" x="298" y="139" width="76" height="36"/>
+        </XCUIElementTypeOther>
+        <XCUIElementTypeTable type="XCUIElementTypeTable" name="todo-list" enabled="true" visible="true" x="0" y="191" width="390" height="520">
+          <XCUIElementTypeCell type="XCUIElementTypeCell" enabled="true" visible="true" x="0" y="191" width="390" height="56">
+            <XCUIElementTypeButton type="XCUIElementTypeButton" name="todo-row-1" label="Buy milk" value="active" enabled="true" visible="true" x="16" y="199" width="256" height="40"/>
+            <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" name="todo-status-1" label="active" value="" enabled="true" visible="false" x="284" y="207" width="34" height="18"/>
+            <XCUIElementTypeButton type="XCUIElementTypeButton" name="delete-1" label="Delete Buy milk" enabled="true" visible="true" x="330" y="205" width="47" height="24"/>
+          </XCUIElementTypeCell>
+          <XCUIElementTypeCell type="XCUIElementTypeCell" enabled="true" visible="true" x="0" y="247" width="390" height="56">
+            <XCUIElementTypeButton type="XCUIElementTypeButton" name="todo-row-2" label="Walk the dog" value="completed" enabled="true" visible="true" x="16" y="255" width="256" height="40"/>
+            <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" name="todo-status-2" label="completed" value="" enabled="true" visible="false" x="284" y="263" width="52" height="18"/>
+            <XCUIElementTypeButton type="XCUIElementTypeButton" name="delete-2" label="Delete Walk the dog" enabled="true" visible="true" x="330" y="261" width="47" height="24"/>
+          </XCUIElementTypeCell>
+          <XCUIElementTypeCell type="XCUIElementTypeCell" enabled="true" visible="true" x="0" y="303" width="390" height="56">
+            <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" name="empty-hint" label="Swipe a row to reveal more actions" value="" enabled="true" visible="true" x="16" y="311" width="300" height="18"/>
+          </XCUIElementTypeCell>
+        </XCUIElementTypeTable>
+        <XCUIElementTypeOther type="XCUIElementTypeOther" name="keyboard" enabled="true" visible="false" x="0" y="844" width="390" height="291">
+          <XCUIElementTypeKey type="XCUIElementTypeKey" name="a" label="a" enabled="true" visible="false" x="10" y="900" width="30" height="40"/>
+          <XCUIElementTypeKey type="XCUIElementTypeKey" name="b" label="b" enabled="true" visible="false" x="50" y="900" width="30" height="40"/>
+        </XCUIElementTypeOther>
+      </XCUIElementTypeOther>
+    </XCUIElementTypeWindow>
+  </XCUIElementTypeApplication>
+</AppiumAUT>

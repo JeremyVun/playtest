@@ -839,65 +839,95 @@ export class WebDriver implements Driver {
     // each independent piece of capture work reports its own span so a later
     // phase can see which one it moved. Diagnostic only — no behavior changes,
     // and a disabled sidecar makes every perf call a single null check.
+    //
+    // Shape (BUILD_PLAN T2.2): the custom snapshot runs FIRST and alone, because
+    // it is what assigns the `[eN]` refs every later step resolves against.
+    // Everything after it — title, screenshot (+dHash/downscale), MHTML, the
+    // native AX tree — is an independent read of the same settled page, so they
+    // run CONCURRENTLY and their artifact writes go through fs.promises. The
+    // screenshot is 80% of the span, so the debug artifacts now hide behind it
+    // rather than adding to it. One awaited barrier below joins every write: no
+    // envelope may ever advertise a file that is not yet on disk.
     const perf = this.#perf;
+    const p = this.#stepPaths(stepNum);
     let at = perf.now();
     const snap = await this.page.evaluate(SNAPSHOT_SOURCE) as PageSnapshot;
     const url = this.page.url();
-    const title = await this.page.title().catch(() => "");
     perf.span("snapshot_source", at, stepNum, { refs: snap.refCount, truncated: snap.truncated });
-    const p = this.#stepPaths(stepNum);
+
+    // One step-artifact write, timed and tolerant of failure.
+    const write = (file: string, data: string | Buffer, artifact: string): Promise<boolean> => {
+      const started = perf.now();
+      const size = typeof data === "string" ? { chars: data.length } : { bytes: data.length };
+      const done = (ok: boolean): boolean => {
+        perf.span("snapshot_write", started, stepNum, { artifact, ...size, ...(ok ? null : { failed: true }) });
+        return ok;
+      };
+      return fs.promises.writeFile(file, data).then(() => done(true), () => done(false));
+    };
+
+    // The agent-facing text: the one artifact whose write failure is fatal (it is
+    // the run's evidence, not a debug aid), so this promise stays unguarded and
+    // the barrier below rethrows exactly as the synchronous write used to.
     at = perf.now();
-    fs.writeFileSync(p.a11y, snap.text + "\n");
-    perf.span("snapshot_write", at, stepNum, { artifact: "a11y" });
+    const a11yWrite = fs.promises.writeFile(p.a11y, snap.text + "\n").then(() => perf.span("snapshot_write", at, stepNum, { artifact: "a11y" }));
+
+    const titleTask = this.page.title().catch(() => "");
+
     // Capture mode follows app.viewport.height: a null height => fullPage (the
     // whole scrollable page - good for debugging scroll / marketing shots); a
     // number => viewport-only (exactly what the user saw, content below the fold
     // cut off). Drives BOTH this on-disk PNG and the vision image returned below.
     const fullPage = this.#viewport.height == null;
-    at = perf.now();
-    let screenshot = await this.page.screenshot({ fullPage }).catch(() => null);
-    perf.span("snapshot_screenshot", at, stepNum, { full_page: fullPage, bytes: screenshot?.length ?? 0 });
-    // The perceptual hash (visual regression's pixel oracle) is computed from the
-    // FULL-SIZE bytes BEFORE #capImage downscales them, so the hash is stable
-    // regardless of whether a vision run also shrinks the model-facing image.
-    let screenshotHash: string | null = null;
-    if (screenshot) {
-      // The perceptual hash is computed from the in-memory bytes regardless of the
-      // disk write. But if the PNG write FAILS, drop screenshot so artifactFlags
-      // (runner.ts) doesn't claim artifacts/screenshots for a file that isn't on
-      // disk — otherwise the viewer/clip would seek to a missing frame.
-      let wrote = true;
-      at = perf.now();
+    const screenshotTask = (async (): Promise<{ screenshot: Buffer | null; screenshotHash: string | null }> => {
+      const shotAt = perf.now();
+      const bytes = await this.page.screenshot({ fullPage }).catch(() => null);
+      perf.span("snapshot_screenshot", shotAt, stepNum, { full_page: fullPage, bytes: bytes?.length ?? 0 });
+      if (!bytes) return { screenshot: null, screenshotHash: null };
+      // The perceptual hash (visual regression's pixel oracle) is computed from
+      // the FULL-SIZE bytes BEFORE #capImage downscales them, so the hash is
+      // stable regardless of whether a vision run also shrinks the model-facing
+      // image. It comes from the in-memory bytes regardless of the disk write —
+      // but if the PNG write FAILS, drop screenshot so artifactFlags (runner.ts)
+      // doesn't claim artifacts/screenshots for a file that isn't on disk,
+      // otherwise the viewer/clip would seek to a missing frame.
+      const wroteTask = write(p.screenshot, bytes, "png");
+      const imageAt = perf.now();
+      const processed = await processScreenshotImage(this.page, bytes);
+      perf.span("snapshot_image", imageAt, stepNum);
+      // The vision prompt reads these bytes, so the model call can never start
+      // before the PNG is durable: this await is inside the barrier below.
+      const wrote = await wroteTask;
+      return { screenshot: wrote ? processed.screenshot : null, screenshotHash: processed.screenshotHash };
+    })();
+
+    const mhtmlTask = (async (): Promise<void> => {
+      const mhtmlAt = perf.now();
       try {
-        fs.writeFileSync(p.screenshot, screenshot);
-      } catch {
-        wrote = false;
-      }
-      perf.span("snapshot_write", at, stepNum, { artifact: "png", bytes: screenshot.length });
-      at = perf.now();
-      const processed = await processScreenshotImage(this.page, screenshot);
-      perf.span("snapshot_image", at, stepNum);
-      screenshotHash = processed.screenshotHash;
-      screenshot = wrote ? processed.screenshot : null;
-    }
-    at = perf.now();
-    try {
-      const { data } = await this.#cdp!.send("Page.captureSnapshot", { format: "mhtml" }); // SAFETY: launch initializes CDP before returning a WebDriver
-      fs.writeFileSync(p.mhtml, data);
-    } catch {}
-    perf.span("snapshot_mhtml", at, stepNum);
+        const { data } = await this.#cdp!.send("Page.captureSnapshot", { format: "mhtml" }); // SAFETY: launch initializes CDP before returning a WebDriver
+        await write(p.mhtml, data, "mhtml");
+      } catch {}
+      perf.span("snapshot_mhtml", mhtmlAt, stepNum);
+    })();
+
     // Debug-only: the browser's NATIVE a11y tree (Chromium's full AX tree via
     // CDP — nothing filtered, so gaps in OUR custom snapshot show up). Flattened
     // into the SAME `role "name"` line shape as snap.text so the viewer can diff
     // the two side-by-side. Never seen by the agent, never part of snap.text or
     // the return value — best-effort, never breaks a run. (page.accessibility was
     // removed in modern Playwright, hence CDP.)
-    at = perf.now();
-    try {
-      const tree = await this.#nativeAxTree();
-      if (tree) fs.writeFileSync(p.pw_a11y, tree + "\n");
-    } catch {}
-    perf.span("snapshot_native_ax", at, stepNum);
+    const nativeAxTask = (async (): Promise<void> => {
+      const axAt = perf.now();
+      try {
+        const tree = await this.#nativeAxTree();
+        if (tree) await write(p.pw_a11y, tree + "\n", "pw_a11y");
+      } catch {}
+      perf.span("snapshot_native_ax", axAt, stepNum);
+    })();
+
+    // The persistence barrier: every artifact of this step is on disk before the
+    // caller gets a snapshot it can put in an envelope.
+    const [title, { screenshot, screenshotHash }] = await Promise.all([titleTask, screenshotTask, a11yWrite, mhtmlTask, nativeAxTask]);
     return { text: snap.text, url, title, refCount: snap.refCount, truncated: snap.truncated, screenshot, screenshotHash };
   }
 

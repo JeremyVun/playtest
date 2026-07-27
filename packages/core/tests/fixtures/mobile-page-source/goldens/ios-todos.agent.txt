@@ -1,0 +1,12 @@
+Screen: TodoFixture
+text: "Playtest Todos"
+[e1] button "Edit"
+text: "2 remaining"
+[e2] textfield "todo-input" value="Buy oat milk"
+[e3] button "Add"
+[e4] button "Buy milk" (active) — "active"
+[e5] button "Delete Buy milk" — "active"
+[e6] button "Walk the dog" (completed) — "completed"
+[e7] button "Delete Walk the dog" — "completed"
+[e8] cell ""
+text: "Swipe a row to reveal more actions"

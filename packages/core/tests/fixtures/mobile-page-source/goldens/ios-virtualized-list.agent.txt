@@ -1,0 +1,7 @@
+Screen: Repayments
+[e1] button "Back"
+[e2] button "Next"
+[e3] button "Pay now" (due) — "Coles Supermarket" "$42.10"
+… 2 more like this (e3-e5)
+[e6] button "Pay now" (overdue) — "Woolworths Metro" "$7.85"
+[e7] button "Pay all"

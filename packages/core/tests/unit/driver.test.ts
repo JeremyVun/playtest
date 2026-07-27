@@ -14,7 +14,7 @@ import Ajv from "ajv";
 import { createDriver } from "../../src/driver.ts";
 import { DummyConfigError } from "../../src/config.ts";
 import { runAxeInPage } from "../../src/axe-source.ts";
-import { createHarFlusher } from "../../src/drivers/har.ts";
+import { createHarFlusher, HAR_JOURNAL_FILE } from "../../src/drivers/har.ts";
 import { overlayFor, toolParamsFor, stepSchemaFor, normalizeDriver, DRIVER_VERBS, __testing } from "../../src/drivers/overlay.ts";
 import { processScreenshotImage } from "../../src/drivers/web.ts";
 import { comparablePins } from "../../src/shared/movement.ts";
@@ -263,31 +263,89 @@ test("processScreenshotImage computes dHash and downscaled image in one page eva
   assert.deepEqual(processed.screenshot, downscaled);
 });
 
-test("createHarFlusher writes the first step, batches later steps, and force-flushes current entries", () => {
+// The mid-run write schedule (BUILD_PLAN T5.1): har.json in full on the first
+// step and on any forced call, an APPEND to the transient journal in between.
+test("createHarFlusher writes the first step, journals later steps, and force-flushes current entries", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "playtest-har-"));
   try {
     const entries: LegacyTestValue[] = [];
     const flush = createHarFlusher(dir, entries, { interval: 3 });
     const add = (n: number) => entries.push({ request: { method: "GET", url: `http://x/${n}` }, response: { status: 200 } });
+    const journal = path.join(dir, HAR_JOURNAL_FILE);
     const diskCount = () => JSON.parse(fs.readFileSync(path.join(dir, "har.json"), "utf8")).log.entries.length;
+    const journalCount = () => (fs.existsSync(journal) ? fs.readFileSync(journal, "utf8").split("\n").filter(Boolean).length : 0);
 
     add(1);
     assert.equal(flush(), true, "first step is written for crash recovery");
     assert.equal(diskCount(), 1);
+    assert.equal(journalCount(), 0, "the first write is har.json itself — nothing to journal");
 
     add(2);
-    assert.equal(flush(), false, "non-interval step skips the hot-path rewrite");
+    assert.equal(flush(), false, "non-interval step skips the hot-path write entirely");
     assert.equal(diskCount(), 1, "disk stays at the last flushed snapshot");
 
     add(3);
-    assert.equal(flush(), true, "interval step rewrites the HAR");
-    assert.equal(diskCount(), 3);
+    assert.equal(flush(), true, "interval step records the new entries");
+    assert.equal(diskCount(), 1, "har.json is NOT restringified on the interval step");
+    assert.equal(journalCount(), 2, "the two entries since the last write are appended");
 
     add(4);
     assert.equal(flush(), false);
     add(5);
     assert.equal(flush({ force: true }), true, "gate/close can force the latest entries");
     assert.equal(diskCount(), 5);
+    assert.equal(fs.existsSync(journal), false, "har.json superseded the journal, so it is removed");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// The artifact contract: whatever the journal does mid-run, the har.json a run
+// finishes with must be exactly what rewriting it on every flush produced.
+test("createHarFlusher: a journalled multi-flush run finalizes to the same har.json bytes as a full rewrite", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "playtest-har-final-"));
+  try {
+    const entries: LegacyTestValue[] = [];
+    const flush = createHarFlusher(dir, entries, { interval: 5 });
+    for (let step = 1; step <= 40; step++) {
+      // Several requests per step, and a body that lands on an ALREADY-journalled
+      // entry (the web driver's #captureBody does exactly this) — proof that
+      // har.json is serialized from memory, never rebuilt from journal lines.
+      for (let i = 0; i < 3; i++) entries.push({ request: { method: "GET", url: `http://x/${step}/${i}` }, response: { status: 200 } });
+      if (step > 1) ((entries[(step - 2) * 3] as LegacyTestValue).response as LegacyTestValue).content = { text: `late body ${step}` };
+      flush();
+    }
+    flush({ force: true });
+
+    const expected = JSON.stringify({ log: { entries } }) + "\n"; // what flushHar has always written
+    assert.equal(fs.readFileSync(path.join(dir, "har.json"), "utf8"), expected, "final har.json is byte-identical to a full rewrite");
+    assert.equal(fs.existsSync(path.join(dir, HAR_JOURNAL_FILE)), false, "the journal is transient — gone once har.json is complete");
+    assert.equal(JSON.parse(expected).log.entries[0].response.content.text, "late body 2", "the late-arriving body is in the artifact");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// Crash path: no forced flush ever happens. har.json must still be valid (just
+// stale), and the journal must be a parseable tail that reconstructs the rest.
+test("createHarFlusher: an unfinished run leaves a valid har.json plus a recoverable journal tail", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "playtest-har-crash-"));
+  try {
+    const entries: LegacyTestValue[] = [];
+    const flush = createHarFlusher(dir, entries, { interval: 2 });
+    for (let step = 1; step <= 7; step++) {
+      entries.push({ request: { method: "GET", url: `http://x/${step}` }, response: { status: 200 } });
+      flush();
+    }
+    // …and the process dies here: no force, no close.
+    const har = JSON.parse(fs.readFileSync(path.join(dir, "har.json"), "utf8"));
+    assert.equal(har.log.entries.length, 1, "har.json is the first-step snapshot — stale, but valid JSON");
+    const tail = fs
+      .readFileSync(path.join(dir, HAR_JOURNAL_FILE), "utf8")
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+    assert.deepEqual([...har.log.entries, ...tail].map((e: LegacyTestValue) => e.request.url), entries.slice(0, 6).map((e: LegacyTestValue) => e.request.url), "har.json ++ journal recovers every entry the flusher saw, in order");
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

@@ -1,0 +1,5 @@
+Screen: Half a screen
+application "Half a screen"
+button "OK"
+text: "Still parsed"
+button "After a mismatched close"

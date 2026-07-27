@@ -20,7 +20,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { MobileDriver } from "../../src/drivers/mobile.ts";
-import { parsePageSource } from "../../src/drivers/mobile-snapshot.ts";
+import { parsePageSource, nativePageSourceTree } from "../../src/drivers/mobile-snapshot.ts";
 
 const SCREEN = { w: 390, h: 844 };
 
@@ -50,6 +50,10 @@ class FakeClient {
   /** Applied by the next tap, so an action can move the screen under the driver. */
   onTap: (() => void) | null = null;
   counts = { getPageSource: 0, takeScreenshot: 0, getAlertText: 0, click: 0 };
+  /** Every `execute()` command name, in order — the gesture-memo oracle. */
+  executed: string[] = [];
+  /** Commands this "platform" does not implement (Appium rejects them). */
+  unsupported = new Set<string>();
 
   async getPageSource() {
     this.counts.getPageSource += 1;
@@ -72,6 +76,8 @@ class FakeClient {
   }
 
   async execute(command: string, args?: { action?: string }) {
+    this.executed.push(command);
+    if (this.unsupported.has(command)) throw new Error(`Unknown mobile command "${command}"`);
     if (command === "mobile: alert" && args?.action === "getButtons") return this.alert?.buttons ?? [];
     return null;
   }
@@ -152,10 +158,47 @@ test("the capture after a settle reuses that source: no page-source read, byte-i
   assert.equal(client.counts.takeScreenshot, 1, "the screenshot stays live on every capture");
 
   // The step artifacts are written from the reused source, including the debug
-  // native tree that is derived from the raw XML.
+  // native tree — which is now derived from the SAME walk as the snapshot above
+  // (T2.1) rather than from a second pass over the XML, and must be unchanged.
   assert.equal(fs.readFileSync(path.join(runDir, "steps", "001.a11y.txt"), "utf8"), snap.text + "\n");
   assert.ok(fs.existsSync(path.join(runDir, "steps", "001.png")));
-  assert.ok(fs.existsSync(path.join(runDir, "steps", "001.pw-a11y.txt")));
+  assert.equal(fs.readFileSync(path.join(runDir, "steps", "001.pw-a11y.txt"), "utf8"), nativePageSourceTree(SCREEN_A) + "\n", "the shared walk renders the same native tree as an independent walk");
+});
+
+// The platform gesture command (see MobileDriver#swipe): try both, then remember
+// which one the session answered to. On UiAutomator2 the first choice is always
+// rejected, and paying that round-trip on every swipe is pure waste.
+test("the swipe command a session answered to is used first from then on", async (t: LegacyTestValue) => {
+  const { client, driver } = makeDriver(t);
+  await driver.start();
+  client.unsupported.add("mobile: swipe"); // an Android/UiAutomator2 session
+
+  const gestures = () => client.executed.filter((c) => c.startsWith("mobile: swipe") || c.startsWith("mobile: scrollGesture"));
+  const first = await driver.execute({ type: "swipe", direction: "up" } as LegacyTestValue); // SAFETY: focused action literal
+  assert.equal(first.ok, true, first.error ?? "swipe failed");
+  // Unchanged first-attempt semantics: `mobile: swipe`, then the fallback.
+  assert.deepEqual(gestures(), ["mobile: swipe", "mobile: scrollGesture"]);
+
+  client.executed.length = 0;
+  const second = await driver.execute({ type: "swipe", direction: "up" } as LegacyTestValue); // SAFETY: focused action literal
+  assert.equal(second.ok, true, second.error ?? "swipe failed");
+  assert.deepEqual(gestures(), ["mobile: scrollGesture"], "the rejected command is not tried again");
+
+  // A scroll goes through the same gesture path and inherits the memo.
+  client.executed.length = 0;
+  await driver.execute({ type: "scroll", direction: "down" } as LegacyTestValue); // SAFETY: focused action literal
+  assert.deepEqual(gestures(), ["mobile: scrollGesture"]);
+});
+
+test("an iOS session that answers the first gesture command never tries the fallback", async (t: LegacyTestValue) => {
+  const { client, driver } = makeDriver(t);
+  await driver.start();
+  for (const step of [1, 2]) {
+    client.executed.length = 0;
+    const res = await driver.execute({ type: "swipe", direction: "up" } as LegacyTestValue); // SAFETY: focused action literal
+    assert.equal(res.ok, true, res.error ?? `swipe ${step} failed`);
+    assert.deepEqual(client.executed.filter((c) => c.startsWith("mobile: ")), ["mobile: swipe"]);
+  }
 });
 
 test("the retained source is good for exactly one capture", async (t: LegacyTestValue) => {

@@ -39,19 +39,36 @@ export interface MobileSnapshot {
   truncated: boolean;
 }
 
-interface MobileNode {
+/**
+ * One opening tag of a page source, as the shared walk records it. IMMUTABLE
+ * once walked: both projections read it and neither writes to it, so one walk
+ * can feed the agent snapshot and the debug native tree (and be handed across a
+ * settle→capture reuse) without either seeing the other's bookkeeping.
+ */
+export interface MobileNode {
   tag: string;
   attrs: MobileAttrs;
   tagPos: number;
   scopedPos: number;
   parent: number;
   role: string;
-  cell?: number;
-  ref?: string;
-  el?: MobileSnapshotElement;
 }
 
-type SurfacedMobileNode = MobileNode & { ref: string; el: MobileSnapshotElement };
+/**
+ * One walk of a page source: every opening tag in document order, plus the
+ * global count per accessibility id (`~aid` is only durable when unique).
+ * Produced once by `walkPageSource()` and shared by every projection.
+ */
+export interface MobilePageSourceWalk {
+  nodes: MobileNode[];
+  aidCounts: Map<string, number>;
+}
+
+/** A node the custom walk surfaced as an `[eN]` element, with that element. */
+interface SurfacedMobileNode {
+  index: number;
+  el: MobileSnapshotElement;
+}
 
 interface RenderedLine {
   display: string;
@@ -238,25 +255,26 @@ function durableLocator(tag: string, attrs: MobileAttrs, tagPos: number, scopedP
 }
 
 /**
- * Walk an Appium page-source string into the `[eN]` text + an ordered element
- * list (ref, role, name, value, locator, bbox, typable). Mirrors the web
- * snapshot contract: caller writes the text to steps/NNN.a11y.txt and keeps the
- * element list to resolve refs → durable locators on execute().
+ * THE walk: every opening tag of a page source, in document order, as a
+ * lightweight TREE (each node carries its parent index). We track three
+ * positions/counts per node:
+ *   tagPos   — 1-based position among ALL same-tag nodes (the plain
+ *            `(//tag)[pos]` fallback locator resolves to it).
+ *   scopedPos — 1-based position among same-tag nodes that SHARE this node's
+ *            accessibility id (the name-scoped `(//tag[@attr="aid"])[pos]`
+ *            locator — stable when UNRELATED controls churn, see durableLocator).
+ *   aidCounts — global count per aid, so `~aid` is used only when it's unique.
+ * The parent chain lets parsePageSource attach a control's in-cell text (a
+ * repayment row's merchant/amount labels) to the control, the way a native list
+ * groups them.
+ *
+ * This regex walk over a multi-megabyte page source is the expensive half of a
+ * mobile snapshot, and BOTH projections (the agent text and the debug native
+ * tree) need exactly the same nodes — so a caller that wants both walks ONCE and
+ * hands the result to each. Never throws: a malformed source degrades to
+ * whatever parsed. Pure; the returned nodes are treated as immutable.
  */
-export function parsePageSource(
-  xml: string,
-  { max = 200, screen = null }: { max?: number; screen?: { w: number; h: number } | null } = {}
-): MobileSnapshot {
-  // Pass 1: every opening tag in document order, as a lightweight TREE (each node
-  // carries its parent index). We track three positions/counts per node:
-  //   tagPos   — 1-based position among ALL same-tag nodes (the plain
-  //            `(//tag)[pos]` fallback locator resolves to it).
-  //   scopedPos — 1-based position among same-tag nodes that SHARE this node's
-  //            accessibility id (the name-scoped `(//tag[@attr="aid"])[pos]`
-  //            locator — stable when UNRELATED controls churn, see durableLocator).
-  //   aidCounts — global count per aid, so `~aid` is used only when it's unique.
-  // The parent chain lets pass 2 attach a control's in-cell text (a repayment
-  // row's merchant/amount labels) to the control, the way a native list groups them.
+export function walkPageSource(xml: string): MobilePageSourceWalk {
   const nodes: IndexedArray<MobileNode> = [];
   const tagSeq = new Map<string, number>();
   const scopedSeq = new Map<string, number>();
@@ -290,6 +308,24 @@ export function parsePageSource(
   } catch {
     // never throw: a malformed source degrades to whatever was parsed so far
   }
+  return { nodes, aidCounts };
+}
+
+/**
+ * Walk an Appium page-source string into the `[eN]` text + an ordered element
+ * list (ref, role, name, value, locator, bbox, typable). Mirrors the web
+ * snapshot contract: caller writes the text to steps/NNN.a11y.txt and keeps the
+ * element list to resolve refs → durable locators on execute().
+ *
+ * `walk` reuses a walk the caller already made (see walkPageSource); omitted,
+ * this walks `xml` itself. When both are given the walk wins — `xml` is then
+ * unused, so a caller holding only a walk may pass `""`.
+ */
+export function parsePageSource(
+  xml: string,
+  { max = 200, screen = null, walk = null }: { max?: number; screen?: { w: number; h: number } | null; walk?: MobilePageSourceWalk | null } = {}
+): MobileSnapshot {
+  const { nodes, aidCounts } = walk ?? walkPageSource(xml);
 
   // The nearest ancestor CELL of a node (the native list-row grouping unit —
 // iOS XCUIElementTypeCell / Android listitem, both roleOf->"cell"), or -1. A
@@ -328,6 +364,7 @@ const elements: MobileSnapshotElement[] = [];
 let title = "";
 let truncated = false;
 const elementsByCell = new Map<number, SurfacedMobileNode[]>(); // cell index -> surfaced element nodes inside it
+const surfaced = new Map<number, MobileSnapshotElement>(); // node index -> its [eN] element
 for (let i = 0; i < nodes.length; i++) {
   const n = nodes[i]!; // SAFETY: loop bounds prove the indexed node exists
   if (/Application$|Window$/.test(n.tag) && !title) title = nameOf(n.attrs) || title;
@@ -340,10 +377,8 @@ for (let i = 0; i < nodes.length; i++) {
   }
   const aid = aidOf(n.attrs);
   const cell = cellOf(i);
-  n.cell = cell;
-  n.ref = `e${elements.length + 1}`;
   const el = {
-    ref: n.ref,
+    ref: `e${elements.length + 1}`,
     role: n.role,
     name: nameOf(n.attrs),
     value: (n.attrs.value ?? "").replace(/\s+/g, " ").trim(),
@@ -351,11 +386,11 @@ for (let i = 0; i < nodes.length; i++) {
     bbox: bboxOf(n.attrs),
     typable: TYPABLE.has(n.role),
   };
-  n.el = el;
+  surfaced.set(i, el);
   elements.push(el);
   if (cell !== -1) {
     const bucket: SurfacedMobileNode[] = elementsByCell.get(cell) ?? [];
-    bucket.push(n as SurfacedMobileNode);
+    bucket.push({ index: i, el });
     elementsByCell.set(cell, bucket);
   }
 }
@@ -381,9 +416,9 @@ for (let i = 0; i < nodes.length; i++) {
   // buttons both describe the same item), skipping an echo of the control name.
   for (const m2 of siblings) {
     if (echoes(m2.el.name, name)) continue;
-    const list: string[] = contextByRef.get(m2.ref) ?? [];
+    const list: string[] = contextByRef.get(m2.el.ref) ?? [];
     if (!list.includes(name)) list.push(name);
-    contextByRef.set(m2.ref, list);
+    contextByRef.set(m2.el.ref, list);
   }
   claimed.add(i);
 }
@@ -403,8 +438,8 @@ for (let i = 0; i < nodes.length; i++) {
     }
     continue;
   }
-  if (!n.el) continue;
-  const el = n.el;
+  const el = surfaced.get(i);
+  if (!el) continue;
   let line = `[${el.ref}] ${el.role} ${JSON.stringify(el.name)}`;
   // A typable control renders its editable contents as `value="…"`. Every OTHER
   // role renders a non-empty accessibility value parenthesized — `button "Buy
@@ -525,43 +560,39 @@ export function alertSnapshot({ text = "", buttons = [] }: { text?: string; butt
  * renders the bare `role "name"` the custom side does and the two align. Never
  * throws: a malformed source degrades to whatever parsed. Returns the joined text,
  * or null when nothing parsed.
+ *
+ * `walk` reuses the walk parsePageSource already made for the same source (see
+ * walkPageSource) — the two projections are pure functions of the SAME nodes, so
+ * a capture that wants both pays for one regex pass. Omitted, this walks `xml`
+ * itself; when given, `xml` is unused.
  */
-export function nativePageSourceTree(xml: string): string | null {
+export function nativePageSourceTree(xml: string, walk: MobilePageSourceWalk | null = null): string | null {
+  const { nodes } = walk ?? walkPageSource(xml);
   const lines: string[] = [];
   let title = "";
   let lastText = "";
-  try {
-    let m: RegExpExecArray | null;
-    TAG_RE.lastIndex = 0;
-    while ((m = TAG_RE.exec(String(xml ?? "")))) {
-      const [, closing, tag, attrBlob] = m as RegExpExecArray & [string, string, string, string];
-      if (closing) continue;
-      const attrs = parseAttrs(attrBlob);
-      if (/Application$|Window$/.test(tag) && !title) title = nameOf(attrs) || title;
+  for (const { tag, attrs, role } of nodes) {
+    if (/Application$|Window$/.test(tag) && !title) title = nameOf(attrs) || title;
 
-      const role = roleOf(tag, attrs);
-      const name = nameOf(attrs);
-      if (role === "text") {
-        // Dedupe against the immediately-preceding text line (the custom renderer
-        // and the web native walk both dedupe adjacent text).
-        if (name && name !== lastText) {
-          lines.push(`text: ${JSON.stringify(name)}`);
-          lastText = name;
-        }
-        continue;
+    const name = nameOf(attrs);
+    if (role === "text") {
+      // Dedupe against the immediately-preceding text line (the custom renderer
+      // and the web native walk both dedupe adjacent text).
+      if (name && name !== lastText) {
+        lines.push(`text: ${JSON.stringify(name)}`);
+        lastText = name;
       }
-      // Keep any node that carries a name OR is one of the interactive roles —
-      // an unnamed structural container is pure noise with no custom counterpart.
-      if (!name && !INTERACTIVE_ROLES.includes(role)) continue;
-
-      let line = `${role} ${JSON.stringify(name)}`;
-      if (!isVisible(attrs)) line += " (invisible)";
-      if (attrs.enabled === "false") line += " (disabled)";
-      lines.push(line);
-      lastText = "";
+      continue;
     }
-  } catch {
-    // never throw: degrade to whatever was parsed so far
+    // Keep any node that carries a name OR is one of the interactive roles —
+    // an unnamed structural container is pure noise with no custom counterpart.
+    if (!name && !INTERACTIVE_ROLES.includes(role)) continue;
+
+    let line = `${role} ${JSON.stringify(name)}`;
+    if (!isVisible(attrs)) line += " (invisible)";
+    if (attrs.enabled === "false") line += " (disabled)";
+    lines.push(line);
+    lastText = "";
   }
   const header = `Screen: ${title || "(app)"}`;
   return lines.length ? [header, ...lines].join("\n") : null;

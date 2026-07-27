@@ -1,0 +1,22 @@
+Screen: TodoFixture
+application "TodoFixture"
+heading "Playtest Todos"
+text: "Playtest Todos"
+button "Edit" (invisible)
+text: "2 remaining"
+textfield "todo-input"
+button "Add"
+table "todo-list"
+cell ""
+button "Buy milk"
+text: "active"
+button "Delete Buy milk"
+cell ""
+button "Walk the dog"
+text: "completed"
+button "Delete Walk the dog"
+cell ""
+text: "Swipe a row to reveal more actions"
+other "keyboard" (invisible)
+key "a" (invisible)
+key "b" (invisible)

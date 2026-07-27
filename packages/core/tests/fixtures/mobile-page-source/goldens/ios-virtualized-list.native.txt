@@ -1,0 +1,29 @@
+Screen: Repayments
+application "Repayments"
+window "Repayments"
+heading "Repayments"
+button "Back" (invisible)
+button "Next" (invisible)
+button "Help" (invisible) (disabled)
+cell "Repayment"
+text: "Coles Supermarket"
+text: "$42.10"
+button "Pay now"
+cell "Repayment"
+text: "Coles Supermarket"
+text: "$42.10"
+button "Pay now"
+cell "Repayment"
+text: "Coles Supermarket"
+text: "$42.10"
+button "Pay now"
+cell "Repayment"
+text: "Woolworths Metro"
+text: "$7.85"
+button "Pay now"
+cell "Scrolled out" (invisible)
+text: "Off screen merchant"
+button "Pay now" (invisible)
+cell "Zero box" (invisible)
+heading "Actions"
+button "Pay all" (disabled)

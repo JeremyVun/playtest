@@ -17,7 +17,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { firstLine, actionOf, initialQuietMs } from "../trajectory.ts";
-import { parsePageSource, alertSnapshot, nativePageSourceTree, normalizeSnapshot as normalizeAxSnapshot, SNAPSHOT_FORMAT, ALERT_LOCATOR_PREFIX } from "./mobile-snapshot.ts";
+import { parsePageSource, walkPageSource, alertSnapshot, nativePageSourceTree, normalizeSnapshot as normalizeAxSnapshot, SNAPSHOT_FORMAT, ALERT_LOCATOR_PREFIX } from "./mobile-snapshot.ts";
 import { overlayFor } from "./overlay.ts";
 import { DummyConfigError } from "../config.ts";
 import { PerfSidecar } from "../perf.ts";
@@ -25,7 +25,7 @@ import type { Browser as WebdriverBrowser, ChainablePromiseElement, remote as we
 import type { Driver, DriverResolution, DriverResult, DriverSnapshot } from "../driver.ts";
 import type { StepAction, StepEnvelope } from "../trajectory.ts";
 import type { ResolvedEnvironment, SettleConfig } from "../types.ts";
-import type { MobileSnapshot, MobileSnapshotElement } from "./mobile-snapshot.ts";
+import type { MobileSnapshot, MobileSnapshotElement, MobilePageSourceWalk } from "./mobile-snapshot.ts";
 
 type MobileEnvironment = Extract<ResolvedEnvironment, { driver: "mobile" }>;
 type RemoteOptions = Parameters<typeof webdriverRemote>[0];
@@ -45,6 +45,9 @@ interface MobileSettlePolicy {
 export const SETTLE_MOBILE = { name: "settle-mobile-v1", source_quiet_ms: 400, max_ms: 10000 };
 const POLL_MS = 100;
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+// The two platform gesture commands #swipe() chooses between (see there).
+const SWIPE_GESTURE = "mobile: swipe";
+const SCROLL_GESTURE = "mobile: scrollGesture";
 
 // Test seam: swap the webdriverio client factory so the offline self-test drives
 // a fake Appium app. Defaults to the real Appium remote().
@@ -177,7 +180,10 @@ export class MobileDriver implements Driver {
   // question about a screen that may have moved on its own since.
   // Never covers alert state: a system alert is drawn by another process and is
   // absent from page source, so captureSnapshot always probes for one live.
-  #settleSource: { seq: number; raw: string; parsed: MobileSnapshot } | null = null;
+  // The `walk` rides along for the same reason the parse does: the debug native
+  // tree is derived from the SAME nodes (T2.1), so a reused screen re-walks
+  // nothing at all.
+  #settleSource: { seq: number; raw: string; parsed: MobileSnapshot; walk: MobilePageSourceWalk } | null = null;
   // Monotonic count of device-MUTATING operations this driver has issued. Every
   // one of them runs through #run() (execute/executeLocator are the only callers
   // and both funnel there), which bumps this before performing; a future direct
@@ -185,6 +191,8 @@ export class MobileDriver implements Driver {
   // Read-only traffic (getPageSource, screenshots, alert probes, finalPageCheck,
   // bbox reads) deliberately does not bump: it cannot change the screen.
   #seq = 0;
+  // The gesture command this session answered to, once one has (see #swipe).
+  #swipeCommand: string | null = null;
   // Device window size in POINTS ({ w, h }), read once at start() from Appium's
   // getWindowSize. Two uses: (1) bounds the visibility rescue to on-screen
   // controls (parsePageSource screen — a scrolled-out list row has a real but
@@ -327,7 +335,12 @@ export class MobileDriver implements Driver {
     // (inert) behind-screen digest so an effectToken AFTER the alert is dismissed
     // compares against the right underlying screen without a fresh getPageSource.
     at = perf.now();
-    const parsed = reused ? reused.parsed : this.#parse(xml);
+    // ONE walk of the XML (mobile-snapshot.ts#walkPageSource) feeds BOTH the
+    // custom snapshot here and the debug native tree below — they are two
+    // projections of the same nodes, and the regex pass is the expensive half
+    // (BUILD_PLAN T2.1). A reused settle screen already carries its walk.
+    const walked = reused ?? this.#walkAndParse(xml);
+    const parsed = walked.parsed;
     perf.span("snapshot_parse", at, stepNum, { reused: Boolean(reused) });
     this.#lastSourceDigest = parsed.text;
     const snap = alert ? alertSnapshot(alert) : parsed;
@@ -341,12 +354,13 @@ export class MobileDriver implements Driver {
     perf.span("snapshot_write", at, stepNum, { artifact: "a11y" });
     // Debug-only: the FULL, unfiltered Appium page-source tree (the mobile analog
     // of the web driver's native AX tree, web.ts#nativeAxTree). Reuse the `xml`
-    // already fetched — no second getPageSource(). Flattened to the same
+    // already fetched — no second getPageSource() — and the walk already made,
+    // so this is a render, not a second parse. Flattened to the same
     // `role "name"` shape so the viewer diffs it against our custom snapshot;
     // never seen by the agent. Best-effort — a throw is swallowed, no artifact.
     at = perf.now();
     try {
-      const tree = nativePageSourceTree(xml);
+      const tree = nativePageSourceTree(xml, walked.walk);
       if (tree) fs.writeFileSync(p.pw_a11y, tree + "\n");
     } catch {}
     perf.span("snapshot_native_ax", at, stepNum);
@@ -446,16 +460,28 @@ export class MobileDriver implements Driver {
   // null until start() reads it — then parsePageSource keeps its non-zero-box
   // fallback, so a pre-start parse is never wrong, just less precise.
   #parse(xml: string): MobileSnapshot {
-    return parsePageSource(xml, { screen: this.#screenSize });
+    return this.#walkAndParse(xml).parsed;
+  }
+
+  /**
+   * One regex walk of a page source, plus the custom parse derived from it
+   * (BUILD_PLAN T2.1). Callers that ALSO want the debug native tree keep the
+   * walk and pass it to nativePageSourceTree, so a snapshot pays for one pass
+   * over the XML instead of two. A caller that only wants the parse (the
+   * effectToken fallback, the settle poll) just drops the walk.
+   */
+  #walkAndParse(xml: string): { walk: MobilePageSourceWalk; parsed: MobileSnapshot } {
+    const walk = walkPageSource(xml);
+    return { walk, parsed: parsePageSource(xml, { screen: this.#screenSize, walk }) };
   }
 
   /**
    * Publish what settle finished holding: the digest effectToken compares
    * against, plus the source and its parse for the captureSnapshot that follows.
    */
-  #settled(digest: string | null, raw: string | null, parsed: MobileSnapshot | null): void {
+  #settled(digest: string | null, raw: string | null, walked: { walk: MobilePageSourceWalk; parsed: MobileSnapshot } | null): void {
     this.#lastSourceDigest = digest; // reused by effectToken (after) — no fresh read
-    this.#settleSource = raw !== null && parsed !== null ? { seq: this.#seq, raw, parsed } : null;
+    this.#settleSource = raw !== null && walked !== null ? { seq: this.#seq, raw, ...walked } : null;
   }
 
   /**
@@ -463,7 +489,7 @@ export class MobileDriver implements Driver {
    * entry: a retained source is good for exactly one capture, and a stale one
    * (some device command ran since) is good for none.
    */
-  #takeSettleSource(): { raw: string; parsed: MobileSnapshot } | null {
+  #takeSettleSource(): { raw: string; parsed: MobileSnapshot; walk: MobilePageSourceWalk } | null {
     const held = this.#settleSource;
     this.#settleSource = null;
     return held && held.seq === this.#seq ? held : null;
@@ -532,16 +558,27 @@ export class MobileDriver implements Driver {
     await this.#client.execute("mobile: alert", { action: "accept" });
   }
 
+  /**
+   * Swipe/scroll through whichever `mobile:` gesture the platform implements:
+   * XCUITest has `mobile: swipe`, UiAutomator2 does not and needs
+   * `mobile: scrollGesture`. We try one, then the other — but the FIRST answer
+   * holds for the whole session (the driver behind a session never changes), so
+   * remember which one worked and lead with it. Android used to pay a rejected
+   * round-trip on every single swipe. The first swipe of a session still tries
+   * `mobile: swipe` first, exactly as before; both still fail silently, since a
+   * gesture that does nothing surfaces as no_effect, not as an error.
+   */
   async #swipe(direction: unknown, handle?: ChainablePromiseElement): Promise<void> {
     const el = handle ? { elementId: handle.elementId } : {};
-    try {
-      await this.#client.execute("mobile: swipe", { direction, ...el });
-      return;
-    } catch {}
-    try {
-      const area = handle ? el : { left: 100, top: 200, width: 200, height: 400 };
-      await this.#client.execute("mobile: scrollGesture", { direction, percent: 1.0, ...area });
-    } catch {}
+    const area = handle ? el : { left: 100, top: 200, width: 200, height: 400 };
+    const order = this.#swipeCommand === SCROLL_GESTURE ? [SCROLL_GESTURE, SWIPE_GESTURE] : [SWIPE_GESTURE, SCROLL_GESTURE];
+    for (const command of order) {
+      try {
+        await this.#client.execute(command, command === SWIPE_GESTURE ? { direction, ...el } : { direction, percent: 1.0, ...area });
+        this.#swipeCommand = command;
+        return;
+      } catch {}
+    }
   }
 
   /** Run one action inside the mobile settle window; always an ExecResult. */
@@ -600,7 +637,7 @@ export class MobileDriver implements Driver {
     const start = Date.now();
     let lastRaw: string | null = null; // raw page source of the previous poll (parsed for the title)
     let lastDigest: string | null = null; // the parsed [eN] digest — the churn-free quiet surface
-    let lastParsed: MobileSnapshot | null = null; // the parse behind lastDigest, retained for the next captureSnapshot
+    let lastWalked: { walk: MobilePageSourceWalk; parsed: MobileSnapshot } | null = null; // the walk + parse behind lastDigest, retained for the next captureSnapshot
     let title = this.#screen;
     let quietSince = Date.now();
     let pending = seed; // the caller's already-read source; stands in for the first fetch
@@ -623,21 +660,21 @@ export class MobileDriver implements Driver {
       // once, not every poll.
       let digest: string | null = lastDigest;
       if (raw !== lastRaw) {
-        const snap = this.#parse(raw);
-        digest = snap.text;
-        title = snap.title || title;
+        const walked = this.#walkAndParse(raw);
+        digest = walked.parsed.text;
+        title = walked.parsed.title || title;
         lastRaw = raw;
-        lastParsed = snap;
+        lastWalked = walked;
       }
       if (digest !== lastDigest) {
         lastDigest = digest;
         quietSince = now;
       } else if (now - quietSince >= sourceWin) {
-        this.#settled(lastDigest, lastRaw, lastParsed); // digest for effectToken, source+parse for captureSnapshot
+        this.#settled(lastDigest, lastRaw, lastWalked); // digest for effectToken, source+walk+parse for captureSnapshot
         return { ms: now - start, title };
       }
       if (now - start >= max_ms) {
-        this.#settled(lastDigest, lastRaw, lastParsed);
+        this.#settled(lastDigest, lastRaw, lastWalked);
         return { ms: now - start, title };
       }
       await sleep(POLL_MS);

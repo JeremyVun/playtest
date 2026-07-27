@@ -1,0 +1,18 @@
+Screen: Edge & Cases
+application "Edge & Cases"
+text: "Line one line two"
+text: "<b>bold</b> & \"quoted\""
+button "Say hello"
+button "First duplicate"
+button "Second duplicate"
+button "Third duplicate"
+button "No identifier at all"
+switch "Dark mode"
+textfield "password"
+searchfield "Search" (disabled)
+link "Terms & conditions"
+image "Playtest logo"
+text: "A very long accessibility label that runs well past the hundred and twenty character cap this parser applies to every re"
+button "Home" (invisible)
+button "Gone" (invisible)
+button "Off" (invisible) (disabled)

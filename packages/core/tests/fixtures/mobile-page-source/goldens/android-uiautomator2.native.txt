@@ -1,0 +1,17 @@
+Screen: (app)
+linearlayout "root"
+text: "Playtest Todos"
+textfield "New todo"
+button "Add"
+androidx.recyclerview.widget.recyclerview "list"
+linearlayout "row"
+switch "Toggle"
+text: "Buy milk"
+button "Delete"
+linearlayout "row"
+switch "Toggle"
+text: "Walk the dog"
+button "Delete"
+button "Show completed"
+button "Clear completed" (disabled)
+text: "Pull to refresh"

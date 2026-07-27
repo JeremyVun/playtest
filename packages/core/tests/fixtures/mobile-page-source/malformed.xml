@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<AppiumAUT>
+  <XCUIElementTypeApplication name="Half a screen" label="Half a screen" enabled="true" visible="true" x="0" y="0" width="390" height="844">
+    <XCUIElementTypeButton name="ok-button" label="OK" enabled="true" visible="true" x="16" y="100" width="80" height="40"/>
+    <XCUIElementTypeStaticText label="Still parsed" enabled="true" visible="true" x="16" y="150" width="200" height="20"/>
+  </XCUIElementTypeOther>
+    <XCUIElementTypeButton name="after-mismatch" label="After a mismatched close" enabled="true" visible="true" x="16" y="200" width="200" height="40"/>
+    <XCUIElementTypeButton name="truncated" label="Truncated tag" enabled="true" visible="true" x="16" y="250" width="200"

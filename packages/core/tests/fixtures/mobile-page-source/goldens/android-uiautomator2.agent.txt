@@ -1,0 +1,12 @@
+Screen: (app)
+text: "Playtest Todos"
+[e1] textfield "New todo" value=""
+[e2] button "Add"
+[e3] switch "Toggle"
+text: "Buy milk"
+[e4] button "Delete"
+[e5] switch "Toggle"
+text: "Walk the dog"
+[e6] button "Delete"
+[e7] button "Show completed"
+[e8] button "Clear completed"

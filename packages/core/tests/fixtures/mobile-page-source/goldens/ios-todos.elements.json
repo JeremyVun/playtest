@@ -1,0 +1,114 @@
+[
+  {
+    "ref": "e1",
+    "role": "button",
+    "name": "Edit",
+    "value": "",
+    "locator": "~edit-button",
+    "bbox": {
+      "x": 330,
+      "y": 55,
+      "w": 44,
+      "h": 28
+    },
+    "typable": false
+  },
+  {
+    "ref": "e2",
+    "role": "textfield",
+    "name": "todo-input",
+    "value": "Buy oat milk",
+    "locator": "~todo-input",
+    "bbox": {
+      "x": 16,
+      "y": 139,
+      "w": 270,
+      "h": 36
+    },
+    "typable": true
+  },
+  {
+    "ref": "e3",
+    "role": "button",
+    "name": "Add",
+    "value": "",
+    "locator": "~add-button",
+    "bbox": {
+      "x": 298,
+      "y": 139,
+      "w": 76,
+      "h": 36
+    },
+    "typable": false
+  },
+  {
+    "ref": "e4",
+    "role": "button",
+    "name": "Buy milk",
+    "value": "active",
+    "locator": "~todo-row-1",
+    "bbox": {
+      "x": 16,
+      "y": 199,
+      "w": 256,
+      "h": 40
+    },
+    "typable": false
+  },
+  {
+    "ref": "e5",
+    "role": "button",
+    "name": "Delete Buy milk",
+    "value": "",
+    "locator": "~delete-1",
+    "bbox": {
+      "x": 330,
+      "y": 205,
+      "w": 47,
+      "h": 24
+    },
+    "typable": false
+  },
+  {
+    "ref": "e6",
+    "role": "button",
+    "name": "Walk the dog",
+    "value": "completed",
+    "locator": "~todo-row-2",
+    "bbox": {
+      "x": 16,
+      "y": 255,
+      "w": 256,
+      "h": 40
+    },
+    "typable": false
+  },
+  {
+    "ref": "e7",
+    "role": "button",
+    "name": "Delete Walk the dog",
+    "value": "",
+    "locator": "~delete-2",
+    "bbox": {
+      "x": 330,
+      "y": 261,
+      "w": 47,
+      "h": 24
+    },
+    "typable": false
+  },
+  {
+    "ref": "e8",
+    "role": "cell",
+    "name": "",
+    "value": "",
+    "locator": "(//XCUIElementTypeCell)[3]",
+    "bbox": {
+      "x": 0,
+      "y": 303,
+      "w": 390,
+      "h": 56
+    },
+    "typable": false
+  }
+]

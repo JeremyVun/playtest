@@ -1,0 +1,4 @@
+Screen: Half a screen
+[e1] button "OK"
+text: "Still parsed"
+[e2] button "After a mismatched close"

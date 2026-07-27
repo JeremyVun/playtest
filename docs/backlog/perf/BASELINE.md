@@ -174,6 +174,42 @@ Artifact bytes, 4 runs of the long cell: `context.jsonl` 165 KB,
    from c1 to c4 and peak RSS goes 325 → 311 MB (flat). Phase 4's T4.2 has to be
    justified by model-time overlap, which this harness cannot show.
 
+## Phase 2 result (T2.2), measured 2026-07-28
+
+Same harness, same machine, after parallelizing web capture and de-syncing the
+step-artifact writes. Web long cell, concurrency 1:
+
+| span | before p50 / p95 | after p50 / p95 |
+|---|---:|---:|
+| `snapshot` | 50.3 / 55.3 | 47.3 / 51.7 |
+| `snapshot_screenshot` | 40.3 / 44.0 | 40.6 / 44.3 |
+| `snapshot_source` | 2.7 / 3.4 | 2.5 / 3.2 |
+| `snapshot_mhtml` | 1.1 / 2.0 | 3.0 / 4.6 |
+| `snapshot_native_ax` | 2.0 / 3.1 | 3.1 / 4.5 |
+| `snapshot_write` | 0.14 / 0.20 | 0.37 / 0.73 |
+| `case_total` | 14 727 / 14 784 | 14 596 / 14 688 |
+
+Short cell `snapshot`: 48.7 → 45.5 p50.
+
+**The win is ~6%, not the ~19% point 3 above projected.** That projection assumed
+MHTML, native AX, and the writes would hide *completely* behind the screenshot.
+They do not: the concurrent CDP work contends with the screenshot on the same
+session, so the individual debug spans and the writes each read 2–3× longer than
+they did serially while overlapping. `snapshot_screenshot` is unchanged, which
+confirms it is still the floor. Two consequences for later phases:
+
+- `snapshot_source` no longer includes `page.title()` — the title moved into the
+  concurrent group. Compare it to pre-Phase-2 numbers with that in mind.
+- Phase 3's core profile, which skips MHTML and native AX outright rather than
+  hiding them, is now clearly the bigger web win: it removes the contention this
+  phase could only overlap.
+
+`har_flush` (T5.1) is unmoved at these page counts (0.14 ms p50, 28 real writes),
+exactly as point 6 predicted: the journal removes a quadratic that this workload
+never reaches. What changed is the *shape* — an interval flush now appends only
+the new entries, and har.json is rewritten in full only on the forced flushes
+(pre-gather, pre-gate, close).
+
 ## Sidecar cost
 
 Measured on the api long cell — the fastest workload, ~130 spans written per

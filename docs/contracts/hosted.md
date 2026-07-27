@@ -50,11 +50,16 @@ SQLite is the system of record for hosted metadata. The object store holds
 content-addressed suite blobs, run bundles, clips, and reports. Filesystem
 object storage is the currently supported implementation.
 
-Local development may use `PLAYTEST_DISPATCH=local`, which starts the real
-runner agent as a child process and exercises the same executor protocol.
-GitHub dispatch uses one workflow per run group or standalone mint and binds
-executors through GitHub OIDC. Dispatch is placement; it is not the system of
-record or an artifact store.
+`PLAYTEST_DISPATCH` selects one placement adapter for the deployment, and an
+unrecognized value fails startup rather than silently meaning GitHub. GitHub
+dispatch (the default) uses one workflow per run group or standalone mint and
+binds executors through GitHub OIDC. `PLAYTEST_DISPATCH=local` starts the real
+runner agent as a child process for local development and exercises the same
+executor protocol. `PLAYTEST_DISPATCH=pool` places work on self-hosted runners
+that claim it outbound (see "Runner pool"). All three implement one adapter
+interface, so run-group lifecycle, the dispatch ledger, and the reconciler do
+not vary by adapter. Dispatch is placement; it is not the system of record or an
+artifact store.
 
 ## Storage, deployment topology, and transactions
 
@@ -169,7 +174,8 @@ admin >= developer >= reviewer >= editor >= viewer
   manages project personas.
 - `reviewer` accepts or rejects baseline candidates and triages findings —
   confirming, rejecting, merging, resolving.
-- `developer` manages executable suite files, environments, and auth providers.
+- `developer` manages executable suite files, environments, auth providers, and
+  the self-hosted runner registry (`viewer` may list runners).
 - `admin` manages membership and project-wide administration, including
   permanent project deletion (`DELETE /api/v1/projects/:p`). Retention is a
   deployment-wide policy set by operators, not configured per project; legal
@@ -307,9 +313,11 @@ protocol rather than a second namespace.
 
 An exchange binds one executor to one active dispatch. In GitHub mode, the
 signed OIDC token must match the configured issuer, audience, repository,
-workflow, ref, and workflow run. Local development uses an explicitly enabled
-insecure exchange. The returned bearer is short-lived and scoped to exactly one
-run group or mint claim; group and mint tokens are not interchangeable.
+workflow, ref, and workflow run. In pool mode the runner presents its
+registration credential plus the dispatch it claimed. Local development uses an
+explicitly enabled insecure exchange. The returned bearer is short-lived and
+scoped to exactly one run group or mint claim; group and mint tokens are not
+interchangeable.
 
 The group spec includes only the selected cases, pinned snapshot, baseline
 references, resolved environment, session requirements, execution limits,
@@ -349,6 +357,98 @@ Case start, upload, report, and group completion are retry-safe. Completion may
 be partial when the executor approaches its runtime budget; the control plane
 dispatches only the remaining cases. A case report is accepted only for its
 group, run id, and current executor binding.
+
+## Runner pool
+
+Under `PLAYTEST_DISPATCH=pool` the control plane never starts or contacts an
+executor. A self-hosted runner — long-lived on a developer machine, or ephemeral
+inside a CI job — authenticates outbound, advertises labels, and claims work.
+**No inbound connection to a runner exists anywhere in this design.** The pool is
+a third implementation of the placement-adapter interface: dispatch rows, the
+reconciler, and run-group lifecycle are the same ones every other adapter uses.
+
+**Identity is not routing.** Two things stay separate:
+
+- The **runner credential** proves identity. It is minted once at registration,
+  shown once, stored as a hash like an API token, and is the only long-lived
+  secret on the runner's machine. It scopes the runner to exactly one project.
+- **Labels** route work. They are not secrets, confer no authority, and appear
+  freely in environment settings and console UI. A runner may re-advertise its
+  labels at check-in; that changes which of its project's jobs match it, never
+  which project it can reach.
+
+Registration is project-scoped: `POST /api/v1/projects/:p/runners`
+(`developer`) returns the runner plus its one-time credential, `GET` the same
+path (`viewer`) lists name, labels, last-seen and current claim, and
+`DELETE …/:r` (`developer`) revokes. Revocation is a timestamp, not a delete:
+the row and its history remain, future check-ins, claims and exchanges are
+refused, and a group already exchanged finishes under its already-issued scoped
+bearer. Revoking twice is a no-op. Registration, revocation, and every claim
+write audit rows. Runner names are unique per project.
+
+**The claim board.** A `requested` dispatch row plus its labels snapshot IS the
+board entry; posting to the board performs no network call and writes no new
+entity. The labels snapshot is written in the same transaction as the ledger
+row, so an entry is never readable before its routing is durable. The three
+runner-credential-authenticated routes are:
+
+1. `GET /runner/pool/claims?wait=true[&labels=…]` — check in and long-poll. The
+   answer is the oldest unclaimed dispatch in the runner's project whose label
+   set is a subset of the runner's, of kind `group` **or** `mint` (session
+   minting places through the same path and must be served). An empty job label
+   set matches any runner in the project. Held reads follow the event feed's
+   discipline: post-commit wake, bounded rescan, correctness from the durable
+   row. The poll only offers; two runners woken by one signal both see it. A
+   runner that already holds a claim is offered nothing and is handed that claim
+   back instead, which is how an agent restarted mid-group finds its work.
+2. `POST /runner/pool/claims/:dispatch` — claim it. One `BEGIN IMMEDIATE`
+   transaction restates the whole precondition in the mutating `WHERE` (still
+   `requested`, still unclaimed, not canceled, runner live and in this project,
+   labels still a subset), so exactly one concurrent runner wins and the loser
+   receives `409 conflict` and returns to polling. The winning claim stamps the
+   runner, moves the dispatch to `scheduled`, and emits the same `run.status`
+   provisioning event GitHub dispatch emits.
+3. `POST /runner/pool/claims/:dispatch/heartbeat` — coarse group-level liveness
+   between claim and completion, on the order of tens of seconds. Case-level
+   telemetry remains the progress route. Only the claim holder may heartbeat it.
+
+Delivery order is oldest-first per project; v1 makes no stronger fairness
+promise. One runner executes one group at a time: holding an active claim is
+part of the claim precondition, so a runner cannot take a second job and starve
+the fleet, while re-claiming the job it already holds is idempotent.
+
+**Claiming assigns, exchanging authorizes.** A credential alone resolves no
+dispatch, so it can never fetch a snapshot, a blob, a session grant, or post a
+report. After winning a claim the runner enters the unchanged protocol at
+`POST /runner/exchange` with its credential and `dispatch_id`, and receives the
+same short-lived bearer scoped to that one run group or mint claim. A runner
+that did not claim a dispatch cannot exchange for it. Because that boundary is
+the pool's whole security model, `PLAYTEST_DISPATCH=pool` refuses to boot with
+`PLAYTEST_RUNNER_INSECURE_EXCHANGE=1` (`ServerConfigError`), and pool mode
+disables the development insecure exchange even under `PLAYTEST_AUTH=dev`.
+
+**Liveness and loss.** The adapter reports claim and heartbeat state as run
+status, which is what lets the existing reconciler treat a dead self-hosted
+runner exactly like a vanished GitHub workflow. It has two loss shapes:
+
+- **Claimed but heartbeat-stale** beyond `PLAYTEST_POOL_HEARTBEAT_TIMEOUT_S`
+  (default 120) is a dead executor: unreported work becomes infrastructure
+  failure and the queued remainder is re-dispatched once, bounded, unchanged.
+- **Never claimed** within `PLAYTEST_POOL_CLAIM_TIMEOUT_S` (default 600) fails
+  the group instead, because re-posting to a board no runner is watching would
+  fail identically. The failure names what nothing checked in to serve ("no
+  runner with the label `jeremys-mac` has checked in for 10 minutes…") together
+  with the remedy, and that message lands on the stories that never ran, not
+  only in a log.
+
+Cancellation marks the claim canceled; the runner observes it at its next
+heartbeat and runs the same teardown a SIGTERM triggers, since nothing can call
+it. Case reports for already-finished cases remain accepted.
+
+**Isolation is stated, not laundered.** A developer laptop is process isolation,
+which this contract already allows for local development and fresh ephemeral
+machines; a persistent shared runner requires per-case containers and reports
+what it used, so a reviewer can see what produced the evidence.
 
 ## Script authoring jobs
 

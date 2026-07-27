@@ -208,16 +208,19 @@ async function grantStandaloneMint(ctx: HostedDynamic, tx: HostedDynamic, { prov
     `SELECT COALESCE(MAX(attempt), 0) + 1 AS attempt FROM dispatches WHERE kind = 'mint' AND ref_id = $1`,
     [claimId],
   );
-  await tx.query(
-    `INSERT INTO dispatches (id, project_id, kind, ref_id, attempt, status)
-       VALUES ($1, $2, 'mint', $3, $4, 'requested')`,
-    [dispatchId, provider.project_id, claimId, attempt.rows[0].attempt],
-  );
   let labels: HostedDynamic[] = [];
   if (provider.environment_id) {
     const env = await tx.query(`SELECT runner_labels FROM environments WHERE id = $1`, [provider.environment_id]);
     labels = env.rows[0]?.runner_labels || [];
   }
+  // The labels snapshot is written WITH the ledger row: under pull-based
+  // placement this row is the claim-board entry, and a mint is served on the
+  // same board as a run group.
+  await tx.query(
+    `INSERT INTO dispatches (id, project_id, kind, ref_id, attempt, status, labels)
+       VALUES ($1, $2, 'mint', $3, $4, 'requested', $5)`,
+    [dispatchId, provider.project_id, claimId, attempt.rows[0].attempt, labels],
+  );
   await audit(tx, {
     actor,
     action: "session.mint_dispatched",
@@ -241,8 +244,12 @@ async function sendStandaloneMint(ctx: HostedDynamic, mint: HostedDynamic) {
     labels: mint.labels,
     attempt: mint.attempt,
   });
+  // Pull-based placement posts to the board instead of starting a workflow, so
+  // the row stays `requested` until a runner claims it (dispatch/pool.ts).
   await ctx.db.query(
-    `UPDATE dispatches SET status = 'scheduled', workflow_run_id = $2, workflow_run_url = $3 WHERE id = $1`,
+    result.claim_pending
+      ? `UPDATE dispatches SET workflow_run_id = $2 WHERE id = $1`
+      : `UPDATE dispatches SET status = 'scheduled', workflow_run_id = $2, workflow_run_url = $3 WHERE id = $1`,
     [mint.dispatchId, result.workflow_run_id ?? null, result.workflow_run_url ?? null],
   );
   return { pending: true, claim_id: mint.claimId, dispatch_id: mint.dispatchId };

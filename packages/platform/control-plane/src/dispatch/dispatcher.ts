@@ -79,10 +79,13 @@ export async function createRunGroup(ctx: HostedDynamic, { principal, project, s
         [r.id, r.run_group_id, r.case_id, r.story_id, r.run_id, r.status, r.mode],
       );
     }
+    // The labels snapshot rides the ledger row, written in the same transaction:
+    // under pull-based placement this row IS the claim-board entry, so a runner
+    // must never be able to read it before its routing labels are durable.
     await tx.query(
-      `INSERT INTO dispatches (id, project_id, kind, ref_id, attempt, status)
-         VALUES ($1, $2, 'group', $3, 1, 'requested')`,
-      [dispatchId, project.id, groupId],
+      `INSERT INTO dispatches (id, project_id, kind, ref_id, attempt, status, labels)
+         VALUES ($1, $2, 'group', $3, 1, 'requested', $4)`,
+      [dispatchId, project.id, groupId, environment.runner_labels || []],
     );
     await audit(tx, {
       actor: actorOf(principal),
@@ -279,6 +282,18 @@ async function runCostHistory(ctx: HostedDynamic, suiteId: HostedDynamic) {
 
 export async function dispatchAttempt(ctx: HostedDynamic, { dispatchId, projectId, kind, refId, attempt, labels }: HostedDynamic) {
   const result = await ctx.github.dispatchWorkflow({ dispatchId, kind, refId, labels, attempt });
+  // Pull-based placement (dispatch/pool.ts): nothing was started, so the row
+  // stays `requested` — that IS the board entry, and the winning claim is what
+  // moves it to `scheduled`, flips the group to running, and emits the
+  // provisioning event below. Only the board's run id is stamped here, so the
+  // reconciler reads claim state instead of hunting for a workflow.
+  if (result.claim_pending) {
+    await ctx.db.query(`UPDATE dispatches SET workflow_run_id = $2 WHERE id = $1`, [
+      dispatchId,
+      result.workflow_run_id ?? null,
+    ]);
+    return;
+  }
   await ctx.db.query(
     `UPDATE dispatches
         SET status = 'scheduled', workflow_run_id = $2, workflow_run_url = $3
@@ -304,9 +319,9 @@ export async function dispatchContinuation(ctx: HostedDynamic, groupId: HostedDy
   const attempt = attemptRow.rows[0].attempt;
   const dispatchId = ulid();
   await ctx.db.query(
-    `INSERT INTO dispatches (id, project_id, kind, ref_id, attempt, status)
-       VALUES ($1, $2, 'group', $3, $4, 'requested')`,
-    [dispatchId, group.project_id, group.id, attempt],
+    `INSERT INTO dispatches (id, project_id, kind, ref_id, attempt, status, labels)
+       VALUES ($1, $2, 'group', $3, $4, 'requested', $5)`,
+    [dispatchId, group.project_id, group.id, attempt, env.runner_labels || []],
   );
   await dispatchAttempt(ctx, {
     dispatchId,

@@ -51,10 +51,10 @@ test("migrations build the whole schema from an empty database and are idempoten
   ).rows.map((r: HostedDynamic) => r.name);
   // 27 baseline tables + 2 consolidation tables (0004) + 1 personas table
   // (0005) + finding_intake_keys (0008) + rule_cards (0012) +
-  // finding_resolution_stamps (0013) + schema_migrations. The three
-  // bug-candidate tables 0003 created are dropped again by 0008: the finding
-  // is the only defect entity.
-  assert.equal(tables.length, 34, "every migration's tables plus schema_migrations");
+  // finding_resolution_stamps (0013) + runners (0015) + schema_migrations. The
+  // three bug-candidate tables 0003 created are dropped again by 0008: the
+  // finding is the only defect entity.
+  assert.equal(tables.length, 35, "every migration's tables plus schema_migrations");
   for (const added of ["consolidation_plans", "consolidation_labels"]) {
     assert.ok(tables.includes(added), `${added} is created by 0004`);
   }
@@ -62,6 +62,7 @@ test("migrations build the whole schema from an empty database and are idempoten
   assert.ok(tables.includes("finding_intake_keys"), "finding_intake_keys is created by 0008");
   assert.ok(tables.includes("rule_cards"), "rule_cards is created by 0012");
   assert.ok(tables.includes("finding_resolution_stamps"), "finding_resolution_stamps is created by 0013");
+  assert.ok(tables.includes("runners"), "runners is created by 0015");
   for (const collapsed of ["bug_candidates", "bug_candidate_evidence", "bug_candidate_suppressions"]) {
     assert.equal(tables.includes(collapsed), false, `${collapsed} was dropped by the findings collapse (0008)`);
   }

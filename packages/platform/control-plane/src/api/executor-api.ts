@@ -3,6 +3,7 @@ import { BundleProvider } from "@playtest/core/artifacts";
 import { HttpResult, readJsonBody, readRawBody } from "../http.ts";
 import { AppError, badRequest, forbidden, notFound, unauthenticated } from "../errors.ts";
 import { issueRunnerToken, requireRunner } from "../auth/runner-tokens.ts";
+import { presentedRunnerCredential, requireRunnerCredential } from "../auth/runner-credentials.ts";
 import { ulid } from "../ulid.ts";
 import { audit } from "../audit.ts";
 import { decryptSecret } from "../crypto/secrets.ts";
@@ -585,6 +586,30 @@ export async function complete(ctx: HostedDynamic) {
 }
 
 async function resolveExchangeDispatch(ctx: HostedDynamic, body: HostedDynamic) {
+  // Pull-based placement: a self-hosted runner presents its registration
+  // credential plus the dispatch it CLAIMED. Claiming assigned the work;
+  // exchanging authorizes it — the credential alone resolves no dispatch, so it
+  // can never fetch a snapshot or post a report. Checked first so a pooled
+  // runner is never quietly handed the development exchange instead.
+  if (presentedRunnerCredential(ctx.req)) {
+    const runner = await requireRunnerCredential(ctx);
+    if (!body.dispatch_id) {
+      throw badRequest(`"dispatch_id" is required: exchange the claim this runner won on the pool board`);
+    }
+    const { rows } = await ctx.db.query(
+      `SELECT * FROM dispatches
+        WHERE id = $1 AND runner_id = $2 AND canceled_at IS NULL
+          AND status IN ('requested','scheduled','running')`,
+      [String(body.dispatch_id), runner.id],
+    );
+    if (!rows[0]) {
+      throw forbidden(
+        `runner "${runner.name}" does not hold an active claim on dispatch "${body.dispatch_id}" — ` +
+          `claim it first with POST /api/v1/runner/pool/claims/${body.dispatch_id}`,
+      );
+    }
+    return rows[0];
+  }
   if (ctx.config.dispatch.allowInsecureRunnerExchange && (body.run_group_id || body.mint_claim_id)) {
     const [kind, refId] = body.mint_claim_id ? ["mint", body.mint_claim_id] : ["group", body.run_group_id];
     const { rows } = await ctx.db.query(

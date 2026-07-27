@@ -13,6 +13,7 @@ import { normalizeClipRequest, startClip } from "../media/clip.ts";
 import { ulid } from "../ulid.ts";
 import { inClause } from "../db.ts";
 import { emitPlatformEvent } from "../events/outbox.ts";
+import { holdUntil } from "../events/hold.ts";
 
 export async function createGroup(ctx: HostedDynamic) {
   const principal = requireAuth(ctx);
@@ -352,9 +353,9 @@ export async function retryGroup(ctx: HostedDynamic) {
     );
     attempt = attempts.rows[0].attempt;
     await tx.query(
-      `INSERT INTO dispatches (id, project_id, kind, ref_id, attempt, status)
-       VALUES ($1, $2, 'group', $3, $4, 'requested')`,
-      [dispatchId, group.project_id, group.id, attempt],
+      `INSERT INTO dispatches (id, project_id, kind, ref_id, attempt, status, labels)
+       VALUES ($1, $2, 'group', $3, $4, 'requested', $5)`,
+      [dispatchId, group.project_id, group.id, attempt, environment.runner_labels || []],
     );
     await tx.query(
       `UPDATE run_groups SET status = 'queued', exit_summary = NULL, updated_at = now()
@@ -618,41 +619,4 @@ async function getEnvironment(ctx: HostedDynamic, id: HostedDynamic) {
   const { rows } = await ctx.db.query(`SELECT * FROM environments WHERE id = $1`, [id]);
   if (!rows[0]) throw notFound(`no environment "${id}"`);
   return rows[0];
-}
-
-/**
- * Hold a long-poll (§4a): re-run `load` when the project's post-commit wake
- * signal fires, with a 1 s scan as the fallback, until rows arrive or
- * `waitSeconds` elapses. Returns whatever the last load produced (possibly []).
- *
- * The scan fallback is not a backstop for a rare miss — it is the correctness
- * path. Events committed between the caller's first `load()` and this loop's
- * subscription wake nobody, so the signal is only ever an accelerator; the
- * cursor and the committed rows decide what a client sees.
- *
- * The hold ends early when the client goes away (tab close, gateway kill —
- * Phase 7 hardening): without that check every abandoned reconnect kept its
- * loop and a DB connection busy for the full hold, and then queried a dead
- * request's context. It also ends when the waker has been stopped, i.e. the
- * server is shutting down — otherwise `wait()` resolves instantly and the loop
- * spins against a closing database.
- */
-async function holdUntil(ctx: HostedDynamic, projectId: HostedDynamic, waitSeconds: HostedDynamic, load: HostedDynamic) {
-  const deadline = Date.now() + waitSeconds * 1000;
-  let rows: HostedDynamic[] = [];
-  while (!rows.length) {
-    if (ctx.req?.destroyed || ctx.res?.destroyed || ctx.res?.writableEnded) return [];
-    if (ctx.feedWaker && !ctx.feedWaker.connected) break;
-    const remaining = deadline - Date.now();
-    if (remaining <= 0) break;
-    if (ctx.feedWaker) await ctx.feedWaker.wait(projectId, Math.min(remaining, 1000));
-    else await sleep(Math.min(remaining, 1000));
-    if (ctx.req?.destroyed || ctx.res?.destroyed || ctx.res?.writableEnded) return [];
-    rows = await load();
-  }
-  return rows;
-}
-
-function sleep(ms: HostedDynamic) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }

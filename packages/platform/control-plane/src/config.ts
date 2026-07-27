@@ -38,6 +38,9 @@ export class ServerConfigError extends Error {
  */
 const GRADER_TIER_MODEL = "sonnet";
 
+/** Placement adapters (`PLAYTEST_DISPATCH`); unset means GitHub workflow dispatch. */
+const DISPATCH_MODES = ["github", "local", "pool"];
+
 /** Decode a 32-byte key given as base64 or hex; null when unset. */
 function parseKmsKey(raw: string | undefined): Buffer | null {
   if (!raw) return null;
@@ -73,6 +76,17 @@ function resolveRetentionDays(env: NodeJS.ProcessEnv) {
  */
 export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
   const authMode = env.PLAYTEST_AUTH === "dev" ? "dev" : "oidc";
+
+  // Placement: which adapter starts (or, for the pool, does not start) runners.
+  // An unrecognized value is a boot error rather than a silent fall back to
+  // GitHub dispatch, which would look like "my runners never get work".
+  const dispatchMode = env.PLAYTEST_DISPATCH || "github";
+  if (!DISPATCH_MODES.includes(dispatchMode)) {
+    throw new ServerConfigError(
+      `PLAYTEST_DISPATCH must be one of ${DISPATCH_MODES.join(", ")} ` +
+        `(got ${JSON.stringify(env.PLAYTEST_DISPATCH)}); leave it unset for GitHub workflow dispatch`,
+    );
+  }
 
   // One data root holds the SQLite database and, by default, the object store,
   // so a deployment cannot accidentally split durable state across volumes
@@ -129,12 +143,28 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
       },
       // Test/development escape hatch for the local dispatch mock. Production
       // exchanges must validate a GitHub OIDC token against workflow_run_id.
-      allowInsecureRunnerExchange: env.PLAYTEST_RUNNER_INSECURE_EXCHANGE === "1" || authMode === "dev",
+      // Pool placement never rides it: a pooled runner is off-premises by
+      // definition, so it always presents its own registration credential and
+      // the insecure exchange is forced off below whatever the auth mode.
+      allowInsecureRunnerExchange:
+        dispatchMode !== "pool" && (env.PLAYTEST_RUNNER_INSECURE_EXCHANGE === "1" || authMode === "dev"),
       // PLAYTEST_DISPATCH=local runs launches through the in-process
       // LocalDispatchClient (spawns the real runner-agent on this machine)
       // instead of GitHub. Dev auth only: its exchange rides the insecure
       // runner exchange, which production must never enable.
-      local: env.PLAYTEST_DISPATCH === "local",
+      local: dispatchMode === "local",
+      // PLAYTEST_DISPATCH=pool places runs on self-hosted runners that claim
+      // work outbound (docs/contracts/hosted.md, "Runner pool"). The control
+      // plane starts nothing and connects to nothing.
+      pool: {
+        enabled: dispatchMode === "pool",
+        // How long a job may sit unclaimed on the board before the group fails
+        // with an error naming the labels nothing checked in to serve.
+        claimTimeoutMs: num(env.PLAYTEST_POOL_CLAIM_TIMEOUT_S, 600) * 1000,
+        // How long a claimed job may go without a heartbeat before its runner
+        // counts as gone (the reconciler's existing dead-executor path).
+        heartbeatTimeoutMs: num(env.PLAYTEST_POOL_HEARTBEAT_TIMEOUT_S, 120) * 1000,
+      },
     },
     auth: { mode: authMode } as {
       mode: "dev" | "oidc";
@@ -332,6 +362,35 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
       `PLAYTEST_DISPATCH=local is a development mode and needs PLAYTEST_AUTH=dev; ` +
         `production placement uses GitHub dispatch (GITHUB_APP_ID et al.)`,
     );
+  }
+
+  // The pool's whole security model is that placement grants nothing and the
+  // exchange authorizes: a runner presents its registration credential bound to
+  // a dispatch it actually claimed. The insecure exchange would let anyone who
+  // learns a run-group id skip the board entirely and collect a scoped bearer,
+  // so the two must never be enabled together. Dev auth stays usable with the
+  // pool — it silently drops the insecure exchange rather than the placement —
+  // but asking for it out loud is a boot error, not a silently ignored variable.
+  if (config.dispatch.pool.enabled && env.PLAYTEST_RUNNER_INSECURE_EXCHANGE === "1") {
+    throw new ServerConfigError(
+      `PLAYTEST_DISPATCH=pool cannot run with PLAYTEST_RUNNER_INSECURE_EXCHANGE=1: pooled runners always ` +
+        `present their registration credential, and the insecure exchange would let an unauthenticated ` +
+        `caller take a run group's scoped token. Unset PLAYTEST_RUNNER_INSECURE_EXCHANGE, or use ` +
+        `PLAYTEST_DISPATCH=local for a single-machine development loop.`,
+    );
+  }
+  for (const [name, ms, minS] of [
+    ["PLAYTEST_POOL_CLAIM_TIMEOUT_S", config.dispatch.pool.claimTimeoutMs, 1],
+    ["PLAYTEST_POOL_HEARTBEAT_TIMEOUT_S", config.dispatch.pool.heartbeatTimeoutMs, 1],
+  ] as Array<[string, number, number]>) {
+    // 0 is allowed only for tests that want an immediately-expired window; a
+    // negative or non-numeric value is always a misconfiguration.
+    if (!Number.isFinite(ms) || ms < 0) {
+      throw new ServerConfigError(
+        `${name} must be a number of seconds >= 0 (${minS} or more in a real deployment) ` +
+          `(got ${JSON.stringify(env[name])})`,
+      );
+    }
   }
 
   if (authMode === "oidc") {

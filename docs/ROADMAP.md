@@ -39,7 +39,9 @@ Plan: [`docs/backlog/self-hosted-runners/BUILD_PLAN.md`](backlog/self-hosted-run
 - [ ] **R0–R1 — Pull-based runner pool:** runner registry, credentialed
       claim board behind `PLAYTEST_DISPATCH=pool`, and the runner-agent pool
       mode, so a runner on a developer machine executes hosted runs against
-      local targets with outbound HTTP only.
+      local targets with outbound HTTP only. R0 (control plane: registry, board,
+      pool adapter, claim-bound exchange, reconciler loss shapes) has landed;
+      R1 (the agent's pool mode and the laptop benchmark) is next.
 - [ ] **R2 — Ephemeral CI runners:** OIDC-badged registration, per-launch
       label pinning, and the reference PR-gating workflow.
 - [ ] **R3 — Environment app artifacts:** content-addressed APK/.app upload

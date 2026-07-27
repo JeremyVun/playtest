@@ -15,9 +15,10 @@
     "secrets": 2,
     "auth_providers": 2,
     "run_groups": 2,
+    "runners": 2,
     "executors": 3,
     "runs": 5,
-    "dispatches": 3,
+    "dispatches": 4,
     "session_artifacts": 1,
     "session_claims": 1,
     "run_events": 4,
@@ -34,7 +35,7 @@
     "consolidation_labels": 2,
     "service_heartbeats": 1
   },
-  "totalRows": 99,
+  "totalRows": 102,
   "tables": [
     "api_tokens",
     "artifacts",
@@ -58,6 +59,7 @@
     "rule_cards",
     "run_events",
     "run_groups",
+    "runners",
     "runs",
     "schema_migrations",
     "secrets",
@@ -288,6 +290,12 @@
     "run_groups:01KT6BC1M094RFN90TX6F4BQG8:updated_at": 1780477540000,
     "run_groups:01KTV8VCG0GWD48MM99GKX098W:created_at": 1781179200000,
     "run_groups:01KTV8VCG0GWD48MM99GKX098W:updated_at": 1781179200000,
+    "runners:01KT1A0F80Z9DPAKMZ66HMNAVB:created_at": 1780308000000,
+    "runners:01KT1A0F80Z9DPAKMZ66HMNAVB:last_seen_at": 1781179500000,
+    "runners:01KT1A0F80Z9DPAKMZ66HMNAVB:revoked_at": null,
+    "runners:01KT1A0F80GSWXNAGC650KK42D:created_at": 1780308000000,
+    "runners:01KT1A0F80GSWXNAGC650KK42D:last_seen_at": 1780473600000,
+    "runners:01KT1A0F80GSWXNAGC650KK42D:revoked_at": 1780570800000,
     "executors:01KT6BC1M05RJRPCD26WB8CDY2:registered_at": 1780477200000,
     "executors:01KT6BC1M05RJRPCD26WB8CDY2:last_report_at": 1780477540000,
     "executors:01KT6BC1M05RJRPCD26WB8CDY2:concluded_at": 1780477540000,
@@ -328,12 +336,27 @@
     "dispatches:01KT6BC1M0H3Z1XN5TJ5BD4M8R:requested_at": 1780477200000,
     "dispatches:01KT6BC1M0H3Z1XN5TJ5BD4M8R:concluded_at": 1780477540000,
     "dispatches:01KT6BC1M0H3Z1XN5TJ5BD4M8R:created_at": 1780477200000,
+    "dispatches:01KT6BC1M0H3Z1XN5TJ5BD4M8R:claimed_at": null,
+    "dispatches:01KT6BC1M0H3Z1XN5TJ5BD4M8R:heartbeat_at": null,
+    "dispatches:01KT6BC1M0H3Z1XN5TJ5BD4M8R:canceled_at": null,
     "dispatches:01KT94MFW0NRBDR3PKS2PRNHPK:requested_at": 1780570800000,
     "dispatches:01KT94MFW0NRBDR3PKS2PRNHPK:concluded_at": 1780570800000,
     "dispatches:01KT94MFW0NRBDR3PKS2PRNHPK:created_at": 1780570800000,
+    "dispatches:01KT94MFW0NRBDR3PKS2PRNHPK:claimed_at": null,
+    "dispatches:01KT94MFW0NRBDR3PKS2PRNHPK:heartbeat_at": null,
+    "dispatches:01KT94MFW0NRBDR3PKS2PRNHPK:canceled_at": null,
     "dispatches:01KTV8VCG0KFG1YMWAT077H53S:requested_at": 1781179200000,
     "dispatches:01KTV8VCG0KFG1YMWAT077H53S:concluded_at": null,
     "dispatches:01KTV8VCG0KFG1YMWAT077H53S:created_at": 1781179200000,
+    "dispatches:01KTV8VCG0KFG1YMWAT077H53S:claimed_at": null,
+    "dispatches:01KTV8VCG0KFG1YMWAT077H53S:heartbeat_at": null,
+    "dispatches:01KTV8VCG0KFG1YMWAT077H53S:canceled_at": null,
+    "dispatches:01KTV8VCG0HE8GZFDXFZNRBWV2:requested_at": 1781179200000,
+    "dispatches:01KTV8VCG0HE8GZFDXFZNRBWV2:concluded_at": null,
+    "dispatches:01KTV8VCG0HE8GZFDXFZNRBWV2:created_at": 1781179200000,
+    "dispatches:01KTV8VCG0HE8GZFDXFZNRBWV2:claimed_at": 1781179200000,
+    "dispatches:01KTV8VCG0HE8GZFDXFZNRBWV2:heartbeat_at": 1781179500000,
+    "dispatches:01KTV8VCG0HE8GZFDXFZNRBWV2:canceled_at": null,
     "session_artifacts:01KTV8VCG0XS2NSPDB3EAHQXFG:minted_at": 1781179200000,
     "session_artifacts:01KTV8VCG0XS2NSPDB3EAHQXFG:expires_at": 1781182800000,
     "session_artifacts:01KTV8VCG0XS2NSPDB3EAHQXFG:created_at": 1781179200000,
@@ -446,6 +469,9 @@
     "run_groups": [
       "01KTV8VCG0GWD48MM99GKX098W:exit_summary"
     ],
+    "runners": [
+      "01KT1A0F80Z9DPAKMZ66HMNAVB:revoked_at"
+    ],
     "executors": [
       "01KT94MFW0JBWBSZ62BPZB017D:concluded_at",
       "01KT94MFW0JBWBSZ62BPZB017D:last_report_at",
@@ -482,12 +508,30 @@
       "01KTV8VCG0ZX2D04SM93PPXCFG:score"
     ],
     "dispatches": [
+      "01KT6BC1M0H3Z1XN5TJ5BD4M8R:canceled_at",
+      "01KT6BC1M0H3Z1XN5TJ5BD4M8R:claimed_at",
       "01KT6BC1M0H3Z1XN5TJ5BD4M8R:error",
+      "01KT6BC1M0H3Z1XN5TJ5BD4M8R:heartbeat_at",
+      "01KT6BC1M0H3Z1XN5TJ5BD4M8R:runner_id",
+      "01KT94MFW0NRBDR3PKS2PRNHPK:canceled_at",
+      "01KT94MFW0NRBDR3PKS2PRNHPK:claimed_at",
       "01KT94MFW0NRBDR3PKS2PRNHPK:error",
+      "01KT94MFW0NRBDR3PKS2PRNHPK:heartbeat_at",
+      "01KT94MFW0NRBDR3PKS2PRNHPK:labels",
+      "01KT94MFW0NRBDR3PKS2PRNHPK:runner_id",
       "01KT94MFW0NRBDR3PKS2PRNHPK:workflow_run_id",
       "01KT94MFW0NRBDR3PKS2PRNHPK:workflow_run_url",
+      "01KTV8VCG0HE8GZFDXFZNRBWV2:canceled_at",
+      "01KTV8VCG0HE8GZFDXFZNRBWV2:concluded_at",
+      "01KTV8VCG0HE8GZFDXFZNRBWV2:error",
+      "01KTV8VCG0HE8GZFDXFZNRBWV2:executor_id",
+      "01KTV8VCG0HE8GZFDXFZNRBWV2:workflow_run_url",
+      "01KTV8VCG0KFG1YMWAT077H53S:canceled_at",
+      "01KTV8VCG0KFG1YMWAT077H53S:claimed_at",
       "01KTV8VCG0KFG1YMWAT077H53S:concluded_at",
-      "01KTV8VCG0KFG1YMWAT077H53S:error"
+      "01KTV8VCG0KFG1YMWAT077H53S:error",
+      "01KTV8VCG0KFG1YMWAT077H53S:heartbeat_at",
+      "01KTV8VCG0KFG1YMWAT077H53S:runner_id"
     ],
     "baselines": [
       "01KT3NHF00JRGMXQFVFG0MDR3M:accepted_from_run_id",
@@ -736,6 +780,6 @@
     "pendingSessionClaims": [
       "01KT1A0F80S7KXHWGNNXBVXVDP|admin"
     ],
-    "activeDispatches": 1
+    "activeDispatches": 2
   }
 }

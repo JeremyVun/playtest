@@ -152,6 +152,10 @@ export const IDS: HostedDynamic = {
   dispatchMedia: fid(T.triage, "dispatch:media"),
   dispatchMint: fid(T.group2, "dispatch:mint"),
 
+  runnerLaptop: fid(T.suiteCreated, "runner:laptop"),
+  runnerRevoked: fid(T.suiteCreated, "runner:retired"),
+  dispatchPool: fid(T.group2, "dispatch:pool"),
+
   artifactBundleFull: fid(T.run1End, "artifact:run1-bundle"),
   artifactIndex: fid(T.run1End, "artifact:run1-index"),
   artifactClip: fid(T.triage, "artifact:run1-clip"),
@@ -377,6 +381,13 @@ export const COLUMN_TYPES: HostedDynamic = {
     id: "text", project_id: "text", kind: "text", ref_id: "text", attempt: "int", workflow_run_id: "text",
     workflow_run_url: "text", executor_id: "text", status: "text", requested_at: "ts", concluded_at: "ts",
     error: "text", created_at: "ts",
+    // Pull-based placement (0015): the labels snapshot that makes this row a
+    // claim-board entry, plus the claim the winning runner stamped on it.
+    labels: "text[]", runner_id: "text", claimed_at: "ts", heartbeat_at: "ts", canceled_at: "ts",
+  },
+  runners: {
+    id: "text", project_id: "text", name: "text", labels: "text[]", credential_hash: "text",
+    ephemeral: "bool", created_by: "text", created_at: "ts", last_seen_at: "ts", revoked_at: "ts",
   },
   run_events: { run_id: "text", seq: "int", ts: "ts", type: "text", payload: "json" },
   artifacts: {
@@ -450,6 +461,7 @@ export const TABLE_ORDER: HostedDynamic = [
   "secrets",
   "auth_providers",
   "run_groups",
+  "runners",
   "executors",
   "runs",
   "dispatches",
@@ -976,6 +988,36 @@ export const TABLES: HostedDynamic = {
     },
   ],
 
+  // Two registered self-hosted runners: one live, one revoked. Revocation is a
+  // timestamp rather than a delete, so a claim and its audit rows keep pointing
+  // at a real runner (0015).
+  runners: [
+    {
+      id: IDS.runnerLaptop,
+      project_id: IDS.projectMain,
+      name: "adas-laptop",
+      labels: ["macos", "ios-sim"],
+      credential_hash: sha256Hex("fixture-runner-credential"),
+      ephemeral: false,
+      created_by: IDS.userAdmin,
+      created_at: T.suiteCreated,
+      last_seen_at: T.now,
+      revoked_at: null,
+    },
+    {
+      id: IDS.runnerRevoked,
+      project_id: IDS.projectMain,
+      name: "retired-mini",
+      labels: [],
+      credential_hash: sha256Hex("fixture-runner-credential-retired"),
+      ephemeral: false,
+      created_by: IDS.userAdmin,
+      created_at: T.suiteCreated,
+      last_seen_at: T.snapshot2,
+      revoked_at: T.triage,
+    },
+  ],
+
   dispatches: [
     {
       id: IDS.dispatchGroup1,
@@ -991,6 +1033,13 @@ export const TABLES: HostedDynamic = {
       concluded_at: T.run3End,
       error: null,
       created_at: T.group1,
+      // Placed on GitHub: the labels rode the workflow inputs, and no claim
+      // exists because the control plane started this executor itself.
+      labels: ["self-hosted", "playtest"],
+      runner_id: null,
+      claimed_at: null,
+      heartbeat_at: null,
+      canceled_at: null,
     },
     {
       id: IDS.dispatchMedia,
@@ -1006,6 +1055,11 @@ export const TABLES: HostedDynamic = {
       concluded_at: T.triage,
       error: null,
       created_at: T.triage,
+      labels: null,
+      runner_id: null,
+      claimed_at: null,
+      heartbeat_at: null,
+      canceled_at: null,
     },
     {
       id: IDS.dispatchMint,
@@ -1021,6 +1075,33 @@ export const TABLES: HostedDynamic = {
       concluded_at: null,
       error: null,
       created_at: T.group2,
+      labels: [],
+      runner_id: null,
+      claimed_at: null,
+      heartbeat_at: null,
+      canceled_at: null,
+    },
+    {
+      // Pull-based placement: nothing was started. The row was the board entry
+      // until a runner claimed it; it has not exchanged yet, so no executor.
+      id: IDS.dispatchPool,
+      project_id: IDS.projectMain,
+      kind: "group",
+      ref_id: IDS.group2,
+      attempt: 1,
+      workflow_run_id: `pool:${IDS.dispatchPool}`,
+      workflow_run_url: null,
+      executor_id: null,
+      status: "scheduled",
+      requested_at: T.group2,
+      concluded_at: null,
+      error: null,
+      created_at: T.group2,
+      labels: ["macos", "ios-sim"],
+      runner_id: IDS.runnerLaptop,
+      claimed_at: T.group2,
+      heartbeat_at: T.now,
+      canceled_at: null,
     },
   ],
 

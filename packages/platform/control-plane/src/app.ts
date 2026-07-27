@@ -10,6 +10,7 @@ import { ensureUser } from "./auth/users.ts";
 import { makeRunnerTokenKey } from "./auth/runner-tokens.ts";
 import { GitHubDispatchClient } from "./dispatch/github.ts";
 import { LocalDispatchClient } from "./dispatch/local.ts";
+import { PoolDispatchClient } from "./dispatch/pool.ts";
 import { FeedWaker } from "./events/feed.ts";
 import { createServer } from "./server.ts";
 import { runRetentionCycle } from "./retention/worker.ts";
@@ -18,8 +19,22 @@ import { reconcileDispatches, RECONCILE_LEASE } from "./dispatch/reconciler.ts";
 import { beatHeartbeat } from "./ops.ts";
 import { withLease } from "./leases.ts";
 import { recomputeFindingKeys } from "./findings/intake.ts";
-import type { AppContext, DispatchClient } from "./types.ts";
+import type { AppContext, DispatchClient, Logger } from "./types.ts";
 import type { ControlPlaneConfig } from "./config.ts";
+import type { Db } from "./db.ts";
+
+/**
+ * The configured placement adapter (`PLAYTEST_DISPATCH`). All three implement
+ * the same interface; only the pool places work without starting anything.
+ */
+function makeDispatchClient(
+  config: ControlPlaneConfig,
+  { db, log }: { db: Db; log: Logger }
+): DispatchClient {
+  if (config.dispatch.pool.enabled) return new PoolDispatchClient(config, { db, log }) as DispatchClient;
+  if (config.dispatch.local) return new LocalDispatchClient(config, { log }) as DispatchClient;
+  return new GitHubDispatchClient(config) as DispatchClient;
+}
 
 export async function createApp(
   config: ControlPlaneConfig,
@@ -54,7 +69,7 @@ export async function createApp(
     log,
     devUserId,
     feedWaker,
-    github: github || (config.dispatch.local ? new LocalDispatchClient(config, { log }) : new GitHubDispatchClient(config)),
+    github: github || makeDispatchClient(config, { db, log }),
     runnerTokenKey: makeRunnerTokenKey(config),
     writeLimiter: new WriteRateLimiter({
       perMinute: config.rateLimit.writesPerMinute,

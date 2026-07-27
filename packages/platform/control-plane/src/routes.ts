@@ -13,6 +13,8 @@ import * as environments from "./api/environments.ts";
 import * as personasApi from "./api/personas.ts";
 import * as secrets from "./api/secrets.ts";
 import * as tokens from "./api/tokens.ts";
+import * as runners from "./api/runners.ts";
+import * as pool from "./api/pool.ts";
 import * as auditApi from "./api/audit.ts";
 import * as authRoutes from "./api/auth-routes.ts";
 import * as authProviders from "./api/auth-providers.ts";
@@ -94,6 +96,11 @@ export function buildRouter() {
   r.post(`${v}/projects/:p/tokens`, tokens.createToken);
   r.del(`${v}/tokens/:id`, tokens.deleteToken);
 
+  // --- self-hosted runner registry (identity; labels route, they do not authorize) ---
+  r.get(`${v}/projects/:p/runners`, runners.listRunners);
+  r.post(`${v}/projects/:p/runners`, runners.createRunner);
+  r.del(`${v}/projects/:p/runners/:r`, runners.deleteRunner);
+
   // --- runs / event feed ---
   r.post(`${v}/projects/:p/run-groups/preview`, runs.previewGroup);
   r.post(`${v}/projects/:p/run-groups`, runs.createGroup);
@@ -166,6 +173,12 @@ export function buildRouter() {
   r.get(`${v}/projects/:p/view/run/*path`, viewer.runEntry);
   r.get(`${v}/projects/:p/view`, viewer.viewIndex);
   r.get(`${v}/projects/:p/view/*path`, viewer.viewStatic);
+
+  // --- runner claim board (runner-credential authenticated; pull-based
+  //     placement, so nothing here is ever an inbound call to a runner) ---
+  r.get(`${v}/runner/pool/claims`, pool.pollClaims);
+  r.post(`${v}/runner/pool/claims/:dispatch`, pool.claimDispatch);
+  r.post(`${v}/runner/pool/claims/:dispatch/heartbeat`, pool.heartbeatClaim);
 
   // --- group executor protocol ---
   r.post(`${v}/runner/exchange`, executor.exchange);

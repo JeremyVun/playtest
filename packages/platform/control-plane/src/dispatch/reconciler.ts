@@ -43,18 +43,25 @@ async function reconcileOne(ctx: HostedDynamic, dispatch: HostedDynamic) {
   }
   if (status.status !== "completed") return { dispatch_id: dispatch.id, action: status.status || "unknown" };
 
+  // A placement adapter may explain the loss itself and say whether re-placing
+  // the remainder can help. Pull-based placement has a loss shape GitHub does
+  // not — nothing ever picked the work up — and re-posting to a board no runner
+  // is watching would only fail again, so the pool answers `redispatch: false`
+  // with a message naming the labels nothing checked in to serve.
   return await markDead(ctx, dispatch, {
     url: status.url,
-    reason: `workflow concluded without group completion (${status.conclusion || "unknown"})`,
+    reason: status.reason || `workflow concluded without group completion (${status.conclusion || "unknown"})`,
+    redispatch: status.redispatch !== false,
   });
 }
 
 /**
- * A dispatch's workflow is gone (concluded without `complete`, or never appeared).
+ * A dispatch's executor is gone (concluded without `complete`, never appeared,
+ * or — under pull-based placement — never claimed or stopped heartbeating).
  * Mark it reconciled_dead, fail in-flight cases as infra, and re-dispatch the
  * queued remainder once (bounded). Returns the reconcile action result.
  */
-async function markDead(ctx: HostedDynamic, dispatch: HostedDynamic, { url, reason }: HostedDynamic) {
+async function markDead(ctx: HostedDynamic, dispatch: HostedDynamic, { url, reason, redispatch = true }: HostedDynamic) {
   if (dispatch.kind === "mint") return await markMintDead(ctx, dispatch, { url, reason });
   const group = await getGroup(ctx, dispatch.ref_id);
   const completed = await ctx.db.query(
@@ -109,7 +116,7 @@ async function markDead(ctx: HostedDynamic, dispatch: HostedDynamic, { url, reas
       `SELECT COUNT(*) AS n FROM dispatches WHERE kind = 'group' AND ref_id = $1`,
       [group.id],
     );
-    shouldRedispatch = queued.rows[0].n > 0 && attempts.rows[0].n < 2;
+    shouldRedispatch = redispatch && queued.rows[0].n > 0 && attempts.rows[0].n < 2;
     await audit(tx, {
       actor: { system: "reconciler" },
       action: "dispatch.dead",
@@ -129,11 +136,16 @@ async function markDead(ctx: HostedDynamic, dispatch: HostedDynamic, { url, reas
         `SELECT * FROM runs WHERE run_group_id = $1 AND status = 'queued'`,
         [group.id],
       );
+      // An adapter that refused re-placement has already explained why in terms
+      // a person can act on ("no runner with label X has checked in…"); that
+      // belongs on the stories that never ran, not the anonymous default, which
+      // would hide the remedy behind a log line.
+      const startError = redispatch === false && reason ? reason : "runner died before case started";
       for (const run of pending.rows) {
         await tx.query(
-          `UPDATE runs SET status = 'infra', finished_at = now(), error = 'runner died before case started', progress = NULL, updated_at = now()
+          `UPDATE runs SET status = 'infra', finished_at = now(), error = $2, progress = NULL, updated_at = now()
             WHERE id = $1`,
-          [run.id],
+          [run.id, startError],
         );
       }
       // Same exit_summary shape as the executor's `complete` — without it the

@@ -257,6 +257,16 @@ the active executor. A dead executor cannot strand a group indefinitely: the
 reconciler marks unreported work as infrastructure failure and may dispatch a
 bounded remainder. Retries never duplicate an already accepted case report.
 
+`POST /api/v1/run-groups/:id/retry` is an editor-authorized, in-place retry for
+a finished group's stories that never started (`infra` or `lost` with no
+`started_at`). It resets only those rows to `queued`, keeps the same group,
+pinned snapshot, case/run ids, and completed verdicts, and creates a new
+dispatch attempt under that group. Product failures and any story that started
+are immutable evidence and are not reset by this route. The group-state check,
+row reset, and dispatch-ledger insert are one transaction: a double click or a
+retry while another attempt is active returns `409 conflict` and creates no
+second attempt.
+
 `GET /api/v1/run-groups/:id?wait=true` is the long-polling surface for
 automation clients. Its completed result preserves the hosted run-group
 projection.
@@ -1346,7 +1356,8 @@ author stories, run them, inspect evidence, make a human decision.
   their columns with each other. Every run is **one row** whatever it is doing:
   what it did (one count per outcome it produced), where it ran, its wall
   clock, its cost, and one action at its right edge (Cancel while it is
-  spending, Synthesize once a discovery run has trajectories to mine). A row
+  spending, Retry in place when stories never started, Synthesize once a
+  discovery run has trajectories to mine). A row
   expands **in place** to its stories, and each story links straight to its
   replay. A run of one story has no summary screen of its own — its name is the
   link to the replay.

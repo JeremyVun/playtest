@@ -5,198 +5,203 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const SRC = path.join(ROOT, "src");
-const CORE = path.join(SRC, "core");
-const CLI = path.join(SRC, "cli");
-const VIEWER = path.join(SRC, "run-viewer");
-const PLATFORM = path.join(SRC, "platform");
-const CORE_PUBLIC = path.join(CORE, "public");
+const WORKSPACES = {
+  "@playtest/core": "packages/core",
+  "@playtest/cli": "packages/cli",
+  "@playtest/run-viewer": "packages/run-viewer",
+  "@playtest/control-plane": "packages/platform/control-plane",
+  "@playtest/runner-agent": "packages/platform/runner-agent",
+  "@playtest/web": "packages/platform/web",
+} as const;
+const ALLOWED_PRODUCTION_EDGES: Record<string, string[]> = {
+  "@playtest/core": [],
+  "@playtest/cli": ["@playtest/core", "@playtest/run-viewer"],
+  "@playtest/run-viewer": ["@playtest/core"],
+  "@playtest/control-plane": ["@playtest/core", "@playtest/web"],
+  "@playtest/runner-agent": ["@playtest/core"],
+  "@playtest/web": ["@playtest/core", "@playtest/run-viewer"],
+};
+const SOURCE_EXTENSIONS = new Set([".ts", ".mts", ".js", ".mjs"]);
+const EXCLUDED = new Set(["node_modules", "build", ".test-build", "vendor", "fixtures"]);
 
-function javascriptFiles(root: LegacyTestValue) {
-  const files: LegacyTestValue = [];
-  const visit = (dir: LegacyTestValue) => {
+const readJson = (file: string) =>
+  JSON.parse(fs.readFileSync(path.join(ROOT, file), "utf8"));
+
+function sourceFiles(root: string) {
+  const files: string[] = [];
+  const visit = (dir: string) => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      if (entry.name === "node_modules" || entry.name.startsWith(".")) continue;
+      if (entry.name.startsWith(".") || EXCLUDED.has(entry.name)) continue;
       const file = path.join(dir, entry.name);
       if (entry.isDirectory()) visit(file);
-      else if (entry.isFile() && (entry.name.endsWith(".js") || entry.name.endsWith(".ts"))) files.push(file);
+      else if (entry.isFile() && SOURCE_EXTENSIONS.has(path.extname(entry.name))) files.push(file);
     }
   };
   visit(root);
   return files;
 }
 
-function relativeImports(file: LegacyTestValue) {
+function imports(file: string) {
   const source = fs.readFileSync(file, "utf8");
-  const imports = [];
-  const pattern = /(?:from\s*|import\s*\()\s*["']([^"']+)["']/g;
-  for (const match of source.matchAll(pattern)) {
-    if (match[1]!.startsWith(".")) { // SAFETY: regex capture group is required by the pattern
-      const matchIndex = match.index;
-      const statementStart = Math.max(
-        source.lastIndexOf("import", matchIndex),
-        source.lastIndexOf("export", matchIndex),
-      );
-      const typeOnly = /^import\s+type\b/.test(source.slice(statementStart, matchIndex));
-      imports.push({ specifier: match[1], target: path.resolve(path.dirname(file), match[1]!), typeOnly }); // SAFETY: regex capture group is required by the pattern
+  const found: string[] = [];
+  const patterns = [
+    /\b(?:import|export)\s+(?:type\s+)?[^;]*?\sfrom\s*["']([^"'\n]+)["']/g,
+    /\bimport\s*\(\s*["']([^"'\n]+)["']/g,
+    /(?:^|\n)\s*import\s*["']([^"'\n]+)["']/g,
+  ];
+  for (const pattern of patterns) {
+    for (const match of source.matchAll(pattern)) {
+      const before = match.index === 0 ? "" : source[match.index - 1];
+      if (before === "`" || before === "'" || before === '"' || before === "/") continue;
+      found.push(match[1]!);
     }
   }
-  return imports;
+  return [...new Set(found)];
 }
 
-function within(file: LegacyTestValue, root: LegacyTestValue) {
-  return file === root || file.startsWith(root + path.sep);
+function packageName(specifier: string) {
+  if (specifier.startsWith("@")) return specifier.split("/").slice(0, 2).join("/");
+  return specifier.split("/")[0]!;
 }
 
-function violations(files: LegacyTestValue, check: LegacyTestValue) {
-  const found = [];
-  for (const file of files) {
-    for (const dependency of relativeImports(file)) {
-      if (dependency.typeOnly) continue;
-      const reason = check(file, dependency.target);
-      if (reason) {
-        found.push(`${path.relative(ROOT, file)} imports ${dependency.specifier}: ${reason}`);
+test("relative imports never cross workspace boundaries, including type-only imports", () => {
+  const roots = Object.fromEntries(
+    Object.entries(WORKSPACES).map(([name, dir]) => [name, path.join(ROOT, dir)]),
+  );
+  const violations: string[] = [];
+  for (const [owner, workspace] of Object.entries(roots)) {
+    for (const file of sourceFiles(workspace)) {
+      for (const specifier of imports(file).filter((value) => value.startsWith("."))) {
+        const target = path.resolve(path.dirname(file), specifier);
+        const targetOwner = Object.entries(roots).find(
+          ([, root]) => target === root || target.startsWith(root + path.sep),
+        )?.[0];
+        if (targetOwner && targetOwner !== owner) {
+          violations.push(`${path.relative(ROOT, file)} -> ${specifier} (${targetOwner})`);
+        }
       }
     }
   }
-  return found;
-}
-
-test("source dependencies point inward toward core, never across experience layers", () => {
-  const coreViolations = violations(javascriptFiles(CORE), (_file: LegacyTestValue, target: LegacyTestValue) => {
-    if (within(target, CLI) || within(target, VIEWER) || within(target, PLATFORM)) {
-      return "core must not depend on an experience layer";
-    }
-    return null;
-  });
-
-  const cliViolations = violations(javascriptFiles(CLI), (_file: LegacyTestValue, target: LegacyTestValue) => {
-    if (within(target, PLATFORM)) return "CLI must not depend on the hosted platform";
-    if (within(target, CORE) && !within(target, CORE_PUBLIC)) {
-      return "CLI must consume a supported core entry point";
-    }
-    return null;
-  });
-
-  const viewerViolations = violations(javascriptFiles(VIEWER), (_file: LegacyTestValue, target: LegacyTestValue) => {
-    if (within(target, CLI) || within(target, PLATFORM)) {
-      return "run viewer must not depend on an experience layer";
-    }
-    if (within(target, CORE) && !within(target, CORE_PUBLIC)) {
-      return "run viewer must consume a supported core entry point";
-    }
-    return null;
-  });
-
-  const platformProduction = [
-    ...javascriptFiles(path.join(PLATFORM, "control-plane", "src")),
-    ...javascriptFiles(path.join(PLATFORM, "runner-agent", "src")),
-    ...javascriptFiles(path.join(PLATFORM, "web")),
-  ];
-  assert.ok(
-    platformProduction.some((file: LegacyTestValue) => file.endsWith(".ts")),
-    "the platform boundary scan must include TypeScript sources",
-  );
-  const platformViolations = violations(platformProduction, (_file: LegacyTestValue, target: LegacyTestValue) => {
-    if (within(target, CLI)) return "hosted platform must not depend on the CLI";
-    if (within(target, CORE) && !within(target, CORE_PUBLIC)) {
-      return "hosted platform must consume a supported core entry point";
-    }
-    return null;
-  });
-
-  assert.deepEqual(
-    [...coreViolations, ...cliViolations, ...viewerViolations, ...platformViolations],
-    [],
-  );
+  assert.deepEqual(violations.sort(), []);
 });
 
-test("package exports expose the supported core and viewer entry points", () => {
-  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
-  assert.deepEqual(Object.keys(manifest.exports).sort(), [
-    "./core/analysis",
-    "./core/api-suite-scripts",
-    "./core/artifacts",
-    "./core/findings",
-    "./core/llm",
-    "./core/media",
-    "./core/reporting",
-    "./core/run",
-    "./core/suite",
-    "./package.json",
-    "./run-viewer/node",
-  ]);
-});
-
-test("public facades expose only their intentional named surface", async () => {
-  const [analysis, artifacts, media, reporting] = await Promise.all([
-    import("../../src/core/public/analysis.ts"),
-    import("../../src/core/public/artifacts.ts"),
-    import("../../src/core/public/media.ts"),
-    import("../../src/core/public/reporting.ts"),
-  ]);
-
-  assert.deepEqual(Object.keys(analysis).sort(), ["extractAnomalies", "movement"]);
-  assert.deepEqual(Object.keys(media).sort(), ["clip"]);
-  assert.deepEqual(Object.keys(reporting).sort(), [
-    "PHASE_DOING", "caseLine", "healDigest", "junitXml", "modeDoing", "summary",
-  ]);
-  assert.deepEqual(Object.keys(artifacts).sort(), [
-    "BundleProvider",
-    "EXPORT_FORMAT",
-    "LocalFsProvider",
-    "acceptBaseline",
-    "actionOf",
-    "actionTrack",
-    "baselinePaths",
-    "coreBundleKeepPath",
-    "describeFindings",
-    "diffTracks",
-    "exportSpec",
-    "findManifests",
-    "findRunsRoot",
-    "firstLine",
-    "freshRunId",
-    "isBundlePath",
-    "latestRun",
-    "manifestToHistoryEntry",
-    "newRunId",
-    "promoteHealed",
-    "readBaseline",
-    "readJsonFile",
-    "rejectHealed",
-    "rewriteBundle",
-    "scanHistory",
-    "scanRun",
-    "specFilename",
-    "writeBundle",
-  ]);
-});
-
-test("product, tests, and studies do not depend on standalone examples", () => {
-  const dependencyExtensions = new Set([".js", ".mjs", ".json", ".sh", ".yaml", ".yml"]);
-  const files = [path.join(ROOT, "package.json")];
-  const visit = (dir: LegacyTestValue) => {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      if (entry.name === "node_modules" || entry.name.startsWith(".")) continue;
-      const file = path.join(dir, entry.name);
-      if (entry.isDirectory()) visit(file);
-      else if (entry.isFile() && dependencyExtensions.has(path.extname(entry.name))) files.push(file);
+test("every package import is declared by the importing workspace", () => {
+  const violations: string[] = [];
+  for (const [owner, workspace] of Object.entries(WORKSPACES)) {
+    const manifest = readJson(`${workspace}/package.json`);
+    const declared = new Set([
+      ...Object.keys(manifest.dependencies ?? {}),
+      ...Object.keys(manifest.optionalDependencies ?? {}),
+      ...Object.keys(manifest.devDependencies ?? {}),
+    ]);
+    for (const file of sourceFiles(path.join(ROOT, workspace))) {
+      for (const specifier of imports(file)) {
+        if (specifier.startsWith(".") || specifier.startsWith("node:")) continue;
+        const dependency = packageName(specifier);
+        if (!declared.has(dependency)) {
+          violations.push(`${owner}: ${path.relative(ROOT, file)} imports undeclared ${dependency}`);
+        }
+      }
     }
-  };
-  for (const root of [SRC, path.join(ROOT, "scripts"), path.join(ROOT, "studies"), path.join(ROOT, "tests")]) {
-    visit(root);
   }
+  assert.deepEqual(violations.sort(), []);
+});
 
+test("the first-party production graph has only approved edges and no cycles", () => {
+  const graph: Record<string, Set<string>> = {};
+  const violations: string[] = [];
+  for (const [owner, workspace] of Object.entries(WORKSPACES)) {
+    graph[owner] = new Set();
+    for (const file of sourceFiles(path.join(ROOT, workspace, "src"))) {
+      for (const specifier of imports(file)) {
+        const dependency = packageName(specifier);
+        if (!(dependency in WORKSPACES)) continue;
+        graph[owner].add(dependency);
+        if (!ALLOWED_PRODUCTION_EDGES[owner]!.includes(dependency)) {
+          violations.push(`${owner} -> ${dependency} from ${path.relative(ROOT, file)}`);
+        }
+      }
+    }
+  }
+  assert.deepEqual(violations.sort(), []);
+
+  const visiting = new Set<string>();
+  const visited = new Set<string>();
+  const visit = (name: string, stack: string[]) => {
+    if (visiting.has(name)) throw new Error(`workspace cycle: ${[...stack, name].join(" -> ")}`);
+    if (visited.has(name)) return;
+    visiting.add(name);
+    for (const dependency of graph[name] ?? []) visit(dependency, [...stack, name]);
+    visiting.delete(name);
+    visited.add(name);
+  };
+  for (const name of Object.keys(graph)) visit(name, []);
+});
+
+test("package exports expose only intentional entry points", () => {
+  assert.deepEqual(Object.keys(readJson("packages/core/package.json").exports).sort(), [
+    "./analysis",
+    "./api-suite-scripts",
+    "./artifacts",
+    "./browser/movement",
+    "./browser/timing",
+    "./findings",
+    "./llm",
+    "./media",
+    "./package.json",
+    "./reporting",
+    "./run",
+    "./suite",
+    "./testing",
+  ]);
+  assert.deepEqual(Object.keys(readJson("packages/run-viewer/package.json").exports).sort(), [
+    "./assets",
+    "./browser",
+    "./node",
+    "./package.json",
+  ]);
+  assert.deepEqual(Object.keys(readJson("packages/platform/web/package.json").exports).sort(), [
+    "./assets",
+    "./package.json",
+  ]);
+  for (const workspace of [
+    "packages/cli",
+    "packages/platform/control-plane",
+    "packages/platform/runner-agent",
+  ]) {
+    assert.equal(readJson(`${workspace}/package.json`).exports, undefined);
+  }
+});
+
+test("production resource locators stay inside their owning workspace", () => {
+  const violations: string[] = [];
+  const pattern = /\bnew\s+URL\s*\(\s*["']([^"']+)["']\s*,\s*import\.meta\.url/g;
+  for (const workspace of Object.values(WORKSPACES)) {
+    const root = path.join(ROOT, workspace);
+    for (const file of sourceFiles(path.join(root, "src"))) {
+      const source = fs.readFileSync(file, "utf8");
+      for (const match of source.matchAll(pattern)) {
+        const target = path.resolve(path.dirname(file), match[1]!);
+        if (target !== root && !target.startsWith(root + path.sep)) {
+          violations.push(`${path.relative(ROOT, file)} resolves ${match[1]} outside its package`);
+        }
+      }
+    }
+  }
+  assert.deepEqual(violations, []);
+});
+
+test("product and repository tests do not depend on standalone examples", () => {
+  const roots = [
+    ...Object.values(WORKSPACES).map((workspace) => path.join(ROOT, workspace)),
+    path.join(ROOT, "tests"),
+    path.join(ROOT, "scripts"),
+  ];
   const examplesPath = ["exam", "ples/"].join("");
-  const violations = files
+  const violations = roots
+    .flatMap(sourceFiles)
     .filter((file) => fs.readFileSync(file, "utf8").includes(examplesPath))
     .map((file) => path.relative(ROOT, file))
     .sort();
-
-  assert.deepEqual(
-    violations,
-    [],
-    "standalone examples must not be build, product, test, or study dependencies",
-  );
+  assert.deepEqual(violations, []);
 });

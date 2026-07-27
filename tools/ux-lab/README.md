@@ -22,7 +22,7 @@ Useful flags for `shoot`:
 
 ## What it does
 
-`plane.mjs` boots `src/platform/control-plane` **in-process** (the same
+`plane.mjs` boots `packages/platform/control-plane` **in-process** (the same
 `createApp` + `listen` path the integration harness uses) against
 `tools/ux-lab/.data`, wiped on every start. It never touches your own
 `.playtest-data` or port 4177.

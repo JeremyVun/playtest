@@ -20,8 +20,11 @@ import { fileURLToPath } from "node:url";
 // The engine's supported script surface. `loadOpenApi` has no facade of its
 // own; a study is not hosted code, and the spec loader is the same one the
 // runner's own policies read documents through.
-import { defaultScriptPolicies, deriveObligations } from "../../../../src/core/public/api-suite-scripts.js";
-import { loadOpenApi } from "../../../../src/core/openapi.js";
+import {
+  defaultScriptPolicies,
+  deriveObligations,
+  loadOpenApi,
+} from "@playtest/core/api-suite-scripts";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 

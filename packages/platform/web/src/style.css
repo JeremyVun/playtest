@@ -1,0 +1,1272 @@
+/* Playtest control plane — quiet, dense, engineering-grade. The palette and type
+   mirror the trajectory viewer (packages/run-viewer/src/web/style.css) so the two products read as
+   one system; light + dark from day one. One accent (signal
+   blue); green/red/amber reserved for pass/fail/changed semantics only. */
+
+:root {
+  --bg0: #0d1016;
+  --bg1: #131722;
+  --bg2: #1a2030;
+  --bg3: #242c40;
+  --line: #1f2636;
+  --line2: #303b54;
+  --ink: #dfe5f1;
+  --dim: #9aa5bc;
+  --faint: #7d8aa4;
+  --accent: #5cc8ff;
+  --accent-ink: #04121c;
+  --accent-soft: rgba(92, 200, 255, 0.12);
+  --pass: #45c578;
+  --pass-soft: rgba(69, 197, 120, 0.14);
+  --fail: #f2594f;
+  --fail-soft: rgba(242, 89, 79, 0.14);
+  --warn: #e3b341;
+  --warn-soft: rgba(227, 179, 65, 0.15);
+  --changed: #e0913a;
+  --changed-soft: rgba(224, 145, 58, 0.15);
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  --shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+  --radius: 8px;
+
+  /* ---- type scale ----
+     One ladder for the whole console. It replaces a dozen ad-hoc sizes between
+     10.5px and 26px, where a table header, a form hint and a chip could all be
+     "the small one" at three different sizes and no two of them lined up.
+     Every step is a role, not a size:
+       micro  uppercase eyebrows and table headers — tracked, never body text
+       xs     chips, tags, counts, mono provenance
+       sm     secondary prose: hints, sub-lines, dim detail
+       base   body
+       md     card and section titles
+       lg     page titles
+       xl     the one big number on a tile
+     Mono renders optically larger than the sans at the same size, so mono text
+     sits one step down (--fs-sm against --fs-base body). */
+  --fs-micro: 11px;
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-base: 14px;
+  --fs-md: 16px;
+  --fs-lg: 20px;
+  --fs-xl: 26px;
+  --lh-tight: 1.35;
+  --lh-base: 1.55;
+  /* Weights: 400 body, 500 dense-row emphasis, 600 titles/labels, 700 numerals.
+     The old 550/650 half-steps rendered as 500/700 on most system fonts anyway,
+     so they bought inconsistency and nothing else. */
+  --fw-med: 500;
+  --fw-semi: 600;
+}
+
+:root[data-theme="light"] {
+  --bg0: #f5f7fa;
+  --bg1: #ffffff;
+  --bg2: #eef1f6;
+  --bg3: #e3e8f0;
+  --line: #dbe1ea;
+  --line2: #c4ccd8;
+  --ink: #1a2230;
+  --dim: #566072;
+  --faint: #5e6a7f;
+  --accent: #15629b;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(21, 98, 155, 0.10);
+  --pass: #147a40;
+  --pass-soft: rgba(20, 122, 64, 0.12);
+  --fail: #bd352c;
+  --fail-soft: rgba(189, 53, 44, 0.10);
+  --warn: #8a6609;
+  --warn-soft: rgba(138, 102, 9, 0.12);
+  --changed: #9c540f;
+  --changed-soft: rgba(156, 84, 15, 0.12);
+  --shadow: 0 8px 30px rgba(20, 30, 50, 0.14);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg0: #f5f7fa; --bg1: #ffffff; --bg2: #eef1f6; --bg3: #e3e8f0;
+    --line: #dbe1ea; --line2: #c4ccd8; --ink: #1a2230; --dim: #566072; --faint: #5e6a7f;
+    --accent: #15629b; --accent-ink: #ffffff; --accent-soft: rgba(21, 98, 155,.10);
+    --pass: #147a40; --pass-soft: rgba(20, 122, 64,.12); --fail: #bd352c; --fail-soft: rgba(189, 53, 44,.10);
+    --warn: #8a6609; --warn-soft: rgba(138, 102, 9,.12); --changed: #9c540f; --changed-soft: rgba(156, 84, 15,.12);
+    --shadow: 0 8px 30px rgba(20,30,50,.14);
+  }
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  background: var(--bg0);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: var(--fs-base);
+  line-height: var(--lh-base);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+h1, h2, h3 { line-height: var(--lh-tight); letter-spacing: -0.01em; font-weight: var(--fw-semi); }
+button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+input, textarea, select { font: inherit; color: inherit; }
+a { color: var(--accent); text-decoration: none; }
+/* An underline marks a link that reads as a WORD in a sentence. Anchors that
+   wrap a control, tile, nav item, chip or the wordmark are targets, not words,
+   and text-decoration propagates from the anchor — a child cannot opt out of
+   it, which is why `#rail .navlink:hover { text-decoration: none }` never took
+   effect and the wordmark and every rail item grew an underline on hover. */
+a:hover { text-decoration: underline; }
+a.quiet-link:hover,
+a.brand-link:hover,
+a:has(.btn, .tile, .navlink, .chip, .status, .att-row, .avatar, .seg, .trend-pips, .card):hover {
+  text-decoration: none;
+}
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 3px; }
+code, .mono { font-family: var(--mono); font-size: var(--fs-sm); }
+
+.label {
+  font-size: var(--fs-micro); letter-spacing: 0.09em; text-transform: uppercase;
+  color: var(--faint); font-weight: var(--fw-semi);
+}
+.dim { color: var(--dim); }
+.faint { color: var(--faint); }
+.boot { display: grid; place-items: center; height: 100vh; color: var(--faint); }
+
+/* ---------- app frame ---------- */
+/* Top bar · content · system status bar. The last row is `auto`, so the frames
+   without a status bar (the project index) simply have nothing in it. */
+#app { display: grid; grid-template-rows: 54px 1fr auto; height: 100vh; }
+#app[aria-busy="true"] { grid-template-rows: 1fr; }
+
+/* Desktop-first scope gate. Below the supported width the console is replaced
+   rather than horizontally clipped — but it keeps its brand and offers a way
+   forward, because an unbranded wall with no exit reads as a broken site (and a
+   half-width window on a laptop lands here). "Continue anyway" sets
+   data-scope="wide" for people who know what they are doing. */
+#scope-gate { display: none; }
+@media (max-width: 899px) {
+  :root:not([data-scope="wide"]) #app,
+  :root:not([data-scope="wide"]) #toasts,
+  :root:not([data-scope="wide"]) #modal-root { display: none !important; }
+  :root:not([data-scope="wide"]) #scope-gate {
+    display: flex; flex-direction: column; min-height: 100vh;
+  }
+  #scope-gate .scope-bar {
+    display: flex; align-items: center; gap: 20px; padding: 0 18px; height: 54px; flex: none;
+    background: var(--bg1); border-bottom: 1px solid var(--line);
+  }
+  #scope-gate .scope-body { flex: 1; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; }
+  #scope-gate .scope-card { max-width: 420px; }
+  #scope-gate h1 { font-size: var(--fs-lg); margin-bottom: 10px; }
+  #scope-gate p { color: var(--dim); line-height: 1.6; margin-bottom: 8px; }
+  #scope-gate .scope-actions { margin-top: 16px; display: flex; gap: 8px; justify-content: center; }
+  /* Overridden: the rail and tables will scroll rather than reflow — that is
+     the deal the person just accepted. */
+  :root[data-scope="wide"] .layout { grid-template-columns: 168px 1fr; }
+  :root[data-scope="wide"] .page { padding: 16px 14px 48px; }
+  :root[data-scope="wide"] .card { overflow-x: auto; }
+}
+
+#topbar {
+  display: flex; align-items: center; gap: 20px; padding: 0 18px;
+  background: var(--bg1); border-bottom: 1px solid var(--line);
+}
+.brand { display: flex; align-items: center; gap: 9px; font-weight: var(--fw-semi); letter-spacing: .01em; }
+.brand svg { width: 16px; height: 16px; fill: var(--accent); }
+.topbar-spacer { flex: 1; }
+.proj-switch select, .proj-switch .select-btn, .searchbox input {
+  background: var(--bg2); border: 1px solid var(--line); border-radius: 6px;
+  padding: 5px 9px; color: var(--ink);
+}
+.proj-switch .selectw { width: auto; }
+.proj-switch .select-btn { width: auto; min-width: 140px; }
+.searchbox input { width: 240px; }
+.topbar .pill {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px;
+  border-radius: 999px; background: var(--bg2); border: 1px solid var(--line); font-size: var(--fs-xs);
+}
+.topbar .pill b { color: var(--accent); }
+/* Top-bar icon control (theme). Square, quiet at rest, and never an underlined
+   link — it is a switch, so it says what it will do through its icon + title. */
+.icon-btn {
+  display: grid; place-items: center; flex: none;
+  width: 30px; height: 30px; border-radius: 7px; color: var(--dim);
+}
+.icon-btn:hover { background: var(--bg2); color: var(--ink); }
+.icon-btn svg { width: 16px; height: 16px; fill: currentColor; }
+
+.usermenu { position: relative; }
+.usermenu > button { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 6px; }
+.avatar {
+  width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--accent-ink);
+  display: grid; place-items: center; font-size: var(--fs-micro); font-weight: 700;
+}
+.menu {
+  position: absolute; right: 0; top: 36px; background: var(--bg1); border: 1px solid var(--line2);
+  border-radius: 8px; box-shadow: var(--shadow); min-width: 180px; padding: 6px; z-index: 40;
+}
+.menu button { display: block; width: 100%; text-align: left; padding: 7px 10px; border-radius: 6px; }
+.menu button:hover { background: var(--bg2); }
+
+/* ---------- layout ---------- */
+.layout { display: grid; grid-template-columns: 208px 1fr; min-height: 0; }
+.layout.no-rail { grid-template-columns: 1fr; }
+#rail { background: var(--bg1); border-right: 1px solid var(--line); padding: 14px 10px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+#rail .navlink {
+  display: flex; align-items: center; gap: 9px;
+  padding: 8px 11px; border-radius: 7px; color: var(--dim); font-weight: var(--fw-med); cursor: pointer;
+}
+#rail .navlink:hover { background: var(--bg2); color: var(--ink); text-decoration: none; }
+#rail .navlink.active { background: var(--accent-soft); color: var(--accent); }
+#rail .nav-ic { display: flex; flex: none; }
+#rail .nav-ic svg { width: 16px; height: 16px; display: block; }
+#rail .nav-label { flex: 1; }
+#rail .navlink .count { font-size: var(--fs-micro); background: var(--bg3); color: var(--dim); border-radius: 999px; padding: 1px 7px; }
+#rail .navlink.active .count { background: var(--accent); color: var(--accent-ink); }
+#rail .rail-group { margin-top: 16px; }
+
+/* fold the rail to an icon column: wide surfaces (the embedded trajectory
+   viewer above all) get the horizontal space back. The chevron toggle sits at
+   the rail's foot; the item labels move into their title tooltips. */
+#rail .rail-toggle {
+  margin-top: auto;
+  display: flex; align-items: center; justify-content: center;
+  align-self: flex-end;
+  width: 30px; height: 30px;
+  border-radius: 7px; color: var(--dim); cursor: pointer;
+}
+#rail .rail-toggle:hover { background: var(--bg2); color: var(--ink); }
+#rail .rail-toggle svg { width: 16px; height: 16px; display: block; }
+.layout.rail-min { grid-template-columns: 54px 1fr; }
+.layout.rail-min #rail { padding: 14px 8px; }
+.layout.rail-min #rail .navlink { justify-content: center; padding: 9px 0; }
+.layout.rail-min #rail .nav-label, .layout.rail-min #rail .navlink .count { display: none; }
+.layout.rail-min #rail .rail-toggle { align-self: center; }
+
+#main { overflow-y: auto; min-height: 0; }
+
+/* ---------- system status bar ----------
+   Always on, under every project page: whether this console is live, how deep
+   the dispatch queue is, how long a run waits for an executor, whether the
+   reconciler is beating, and what the models have cost. It is a glance, not a
+   dashboard — one line of quiet numbers, each one carrying its state in words
+   (never colour alone), with the dispatch ledger in a drawer that opens OVER
+   the page rather than pushing it. */
+#statusbar { position: relative; background: var(--bg1); border-top: 1px solid var(--line); }
+.sb-bar {
+  display: flex; align-items: center; gap: 18px; height: 30px; padding: 0 14px;
+  font-size: var(--fs-micro); color: var(--dim); white-space: nowrap; overflow: hidden;
+}
+.sb-live, .sb-item { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+/* The items live in a wrapper the repaint can swap wholesale, but they must lay
+   out as if they were the bar's own children — hence `contents`, so the bar's
+   flex gap still separates them. */
+.sb-items { display: contents; }
+.sb-k { color: var(--faint); letter-spacing: .06em; text-transform: uppercase; }
+.sb-v { color: var(--ink); font-variant-numeric: tabular-nums; }
+.sb-v.pass { color: var(--pass); }
+.sb-v.infra { color: var(--warn); }
+.sb-v.accent { color: var(--accent); }
+.sb-v.neutral { color: var(--dim); }
+.sb-dot { width: 6px; height: 6px; border-radius: 50%; flex: none; background: var(--dim); }
+.sb-dot.pass { background: var(--pass); }
+.sb-dot.infra { background: var(--warn); }
+.sb-spacer { flex: 1; }
+.sb-toggle {
+  display: inline-flex; align-items: center; gap: 6px; flex: none;
+  padding: 2px 8px; border-radius: 6px; color: var(--dim); font-size: var(--fs-micro);
+}
+.sb-toggle:hover, .sb-toggle[aria-expanded="true"] { background: var(--bg2); color: var(--ink); }
+.sb-chev { font-size: 9px; }
+.sb-panel {
+  position: absolute; left: 0; right: 0; bottom: 100%; z-index: 30;
+  max-height: 46vh; overflow-y: auto; padding: 14px 16px 16px;
+  background: var(--bg1); border-top: 1px solid var(--line2);
+  /* The drawer opens upward, so its shadow falls upward too — the stock
+     downward --shadow would be cast behind the bar, where nobody can see it. */
+  box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.28);
+}
+/* The sentence behind each number in the bar. A `title` is unreachable by
+   keyboard and invisible on touch, so the notes get a home on screen too. */
+.sb-panel .sb-notes {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 4px 20px;
+  font-size: var(--fs-xs); color: var(--dim); margin-bottom: 14px;
+}
+.sb-panel .sb-notes b { color: var(--ink); font-weight: var(--fw-semi); }
+.sb-panel .section-title { margin-bottom: 8px; }
+.page { max-width: 1180px; margin: 0 auto; padding: 22px 26px 60px; }
+.page-head { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; flex-wrap: wrap; }
+.page-head h1 { font-size: var(--fs-lg); font-weight: var(--fw-semi); }
+.page-head .sub { color: var(--dim); }
+.crumbs { color: var(--faint); font-size: var(--fs-sm); margin-bottom: 4px; }
+/* underlined: crumbs links sit inside faint text, so color alone can't mark
+   them as links (axe link-in-text-block) */
+.crumbs a { color: var(--dim); text-decoration: underline; text-underline-offset: 2px; }
+.head-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+
+/* ---------- primitives ---------- */
+.btn {
+  display: inline-flex; align-items: center; gap: 7px; padding: 7px 13px; border-radius: 7px;
+  border: 1px solid var(--line2); background: var(--bg2); color: var(--ink); font-weight: var(--fw-med); white-space: nowrap;
+}
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.primary:hover { filter: brightness(1.06); }
+.btn.ghost { background: transparent; border-color: transparent; color: var(--dim); }
+.btn.ghost:hover { background: var(--bg2); color: var(--ink); }
+/* Destructive actions look destructive AT REST. A colour that only arrives on
+   :hover never arrives at all on a touch screen or for anyone moving by
+   keyboard, which left four Delete buttons and three Edit buttons identical. */
+.btn.danger { color: var(--fail); border-color: var(--fail); }
+.btn.danger:hover { background: var(--fail-soft); border-color: var(--fail); }
+/* Filled red is reserved for the confirm dialog's action — the last click. */
+.btn.primary.danger { background: var(--fail); border-color: var(--fail); color: var(--accent-ink); }
+.btn.primary.danger:hover { filter: brightness(1.06); background: var(--fail); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn-sm { padding: 4px 9px; font-size: var(--fs-xs); }
+
+.card { background: var(--bg1); border: 1px solid var(--line); border-radius: var(--radius); }
+.card.pad { padding: 16px 18px; }
+.stack { display: flex; flex-direction: column; gap: 16px; }
+.run-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+/* Headline numerals: tabular figures so a pass rate ticking 98% → 100% doesn't
+   shift the digits beside it. */
+.big, .tile .v, .pass-summary .v { font-variant-numeric: tabular-nums; }
+.big { font-size: var(--fs-xl); font-weight: 700; margin-top: 6px; }
+.section-title { font-size: var(--fs-md); margin: 8px 0 10px; }
+.grid-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+.tile { background: var(--bg1); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
+.tile .k { color: var(--faint); font-size: var(--fs-micro); letter-spacing: .06em; text-transform: uppercase; }
+.tile .v { font-size: var(--fs-xl); font-weight: var(--fw-semi); margin-top: 4px; }
+.tile .v.sm { font-size: var(--fs-md); }
+
+/* Suites header: compact verdict cards + the contextual Review-all action,
+   not a grid of equal-weight tiles. One fact per card — the rate card carries
+   the number and the sentence that sizes it, the trend card the sparkline. */
+.overview-head { display: flex; align-items: stretch; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.overview-head > a { align-self: center; }
+.pass-summary {
+  min-width: 220px; padding: 12px 14px;
+  background: var(--bg1); border: 1px solid var(--line); border-radius: var(--radius);
+}
+.pass-summary .k { color: var(--faint); font-size: var(--fs-micro); letter-spacing: .06em; text-transform: uppercase; }
+.pass-summary .v { margin-top: 2px; font-size: var(--fs-xl); line-height: 1.1; font-weight: var(--fw-semi); }
+.pass-summary-detail { color: var(--dim); font-size: var(--fs-xs); margin-top: 4px; }
+.pass-trend { min-width: 0; display: flex; flex-direction: column; }
+.pass-trend .spark { display: block; margin-top: auto; padding-top: 8px; }
+.overview-head > a { margin-left: auto; }
+
+/* Advanced disclosure (Test targets JSON / auth / secrets). */
+details.advanced > summary { cursor: pointer; font-size: var(--fs-sm); color: var(--dim); font-weight: var(--fw-med); }
+details.advanced[open] > summary { margin-bottom: 6px; }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px;
+  background: var(--bg2); border: 1px solid var(--line); font-size: var(--fs-xs); color: var(--dim);
+  /* A pill broken across two lines reads as two chips. */
+  white-space: nowrap;
+}
+.chip.tag { font-family: var(--mono); }
+/* Triage-state / severity chips: words + tone, never the run-status glyphs. */
+.chip.state-new { color: var(--changed); border-color: var(--changed); background: var(--changed-soft); font-weight: var(--fw-semi); }
+.chip.state-accepted { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); font-weight: var(--fw-semi); }
+.chip.state-muted { color: var(--dim); }
+/* Resolved is finished work, not merely archived — it earns the pass green. */
+.chip.state-resolved { color: var(--pass); border-color: var(--pass); background: var(--pass-soft); font-weight: var(--fw-semi); }
+/* Calm (informational) tone: the system reporting good news — "looks fixed",
+   "auto-resolved" — never an alarm and never a state word. */
+.chip.calm { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.chip-row { display: inline-flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.chip-row a { text-decoration: none; }
+.chip.sev-major { color: var(--fail); border-color: var(--fail); background: var(--fail-soft); font-weight: var(--fw-semi); }
+.chip.sev-minor { color: var(--warn); border-color: var(--warn); background: var(--warn-soft); }
+.chip.sev-info { color: var(--dim); }
+/* trend pips: a story's recent verdicts, oldest → newest (suite page TREND) */
+.trend-pips { display: inline-flex; align-items: center; gap: 4px; text-decoration: none; }
+.trend-pips .pip { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); flex: none; }
+.trend-pips .pip.pass { background: var(--pass); }
+.trend-pips .pip.fail { background: var(--fail); }
+.trend-pips .pip.infra { background: var(--warn); }
+.trend-pips .pip.explored { background: var(--accent); }
+.trend-pips .desc { margin-left: 5px; }
+
+.status { display: inline-flex; align-items: center; gap: 6px; font-weight: var(--fw-semi); font-size: var(--fs-sm); }
+.status .glyph { font-size: var(--fs-xs); }
+.status.pass { color: var(--pass); }
+.status.fail { color: var(--fail); }
+.status.changed { color: var(--changed); }
+.status.infra { color: var(--warn); }
+.status.explored, .status.neutral { color: var(--dim); }
+.status.running { color: var(--accent); }
+
+@media (max-width: 760px) {
+  .run-summary { grid-template-columns: 1fr; }
+}
+.nextrun { font-family: var(--mono); font-size: var(--fs-xs); color: var(--dim); }
+
+table.rows { width: 100%; border-collapse: collapse; }
+table.rows th { text-align: left; font-size: var(--fs-micro); letter-spacing: .08em; text-transform: uppercase; color: var(--faint); font-weight: var(--fw-semi); padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+table.rows td { padding: 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.rows tr:hover td { background: var(--bg1); }
+table.rows .id { font-family: var(--mono); font-weight: var(--fw-semi); }
+table.rows .desc { color: var(--dim); font-size: var(--fs-sm); }
+/* A row's title is the plain-language thing — the story a person wrote, the
+   finding's sentence, the run's trigger note. The machine id is a small mono
+   tag beside it. Monospace is reserved for what really is code: selectors,
+   URLs, and ids in provenance lines. */
+table.rows .rowtitle { font-weight: var(--fw-semi); color: var(--ink); }
+a:hover .rowtitle { text-decoration: underline; }
+.rowtag {
+  font-family: var(--mono); font-size: var(--fs-micro); font-weight: 400; color: var(--faint);
+  white-space: nowrap; margin-left: 8px;
+}
+.rowtag.block { display: block; margin: 2px 0 0; }
+/* one authored story, several persona runs */
+.persona-count { font-size: var(--fs-xs); color: var(--dim); margin-left: 8px; white-space: nowrap; }
+/* ---------- personas ----------
+   A persona's description is the actor's prompt, which for the built-ins runs to
+   several hundred words. Printed in full it turned the page into five slabs of
+   dim grey text nobody could scan, so the card carries a CLAMPED preview and the
+   dialog carries the whole thing. Reflowing (see paragraphs() in
+   pages/personas.js) is what makes the preview read as prose rather than as a
+   file with a ragged right edge. */
+.persona-section + .persona-section { margin-top: 28px; }
+.section-head { margin-bottom: 12px; }
+.section-head .section-title { margin: 0; display: flex; align-items: baseline; gap: 8px; }
+.section-head .section-title .count { font-size: var(--fs-xs); font-weight: 400; color: var(--faint); }
+.section-head .section-gloss { margin-top: 2px; color: var(--dim); font-size: var(--fs-sm); max-width: 82ch; }
+
+/* Stretch, not start: a row of cards whose bottoms line up reads as a set. The
+   clamp caps how far apart a 34-word persona and a 180-word one can get. */
+.persona-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+/* The whole card is the control: one tab stop and one accessible name per
+   persona, instead of three same-shaped buttons repeated down the page. */
+/* Column flex, not block: a <button> vertically centres its own content, so a
+   short persona in a stretched row floated away from the card's top edge. */
+.persona-card, .persona-add { display: flex; flex-direction: column; align-items: stretch; width: 100%; text-align: left; padding: 14px 16px; }
+.persona-card { justify-content: flex-start; }
+.persona-card:hover, .persona-card:focus-visible, .persona-add:hover, .persona-add:focus-visible { border-color: var(--accent); }
+.pc-head { display: flex; align-items: baseline; gap: 10px; }
+.pc-name { flex: 1; min-width: 0; font-size: var(--fs-md); font-weight: var(--fw-semi); overflow-wrap: anywhere; }
+/* The verb, quiet at rest — the card already looks clickable, this says what
+   the click does without spending a button on it. */
+.pc-cue { flex: none; font-size: var(--fs-xs); color: var(--faint); }
+.persona-card:hover .pc-cue, .persona-card:focus-visible .pc-cue { color: var(--accent); }
+.pc-meta { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; margin-top: 3px; font-size: var(--fs-xs); color: var(--faint); }
+.pc-meta .slug { font-family: var(--mono); }
+.pc-prose {
+  margin-top: 9px; color: var(--dim); font-size: var(--fs-sm); line-height: 1.55;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 6; overflow: hidden;
+}
+.persona-add {
+  display: flex; flex-direction: column; gap: 5px; justify-content: center;
+  border-style: dashed; border-color: var(--line2); background: transparent; min-height: 132px;
+}
+.persona-add .pa-title { font-weight: var(--fw-semi); }
+.persona-add .pa-why { color: var(--dim); font-size: var(--fs-sm); line-height: 1.5; }
+
+/* The persona dialog holds a paragraph of prompt text, so it gets more room
+   than the 460px default, and its textarea is prose — the global monospace
+   textarea is for YAML and selectors, not for a sentence about a warehouse. */
+.modal:has(.persona-form), .modal:has(.persona-read) { max-width: 620px; }
+.persona-form .lead { margin-bottom: 16px; color: var(--dim); font-size: var(--fs-sm); line-height: 1.55; }
+.persona-form .lead b { color: var(--ink); font-weight: var(--fw-semi); }
+textarea.prose-input { font-family: var(--sans); font-size: var(--fs-base); line-height: 1.55; min-height: 190px; }
+/* The derived reference word is a receipt inside the Name hint, so it must not
+   break across lines mid-token the way `## Persona` prose would. */
+.persona-form .hint .mono { color: var(--dim); white-space: nowrap; }
+.persona-read .pr-meta { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; font-size: var(--fs-xs); color: var(--faint); }
+.persona-read .pr-meta .slug { font-family: var(--mono); }
+/* Same size and weight as the editable version in the other dialog: the same
+   prompt should not change appearance depending on whether you may edit it. */
+.persona-read .pr-prose { max-height: 52vh; overflow-y: auto; }
+.persona-read .pr-prose p { color: var(--ink); font-size: var(--fs-base); line-height: 1.6; }
+.persona-read .pr-prose p + p { margin-top: 10px; }
+/* Delete sits on the far left of the dialog it belongs to, a dialog's width away
+   from Save rather than 8px from it. Scoped through .modal to outrank the
+   `.modal .modal-actions { justify-content: flex-end }` default below. */
+.modal .modal-actions.split { justify-content: space-between; }
+.modal .modal-actions .right { display: flex; gap: 8px; }
+
+.empty { text-align: center; color: var(--dim); padding: 44px 20px; }
+.empty h3 { color: var(--ink); font-weight: var(--fw-semi); margin-bottom: 6px; }
+.empty p { max-width: 460px; margin: 0 auto 14px; }
+.empty .empty-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+
+/* First-run checklist: the three things that must exist before a run can say
+   anything, each linking to the thing that does it. A brand-new project used to
+   offer a pass-rate of "—" and two identical New suite buttons, and never
+   mentioned that a run also needs somewhere to point. */
+.checklist { list-style: none; display: flex; flex-direction: column; }
+.checklist li { display: flex; align-items: flex-start; gap: 12px; padding: 13px 16px; border-bottom: 1px solid var(--line); }
+.checklist li:last-child { border-bottom: none; }
+.checklist .tick {
+  flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
+  font-size: var(--fs-xs); font-weight: 700; border: 1px solid var(--line2); color: var(--faint); background: var(--bg2);
+}
+.checklist li.done .tick { background: var(--pass-soft); border-color: var(--pass); color: var(--pass); }
+.checklist li.done .step-title { color: var(--dim); }
+.checklist .step { flex: 1; min-width: 0; }
+.checklist .step-title { font-weight: var(--fw-semi); }
+.checklist .step-why { color: var(--dim); font-size: var(--fs-sm); margin-top: 2px; }
+.checklist .step-do { flex: none; }
+
+/* Findings needs-review: the inline triage cell stays on one line, and the
+   unreviewed banner is quiet emphasis — a statement of what the thing is, not
+   an alarm (the claim is unvetted; alarms are for confirmed work). */
+.row-actions { white-space: nowrap; text-align: right; }
+.row-actions .btn + .btn { margin-left: 6px; }
+.review-banner { border-left: 3px solid var(--warn); }
+/* The story-health words are one phrase ("still failing"); give the title
+   column the flexible width instead of letting short cells steal it. */
+.findings-index .status { white-space: nowrap; }
+.findings-index td:nth-child(2) { width: 52%; }
+
+/* The runs filter row: the All runs / Needs attention split (a filter, so it
+   wears the segmented control the rest of the console uses for filters — not a
+   button in the header, where it read as an action) and the story search. */
+.runs-filter { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.runs-story-filter {
+  width: 240px; background: var(--bg2); border: 1px solid var(--line2); border-radius: 7px;
+  padding: 5px 10px; color: var(--ink); font-size: var(--fs-sm);
+}
+.runs-story-filter::placeholder { color: var(--faint); }
+
+/* ---------- the runs index ----------
+   ONE table for every suite: one sticky column header, one card, suites as
+   full-width head rows inside it. A header per suite cost a header's height per
+   suite and bought nothing, and separate tables cannot align their columns with
+   each other — which is the entire point of a column.
+
+   Every run is ONE row whatever it is doing, because several suites with
+   something in flight is the ordinary state of a busy console. A run expands in
+   place to its stories so a replay is one click from the rail rather than
+   three; the expanded block is a full-width cell under the row, inset and
+   quieter than it, and nothing about it should compete with the outcome counts
+   above. */
+/* Fixed, not auto. Every cell after RUN holds a value of known size, and RUN
+   holds two things that must never widen the table: a launch note of any length
+   and the live "now" line, whose whole job is to say as much as fits. Under an
+   auto layout the now-line's nowrap made the table wider than its card and
+   pushed the action column off the screen. */
+.run-index { table-layout: fixed; }
+.run-index col.c-outcome { width: 132px; }
+.run-index col.c-target { width: 92px; }
+.run-index col.c-took, .run-index col.c-cost { width: 78px; }
+.run-index col.c-started { width: 100px; }
+.run-index col.c-actions { width: 100px; }
+/* The columns stay readable while the list scrolls past them. `th`, not
+   `thead`: sticky on a table section is still not universal. */
+.run-index thead th {
+  position: sticky; top: 0; z-index: 2; background: var(--bg1); padding: 7px 10px;
+}
+/* Denser than the console default: this list is read by the screenful. */
+.run-index td { padding: 7px 10px; vertical-align: middle; }
+/* Fixed columns mean everything in them has to be willing to be cut short. */
+.run-index .launch-name { min-width: 0; }
+.run-index .launch-name > a { min-width: 0; overflow: hidden; }
+.run-index .launch-name .rowtitle,
+.run-index .launch-name .rowtag {
+  display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* The count tag goes before the name does: "3 stories" is recoverable from the
+   expanded run, "nightly regr…" is how you tell three runs apart. */
+.run-index .launch-name .rowtag { flex: 0 50 auto; }
+.run-index .launch-name > a { flex: 0 1 auto; }
+.run-index td.dim { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Six value columns and a name do not fit a half-width window. The budget
+   tightens first, and then the two columns a triage pass reaches for last drop
+   out — both are still stated on every story inside the run. */
+@media (max-width: 1240px) {
+  .run-index col.c-outcome { width: 112px; }
+  .run-index col.c-target { width: 76px; }
+  .run-index col.c-took, .run-index col.c-cost { width: 64px; }
+  .run-index col.c-started { width: 84px; }
+  .run-index col.c-actions { width: 84px; }
+}
+/* Collapsed to nothing rather than `display: none`: a table row must keep one
+   cell per column or every cell after the hidden one slides into the wrong
+   one. Under a fixed layout a zero-width column with no padding really is
+   zero wide, whatever is inside it. */
+@media (max-width: 1140px) {
+  .run-index col.c-cost { width: 0; }
+  .run-index th:nth-child(5), .run-index .launch-row > td:nth-child(5) {
+    padding: 0; overflow: hidden; visibility: hidden;
+  }
+}
+@media (max-width: 1020px) {
+  .run-index col.c-took { width: 0; }
+  .run-index th:nth-child(4), .run-index .launch-row > td:nth-child(4) {
+    padding: 0; overflow: hidden; visibility: hidden;
+  }
+}
+
+/* A suite's head row: its name, how many runs are loaded, the trend, and the
+   launch. Tinted and rule-topped so it reads as a divider rather than a run. */
+.run-index .suite-head-cell {
+  padding: 6px 10px; background: var(--bg2); border-bottom: 1px solid var(--line);
+}
+.run-index .suite-block + .suite-runs .launch-row:first-child > td { border-top: none; }
+.run-index .suite-block:not(:first-of-type) .suite-head-cell { border-top: 1px solid var(--line2); }
+.suite-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.suite-head .suite-name {
+  flex: none; margin: 0; font-size: var(--fs-base); font-weight: var(--fw-semi);
+  display: flex; align-items: baseline; gap: 8px;
+}
+.suite-head .count { font-size: var(--fs-xs); font-weight: 400; color: var(--faint); }
+.suite-head .trend-pips { margin-right: auto; }
+.suite-head .expander { margin-top: 0; margin-right: -6px; }
+.suite-head .suite-launch { flex: none; }
+
+/* Runs are children of the suite head above them, and the RUN column has to
+   say so: head and row both open with a 22px expander, which put the suite's
+   name and its runs' names on the same left edge — a list, not a tree. The
+   whole child block steps right instead, so the suite name is the only thing
+   on the page at the margin. */
+.run-index .suite-runs .launch-row > td:first-child,
+.run-index .suite-runs .story-rows > td { padding-left: 30px; }
+.run-index .launch-row { cursor: default; }
+.run-index .launch-row:hover > td { background: var(--bg2); }
+/* An open run keeps its own background — a grey slab over the row and its
+   stories read as one undifferentiated block. The accent rail on .story-lines
+   and the accent expander are what say "open". */
+.run-index .launch-row.open > td { border-bottom-color: transparent; }
+.launch-name { display: flex; align-items: baseline; gap: 8px; }
+.launch-name .rowtag { margin-left: 0; }
+
+/* The one action a run row carries, at its right edge: Cancel while it spends,
+   Synthesize once a discovery run has trajectories to mine. Quiet at rest — six
+   red buttons down a busy page is an alarm, and both of these confirm before
+   they do anything — and named on hover by the colour of what they are. */
+.row-act {
+  padding: 3px 8px; border-radius: 6px; font-size: var(--fs-xs); color: var(--dim);
+  border: 1px solid transparent; white-space: nowrap;
+}
+.row-act:hover { background: var(--bg3); color: var(--ink); border-color: var(--line2); }
+.row-act.danger:hover { color: var(--fail); border-color: var(--fail); background: var(--fail-soft); }
+.row-act:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* OUTCOME for a run in flight: a two-segment meter and "1/3", not the sentence
+   "1 of 3 stories done". On a page of live runs the shape is what lets you
+   compare them at a glance, and it is a third of the width; the sentence is
+   what the screen reader gets, off the same numbers. */
+.run-progress { display: inline-flex; align-items: center; gap: 8px; }
+.rp-meter {
+  display: flex; width: 54px; height: 5px; border-radius: 3px;
+  background: var(--line2); overflow: hidden; flex: none;
+}
+.rp-done { background: var(--accent); }
+.rp-moving { background: var(--accent); opacity: 0.3; animation: live-pulse 2.2s ease-in-out infinite; }
+.rp-count {
+  font-size: var(--fs-sm); font-weight: var(--fw-semi); color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The sign of life on a COLLAPSED run in flight: one line under its name, with
+   the story furthest along, what it is doing, where in its budget it is and the
+   actor's latest action. Everything the live block said, minus the room — the
+   block itself is one click away, and is what the In flight tab opens. */
+.run-now {
+  display: flex; align-items: baseline; gap: 8px; margin: 3px 0 0 30px;
+  font-size: var(--fs-sm); white-space: nowrap; overflow: hidden;
+}
+.run-now .status { flex: none; font-size: var(--fs-xs); }
+.run-now .status.running .glyph { animation: live-pulse 2.2s ease-in-out infinite; }
+/* The action gives way, and it gives way alone: everything before it is fixed,
+   so a long story id can never squeeze the step counter and a long action can
+   never squeeze the id. The id still yields at 46% of the line — past that it
+   is a persona-fanned id long enough to be the whole line by itself. */
+.run-now-story {
+  flex: none; min-width: 0; max-width: 46%; font-size: var(--fs-xs);
+  overflow: hidden; text-overflow: ellipsis;
+}
+.run-now-more { flex: none; color: var(--faint); font-size: var(--fs-xs); }
+.run-now-step { flex: none; color: var(--dim); font-variant-numeric: tabular-nums; }
+.run-now-action { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--dim); }
+/* The disclosure control. A real button: expanding a run is a state change an
+   assistive technology has to be able to announce (aria-expanded), and a click
+   handler on the row alone is invisible to it. */
+.expander {
+  flex: none; width: 22px; height: 22px; margin-top: -3px; border-radius: 5px;
+  color: var(--dim); font-size: 13px; line-height: 1; display: grid; place-items: center;
+}
+.expander:hover { background: var(--bg3); color: var(--ink); }
+.expander:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.launch-row.open .expander { color: var(--accent); }
+.expander-spacer { flex: none; width: 22px; }
+.outcome-counts { display: inline-flex; align-items: center; gap: 10px; }
+.outcome-counts .status { font-variant-numeric: tabular-nums; }
+
+.run-index .story-rows > td { padding: 2px 10px 8px 10px; }
+.story-lines { display: flex; flex-direction: column; border-left: 2px solid var(--accent); }
+/* Fixed columns, not a max-width on the name: a 44-character story id under
+   `minmax(110px, 340px)` wrapped onto a second line, so the tallest rows in the
+   block were the ones carrying the least. The name ellipsizes instead, and the
+   whole line is the link to the id in full. */
+.story-line {
+  /* The last column is the link word — "▶ Replay" or "Why it didn't run →" —
+     and sizes to it: fixed at the shorter word's width it pushed the longer
+     one off the card. The name column is the one that yields. */
+  display: grid; grid-template-columns: 150px minmax(0, 1fr) 250px max-content;
+  gap: 12px; align-items: baseline; padding: 4px 10px; border-radius: 6px;
+}
+a:hover > .story-line, a:focus-visible > .story-line { background: var(--bg3); }
+a:focus-visible > .story-line { outline: 2px solid var(--accent); outline-offset: -2px; }
+.story-line .story-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.story-line .story-detail {
+  font-size: var(--fs-sm); font-variant-numeric: tabular-nums;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* The word for the destination. The replay is the product's core experience and
+   was reachable only by guessing that a story id was a link. */
+.story-open { color: var(--accent); font-size: var(--fs-sm); white-space: nowrap; }
+a:hover .story-open { text-decoration: underline; }
+.story-more { padding: 5px 10px; font-size: var(--fs-sm); color: var(--dim); }
+a:hover > .story-more { color: var(--accent); }
+button.story-more-btn { display: block; text-align: left; border-radius: 6px; }
+button.story-more-btn:hover { color: var(--accent); background: var(--bg3); }
+button.story-more-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* The run's own narration inside the block — the cold-start stage, or the
+   plain-words verdict. The mid-run counts it used to also state are on the row
+   now, in the OUTCOME meter. */
+.story-note { padding: 4px 10px 5px; font-size: var(--fs-sm); color: var(--dim); }
+
+/* Every queued story on one line. A queued story has no vitals, no evidence and
+   nowhere to go; a row each said "not yet" N times and wrapped every long id
+   across two lines doing it. */
+.story-queued {
+  display: flex; align-items: baseline; gap: 12px; padding: 4px 10px;
+  white-space: nowrap; overflow: hidden;
+}
+.story-queued .status { flex: none; width: 138px; }
+.story-queued-ids {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  font-size: var(--fs-xs); font-weight: 400; color: var(--faint);
+}
+
+/* A story in flight: a live block, not a table-line pastiche. The head keeps
+   the chip column so live and finished lines share a left rhythm, but gives
+   the name the whole middle (no cap — a long id must not wrap around floating
+   vitals) and right-aligns the vitals. Under it: a hairline step-budget meter
+   and the actor's recent actions as a fading trail, both indented to the name
+   so the block reads as one story's column of life. */
+.story-live { border-radius: 6px; padding-bottom: 3px; }
+.story-live .story-vitals {
+  font-size: var(--fs-sm); font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.story-line.story-live-head { grid-template-columns: 150px minmax(0, 1fr) auto; }
+.story-live-head .story-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The glyph breathes while the story moves — the between-events sign of life. */
+.story-live-head .status.running .glyph { animation: live-pulse 2.2s ease-in-out infinite; }
+@keyframes live-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+@media (prefers-reduced-motion: reduce) {
+  .story-live-head .status.running .glyph,
+  .run-now .status.running .glyph,
+  .rp-moving { animation: none; }
+}
+/* A gauge, not a rule across the page: capped so it reads as a small dial next
+   to the story it belongs to, however wide the console gets. */
+.story-meter {
+  height: 3px; border-radius: 2px; background: var(--line2); overflow: hidden;
+  max-width: 420px; margin: 1px 10px 3px calc(150px + 12px + 10px);
+}
+.story-meter-fill {
+  height: 100%; border-radius: 2px; background: var(--accent);
+  transition: width 0.6s ease;
+}
+/* The trail on ONE line, newest first. Three stacked lines per live story was
+   the single biggest thing that made a run in flight half a screen tall, and a
+   trail reads as well running left from the newest as it does stacked. */
+.story-actions {
+  padding: 0 10px 2px calc(150px + 12px + 10px);
+  font-size: var(--fs-sm); color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* Age fades: the newest action is the one being read; the ones before it are
+   context. The general sibling is the third item — one step fainter again. */
+.story-action.past { color: var(--dim); }
+.story-action.past ~ .story-action.past { color: var(--faint); }
+.story-action-arrow, .story-action-sep { color: var(--faint); }
+@media (max-width: 1100px) {
+  /* Still a fixed detail column, not `auto`: an infra error runs to a hundred
+     characters, and given the room it took it the story's own name was the
+     thing that ended in an ellipsis. */
+  .story-line { grid-template-columns: 130px minmax(0, 1fr) 210px max-content; }
+  .story-line.story-live-head { grid-template-columns: 130px minmax(0, 1fr) auto; }
+  .story-actions { padding-left: calc(130px + 12px + 10px); }
+  .story-meter { margin-left: calc(130px + 12px + 10px); }
+  .story-queued .status { width: 118px; }
+  .run-now { margin-left: 0; }
+}
+@media (max-width: 900px) {
+  .story-line .story-detail { display: none; }
+}
+/* A filter that is ON says so without relying on its colour. */
+.btn.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+
+/* An "it never ran" outcome is amber and offers a retry — it is not a product
+   failure, and inviting a bug report about an app that was never reached sends
+   the triager hunting a bug that does not exist. */
+.rd-didnt-run { margin-top: 8px; padding: 8px 12px; border-radius: 7px; border-left: 3px solid var(--warn); background: var(--warn-soft); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.rd-didnt-run .why { flex: 1; min-width: 260px; font-size: var(--fs-sm); color: var(--ink); }
+.rd-didnt-run .why .mono { word-break: break-all; }
+
+.deferred { border: 1px dashed var(--line2); border-radius: var(--radius); padding: 28px; text-align: center; color: var(--faint); background: var(--bg1); }
+
+/* ---------- forms ---------- */
+.field { margin-bottom: 14px; }
+.field > label { display: block; margin-bottom: 5px; font-weight: var(--fw-med); font-size: var(--fs-sm); }
+.field .hint { color: var(--faint); font-size: var(--fs-xs); margin-top: 4px; }
+input[type=text], input[type=email], input[type=password], input[type=number], textarea, select {
+  width: 100%; background: var(--bg2); border: 1px solid var(--line2); border-radius: 7px;
+  padding: 8px 10px; color: var(--ink);
+}
+textarea { resize: vertical; min-height: 72px; font-family: var(--mono); font-size: var(--fs-sm); line-height: 1.55; }
+textarea.code { min-height: 320px; white-space: pre; overflow-wrap: normal; tab-size: 2; }
+.inline { display: flex; gap: 8px; align-items: center; }
+.check { display: inline-flex; gap: 7px; align-items: center; }
+.check input { width: auto; }
+
+/* custom select — the native popup (macOS Liquid Glass) fights the theme and
+   can't be styled, so enhanceSelect() hides the select and renders this. */
+.selectw { position: relative; display: block; width: 100%; }
+.selectw > select { display: none; }
+.select-btn {
+  display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 8px;
+  background: var(--bg2); border: 1px solid var(--line2); border-radius: 7px;
+  padding: 8px 10px; color: var(--ink); text-align: left; font: inherit; cursor: pointer;
+}
+.select-btn:disabled { opacity: .55; cursor: default; }
+.select-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.select-val { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.select-caret { color: var(--faint); font-size: 10px; flex: none; }
+.select-menu {
+  position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 60;
+  background: var(--bg1); border: 1px solid var(--line2); border-radius: 8px;
+  box-shadow: var(--shadow); padding: 4px; max-height: 260px; overflow: auto;
+}
+.select-menu .select-opt {
+  display: block; width: 100%; text-align: left; padding: 7px 10px; border-radius: 6px;
+  color: var(--ink); font-size: var(--fs-sm);
+}
+.select-menu .select-opt:hover, .select-menu .select-opt:focus { background: var(--bg2); outline: none; }
+.select-menu .select-opt.on { color: var(--accent); background: var(--accent-soft); }
+.select-menu .select-opt:disabled { color: var(--faint); }
+/* ⋯ overflow menu (rare lifecycle actions) — the select-menu look, hung off a
+   small trigger: right-aligned with its own width instead of the wrapper's. */
+.select-menu.overflow-menu { left: auto; right: 0; min-width: 180px; }
+.select-menu .select-opt.danger { color: var(--fail); }
+.criterion .selectw { width: auto; }
+
+/* editor split */
+.editor { display: grid; grid-template-columns: 1fr 320px; gap: 18px; align-items: start; }
+@media (max-width: 900px) { .editor { grid-template-columns: 1fr; } }
+.editor .side .card { margin-bottom: 12px; }
+/* The editors' save bar: sticky to the bottom of the scroll viewport, present
+   only while there are unsaved changes. Raised above the page so it reads as
+   the one pending decision, not another card in the flow. */
+.savebar {
+  position: sticky; bottom: 14px; z-index: 5;
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  margin-top: 18px; padding: 10px 12px 10px 16px;
+  background: var(--bg1); border: 1px solid var(--line2); border-radius: 10px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, .25);
+  animation: savebar-in .18s ease-out;
+}
+.savebar[hidden] { display: none; }
+.savebar-msg { color: var(--dim); font-size: var(--fs-sm); }
+.savebar-msg.warn { color: var(--warn); }
+.savebar-actions { display: flex; gap: 8px; flex-shrink: 0; }
+@keyframes savebar-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .savebar { animation: none; } }
+
+.seg { display: inline-flex; background: var(--bg2); border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.seg button { padding: 5px 12px; color: var(--dim); font-size: var(--fs-sm); }
+.seg button.on { background: var(--accent-soft); color: var(--accent); }
+
+.check-list { list-style: none; display: flex; flex-direction: column; gap: 7px; }
+.check-item { display: flex; gap: 8px; align-items: flex-start; font-size: var(--fs-sm); }
+.check-item .g { margin-top: 1px; }
+.check-item.ok { color: var(--pass); }
+.check-item.warn { color: var(--warn); }
+.check-item.err { color: var(--fail); }
+.check-item .msg { color: var(--ink); }
+.check-item.err .msg { color: var(--fail); }
+
+/* the kind reads as words now, not an enum token — it needs the room */
+.criterion { display: grid; grid-template-columns: 190px 1fr auto; gap: 8px; align-items: center; margin-bottom: 6px; }
+.criterion select { padding: 6px 8px; }
+
+/* toasts + modal */
+#toasts { position: fixed; bottom: 18px; right: 18px; display: flex; flex-direction: column; gap: 8px; z-index: 100; }
+.toast { background: var(--bg1); border: 1px solid var(--line2); border-left: 3px solid var(--accent); border-radius: 7px; padding: 10px 14px; box-shadow: var(--shadow); max-width: 380px; }
+.toast.err { border-left-color: var(--fail); }
+.toast.ok { border-left-color: var(--pass); }
+.toast .t-title { font-weight: var(--fw-semi); }
+.toast .t-body { color: var(--dim); font-size: var(--fs-sm); margin-top: 2px; white-space: pre-wrap; }
+
+#modal-root:empty { display: none; }
+/* The scrim scrolls: a dialog taller than the window must never strand its
+   actions off-screen. `safe center` keeps the top edge reachable when the
+   dialog overflows (plain centring clips it above the scroll origin). */
+.modal-scrim { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: grid; justify-items: center; align-content: safe center; overflow-y: auto; z-index: 90; padding: 20px; }
+.modal { background: var(--bg1); border: 1px solid var(--line2); border-radius: 10px; box-shadow: var(--shadow); width: 100%; max-width: 460px; padding: 20px 22px; }
+.modal .modal-title { font-size: var(--fs-md); font-weight: var(--fw-semi); margin-bottom: 10px; }
+.modal .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
+
+.spark { display: inline-block; vertical-align: middle; }
+
+/* ---------- Phase 3: live dashboard, run detail, review queue ---------- */
+
+/* quiet links wrap tiles/rows without the anchor underline/color */
+a.quiet-link { color: inherit; }
+a.quiet-link:hover { text-decoration: none; }
+a.quiet-link:hover .tile, a.quiet-link:hover .att-row { border-color: var(--accent); }
+
+.att-list { display: flex; flex-direction: column; }
+.att-row { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.att-list a:last-child .att-row { border-bottom: none; }
+.att-row:hover { background: var(--bg2); }
+
+.group-head .dim { margin-top: 4px; }
+
+/* ---------- run detail ----------
+   A masthead over the full-bleed embedded viewer, read left to right in four
+   zones: WHO/WHAT (verdict + story id) · WHERE-TO (story switcher, parent run)
+   · SIGNALS (score, findings) · ACTIONS. It used to be one flat row of nine
+   chips at equal weight and equal gap, where the story's name, a navigation
+   control and a download menu all looked like the same kind of thing.
+
+   The header's bottom edge is the verdict: a 2px rule in the run's status
+   colour, drawn exactly where this page's claim ("failed") meets the evidence
+   for it (the viewer). It costs no vertical space, which matters — every pixel
+   here is one the replay doesn't get. */
+.run-detail { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.run-detail-head {
+  border-radius: 0; border-left: none; border-right: none; border-top: none;
+  padding: 9px 18px 10px; border-bottom: 2px solid var(--line);
+}
+.run-detail-head.v-pass { border-bottom-color: var(--pass); }
+.run-detail-head.v-fail { border-bottom-color: var(--fail); }
+.run-detail-head.v-changed { border-bottom-color: var(--changed); }
+.run-detail-head.v-infra { border-bottom-color: var(--warn); }
+.run-detail-head.v-running { border-bottom-color: var(--accent); }
+
+.rd-line1 { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; row-gap: 8px; }
+/* Identity. The verdict and the story's name are one unit and never separate:
+   a case id with no verdict beside it is the page's biggest unanswered question. */
+.rd-ident { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.rd-ident h1.rd-title {
+  font-size: var(--fs-md); font-weight: var(--fw-semi); font-family: var(--mono);
+  letter-spacing: -0.015em; overflow-wrap: anywhere;
+}
+/* Navigation, fenced off from identity by a hairline: these move you somewhere,
+   nothing else in the row does. */
+.rd-nav { display: flex; align-items: center; gap: 10px; }
+.rd-nav::before { content: ""; flex: none; width: 1px; align-self: stretch; min-height: 18px; background: var(--line2); }
+.rd-up { font-size: var(--fs-sm); color: var(--dim); white-space: nowrap; }
+.rd-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+/* Sideways movement between the stories of one run, so the replay is not a dead
+   end you have to climb out of to reach the next failure. */
+.story-switch { display: inline-flex; align-items: center; gap: 4px; }
+.story-switch .story-step { padding: 4px 8px; line-height: 1; }
+/* Story ids are long: at the stock 180px menu width every one of them wrapped. */
+.story-switch .select-menu { min-width: 270px; }
+
+/* The grader's number, labelled — a bare "score 38" was read as a percentage. */
+.rd-score { gap: 6px; padding: 2px 9px; }
+.rd-score .k { font-size: var(--fs-micro); letter-spacing: .07em; text-transform: uppercase; color: var(--faint); }
+.rd-score .v { font-size: var(--fs-sm); font-weight: var(--fw-semi); color: var(--ink); font-variant-numeric: tabular-nums; }
+
+/* Findings this run is evidence in: a count, not a chip each. One truncated
+   title per finding was already crowding the row at two, and assertion failures
+   file findings on their own, so the count only grows. */
+.btn.rd-findings { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); font-weight: var(--fw-semi); }
+.btn.rd-findings:hover { filter: brightness(1.08); }
+/* The calm auto-resolve receipt — good news, so no semibold alarm weight. */
+.btn.rd-resolved-findings { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.btn.rd-resolved-findings:hover { filter: brightness(1.08); }
+.rd-findings-wrap .select-menu { min-width: 330px; max-width: 440px; max-height: min(52vh, 420px); padding: 5px; }
+.rd-findings-wrap .select-opt { padding: 8px 10px; }
+/* Hairlines between findings: at five, the titles ran together into one column
+   of text and the severity chips were the only thing marking a new row. */
+.rd-findings-wrap .select-opt + .select-opt { margin-top: 4px; padding-top: 11px; border-top: 1px solid var(--line); }
+.fx { display: flex; flex-direction: column; gap: 5px; }
+.fx-title { color: var(--ink); font-weight: var(--fw-med); line-height: var(--lh-tight); white-space: normal; }
+.fx-meta { display: flex; align-items: center; gap: 6px; }
+
+/* Metadata: facts, not prose. Each is its own cell and the dots between them
+   are drawn in the hairline colour so they read as rules, not as more words. */
+.rd-meta {
+  margin-top: 4px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px;
+  font-size: var(--fs-sm); color: var(--dim); line-height: 1.5;
+}
+.rd-meta .msep { color: var(--line2); }
+.rd-meta .where { color: var(--ink); font-weight: var(--fw-med); }
+.rd-meta .num { font-variant-numeric: tabular-nums; }
+.rd-meta .mono { color: var(--dim); }
+
+/* The strips below the masthead are one family: soft tone, a solid edge in the
+   same colour so the block still reads at a glance in high-contrast mode. */
+.rd-banner {
+  margin-top: 8px; padding: 7px 12px; border-radius: 7px; border-left: 3px solid var(--changed);
+  background: var(--changed-soft); display: flex; align-items: center; gap: 8px;
+}
+/* The decision belongs at the end of the sentence it answers, not wedged
+   against it — the gloss takes the slack. */
+.rd-banner > .dim { flex: 1; min-width: 0; }
+/* sign-off residue after the pending banner resolves (round-3: absence-of-controls
+   was the only receipt) */
+.rd-resolved {
+  margin-top: 8px; padding: 4px 12px; border-left: 3px solid var(--line2);
+  font-size: var(--fs-sm); display: flex; align-items: center; gap: 8px;
+}
+/* the decisive verdict, said above the replay — the failing check was
+   "visually secondary" inside the viewer's gate panel in both study rounds */
+.rd-fail {
+  margin-top: 8px; padding: 8px 12px; border-radius: 7px; border-left: 3px solid var(--fail);
+  background: var(--fail-soft); display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+}
+.rd-fail .rd-fail-rows { flex: 1; min-width: 260px; display: flex; flex-direction: column; gap: 4px; }
+.rd-fail-row { display: flex; gap: 8px; align-items: baseline; }
+.rd-fail-row .g { color: var(--fail); font-weight: 700; }
+.rd-fail-row .spec { font-family: var(--mono); font-size: var(--fs-sm); font-weight: var(--fw-semi); color: var(--fail); word-break: break-word; }
+.rd-fail-row .detail { font-size: var(--fs-sm); color: var(--ink); word-break: break-word; }
+.viewer-embed { flex: 1; width: 100%; border: 0; min-height: 0; background: var(--bg0); }
+
+/* review queue */
+.review-list { display: flex; flex-direction: column; }
+.review-row { border-bottom: 1px solid var(--line); padding: 4px 6px; }
+.review-row:last-child { border-bottom: none; }
+.review-row.selected { box-shadow: inset 2px 0 0 var(--accent); background: var(--bg2); }
+/* Historical tail reads muted through weight and the neutral resolved line —
+   never through opacity, which drags every child under WCAG AA contrast. */
+.review-row.resolved .id { color: var(--dim); font-weight: 400; }
+.review-row.resolved .review-head { cursor: default; }
+.review-head { display: flex; align-items: center; gap: 12px; padding: 8px 8px; cursor: pointer; flex-wrap: wrap; }
+.review-head:hover { background: var(--bg2); border-radius: 6px; }
+.diffsum .del { color: var(--fail); }
+.diffsum .add { color: var(--pass); }
+.review-expand { padding: 4px 10px 12px 34px; }
+.review-story { font-size: var(--fs-sm); margin-bottom: 8px; }
+.review-conflict, .review-resolved-line { padding: 0 10px 8px 34px; font-size: var(--fs-sm); }
+.diff-ops { display: flex; flex-direction: column; gap: 2px; font-family: var(--mono); font-size: var(--fs-xs); }
+.diff-op { display: grid; grid-template-columns: 1fr 20px 1fr; gap: 8px; align-items: baseline; }
+.diff-op .side { padding: 3px 8px; border-radius: 5px; overflow-wrap: anywhere; }
+.diff-op .side.del { background: var(--fail-soft); color: var(--fail); }
+.diff-op .side.add { background: var(--pass-soft); color: var(--pass); }
+.diff-op .arrow { text-align: center; }
+.review-viewer-link { margin: 8px 0 2px; font-size: var(--fs-sm); }
+/* why-it-healed: what broke + the agent's stated reasoning, before the raw diff */
+.review-heal { margin-bottom: 12px; }
+.review-heal .heal-line { font-size: var(--fs-sm); }
+.review-heal .heal-line .del { color: var(--fail); font-family: var(--mono); font-size: var(--fs-xs); }
+.review-heal .heal-line .add { color: var(--pass); font-family: var(--mono); font-size: var(--fs-xs); }
+.review-heal .heal-thought {
+  margin: 6px 0;
+  padding: 6px 12px;
+  border-left: 2px solid var(--line2);
+  color: var(--dim);
+  font-size: var(--fs-sm);
+  line-height: 1.55;
+}
+.review-actions { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+.review-note { flex: 1; min-width: 160px; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+@media (max-width: 760px) {
+  .diff-op { grid-template-columns: 1fr; }
+  .diff-op .arrow { display: none; }
+}
+.login-wrap { display: grid; place-items: center; height: 100vh; }
+.login-card { background: var(--bg1); border: 1px solid var(--line); border-radius: 12px; padding: 34px 36px; width: 360px; text-align: center; box-shadow: var(--shadow); }
+.login-card .brand { justify-content: center; font-size: var(--fs-lg); margin-bottom: 8px; }
+.login-card p { color: var(--dim); margin-bottom: 20px; }
+
+/* ---------- Inline story drafting, launch preview ---------- */
+
+/* chat layout: conversation left, drafts rail right */
+.chat-layout { display: grid; grid-template-columns: 1fr 360px; gap: 18px; align-items: start; }
+@media (max-width: 960px) { .chat-layout { grid-template-columns: 1fr; } }
+.chat-pane { display: flex; flex-direction: column; min-height: 420px; max-height: calc(100vh - 220px); }
+.chat-log { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.msg { max-width: 82%; padding: 9px 13px; border-radius: 12px; font-size: var(--fs-base); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg.user { align-self: flex-end; background: var(--accent-soft); border: 1px solid transparent; border-bottom-right-radius: 4px; }
+.msg.assistant { align-self: flex-start; background: var(--bg2); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+.msg.thinking { color: var(--dim); }
+.msg.thinking .dots { letter-spacing: 2px; animation: pt-pulse 1.2s ease-in-out infinite; }
+@keyframes pt-pulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+.msg-tool { align-self: flex-start; font-size: var(--fs-xs); color: var(--dim); background: var(--bg2); border: 1px dashed var(--line2); border-radius: 999px; padding: 3px 11px; }
+.msg-tool.ok { color: var(--pass); border-color: var(--pass); border-style: solid; background: var(--pass-soft); }
+.msg-tool.err { color: var(--fail); border-color: var(--fail); border-style: solid; background: var(--fail-soft); }
+.chat-error { font-size: var(--fs-sm); padding: 6px 2px; }
+.chat-input { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--line); }
+.chat-input textarea { flex: 1; min-height: 44px; max-height: 140px; resize: vertical; }
+
+/* "Help me draft": the dialog is capped at the window, the transcript scrolls,
+   and the prompt box plus its actions stay pinned where they can be reached. */
+.modal:has(.draft-modal) { max-width: 620px; max-height: calc(100vh - 40px); display: flex; flex-direction: column; }
+.modal:has(.draft-modal) .modal-title { flex: none; }
+.draft-modal { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.draft-modal > .stack { flex: 1; min-height: 0; gap: 12px; }
+.draft-modal .chat-log { flex: 1 1 auto; min-height: 0; padding: 0; }
+.draft-modal .chat-log:empty { display: none; }
+.draft-modal .field, .draft-modal .modal-actions, .draft-modal .chat-error { flex: none; }
+.draft-modal .card.pad { overflow-y: auto; min-height: 0; }
+
+/* Run limits are a compact pair: these are small scalar budgets, not long-form
+   values that should claim the full card width. */
+.run-limits-fields {
+  display: grid; grid-template-columns: minmax(180px, 2fr) minmax(260px, 3fr);
+  gap: 24px; max-width: 760px;
+}
+.run-limits-fields .field { margin-bottom: 0; }
+@media (max-width: 760px) { .run-limits-fields { grid-template-columns: 1fr; gap: 14px; } }
+
+/* Browser geometry is one setting with three independent scalars. Keep them
+   together so width × height × resolution reads as a single display profile. */
+.browser-display-fields {
+  display: grid; grid-template-columns: repeat(3, minmax(140px, 1fr));
+  gap: 18px; max-width: 760px;
+}
+.browser-display-fields .field { margin-bottom: 0; }
+@media (max-width: 760px) { .browser-display-fields { grid-template-columns: 1fr; gap: 14px; } }
+
+/* Suite settings: one row per project environment — name, this suite's URL for
+   it, and the sentence saying what a blank row resolves to. */
+.env-row { display: grid; grid-template-columns: 160px 1fr; gap: 8px 14px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+.env-row:first-of-type { border-top: none; padding-top: 0; }
+.env-row-name { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.env-row-why { grid-column: 2; font-size: var(--fs-sm); margin-top: -2px; }
+/* The ring's cookies sit under its URL, same width — the name cell spans both. */
+.env-row-cookies { grid-column: 2; }
+.env-row-why .mono { font-family: var(--mono); overflow-wrap: anywhere; }
+/* A row that can be taken away keeps its field the same width as every other
+   row's; the button sits beside it rather than shrinking the input. */
+.env-row-sub { width: 100%; font-size: 11.5px; margin-top: 2px; }
+.env-row-edit { display: flex; align-items: center; gap: 8px; }
+.env-row-edit input { flex: 1; min-width: 0; }
+/* Scope headings inside the targets card: which rows the project shares and
+   which belong to this suite alone, with that group's one action on the right. */
+.env-group {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin: 18px 0 8px; padding-top: 12px; border-top: 1px solid var(--line);
+  font-size: var(--fs-sm); color: var(--dim);
+}
+@media (max-width: 760px) { .env-row { grid-template-columns: 1fr; } .env-row-why, .env-row-cookies { grid-column: 1; } }
+
+/* drafts rail */
+.drafts .draft-card { margin-bottom: 12px; }
+.draft-head { display: flex; align-items: center; gap: 10px; justify-content: space-between; flex-wrap: wrap; }
+.draft-head .mono { font-family: var(--mono); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.draft-rationale { font-size: var(--fs-sm); margin-top: 6px; }
+.draft-card details { margin-top: 10px; }
+.draft-card summary { cursor: pointer; color: var(--dim); font-size: var(--fs-sm); }
+.draft-modal .draft-yaml {
+  margin-top: 8px; max-height: 260px; overflow-x: hidden; overflow-y: auto;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.draft-actions { display: flex; gap: 8px; margin-top: 10px; align-items: center; }
+.draft-actions input { flex: 1; }
+.draft-card .check-list { margin-top: 8px; }
+
+/* The launcher (runs launch dialog).
+
+   Two decisions cost money and touch a real app — where this runs, and whether
+   the agent drives it — so those are the only things the dialog opens with.
+   Everything else is either context under the title (which suite, which
+   stories), the consequence of a choice printed directly beneath it (the
+   resolved target, the mode's cost), or an override folded into a disclosure
+   whose summary already states what it would change. The plan and the price sit
+   in the footer, beside Launch, where the last check happens. */
+.modal:has(.launch-form) { max-width: 560px; }
+.launch-form { display: grid; gap: 14px; }
+.launch-context {
+  margin-top: -6px; color: var(--dim); font-size: var(--fs-sm);
+  display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap;
+}
+.launch-where { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 14px; }
+.launch-form .field { margin-bottom: 0; }
+.launch-form .field > .field-label { display: block; margin-bottom: 5px; font-weight: var(--fw-med); font-size: var(--fs-sm); }
+
+/* The resolved target hangs off the environment select like a hint, because
+   that is exactly what it is: the answer to what "production" means here. */
+.launch-target {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px;
+  align-items: baseline;
+  margin-top: -8px; padding: 8px 11px; border-radius: 7px;
+  background: var(--bg2); font-size: var(--fs-sm);
+}
+.launch-target:empty { display: none; }
+.launch-target.warn { background: var(--warn-soft); color: var(--warn); }
+.launch-target.warn .preview-key { color: var(--warn); }
+.launch-target-main { min-width: 0; overflow-wrap: anywhere; }
+.launch-target-url { font-family: var(--mono); font-size: var(--fs-sm); color: var(--ink); }
+.launch-target.warn .launch-target-url { color: var(--warn); }
+.launch-source { margin-left: 8px; color: var(--dim); font-size: var(--fs-xs); white-space: nowrap; }
+.launch-source::before { content: "· "; }
+.launch-target.warn .launch-source { color: var(--warn); }
+
+/* Mode is two options with different bills. Both are on the surface with what
+   they do; the chosen one spells out what that costs you. */
+.launch-modes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.launch-mode {
+  display: grid; gap: 2px; justify-items: start; text-align: left;
+  padding: 8px 11px; border: 1px solid var(--line2); border-radius: 7px;
+  background: var(--bg2); color: var(--dim);
+}
+.launch-mode:hover { border-color: var(--accent); }
+.launch-mode.on { border-color: var(--accent); background: var(--accent-soft); }
+.launch-mode-name { font-weight: var(--fw-semi); font-size: var(--fs-sm); color: var(--ink); }
+.launch-mode.on .launch-mode-name { color: var(--accent); }
+.launch-mode-gist { font-size: var(--fs-xs); }
+.launch-mode-note { margin-top: 8px; color: var(--dim); font-size: var(--fs-xs); line-height: 1.5; }
+.launch-mode-note.costly { color: var(--warn); }
+.launch-models { margin-top: 5px; color: var(--faint); font-size: var(--fs-xs); }
+.launch-models:empty { display: none; }
+
+.launch-limits > summary { padding: 2px 0; }
+.launch-limits-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 10px; }
+
+.launch-warnings:empty { display: none; }
+.launch-warnings { display: grid; gap: 6px; }
+
+/* Actions row: the plan on the left, the button that commits to it on the
+   right. `.split` is the shared modal-actions variant. */
+.modal .launch-actions { align-items: end; margin-top: 4px; }
+.launch-plan { min-width: 0; font-size: var(--fs-sm); }
+.launch-plan-runs { color: var(--dim); overflow-wrap: anywhere; }
+.launch-plan-runs strong { color: var(--ink); font-weight: var(--fw-semi); }
+.launch-plan-cost { margin-top: 1px; color: var(--faint); font-size: var(--fs-xs); }
+
+.preview-key { color: var(--faint); font-size: var(--fs-micro); font-weight: var(--fw-semi); letter-spacing: .07em; text-transform: uppercase; }
+.preview-warn { padding: 7px 11px; border-radius: 7px; background: var(--warn-soft); color: var(--warn); font-size: var(--fs-sm); }
+@media (max-width: 680px) {
+  .launch-where,
+  .launch-limits-fields { grid-template-columns: 1fr; }
+  .launch-actions { flex-direction: column; align-items: stretch; gap: 12px; }
+  .launch-actions .right { justify-content: flex-end; }
+}
+
+pre.code { background: var(--bg2); border: 1px solid var(--line); border-radius: 7px; padding: 10px 12px; overflow-x: auto; font-family: var(--mono); font-size: var(--fs-xs); }
+
+/* ---------- Phase 6: finding detail — criterion, reconciliation, evidence hero ---------- */
+.crit-line { display: flex; gap: 8px; align-items: baseline; margin: 10px 0 2px; }
+.crit-line .g { color: var(--fail); font-weight: 700; }
+.crit-line .spec { font-family: var(--mono); font-size: var(--fs-sm); font-weight: var(--fw-semi); color: var(--fail); word-break: break-word; }
+.crit-line .detail { font-size: var(--fs-sm); color: var(--ink); word-break: break-word; }
+.health-line { margin-top: 10px; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; font-size: var(--fs-sm); }
+.copy-receipt { color: var(--pass); font-size: var(--fs-xs); font-weight: var(--fw-semi); }
+/* latest evidence stands on its own: failing-step screenshot + excerpt + deep link */
+.ev-hero { display: grid; grid-template-columns: minmax(220px, 340px) 1fr; overflow: hidden; }
+.ev-hero .shot { display: block; background: var(--bg2); border-right: 1px solid var(--line); }
+.ev-hero .shot img { display: block; width: 100%; height: 100%; max-height: 300px; object-fit: cover; object-position: top center; }
+.ev-hero .shot-missing { display: grid; place-items: center; color: var(--dim); font-size: var(--fs-sm); padding: 24px; text-align: center; }
+.ev-hero .meta { padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.ev-hero .meta .excerpt { font-size: var(--fs-sm); overflow-wrap: anywhere; }
+@media (max-width: 760px) {
+  .ev-hero { grid-template-columns: 1fr; }
+  .ev-hero .shot { border-right: none; border-bottom: 1px solid var(--line); }
+}

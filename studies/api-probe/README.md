@@ -75,7 +75,7 @@ timeout mid-search burns the run's budget without producing evidence.
 ```sh
 playtest ./studies/api-probe --fresh --no-grade
 # or, without linking the CLI:
-node src/cli/cli.js run ./studies/api-probe --fresh --no-grade
+node packages/cli/src/cli.ts run ./studies/api-probe --fresh --no-grade
 ```
 
 - `--fresh` forces a fresh agentic run every time. A passing first run may write
@@ -86,14 +86,14 @@ node src/cli/cli.js run ./studies/api-probe --fresh --no-grade
 One story at a time, when you are iterating:
 
 ```sh
-node src/cli/cli.js run ./studies/api-probe --id conservation --fresh --no-grade
+node packages/cli/src/cli.ts run ./studies/api-probe --id conservation --fresh --no-grade
 ```
 
 Validate the suite without running anything (offline, no model):
 
 ```sh
-node src/cli/cli.js list ./studies/api-probe
-node src/cli/cli.js lint ./studies/api-probe
+node packages/cli/src/cli.ts list ./studies/api-probe
+node packages/cli/src/cli.ts lint ./studies/api-probe
 ```
 
 ### 4. Score the traces

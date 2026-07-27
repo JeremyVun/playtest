@@ -13,20 +13,20 @@
 // Design (see the module comments): everything that has a public API is driven
 // through /api/v1 as the dev admin. The ONE thing with no public path is
 // *creating runs*: POST /projects/:p/run-groups hard-refuses unless GitHub
-// dispatch is configured (src/platform/control-plane/src/dispatch/dispatcher.ts:12-16), and this
+// dispatch is configured (packages/platform/control-plane/src/dispatch/dispatcher.ts), and this
 // dev server has no GitHub App. So run history is created by (a) inserting the
 // run_group + runs + dispatch rows a launch would have made — the sole
 // direct-DB seam, isolated in seedRunGroupRows() — and then (b) driving the
 // REAL public runner protocol (exchange -> start -> uploadBundle -> report ->
 // complete) exactly as a GitHub Actions executor would. That path is reachable
 // because config.dispatch.allowInsecureRunnerExchange is ON in dev
-// (src/platform/control-plane/src/config.ts:92), so the server computes candidate diffs,
+// (packages/platform/control-plane/src/config.ts), so the server computes candidate diffs,
 // extracts findings, emits events, and stores bundles through its own code —
 // nothing about results is hand-forged in the DB. Bundles reuse GENUINE
 // committed trajectories from studies/viewer-self-test/fixtures/ (run bundles have pinned
 // schemas — never invent bytes), packed with core writeBundle.
 //
-// Zero new deps: fetch is a Node 20 global; `pg` is reused from src/platform/control-plane's
+// Zero new deps: fetch is a Node global; `pg` is reused from the control-plane package's
 // node_modules; tar/bundle/ulid/newRunId are imported from the repo by path.
 
 import fs from "node:fs";
@@ -37,12 +37,11 @@ import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 
-import { writeBundle } from "../../src/core/bundle.js";
-import { newRunId } from "../../src/core/trajectory.js";
-import { writeTar } from "../../src/platform/control-plane/src/suites/tar.ts";
-import { ulid } from "../../src/platform/control-plane/src/ulid.ts";
+import { newRunId, writeBundle } from "@playtest/core/artifacts";
+import { writeTar } from "../../packages/platform/control-plane/src/suites/tar.ts";
+import { ulid } from "../../packages/platform/control-plane/src/ulid.ts";
 
-const require = createRequire(path.join(REPO(), "src/platform/control-plane/"));
+const require = createRequire(path.join(REPO(), "packages/platform/control-plane/"));
 const { Pool } = require("pg");
 
 function REPO() {
@@ -530,9 +529,9 @@ async function main() {
 }
 
 // The fs object store lives at <cwd-of-server>/.playtest-data/objects by default
-// (config.js). The server runs from src/platform/control-plane, and OBJECT_STORE_URL is unset.
+// (config.ts). The server runs from packages/platform/control-plane, and OBJECT_STORE_URL is unset.
 function storeRoot() {
-  const raw = process.env.PLAYTEST_HOSTED_STORE || path.join(REPO(), "src/platform/control-plane/.playtest-data/objects");
+  const raw = process.env.PLAYTEST_HOSTED_STORE || path.join(REPO(), "packages/platform/control-plane/.playtest-data/objects");
   return path.resolve(raw);
 }
 async function putStoreObject(key, buf) {

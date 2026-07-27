@@ -8,7 +8,7 @@ commands and viewer routes are defined in
 
 ## Versions and comparability
 
-The current constants are exported from `src/core/trajectory.ts`:
+The current constants are exported from `packages/core/src/trajectory.ts`:
 
 ```js
 HARNESS_VERSION = "0.1.0"
@@ -23,7 +23,7 @@ SETTLE = {
 ```
 
 `manifest.pins` records the behavior that determines whether two runs are
-comparable. `src/core/shared/movement.ts` is the executable source of truth for
+comparable. `packages/core/src/shared/movement.ts` is the executable source of truth for
 the pin set:
 
 ```js
@@ -338,7 +338,7 @@ evidence used by gates and grading.
 
 ### Grade artifact
 
-`src/core/schemas/grade.schema.json` owns the exact model-authored shape.
+`packages/core/src/schemas/grade.schema.json` owns the exact model-authored shape.
 `grade.json` contains its validated `score`, `completion`, `efficiency`,
 `findings`, and `summary`, plus optional report answers. Each current grader
 finding is:
@@ -667,7 +667,7 @@ layout and how the pieces relate.
 ```text
 <script-run-dir>/
   har.json             HAR 1.2, sensitive, untracked
-  script-report.json   src/core/schemas/script-report.schema.json
+  script-report.json   packages/core/src/schemas/script-report.schema.json
 ```
 
 One execution writes exactly those two files plus an exit status; nothing else.

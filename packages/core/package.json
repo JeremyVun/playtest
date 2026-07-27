@@ -1,0 +1,43 @@
+{
+  "name": "@playtest/core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Playtest journey engine and artifact contracts",
+  "type": "module",
+  "exports": {
+    "./run": "./src/public/run.ts",
+    "./suite": "./src/public/suite.ts",
+    "./artifacts": "./src/public/artifacts.ts",
+    "./analysis": "./src/public/analysis.ts",
+    "./findings": "./src/public/findings.ts",
+    "./media": "./src/public/media.ts",
+    "./llm": "./src/public/llm.ts",
+    "./reporting": "./src/public/reporting.ts",
+    "./api-suite-scripts": "./src/public/api-suite-scripts.ts",
+    "./browser/movement": "./src/shared/movement.ts",
+    "./browser/timing": "./src/shared/timing.ts",
+    "./testing": "./src/public/testing.ts",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node --import ../../tests/support/hermetic.ts --test tests/unit/*.test.ts tests/integration/*.test.ts",
+    "test:browser": "node --import ../../tests/support/hermetic.ts --test tests/browser/*.test.ts",
+    "test:mobile": "node --test tests/mobile/*.test.ts"
+  },
+  "engines": {
+    "node": ">=24.18.0"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "axe-core": "^4.12.1",
+    "playwright": "^1.53.0",
+    "yaml": "^2.7.0"
+  },
+  "optionalDependencies": {
+    "webdriverio": "^9.0.0"
+  },
+  "devDependencies": {
+    "appium": "^3.6.0"
+  }
+}

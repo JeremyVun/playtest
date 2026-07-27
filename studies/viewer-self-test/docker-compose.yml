@@ -8,7 +8,7 @@ services:
       - ../..:/app:ro
     environment:
       PLAYTEST_VIEW_HOST: "0.0.0.0" # default loopback is unreachable through Docker port mapping
-    command: node src/cli/cli.js view studies/viewer-self-test/fixtures/runs --port 4317 --no-open
+    command: node packages/cli/src/cli.ts view studies/viewer-self-test/fixtures/runs --port 4317 --no-open
     ports:
       - "4317"
     healthcheck:

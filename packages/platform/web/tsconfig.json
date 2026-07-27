@@ -1,0 +1,19 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "lib": ["es2023", "dom", "dom.iterable"],
+    "types": []
+  },
+  "include": [
+    "src/app.ts",
+    "src/browser-globals.d.ts",
+    "src/vendor-modules.d.ts",
+    "src/lib/**/*.ts",
+    "src/pages/**/*.ts"
+  ],
+  "exclude": [
+    "src/vendor/**"
+  ]
+}

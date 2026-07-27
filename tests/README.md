@@ -76,8 +76,8 @@ booted and kills the server it spawned.
 
 Hosted packages own their tests:
 
-- `src/platform/control-plane/tests/{unit,integration}`
-- `src/platform/runner-agent/tests/unit`
+- `packages/platform/control-plane/tests/{unit,integration}`
+- `packages/platform/runner-agent/tests/unit`
 
 The archived July 2026 hill-climb project owns historical standalone suites
 under `studies/archive/hillclimb-2026-07/{tests,bench/tests}`. They are not part

@@ -20,7 +20,7 @@ manifest, the transcript, and the bundle manifest.
 | Version | Covers | Current |
 |---|---|---|
 | `contract_version` | the entry contract, the client API, and the check API | 1 |
-| `script_report_version` | the persisted report shape (`src/core/schemas/script-report.schema.json`) | 1 |
+| `script_report_version` | the persisted report shape (`packages/core/src/schemas/script-report.schema.json`) | 1 |
 | `manifest_version` | the coverage-obligation manifest shape | 1 |
 | `handout_version` | the handout's file set, manifest, and maintained assets ([The handout](#the-handout)) | 2 |
 | `authoring_transcript_version` | the persisted transcript ([The authoring loop](#the-authoring-loop)) | 1 |
@@ -167,7 +167,7 @@ text and the HAR; it is returned by the runner API and not persisted by it.
 - **Timeout.** The child is killed at `timeout_ms` (`SIGTERM`, then `SIGKILL`).
   A killed run keeps the HAR flushed so far and reports a `timeout` defect.
 - **Configuration and user input** fail as `DummyConfigError`
-  (`src/core/config.ts`) with an actionable message and no stack: a missing
+  (`packages/core/src/config.ts`) with an actionable message and no stack: a missing
   script, a non-http(s) `base_url`, a malformed `allowed_origins` entry, a write
   grant for a different origin, a secret name that is not a
   `PLAYTEST_SECRET_<NAME>` tail, a malformed policy declaration, a duplicate
@@ -237,7 +237,7 @@ rather than pretending the run was invalid.
 
 ## Report schema
 
-`src/core/schemas/script-report.schema.json` is authoritative. Top level:
+`packages/core/src/schemas/script-report.schema.json` is authoritative. Top level:
 
 ```
 script_report_version, contract_version
@@ -269,7 +269,7 @@ check and raised as an `evidence_unresolvable` defect.
 ## Risk profile
 
 Mechanical, from the static script text plus a recorded HAR, with **no model
-call**. One module (`src/core/public/api-suite-scripts.ts` → `profileScript`) feeds both the
+call**. One module (`packages/core/src/public/api-suite-scripts.ts` → `profileScript`) feeds both the
 CLI and the hosted script page, so a reviewer sees the same numbers everywhere.
 
 ```
@@ -290,7 +290,7 @@ or matching a numeric / uuid / ulid / `prefix_handle` shape, collapses to `{id}`
 
 ## Leak scan
 
-The P2 baseline leak scan (`src/core/baseline-scan.ts`) applied to script text,
+The P2 baseline leak scan (`packages/core/src/baseline-scan.ts`) applied to script text,
 with the same rules and the same consequence — findings **block**:
 
 | Rule | Finding |
@@ -404,7 +404,7 @@ process and the script process are different processes:
   proxy's guards are unaffected by anything happening inside the child.
 
 The adversarial battery proving this lives with the package that owns the
-boundary (`src/platform/runner-agent/tests/unit/script-boundary.test.ts`) and
+boundary (`packages/platform/runner-agent/tests/unit/script-boundary.test.ts`) and
 covers: ambient `fetch`, `node:http`/`node:net`, alternate-origin and DNS
 access, `process.env` reads, filesystem escape, `child_process`, direct report
 fabrication, and credential exfiltration through URLs, bodies, logs, and thrown
@@ -413,7 +413,7 @@ exceptions. Each attempt must be blocked or provably credential-free
 
 ## Run configuration
 
-The runner API (`src/core/public/api-suite-scripts.ts` → `runScript` / `resolveScriptRun`):
+The runner API (`packages/core/src/public/api-suite-scripts.ts` → `runScript` / `resolveScriptRun`):
 
 ```
 script            path to the script module (required)
@@ -491,7 +491,7 @@ that is the whole of it.
 `DESIGN` N9: approval is an **artifact lifecycle state**, the platform's third
 instance of a pattern it already runs twice (healed baselines held for review,
 findings review). It is not a permission framework, and nothing here is a role
-system — `src/core/public/api-suite-scripts.ts` owns the shape and the one question
+system — `packages/core/src/public/api-suite-scripts.ts` owns the shape and the one question
 dispatch asks, and the hosted side owns storage and the surface
 ([Hosted: The script page](hosted.md#the-script-page)).
 
@@ -596,7 +596,7 @@ One recorded fact licenses execution against a target: the owner's answer to
 *"safe to write test data to this environment?"* (`DESIGN` §4 step 2, N8). It is
 the same record everywhere — run configuration's `target.write_grant`, an
 authoring job's `target.authorization` — and it is resolved by one module
-(`src/core/api-suite-scripts/license.ts`).
+(`packages/core/src/api-suite-scripts/license.ts`).
 
 ```
 { origin, approved_by, approved_at?, record?, write: true | false,
@@ -643,7 +643,7 @@ by a `Link` header on the target's root with `rel` of `service-desc`,
 `describedby`, or `openapi`. `spec.paths` overrides the conventional list.
 
 However it arrives, the document is materialized into the run's work directory
-and resolved through the shipped enrichment (`src/core/openapi.ts`) — so a
+and resolved through the shipped enrichment (`packages/core/src/openapi.ts`) — so a
 provisioned spec is the same enriched object the policies and the manifest
 already read, under the same boundary rules: internal pointers resolve, file
 refs resolve only inside the document's own directory tree, **a network `$ref`
@@ -729,7 +729,7 @@ model anywhere in their construction:
 ```
 
 `BRIEF.md` and `CLIENT.md` are maintained assets under
-`src/core/api-suite-scripts/handout/`, parameterized by target, mode, credential
+`packages/core/src/api-suite-scripts/handout/`, parameterized by target, mode, credential
 references, and budgets. They are the productized S0 protocol text
 (`studies/api-suite/BRIEF.md`), and two of their rules were earned by that
 study's transcripts rather than designed: **an approved rule beats the OpenAPI
@@ -844,7 +844,7 @@ execution cannot overrun the job's total.
 ## Findings
 
 A failing check on a sound suite is a **candidate finding**
-(`src/core/api-suite-scripts/findings.ts`), and so is an applicable Level 0 policy the
+(`packages/core/src/api-suite-scripts/findings.ts`), and so is an applicable Level 0 policy the
 traffic violated. A finding carries its obligation and the rule statement behind
 it, its expected/observed strings, and its cited HAR entries **read back as
 exchanges** — method, URL, status — which is the re-verification `DESIGN` N5
@@ -880,7 +880,7 @@ verdict, the same failing checks, and the same obligation accounting.
 
 ## The authoring job file
 
-`src/core/schemas/authoring-job.schema.json` is authoritative, and the same
+`packages/core/src/schemas/authoring-job.schema.json` is authoritative, and the same
 shape backs the CLI and the hosted job:
 
 ```

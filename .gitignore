@@ -10,12 +10,7 @@ runs/
 *.log
 .DS_Store
 *.mp4
-# Hosted control plane (apps/) — never part of the published @jeremyvun/playtest
-# tarball (root package.json `files` is an allowlist that excludes apps/). These
-# ignore the server's local dev state.
-apps/**/node_modules/
 .playtest-data/
-apps/**/.playtest-data/
 
 # hill-climb report: screenshot assets are regenerable from runs/ via bench/site.mjs (75MB, not committed)
 studies/hillclimb/report/assets/
@@ -33,11 +28,7 @@ tests/fixtures/todo-app-swiftui/build/
 .venv-schemathesis/
 .schemathesis/
 
-# Browser ESM emitted in place for the viewer and DOM-free platform unit tests.
-src/core/shared/*.js
-src/run-viewer/web/**/*.js
-src/platform/web/**/*.js
-!src/platform/web/vendor/**
-
-# Minified hosted-console bundle and copied static shell.
-src/platform/web/build/
+# Package-local generated browser output.
+packages/run-viewer/build/
+packages/platform/web/build/
+packages/platform/web/.test-build/

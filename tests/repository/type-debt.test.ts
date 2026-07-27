@@ -5,7 +5,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const ROOTS = ["src", "tests", "tools", "docs"];
+const ROOTS = ["packages", "tests", "tools", "docs"];
 const TEXT_EXTENSIONS = new Set([".ts", ".mts", ".js", ".mjs", ".md"]);
 const DEBT_MARKER = "TODO" + "(ts)";
 

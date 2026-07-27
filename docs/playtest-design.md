@@ -60,7 +60,7 @@ Four principles run through everything:
    telemetry annotates it, replay executes straight out of it, and the grader
    and viewer read it. Everything else is implementation.
 4. **One engine everywhere.** The hosted runner executes cases through the
-   same public core API (`src/core/public/`) the CLI uses. Hosted adds
+   same public core API (`packages/core/src/public/`) the CLI uses. Hosted adds
    coordination — snapshots, dispatch, review, retention — never a second
    test semantics.
 
@@ -192,7 +192,7 @@ stay cheap; 40+ steps without context bloat.
 ### The step contract
 
 The actor's whole turn is one schema-validated object
-(`src/core/schemas/step.schema.json`, currently version 8), with per-driver
+(`packages/core/src/schemas/step.schema.json`, currently version 8), with per-driver
 verbs overlaid onto one canonical schema. `thought` and `expectation` are
 deliberately free-form — over-structuring reasoning degrades it. The harness
 wraps each step in an **envelope**: one line of `trajectory.jsonl` carrying
@@ -209,7 +209,7 @@ All model calls go through a single fetch-based client speaking the OpenAI
 chat-completions contract. `PLAYTEST_LLM_BASE_URL` is required — there is no
 default endpoint — and points at any compatible gateway; the key falls back
 through `PLAYTEST_LLM_API_KEY` → `ANTHROPIC_API_KEY` → `OPENAI_API_KEY`.
-Model names are **aliases** resolved through `src/core/models.json`
+Model names are **aliases** resolved through `packages/core/src/models.json`
 (overridable per alias via environment), and every case can set `actor_model`
 and `grader_model` independently. Several distinct roles ride the same
 client: actor, grader, discovery synthesis, findings consolidation, script

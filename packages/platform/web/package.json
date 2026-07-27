@@ -1,0 +1,26 @@
+{
+  "name": "@playtest/web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Hosted Playtest browser console",
+  "type": "module",
+  "exports": {
+    "./assets": "./src/assets.ts",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "node src/build.ts",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.build.json && tsc -p tsconfig.test.json --noEmit",
+    "test": "node tests/prepare-test-build.ts clean && tsc -p tsconfig.test.json && node tests/prepare-test-build.ts assets && node --test .test-build/tests/*.test.js"
+  },
+  "engines": {
+    "node": ">=24.18.0"
+  },
+  "dependencies": {
+    "@playtest/core": "^0.1.0",
+    "@playtest/run-viewer": "^0.1.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.1"
+  }
+}

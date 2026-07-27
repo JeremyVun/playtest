@@ -25,8 +25,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { runScript } from "../../../src/core/public/api-suite-scripts.js";
-import { resetSecrets } from "../../../src/core/secrets.js";
+import { runScript } from "@playtest/core/api-suite-scripts";
+import { resetSecrets } from "@playtest/core/testing";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "../../..");

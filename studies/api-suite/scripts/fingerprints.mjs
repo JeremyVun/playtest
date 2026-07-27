@@ -81,13 +81,13 @@ function engineFiles(entry) {
   return found.sort();
 }
 
-const facade = path.join(REPO_ROOT, "src/core/public/api-suite-scripts.js");
+const facade = path.join(REPO_ROOT, "packages/core/src/public/api-suite-scripts.ts");
 for (const file of engineFiles(facade)) add("engine", repoLabel(file), file);
 // child.js is spawned, not imported, so the import walk cannot see it.
-for (const file of listing(path.join(REPO_ROOT, "src/core/api-suite-scripts"), (name) => name.endsWith(".js"))) {
+for (const file of listing(path.join(REPO_ROOT, "packages/core/src/api-suite-scripts"), (name) => name.endsWith(".ts"))) {
   add("engine", repoLabel(file), file);
 }
-add("engine", "src/core/schemas/script-report.schema.json", path.join(REPO_ROOT, "src/core/schemas/script-report.schema.json"));
+add("engine", "packages/core/src/schemas/script-report.schema.json", path.join(REPO_ROOT, "packages/core/src/schemas/script-report.schema.json"));
 add("contract", "docs/contracts/scripts.md", path.join(REPO_ROOT, "docs/contracts/scripts.md"));
 
 // PREREGISTRATION.md is deliberately NOT in the set. It is the document that
@@ -182,9 +182,9 @@ out(`generated:          ${new Date().toISOString()} (this line is the only non-
 out("");
 out("| Component | Pin |");
 out("|---|---|");
-out(`| Runner (subprocess, timeout, outputs) | \`src/core/api-suite-scripts/runner.js\` @ \`${commit.slice(0, 7)}\` · sha256 \`${(items.find((item) => item.path.endsWith("scripts/runner.js"))?.sha256 ?? "—").slice(0, 16)}…\` |`);
-out(`| Injected client (origin lock, budget, HAR, read-only) | \`src/core/api-suite-scripts/{client,proxy,har}.js\` · engine digest \`${groupDigest("engine").slice(0, 16)}…\` |`);
-out(`| Suite report schema | S1's \`script_report_version: 1\` — \`src/core/schemas/script-report.schema.json\` sha256 \`${(items.find((item) => item.path.endsWith("script-report.schema.json"))?.sha256 ?? "—").slice(0, 16)}…\` |`);
+out(`| Runner (subprocess, timeout, outputs) | \`packages/core/src/api-suite-scripts/runner.ts\` @ \`${commit.slice(0, 7)}\` · sha256 \`${(items.find((item) => item.path.endsWith("api-suite-scripts/runner.ts"))?.sha256 ?? "—").slice(0, 16)}…\` |`);
+out(`| Injected client (origin lock, budget, HAR, read-only) | \`packages/core/src/api-suite-scripts/{client,proxy,har}.ts\` · engine digest \`${groupDigest("engine").slice(0, 16)}…\` |`);
+out(`| Suite report schema | S1's \`script_report_version: 1\` — \`packages/core/src/schemas/script-report.schema.json\` sha256 \`${(items.find((item) => item.path.endsWith("script-report.schema.json"))?.sha256 ?? "—").slice(0, 16)}…\` |`);
 out(`| Script contract | \`docs/contracts/scripts.md\` sha256 \`${(items.find((item) => item.path.endsWith("contracts/scripts.md"))?.sha256 ?? "—").slice(0, 16)}…\` |`);
 out(`| Authoring brief / handout template | \`studies/api-suite/BRIEF.md\` + \`handout-src/CLIENT.md\` · study digest \`${groupDigest("study").slice(0, 16)}…\` |`);
 out(`| Proposal-trial prompt | \`studies/api-suite/PROPOSAL-BRIEF.md\` sha256 \`${(items.find((item) => item.path.endsWith("PROPOSAL-BRIEF.md"))?.sha256 ?? "—").slice(0, 16)}…\` |`);
@@ -195,7 +195,7 @@ out("| Retry policy | **PLACEHOLDER — client timeout, retries, backoff, what c
 out(`| Trial harness | \`studies/api-suite/scripts/{make-handout,trial-run,replay-round,fingerprints}.mjs\` · harness digest \`${groupDigest("harness").slice(0, 16)}…\` |`);
 out(`| Fixture | ${fixtureDir ? `\`${FIXTURE_LABEL}\` tree @ \`${String(fixtureCommit).slice(0, 7)}\` · fixture digest \`${groupDigest("fixture").slice(0, 16)}…\`` : "**LEDGER_FIXTURE_DIR is not set — re-run with it exported**"}; \`LEDGER_SEED=${STUDY.seed}\` |`);
 out(`| Bench pins | ${fixtureDir ? `bench digest \`${groupDigest("bench").slice(0, 16)}…\` (verify with \`verify-instrument.mjs\`)` : "**LEDGER_FIXTURE_DIR is not set**"} |`);
-out("| Recorder | runner-written HAR (`src/core/api-suite-scripts/har.js`); no external proxy |");
+out("| Recorder | runner-written HAR (`packages/core/src/api-suite-scripts/har.ts`); no external proxy |");
 out("| Probe rematch instrument | P1 tree at `9059797`, plus the re-freeze SHA if a tuning round happens (§9.3) |");
 out(`| Replay-order seed | ${process.env.REPLAY_ORDER_SEED ? `\`${process.env.REPLAY_ORDER_SEED}\`` : "**PLACEHOLDER — `$REPLAY_ORDER_SEED`, generated at freeze**"} |`);
 out(`| Sealed set | **PLACEHOLDER — §4.2 commitment** |`);

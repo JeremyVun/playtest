@@ -21,7 +21,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
-const EMIT_DIRS = ["src/core/shared", "src/run-viewer/web", "src/platform/web"].map((dir) =>
+const EMIT_DIRS = ["packages/run-viewer/build", "packages/platform/web/build"].map((dir) =>
   path.join(ROOT, dir),
 );
 const FIXTURE_DIR_NAMES = new Set(["fixtures", "vendor", "node_modules"]);
@@ -49,12 +49,12 @@ const rel = (file) => path.relative(ROOT, file);
 // --- status ----------------------------------------------------------------
 
 const AREAS = [
-  "src/core",
-  "src/cli",
-  "src/run-viewer",
-  "src/platform/control-plane",
-  "src/platform/runner-agent",
-  "src/platform/web",
+  "packages/core",
+  "packages/cli",
+  "packages/run-viewer",
+  "packages/platform/control-plane",
+  "packages/platform/runner-agent",
+  "packages/platform/web",
   "tests",
 ];
 

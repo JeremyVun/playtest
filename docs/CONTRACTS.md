@@ -34,9 +34,9 @@ tests, and Git history own those concerns.
 
 - JSON/YAML schemas own directly expressible validation. Engine contracts own
   merge precedence and cross-field rules that schemas cannot express.
-- `package.json` and `src/core/public/` own the executable list of supported
-  import specifiers and names. Interface contracts own their behavioral
-  guarantees.
+- Workspace `package.json` export maps and package-owned public facades own the
+  executable list of supported import specifiers and names. Interface contracts
+  own their behavioral guarantees.
 - Commander definitions own the complete human help inventory. Interface
   contracts record stable command resolution, side effects, machine output,
   safety, and exit behavior.

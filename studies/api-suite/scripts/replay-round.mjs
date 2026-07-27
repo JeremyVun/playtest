@@ -50,7 +50,7 @@
 // Two recorders, and the choice is about the ARM's shape, not the round's:
 //
 //   --recorder runner  (default) the S1 script substrate, in process, through
-//                      `src/core/public/api-suite-scripts.js` → `runScript`. This is the
+//                      `@playtest/core/api-suite-scripts` → `runScript`. This is the
 //                      pinned interface for every S0 script-contract arm: the
 //                      runner records the HAR, enforces the 360-request budget
 //                      at the wire, injects credentials by name, and writes
@@ -67,7 +67,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
-import { runScript } from "../../../src/core/public/api-suite-scripts.js";
+import { runScript } from "@playtest/core/api-suite-scripts";
 import { STUDY, INVARIANTS_FILE, loadRules, loadSpec, resolveStudySecrets, secretNamesFrom, writeGrantFor } from "./lib/handout.mjs";
 
 const arg = (name, fallback = null) => {

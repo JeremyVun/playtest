@@ -129,7 +129,7 @@ for (const story of stories) {
   const code = await new Promise((resolve) => {
     const child = execFile(
       "node",
-      [path.join(ROOT, "src/cli/cli.js"), "run", SUITE, "--id", story, "--fresh", "--no-grade"],
+      [path.join(ROOT, "packages/cli/src/cli.ts"), "run", SUITE, "--id", story, "--fresh", "--no-grade"],
       { env: runEnv, cwd: ROOT, maxBuffer: 64 * 1024 * 1024 },
       (err, stdout, stderr) => {
         process.stdout.write(stdout.split("\n").slice(-8).join("\n") + "\n");

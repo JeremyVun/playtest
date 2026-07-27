@@ -1,0 +1,22 @@
+# Fixture suite for hosted executor-protocol tests.
+# base_url here is a placeholder — the executor's environment overlay rewrites
+# app.envs.<name>.base_url to the real in-process todo-app URL at
+# materialization time; the case runs with --env <name>.
+#
+# auth_states below are ALSO placeholders (never read at hosted run time): the
+# control plane's suite/case resolver (packages/platform/control-plane/src/suites/resolve.js
+# resolveCases, used by both GET /suites/:s/cases and run-group creation) calls
+# core discoverCases with no --env, so a story's app.auth label needs *some*
+# entry in app.auth_states to resolve at that stage or discoverCases throws
+# (core config.js "no app.auth_states declared"). Core's per-key env-overlay
+# merge (config.js: "an env's cookies/settle REPLACES the top-level one
+# wholesale") means the environment's real, executor-generated auth_states
+# fully replaces this map the moment the real run happens with --env <name> —
+# these placeholder paths are never opened by anything.
+app:
+  base_url: http://localhost:3000
+  auth: member
+  auth_states:
+    member: ./.auth/member.json
+    admin: ./.auth/admin.json
+  init: ./seed/reset.mjs

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Local boot for the hosted control plane (src/platform/control-plane + the
-# static console in src/platform/web). One command, no prerequisites beyond
+# Local boot for the hosted control plane and packaged web console. One command,
+# no prerequisites beyond
 # `npm install`: no database service, no container, no cloud.
 #
 #   scripts/hosted-server.sh            # API + console on http://127.0.0.1:4177
@@ -35,19 +35,19 @@ case "${1:-}" in
 esac
 
 # ---- 1. Node ---------------------------------------------------------------
-# The control plane's metadata store is node:sqlite, which landed in 22.5. A
+# The repository runs on Node 24 LTS. A
 # server that boots and then dies on its first query is a worse failure than
 # refusing here with the version you have.
 node_ver="$(node --version 2>/dev/null || echo none)"
 if [ "$node_ver" = none ]; then
-  echo "hosted-server: Node is not on PATH. Install Node 22.5 or newer." >&2
+  echo "hosted-server: Node is not on PATH. Install Node 24.18 or newer." >&2
   exit 2
 fi
 node -e 'const [a,b]=process.versions.node.split(".").map(Number);
-  if (a<22 || (a===22 && b<5)) { console.error(`hosted-server: the control plane needs Node >= 22.5 for node:sqlite; this is ${process.version}.`); process.exit(2); }'
+  if (a<24 || (a===24 && b<18)) { console.error(`hosted-server: Playtest needs Node >= 24.18; this is ${process.version}.`); process.exit(2); }'
 
 # ---- 2. dependencies -------------------------------------------------------
-if [ ! -d "$REPO/node_modules" ] || [ ! -e "$REPO/node_modules/@jeremyvun/playtest-control-plane" ]; then
+if [ ! -d "$REPO/node_modules" ] || [ ! -e "$REPO/node_modules/@playtest/control-plane" ]; then
   echo "hosted-server: installing dependencies (first run only)…" >&2
   (cd "$REPO" && npm install)
 fi
@@ -171,7 +171,7 @@ if [ "$cmd" = "serve" ]; then
   } >&2
 fi
 
-cd "$REPO/src/platform/control-plane"
+cd "$REPO/packages/platform/control-plane"
 if [ "$cmd" = "serve" ]; then
   exec node src/index.ts
 fi

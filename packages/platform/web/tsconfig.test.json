@@ -1,0 +1,18 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "rewriteRelativeImportExtensions": true,
+    "outDir": ".test-build",
+    "rootDir": ".",
+    "lib": ["es2023", "dom", "dom.iterable"],
+    "types": ["node"]
+  },
+  "include": [
+    "src/**/*.ts",
+    "tests/**/*.ts"
+  ],
+  "exclude": [
+    "src/vendor/**"
+  ]
+}

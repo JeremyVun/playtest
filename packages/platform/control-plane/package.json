@@ -1,0 +1,25 @@
+{
+  "name": "@playtest/control-plane",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Hosted Playtest control plane",
+  "type": "module",
+  "bin": {
+    "playtest-server": "./src/index.ts"
+  },
+  "scripts": {
+    "start": "node src/index.ts",
+    "migrate": "node src/index.ts migrate",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node --import ../../../tests/support/hermetic.ts --test tests/unit/*.test.ts",
+    "test:integration": "node --import ../../../tests/support/hermetic.ts --test tests/integration/*.test.ts"
+  },
+  "engines": {
+    "node": ">=24.18.0"
+  },
+  "dependencies": {
+    "@playtest/core": "^0.1.0",
+    "@playtest/web": "^0.1.0",
+    "yaml": "^2.7.0"
+  }
+}

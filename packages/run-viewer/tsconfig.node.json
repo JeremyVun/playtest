@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "types": ["node"]
+  },
+  "include": [
+    "src/node/**/*.ts",
+    "src/assets.ts",
+    "src/build.ts",
+    "tests/node/**/*.ts",
+    "tests/browser/**/*.ts",
+    "../../tests/support/**/*.ts"
+  ]
+}

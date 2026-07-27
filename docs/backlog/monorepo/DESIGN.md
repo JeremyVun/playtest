@@ -1,6 +1,6 @@
 # Monorepo package structure
 
-**Status:** proposed.
+**Status:** implemented 2026-07-27.
 
 This design replaces the combined root CLI/core package and the partially
 isolated platform workspaces with one private npm monorepo whose package
@@ -152,16 +152,16 @@ does not import browser application modules.
 
 ## Package names and manifests
 
-The CLI keeps the existing product package name and binary:
+All packages use the `@playtest` scope; the CLI keeps the `playtest` binary:
 
 | Workspace | Package name | Executable |
 |---|---|---|
-| `packages/cli` | `@jeremyvun/playtest` | `playtest` |
-| `packages/core` | `@jeremyvun/playtest-core` | — |
-| `packages/run-viewer` | `@jeremyvun/playtest-run-viewer` | — |
-| `packages/platform/control-plane` | `@jeremyvun/playtest-control-plane` | `playtest-server` |
-| `packages/platform/runner-agent` | `@jeremyvun/playtest-runner-agent` | `runner-agent` |
-| `packages/platform/web` | `@jeremyvun/playtest-web` | — |
+| `packages/cli` | `@playtest/cli` | `playtest` |
+| `packages/core` | `@playtest/core` | — |
+| `packages/run-viewer` | `@playtest/run-viewer` | — |
+| `packages/platform/control-plane` | `@playtest/control-plane` | `playtest-server` |
+| `packages/platform/runner-agent` | `@playtest/runner-agent` | `runner-agent` |
+| `packages/platform/web` | `@playtest/web` | — |
 
 All workspaces are `"private": true`; registry distribution remains descoped.
 Private does not prevent checkout-based execution or `npm link`.
@@ -210,7 +210,7 @@ import { runCase } from "../../../core/public/run.ts";
 become:
 
 ```ts
-import { runCase } from "@jeremyvun/playtest-core/run";
+import { runCase } from "@playtest/core/run";
 ```
 
 This rule includes type-only imports. A type needed by another package is part
@@ -220,16 +220,16 @@ by writing `import type`.
 Core keeps narrow named facades:
 
 ```text
-@jeremyvun/playtest-core/run
-@jeremyvun/playtest-core/suite
-@jeremyvun/playtest-core/artifacts
-@jeremyvun/playtest-core/analysis
-@jeremyvun/playtest-core/findings
-@jeremyvun/playtest-core/media
-@jeremyvun/playtest-core/llm
-@jeremyvun/playtest-core/reporting
-@jeremyvun/playtest-core/api-suite-scripts
-@jeremyvun/playtest-core/browser/movement
+@playtest/core/run
+@playtest/core/suite
+@playtest/core/artifacts
+@playtest/core/analysis
+@playtest/core/findings
+@playtest/core/media
+@playtest/core/llm
+@playtest/core/reporting
+@playtest/core/api-suite-scripts
+@playtest/core/browser/movement
 ```
 
 Required shared types are exported from the facade that owns their behavior
@@ -239,9 +239,9 @@ implementation files.
 Run viewer exposes separate environments:
 
 ```text
-@jeremyvun/playtest-run-viewer/node
-@jeremyvun/playtest-run-viewer/browser
-@jeremyvun/playtest-run-viewer/assets
+@playtest/run-viewer/node
+@playtest/run-viewer/browser
+@playtest/run-viewer/assets
 ```
 
 `node` is the local read-only host. `browser` is the browser build entry.
@@ -251,7 +251,7 @@ build; it exposes no HTTP or platform behavior.
 Platform web exposes only its completed build locator to the control plane:
 
 ```text
-@jeremyvun/playtest-web/assets
+@playtest/web/assets
 ```
 
 The existing `@jeremyvun/playtest/core/*` and
@@ -317,7 +317,7 @@ The current viewer adapter is split by responsibility:
 - viewer UI assets come only from the platform-web build.
 
 The control plane must have no import from
-`@jeremyvun/playtest-run-viewer` and no filesystem reference to core or viewer
+`@playtest/run-viewer` and no filesystem reference to core or viewer
 source directories.
 
 ## Source and asset resolution
@@ -411,7 +411,7 @@ Checkout-based CLI use becomes:
 
 ```sh
 node packages/cli/src/cli.ts --help
-npm link --workspace=@jeremyvun/playtest
+npm link --workspace=@playtest/cli
 playtest --help
 ```
 
@@ -478,7 +478,7 @@ The restructure is complete when:
 - the root package has no product identity or runtime dependencies;
 - `npm run typecheck`, `npm test`, hosted unit/integration tests, runner tests,
   browser tests, and mobile tests retain their documented behavior;
-- `npm link --workspace=@jeremyvun/playtest` exposes a working `playtest`;
+- `npm link --workspace=@playtest/cli` exposes a working `playtest`;
 - local `playtest view` and the hosted run page render the same viewer build;
 - the hosted viewer retains authorization, deep links, Range requests,
   history, changed-run review, themes, and keyboard behavior;

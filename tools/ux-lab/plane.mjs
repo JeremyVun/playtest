@@ -1,6 +1,6 @@
 // A disposable, fully-seeded hosted control plane for UX work.
 //
-// Boots `src/platform/control-plane` in-process (same code path as the
+// Boots `packages/platform/control-plane` in-process (same code path as the
 // integration harness: `createApp` + `listen`) against a throwaway data root, so
 // a UX pass never touches the developer's own `.playtest-data` or port 4177.
 //
@@ -16,7 +16,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const CP = path.join(REPO_ROOT, "src/platform/control-plane/src");
+const CP = path.join(REPO_ROOT, "packages/platform/control-plane/src");
 
 /** Accepts every dispatch and never spawns anything. */
 export class StubDispatch {

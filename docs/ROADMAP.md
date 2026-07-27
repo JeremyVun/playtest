@@ -9,17 +9,6 @@ web journey path, and update the owning contract with any contract change.
 
 ## Active work
 
-### Monorepo package structure
-
-Design: [`docs/backlog/monorepo/DESIGN.md`](backlog/monorepo/DESIGN.md).
-
-- [ ] Split the combined root CLI/core/viewer package into peer workspaces,
-      make the root orchestration-only, declare every cross-package
-      dependency, and move source and tests under `packages/`.
-- [ ] Make run-viewer a shared UI package consumed by CLI and platform web;
-      make platform web own the complete hosted browser build and remove
-      viewer source ownership from the control plane.
-
 ### Single-node durable storage
 
 Plan: [`docs/backlog/storage/BUILD_PLAN.md`](backlog/storage/BUILD_PLAN.md).

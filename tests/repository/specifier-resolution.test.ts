@@ -15,12 +15,12 @@ import { fileURLToPath } from "node:url";
 // sibling of a .js specifier must exist.
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const SCAN_ROOTS = ["src", "tests"].map((dir) => path.join(ROOT, dir));
+const SCAN_ROOTS = ["packages", "tests"].map((dir) => path.join(ROOT, dir));
 const SOURCE_EXTENSIONS = new Set([".js", ".mjs", ".ts", ".mts"]);
 
 // Directories whose contents are not first-party import-graph members:
 // vendored code and fixtures that model user-authored files.
-const EXCLUDED_DIR_NAMES = new Set(["node_modules", "fixtures", "vendor"]);
+const EXCLUDED_DIR_NAMES = new Set(["node_modules", "fixtures", "vendor", "build", ".test-build"]);
 
 function sourceFiles(root: LegacyTestValue) {
   const files: LegacyTestValue = [];
@@ -35,17 +35,6 @@ function sourceFiles(root: LegacyTestValue) {
   visit(root);
   return files;
 }
-
-// Browser-served directories resolve some specifiers through a server URL
-// mapping rather than the filesystem. Keep this table in sync with the
-// serving code it mirrors (the viewer host's SHARED_DIR route).
-const SERVED_MAPPINGS = [
-  {
-    under: path.join(ROOT, "src", "run-viewer", "web"),
-    prefix: "./shared/",
-    root: path.join(ROOT, "src", "core", "shared"),
-  },
-];
 
 // A line containing this marker is skipped: for source-code-as-data strings
 // in tests, where an import statement is fixture text, not a module edge.
@@ -82,11 +71,6 @@ function existsAllowingTsSource(target: LegacyTestValue) {
 
 function resolves(file: LegacyTestValue, specifier: LegacyTestValue) {
   const bare = specifier.split(/[?#]/)[0];
-  for (const mapping of SERVED_MAPPINGS) {
-    if (file.startsWith(mapping.under + path.sep) && bare.startsWith(mapping.prefix)) {
-      return existsAllowingTsSource(path.join(mapping.root, bare.slice(mapping.prefix.length)));
-    }
-  }
   return existsAllowingTsSource(path.resolve(path.dirname(file), bare));
 }
 

@@ -1,8 +1,8 @@
 # Discovery study over the hosted Playtest web app (ROADMAP.md M1).
 #
 # No compose: the control plane runs on the host. Bring it up first
-# (src/platform/control-plane/README.md): `docker compose -f infra/dev-compose.yml up`,
-# then src/platform/control-plane with PLAYTEST_AUTH=dev → http://127.0.0.1:4177, and seed
+# (packages/platform/control-plane/README.md): `docker compose -f infra/dev-compose.yml up`,
+# then packages/platform/control-plane with PLAYTEST_AUTH=dev → http://127.0.0.1:4177, and seed
 # a THROWAWAY project from the study-owned todo fixture — discovery actors mutate
 # state, so never point this study at real data.
 #

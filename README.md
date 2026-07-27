@@ -51,14 +51,13 @@ Docs map: this file (usage) · [`docs/playtest-design.md`](docs/playtest-design.
 ```sh
 git clone <this repo> && cd playtest
 npm install
-npm link                 # puts `playtest` on your PATH
+npm link --workspace=@playtest/cli  # puts `playtest` on your PATH
 playtest install-skill   # optional: teach your coding agent to drive it (run inside your project)
 ```
 
-`npm install` also emits the trajectory viewer's browser modules and bundles
-the hosted console. Run `npm run build:web` after changing their TypeScript
-sources if you are not entering through a test or server command that builds
-them automatically.
+`npm install` also builds the self-contained trajectory viewer and hosted
+console. Run `npm run build:web` after changing their TypeScript sources if you
+are not entering through a test or server command that builds them automatically.
 
 ## Quickstart
 
@@ -559,7 +558,7 @@ launcher, unlike the CLI, sources a gitignored repo-root `.env` so a local serve
 picks up the model gateway; it also reclaims its port from a stale server and
 reports what is configured. Its default
 test command runs unit tests;
-`npm run test:integration --workspace=@jeremyvun/playtest-control-plane`
+`npm run test:integration --workspace=@playtest/control-plane`
 boots the whole control plane against temporary SQLite data roots. Deterministic
 test applications and suites live under `tests/fixtures/`; `examples/` remains
 user-facing and independently deletable.

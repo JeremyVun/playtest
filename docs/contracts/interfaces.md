@@ -12,19 +12,26 @@ package export map:
 
 | Specifier | Facade | Purpose |
 |---|---|---|
-| `@jeremyvun/playtest/core/run` | `src/core/public/run.ts` | Run cases and grade artifacts |
-| `@jeremyvun/playtest/core/suite` | `src/core/public/suite.ts` | Discover and lint cases; list personas and read the built-ins' text |
-| `@jeremyvun/playtest/core/artifacts` | `src/core/public/artifacts.ts` | Baselines, bundles, run history, roots, and storage providers |
-| `@jeremyvun/playtest/core/analysis` | `src/core/public/analysis.ts` | Run movement analysis and deterministic anomaly signals |
-| `@jeremyvun/playtest/core/findings` | `src/core/public/findings.ts` | Local findings ledger: identity, intake, lifecycle, consolidation plans, export |
-| `@jeremyvun/playtest/core/media` | `src/core/public/media.ts` | Clip generation |
-| `@jeremyvun/playtest/core/llm` | `src/core/public/llm.ts` | Model configuration, calls, coercion, and cost helpers |
-| `@jeremyvun/playtest/core/reporting` | `src/core/public/reporting.ts` | Status labels, case lines, summaries, and JUnit |
-| `@jeremyvun/playtest/run-viewer/node` | `src/run-viewer/node.ts` | Viewer serving and run projections |
-| `@jeremyvun/playtest/package.json` | `package.json` | Package metadata |
+| `@playtest/core/run` | `packages/core/src/public/run.ts` | Run cases and grade artifacts |
+| `@playtest/core/suite` | `packages/core/src/public/suite.ts` | Discover and lint cases; list personas and read built-in text |
+| `@playtest/core/artifacts` | `packages/core/src/public/artifacts.ts` | Baselines, bundles, run history, roots, and storage providers |
+| `@playtest/core/analysis` | `packages/core/src/public/analysis.ts` | Run movement analysis and deterministic anomaly signals |
+| `@playtest/core/findings` | `packages/core/src/public/findings.ts` | Local findings identity, intake, lifecycle, consolidation, and export |
+| `@playtest/core/media` | `packages/core/src/public/media.ts` | Clip generation |
+| `@playtest/core/llm` | `packages/core/src/public/llm.ts` | Model configuration, calls, coercion, and cost helpers |
+| `@playtest/core/reporting` | `packages/core/src/public/reporting.ts` | Status labels, case lines, summaries, and JUnit |
+| `@playtest/core/api-suite-scripts` | `packages/core/src/public/api-suite-scripts.ts` | API-suite authoring, execution, and review contracts |
+| `@playtest/core/browser/movement` | `packages/core/src/shared/movement.ts` | Browser-safe movement projections |
+| `@playtest/core/browser/timing` | `packages/core/src/shared/timing.ts` | Browser-safe trajectory timing |
+| `@playtest/run-viewer/node` | `packages/run-viewer/src/node/index.ts` | Local read-only viewer host |
+| `@playtest/run-viewer/browser` | `packages/run-viewer/src/web/app.ts` | Viewer browser-build entry |
+| `@playtest/run-viewer/assets` | `packages/run-viewer/src/assets.ts` | Completed local-viewer build locator |
+| `@playtest/web/assets` | `packages/platform/web/src/assets.ts` | Completed hosted-web build locator |
 
 The facade modules use explicit named exports; only those names are public.
-Internal file paths are unsupported.
+Each package also exports its own `package.json`. `@playtest/core/testing` is a
+repository-only test seam, not a production integration surface. Internal file
+paths are unsupported.
 
 Notable behavioral seams include `willRecord` for record-pool dispatch and the
 reporting exports `healDigest` and `PHASE_DOING`. Model aliases are resolved
@@ -548,12 +555,12 @@ Local directories use `LocalFsProvider`; `.ptrun` files use `BundleProvider`.
 Only GET and HEAD are allowed; other methods return 405. The server is
 read-only and never creates a runs root or changes a baseline. A missing root
 is a valid empty picker. An existing non-bundle file is an error. Every path is
-contained under its owning static, shared, or run root; traversal is rejected.
+contained under its owning static or run root; traversal is rejected.
 
 ### Routes
 
-- `/` and viewer static assets come from `src/run-viewer/web/`.
-- `/shared/*` serves browser-safe modules under `src/core/shared/`.
+- `/` and viewer static assets come from the completed
+  `packages/run-viewer/build/` asset directory.
 - `/run/*` serves artifact files in single-run mode.
 - `/run/<run_id>/<case_id>/*` serves artifacts in runs-root mode.
 - `/runs.json` lists runs.

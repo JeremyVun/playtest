@@ -14,8 +14,8 @@ not-yet-converted `.js` importer — invisible to `tsc` — still fails the gate
 
 ```sh
 node tools/ts-migration/status.mjs                      # progress per area + debt tally
-node tools/ts-migration/status.mjs importers src/core/config.ts  # every reference, by any mechanism
-node tools/ts-migration/status.mjs closure src/core/clip.js src/core/config.ts ...
+node tools/ts-migration/status.mjs importers packages/core/src/config.ts  # every reference, by any mechanism
+node tools/ts-migration/status.mjs closure packages/core/src/clip.ts packages/core/src/config.ts ...
 ```
 
 `importers` is the mandatory step before renaming a module: it greps by bare

@@ -271,7 +271,7 @@ Every driver implements:
 }
 ```
 
-This shape is also expressed by the exported `Driver` TypeScript interface in `src/core/driver.ts`.
+This shape is also expressed by the exported `Driver` TypeScript interface in `packages/core/src/driver.ts`.
 
 `start()` opens the entry state and returns an `ExecResult` whose performance
 and network data seed the gate. `captureSnapshot()` returns text, optional
@@ -347,7 +347,7 @@ explicit value is part of the settle comparability pin.
 
 ### Step validation
 
-`src/core/schemas/step.schema.json` is the strict canonical action schema.
+`packages/core/src/schemas/step.schema.json` is the strict canonical action schema.
 Actions are flat: one `type` plus the fields used by that verb. Per-verb
 required fields use `allOf` conditionals.
 
@@ -643,7 +643,7 @@ silently downgrading the actor to an empty operation list.
   valid; a key without a gateway URL is not.
 - Prompt caching on by default; `PLAYTEST_LLM_CACHE=0|false|off|no` disables it.
 
-Configured model aliases resolve through `src/core/models.json`;
+Configured model aliases resolve through `packages/core/src/models.json`;
 `PLAYTEST_<ALIAS>_MODEL` overrides an alias, while an unknown value passes
 through as an already qualified model name.
 
@@ -1316,7 +1316,7 @@ defect, and never to overturn a verdict or suggest relaxing a check. Runs with
 neither invariants nor a drift report are unchanged.
 
 A discovery grade also receives a `## Deterministic signals` section: a compact,
-model-facing list produced by the pure anomaly extractor (`src/core/anomalies.ts`,
+model-facing list produced by the pure anomaly extractor (`packages/core/src/anomalies.ts`,
 `extractAnomalies`) over the run's recorded envelopes. Its input is recorded
 fields only — `network.requests` status, `console_errors`, the harness-computed
 `confusion` markers (`action_failed`, `no_effect`, `repeated_action`; `state_drift`
@@ -1355,7 +1355,7 @@ later group those observations, but grading remains one-run analysis.
 
 ### Cross-run finding identity and lifecycle
 
-`@jeremyvun/playtest/core/findings` exposes the durable identity layer that sits
+`@playtest/core/findings` exposes the durable identity layer that sits
 above one run's `grade.json`. It is the local half of a model shared with the
 hosted control plane (`docs/contracts/hosted.md`); the two are different
 physical databases with the same semantics.
@@ -1368,7 +1368,7 @@ physical databases with the same semantics.
   signal has no exact keys.
 - Algorithms are versioned and frozen: `key-v1`, `locus-norm-v1`,
   `match-text-v1`, retrieval `shortlist-v1`. The reference spec is
-  `tests/core/findings/spec.ts`; the core and hosted implementations are
+  `tests/support/findings/spec.ts`; the core and hosted implementations are
   independently pinned to it byte for byte, so the same defect keys identically
   on both sides. Every stored row carries its algorithm versions so a bump can
   recompute.

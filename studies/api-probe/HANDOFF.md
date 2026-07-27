@@ -154,7 +154,7 @@ LEDGER_FAULTS=f-close-ghost node examples/ledger-api/server.js
 # One probe run
 PLAYTEST_LLM_BASE_URL=http://127.0.0.1:8900 PLAYTEST_LLM_API_KEY=subscription \
 PLAYTEST_GPT5_5_MODEL=gpt-5.5 PLAYTEST_LLM_TIMEOUT_MS=305000 \
-node src/cli/cli.js run ./studies/api-probe --id conservation --fresh --no-grade
+node packages/cli/src/cli.ts run ./studies/api-probe --id conservation --fresh --no-grade
 
 # Tests
 node --test "examples/ledger-api/test/**/*.test.js"   # 67

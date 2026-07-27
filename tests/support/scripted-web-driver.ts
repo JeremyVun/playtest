@@ -1,7 +1,7 @@
 // A scripted in-memory "web" driver for hermetic act/heal engine tests.
 //
 // The runner reaches a transport only through the Driver seam
-// (src/core/driver.ts), so an object implementing that surface over a tiny
+// (packages/core/src/driver.ts), so an object implementing that surface over a tiny
 // named state machine runs record/act/heal — including heal re-anchoring
 // (docs/contracts/engine.md#act-and-heal) — with the real runner, writer, and
 // artifacts, but no browser. Screens are static snapshot texts keyed by state;

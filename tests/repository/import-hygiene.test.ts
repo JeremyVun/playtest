@@ -4,10 +4,10 @@ import assert from "node:assert/strict";
 test("core library modules import without CLI side effects", async () => {
   const [{ runCase, runAll }, { discoverCases, parseDuration, resolveViewport }, { clip }, { lintCase }] =
     await Promise.all([
-      import("../../src/core/runner.ts"),
-      import("../../src/core/config.ts"),
-      import("../../src/core/clip.ts"),
-      import("../../src/core/lint.ts"),
+      import("@playtest/core/run"),
+      import("@playtest/core/suite"),
+      import("@playtest/core/media"),
+      import("@playtest/core/suite"),
     ]);
 
   assert.equal(typeof runCase, "function");

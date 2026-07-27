@@ -6,13 +6,13 @@ component alone.
 
 The executable inventories remain authoritative:
 
-- `src/platform/control-plane/src/routes.ts` owns the complete HTTP route list.
-- `src/platform/control-plane/migrations/` owns the exact SQLite schema.
-- `src/platform/control-plane/src/config.ts` owns environment variables,
+- `packages/platform/control-plane/src/routes.ts` owns the complete HTTP route list.
+- `packages/platform/control-plane/migrations/` owns the exact SQLite schema.
+- `packages/platform/control-plane/src/config.ts` owns environment variables,
   defaults, and validation.
-- `src/platform/control-plane/src/errors.ts` owns error codes and HTTP status
+- `packages/platform/control-plane/src/errors.ts` owns error codes and HTTP status
   mappings.
-- JSON and YAML schemas under `src/core/schemas/` own suite validation.
+- JSON and YAML schemas under `packages/core/src/schemas/` own suite validation.
 
 Do not copy those inventories into this file. Update this contract when a
 cross-component promise, persisted lifecycle, authorization rule, or trust
@@ -22,26 +22,26 @@ boundary changes.
 
 Hosted Playtest has three runtime components:
 
-- `src/platform/control-plane` owns authentication, authorization, persistence,
+- `packages/platform/control-plane` owns authentication, authorization, persistence,
   suite snapshots, dispatch, review, findings (including discovery study
   synthesis), retention, and the HTTP API.
-- `src/platform/runner-agent` materializes a pinned suite snapshot, executes
+- `packages/platform/runner-agent` materializes a pinned suite snapshot, executes
   cases through the public core API, uploads sealed run bundles, and reports
   results. It never opens the control-plane database.
-- `src/platform/web` is a static browser client served by the control plane. It
-  embeds the shared viewer from `src/run-viewer/web`.
+- `packages/platform/web` is a static browser client served by the control
+  plane. Its completed build embeds the completed run-viewer browser build.
 
 Each component is a private npm workspace with its own scripts and direct
-dependency declarations. The root `@jeremyvun/playtest` CLI/core package is
-also the workspace root, and its `package-lock.json` is the only lockfile.
+dependency declarations. The private root is orchestration only, and its
+`package-lock.json` is the only lockfile.
 
-The hosted components consume core only through `src/core/public/`. The local
-CLI remains fully functional without the hosted platform.
+Hosted components consume core only through `@playtest/core/*` package exports.
+The local CLI remains fully functional without the hosted platform.
 
 The hosted console is one minified ESM bundle served with its copied HTML and
-CSS from the generated `src/platform/web/build/` directory. Its source map is
-generated beside it. The embedded viewer and shared browser modules remain
-JavaScript emitted beside their TypeScript sources. A checkout must run
+CSS from the generated `packages/platform/web/build/` directory. Its source map
+is generated beside it, and the complete run-viewer build is copied under
+`build/viewer/`. No generated JavaScript is emitted beside TypeScript source. A checkout must run
 `npm install` (which runs `npm run build:web`) or run `npm run build:web`
 explicitly before any server serves those directories. The supported hosted
 entry point performs that build itself.
@@ -184,7 +184,7 @@ is process-local, so its effective capacity scales with server replicas.
 
 **Validators and content coding.** Every fully buffered response — handler
 JSON, small handler buffers, and the static web app — leaves through one sender
-(`src/platform/control-plane/src/response.ts`), which owns conditional requests
+(`packages/platform/control-plane/src/response.ts`), which owns conditional requests
 and content coding; no route implements either. A 200 GET/HEAD whose body is
 JSON, text, script, image, or font carries a strong `ETag` (truncated SHA-256
 of the uncompressed bytes) plus `cache-control: no-cache`: nothing here has
@@ -385,7 +385,7 @@ can see what their suite is judged against before deciding anything.
 cleared precision and detection but its suite found 8 of 13 sealed faults
 against 11–12 for suites given the rules (`DESIGN` §7.1), so the surface says
 *"review and confirm your API's rules"* and never that the platform discovered
-them. The console's copy lives DOM-free in `src/platform/web/lib/rule-cards.ts`
+them. The console's copy lives DOM-free in `packages/platform/web/src/lib/rule-cards.ts`
 and the offline gate asserts the sentences that carry that promise — a change
 that re-inflates the claim fails a test rather than a review.
 
@@ -475,7 +475,7 @@ recorded and current; without one the client refuses every non-`GET`/`HEAD`
 request at the wire. The grant is target authorization, never script content.
 
 The adversarial battery that proves this boundary ships with the package that
-owns it (`src/platform/runner-agent/tests/unit/`) and covers ambient `fetch`,
+owns it (`packages/platform/runner-agent/tests/unit/`) and covers ambient `fetch`,
 `node:http`/`node:net`, alternate-origin and DNS access, `process.env` reads,
 filesystem escape, `child_process`, direct report fabrication, and credential
 exfiltration through URLs, bodies, logs, and thrown exceptions. Each attempt
@@ -889,7 +889,7 @@ three steps is a guarantee, not an implementation detail:
 Retrieval thresholds are server configuration, not constants: the right value is
 a property of a project's candidate corpus, not of the algorithm. The defaults
 below were measured against the fixture corpus
-(`tests/core/findings/README.md` records the scored pairs and the baseline).
+(`tests/support/findings/README.md` records the scored pairs and the baseline).
 The verification model resolves per project — see "Model selection"
 (`consolidation_model` policy, `PLAYTEST_CONSOLIDATION_MODEL` env, then the
 `gpt5_6_terra` tier). Startup rejects an out-of-range value, or an auto-suggest
@@ -1205,7 +1205,7 @@ Rule-card proposal is the assistant's second call and the one durable-writing
 one ([Rule cards](#rule-cards)): it persists `candidate` rows, an audit entry,
 and a feed event. Its prompt, forced-tool schema, validation, and normalization
 are owned by the engine
-(`src/core/public/api-suite-scripts.ts`) so the CLI and a future runner-agent job share
+(`packages/core/src/public/api-suite-scripts.ts`) so the CLI and a future runner-agent job share
 one instrument. Like every other model call here it decides nothing:
 a proposed card is always a candidate.
 
@@ -1408,12 +1408,12 @@ author stories, run them, inspect evidence, make a human decision.
   the existing API/CLI boundary; the console adds no token-management UI.
   Plugins, Integrations, and Retention are not configured from the console.
 - Every page's `nav:` value resolves to exactly one rail item through
-  `railFor` (`src/platform/web/lib/nav.ts`). Surfaces that live under a rail
+  `railFor` (`packages/platform/web/src/lib/nav.ts`). Surfaces that live under a rail
   item say so: the suite page, story editor, suite settings, Versions and run
   history map to Suites; the changed-stories queue maps to Runs. A page that
   lights up no rail item is a bug, and the hermetic gate asserts the mapping.
 - System health is a status bar, not a page. Inside a project, a thin always-on
-  footer (`src/platform/web/lib/statusbar.ts`) states whether this console is
+  footer (`packages/platform/web/src/lib/statusbar.ts`) states whether this console is
   live and — for developers — dispatch depth against the cap, GHA queue wait,
   reconciler liveness, and model spend; the dispatch ledger opens in a drawer
   over the page. It replaces the folded "Operations" section that used to sit
@@ -1436,7 +1436,7 @@ author stories, run them, inspect evidence, make a human decision.
   manager. A suite's `playtest.yaml` is edited on **Suite settings**
   (`/p/:key/suites/:slug/settings`) as a form with a YAML view of the identical
   bytes — the same discipline as the story editor, applied through
-  `src/platform/web/lib/defaults-form.ts`, so comments and unedited keys survive.
+  `packages/platform/web/src/lib/defaults-form.ts`, so comments and unedited keys survive.
   Personas, hooks and assertions are code-tier files: they arrive and leave as a
   `.tar` (Import/Export) and are edited with the CLI. The raw file tree
   (`/p/:key/suites/:slug/files`) is gone and redirects to Suite settings.
@@ -1497,7 +1497,7 @@ author stories, run them, inspect evidence, make a human decision.
   **Models** (admin) edits the project's actor/grader defaults; Suite settings
   has a **Models** card writing the suite's own top-level
   `actor_model`/`grader_model`. Both are dropdowns over the `GET /models` tier
-  list (`src/platform/web/lib/model-select.ts`), whose first option is the
+  list (`packages/platform/web/src/lib/model-select.ts`), whose first option is the
   inherited state and names what it resolves to — "Project default — sonnet",
   "Engine default — gpt5_4_mini" — so not choosing reads as the concrete model
   it means, never as an empty box. A final "Custom model name…" option reveals
@@ -1519,7 +1519,7 @@ author stories, run them, inspect evidence, make a human decision.
   (`new`/`reopened`/`accepted`/`rejected`/`resolved`); the console shows four
   disjoint buckets — **Needs review** (new), **Open** (accepted or reopened),
   **Resolved**, **Rejected** — and
-  `src/platform/web/lib/finding-buckets.ts` is the only mapping between them.
+  `packages/platform/web/src/lib/finding-buckets.ts` is the only mapping between them.
   A `new` finding's chip reads "needs review", an `accepted` one "confirmed":
   confirming a finding says it is real, not that it is done.
   `?filter=dismissed` still resolves to the Rejected bucket.
@@ -1534,7 +1534,7 @@ author stories, run them, inspect evidence, make a human decision.
   interface at all — a person launches a run, of some stories, against an
   environment.
 - Engine tokens are translated before a person reads them.
-  `src/platform/web/lib/vocab.ts` owns the display words for candidate
+  `packages/platform/web/src/lib/vocab.ts` owns the display words for candidate
   categories, deterministic signals, success-criterion kinds and the run-status
   legend; an unmapped token degrades to a readable phrase rather than a blank,
   so a new engine signal is usable without a web release. The raw token stays
@@ -1546,7 +1546,7 @@ author stories, run them, inspect evidence, make a human decision.
   else what triggered it. Never a shortened ULID — `short()` takes a ULID's
   leading characters, which are its timestamp, so two runs minted in the same
   millisecond render the same "id" and the label distinguishes nothing.
-- One arithmetic per run. `src/platform/web/lib/run-stats.ts` derives every
+- One arithmetic per run. `packages/platform/web/src/lib/run-stats.ts` derives every
   count, word and tone about a run from whichever shape the caller holds — the
   list projection's `stats`, a fetched group's story rows, or a legacy
   `exit_summary` — so an index row, the run's own header and its narration cannot
@@ -1619,7 +1619,7 @@ author stories, run them, inspect evidence, make a human decision.
   colour, shape, or a `title` has a visually hidden text equivalent beside it:
   `title` is unreachable by keyboard and invisible on touch.
 - Every modal goes through one primitive (`openModal` in
-  `src/platform/web/lib/ui.ts`): Escape closes it, Tab is trapped inside it,
+  `packages/platform/web/src/lib/ui.ts`): Escape closes it, Tab is trapped inside it,
   focus lands on the first control on open and returns to the opener on close,
   and a confirm dialog's default focus is Cancel.
 - Where a screen repeats a control — Delete per environment, Run per story —
@@ -1631,7 +1631,7 @@ These invariants are authored and reviewed by hand. The repository has no
 browser harness that loads the hosted SPA and no accessibility (axe) harness, so
 nothing here about rendering, keyboard operation, contrast, or focus is
 machine-verified. What *is* asserted hermetically, in
-`src/platform/control-plane/tests/unit/web-ia.test.ts`, is the information
+`packages/platform/web/tests/web-ia.test.ts`, is the information
 architecture above: the four nav items and their targets, the rail item every
 page's `nav:` value resolves to, the three Settings sections and their role
 disclosure, the finding buckets and their state mapping, the display vocabulary
@@ -1654,7 +1654,7 @@ workbench for looking at the console, not a gate — nothing in CI runs it.
 That inventory is assertable only because the IA is DOM-free by design: nav,
 Settings sections, redirects, finding buckets, display vocabulary, status-bar
 vocabulary, and secret masking live in plain modules under
-`src/platform/web/lib/`. Keep them there.
+`packages/platform/web/src/lib/`. Keep them there.
 
 ## Contract changes
 

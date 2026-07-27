@@ -100,7 +100,7 @@ failure summary".
 
 # Round 1 report (2026-07-06/07, pre-fixes)
 
-Run 2026-07-06/07 against the hosted control plane (`src/platform/control-plane` + `src/platform/web`,
+Run 2026-07-06/07 against the hosted control plane (`packages/platform/control-plane` + `packages/platform/web/src`,
 dev auth, seeded `todos` project via `studies/hosted-ux/seed.mjs`). 8 usable
 trajectories across 7 stories; scores 52–94; one give-up. Run dirs:
 `runs/2026-07-06T1624-d83a` (batch 1), `runs/2026-07-07T2226-c0df` (orient),

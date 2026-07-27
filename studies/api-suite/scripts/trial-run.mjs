@@ -40,7 +40,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { runScript } from "../../../src/core/public/api-suite-scripts.js";
+import { runScript } from "@playtest/core/api-suite-scripts";
 import { STUDY, STUDY_SECRETS, argOf, flagOf, loadRules, loadSecretsFile, loadSpec, resolveStudySecrets, secretNamesFrom, writeGrantFor } from "./lib/handout.mjs";
 
 const die = (message) => {

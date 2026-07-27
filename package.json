@@ -1,73 +1,36 @@
 {
-  "name": "@jeremyvun/playtest",
+  "name": "playtest-monorepo",
   "version": "0.1.0",
-  "description": "User journey testing for web apps: an AI agent role-plays a user against your app and the harness scores whether the app let it succeed.",
-  "license": "MIT",
-  "author": "Jeremy Vun",
+  "private": true,
   "type": "module",
   "workspaces": [
-    "src/platform/control-plane",
-    "src/platform/runner-agent",
-    "src/platform/web"
-  ],
-  "bin": {
-    "playtest": "./src/cli/cli.ts"
-  },
-  "exports": {
-    "./core/run": "./src/core/public/run.ts",
-    "./core/suite": "./src/core/public/suite.ts",
-    "./core/artifacts": "./src/core/public/artifacts.ts",
-    "./core/analysis": "./src/core/public/analysis.ts",
-    "./core/findings": "./src/core/public/findings.ts",
-    "./core/media": "./src/core/public/media.ts",
-    "./core/llm": "./src/core/public/llm.ts",
-    "./core/reporting": "./src/core/public/reporting.ts",
-    "./core/api-suite-scripts": "./src/core/public/api-suite-scripts.ts",
-    "./run-viewer/node": "./src/run-viewer/node.ts",
-    "./package.json": "./package.json"
-  },
-  "files": [
-    "src/core",
-    "src/cli",
-    "src/run-viewer",
-    "skills",
-    "docs/CONTRACTS.md",
-    "docs/contracts",
-    "docs/playtest-design.md"
+    "packages/core",
+    "packages/cli",
+    "packages/run-viewer",
+    "packages/platform/*"
   ],
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.web.json --noEmit && npm run typecheck --workspaces --if-present",
-    "build:web": "tsc -p tsconfig.web.json && npm run build --workspace=@jeremyvun/playtest-web",
+    "typecheck": "npm run typecheck --workspaces --if-present && tsc -p tsconfig.json",
+    "build:web": "npm run build --workspace=@playtest/run-viewer && npm run build --workspace=@playtest/web",
     "prepare": "npm run build:web",
-    "test": "npm run test:core && npm run test:cli && npm run test:viewer && npm run test:repository",
-    "test:core": "node --import ./tests/support/hermetic.ts --test tests/core/unit/*.test.ts tests/core/integration/*.test.ts",
-    "test:cli": "node --import ./tests/support/hermetic.ts --test tests/cli/*.test.ts",
-    "test:viewer": "npm run build:web && node --import ./tests/support/hermetic.ts --test tests/run-viewer/node/*.test.ts",
+    "test": "npm run build:web && npm run test --workspaces --if-present && npm run test:repository",
+    "test:core": "npm test --workspace=@playtest/core",
+    "test:cli": "npm test --workspace=@playtest/cli",
+    "test:viewer": "npm test --workspace=@playtest/run-viewer",
     "test:repository": "node --import ./tests/support/hermetic.ts --test tests/repository/*.test.ts",
-    "test:browser": "npm run build:web && node --import ./tests/support/hermetic.ts --test tests/core/browser/*.test.ts tests/run-viewer/browser/*.test.ts",
-    "test:mobile": "node --test tests/core/mobile/*.test.ts",
+    "test:browser": "npm run build:web && npm run test:browser --workspace=@playtest/core && npm run test:browser --workspace=@playtest/run-viewer",
+    "test:mobile": "npm run test:mobile --workspace=@playtest/core",
     "test:all": "npm test && npm run test:browser",
     "hosted": "bash scripts/hosted-server.sh",
     "hosted:migrate": "bash scripts/hosted-server.sh migrate",
-    "hosted:test": "npm run build:web && npm test --workspace=@jeremyvun/playtest-control-plane",
-    "runner:test": "npm test --workspace=@jeremyvun/playtest-runner-agent"
+    "hosted:test": "npm run build:web && npm test --workspace=@playtest/control-plane",
+    "runner:test": "npm test --workspace=@playtest/runner-agent"
   },
   "engines": {
     "node": ">=24.18.0"
   },
-  "dependencies": {
-    "ajv": "^8.17.1",
-    "axe-core": "^4.12.1",
-    "commander": "^13.1.0",
-    "playwright": "^1.53.0",
-    "yaml": "^2.7.0"
-  },
-  "optionalDependencies": {
-    "webdriverio": "^9.0.0"
-  },
   "devDependencies": {
     "@types/node": "^26.1.1",
-    "appium": "^3.6.0",
     "typescript": "^7.0.2"
   }
 }

@@ -1,0 +1,30 @@
+{
+  "name": "@playtest/run-viewer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Playtest trajectory viewer and local read-only host",
+  "type": "module",
+  "exports": {
+    "./node": "./src/node/index.ts",
+    "./browser": "./src/web/app.ts",
+    "./assets": "./src/assets.ts",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "start": "node src/node/index.ts",
+    "build": "node src/build.ts",
+    "typecheck": "tsc -p tsconfig.node.json && tsc -p tsconfig.web.json",
+    "test": "npm run build && node --import ../../tests/support/hermetic.ts --test tests/node/*.test.ts",
+    "test:browser": "npm run build && node --import ../../tests/support/hermetic.ts --test tests/browser/*.test.ts"
+  },
+  "engines": {
+    "node": ">=24.18.0"
+  },
+  "dependencies": {
+    "@playtest/core": "^0.1.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.1",
+    "playwright": "^1.53.0"
+  }
+}

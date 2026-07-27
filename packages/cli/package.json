@@ -1,0 +1,27 @@
+{
+  "name": "@playtest/cli",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Playtest command-line interface",
+  "type": "module",
+  "bin": {
+    "playtest": "./src/cli.ts"
+  },
+  "scripts": {
+    "start": "node src/cli.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node --import ../../tests/support/hermetic.ts --test tests/*.test.ts"
+  },
+  "engines": {
+    "node": ">=24.18.0"
+  },
+  "dependencies": {
+    "@playtest/core": "^0.1.0",
+    "@playtest/run-viewer": "^0.1.0",
+    "commander": "^13.1.0",
+    "playwright": "^1.53.0"
+  },
+  "optionalDependencies": {
+    "webdriverio": "^9.0.0"
+  }
+}

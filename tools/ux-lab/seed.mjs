@@ -22,11 +22,10 @@ import path from "node:path";
 import crypto from "node:crypto";
 
 import { REPO_ROOT } from "./plane.mjs";
-import { writeBundle } from "../../src/core/bundle.ts";
-import { newRunId } from "../../src/core/trajectory.ts";
-import { writeTar } from "../../src/platform/control-plane/src/suites/tar.ts";
-import { ulid } from "../../src/platform/control-plane/src/ulid.ts";
-import { intakeFinding } from "../../src/platform/control-plane/src/findings/intake.ts";
+import { newRunId, writeBundle } from "@playtest/core/artifacts";
+import { writeTar } from "../../packages/platform/control-plane/src/suites/tar.ts";
+import { ulid } from "../../packages/platform/control-plane/src/ulid.ts";
+import { intakeFinding } from "../../packages/platform/control-plane/src/findings/intake.ts";
 
 const DAY = 24 * 60 * 60 * 1000;
 const HOUR = 60 * 60 * 1000;

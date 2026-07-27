@@ -6,15 +6,18 @@ import { h, mount } from "../lib/dom.js";
 import { link, navigate } from "../lib/router.js";
 import { renderFrame, page } from "../lib/shell.js";
 import { state, hasRole, loadMe, loadProjects } from "../lib/state.js";
-import { toast, toastError, confirmModal, formModal, emptyState, formField, enhanceSelect } from "../lib/ui.js";
+import { toast, toastError, confirmModal, formModal, emptyState, formField, enhanceSelect, copyText } from "../lib/ui.js";
 import { SETTINGS_SECTIONS } from "../lib/settings-sections.js";
 import { modelField } from "../lib/model-select.js";
 import { MASK, maskSecretEnv, literalSecretKeys } from "../lib/secret-mask.js";
 import { parseCookieList, formatCookieList } from "../lib/defaults-form.js";
 import { humanize as words, categoryLabel } from "../lib/vocab.js";
+import { startCommand, oneShot, runnerLabelsText } from "../lib/runners.js";
+import { ago } from "../lib/labels.js";
 
 const RENDER: WebDynamic = {
   "test-targets": testTargetsTab,
+  runners: runnersTab,
   runs: runsTab,
   models: modelsTab,
   team: membersTab,
@@ -132,6 +135,131 @@ async function testTargetsTab(projectKey: WebDynamic, project: WebDynamic, slot:
   environmentsTab(projectKey, project, envSlot);
   authProvidersTab(projectKey, project, authSlot);
   if (canAdmin) secretsTab(projectKey, project, secretSlot);
+}
+
+// ---------- runners ----------
+// A self-hosted runner is the machine a run actually happens on. Everything it
+// does is outbound (docs/contracts/hosted.md, "Runner pool"), so this surface
+// hands out an identity and never reaches back: register → paste one command on
+// that machine → give an environment the labels it advertises.
+//
+// R1 keeps this deliberately small — register, list, revoke. Live presence, the
+// claim a runner is executing, and launch-time placement warnings are R4.
+async function runnersTab(projectKey: WebDynamic, project: WebDynamic, slot: WebDynamic) {
+  let items: WebDynamic = [];
+  try { ({ items } = await api.get(`/projects/${projectKey}/runners`)); } catch (err: WebDynamic) { return toastError(err); }
+  const refresh = () => runnersTab(projectKey, project, slot);
+  const add = h("button.btn.primary", { onclick: () => registerRunnerModal(projectKey, refresh) }, "+ Register runner");
+  const live = items.filter((r: WebDynamic) => !r.revoked_at);
+
+  const body = items.length
+    ? h("div", { style: "display:flex;flex-direction:column;gap:12px" }, ...items.map((r: WebDynamic) => h("div.card.pad", {},
+        h("div", { style: "display:flex;align-items:center;gap:10px;flex-wrap:wrap" },
+          h("span.id", {}, r.name),
+          r.revoked_at ? h("span.chip", {}, "revoked") : null,
+          h("div", { style: "flex:1" }),
+          // Every row repeats one verb, so the accessible name carries the runner.
+          r.revoked_at
+            ? null
+            : h("button.btn.btn-sm.danger", { "aria-label": `Revoke runner ${r.name}`, onclick: () => revokeRunner(projectKey, r, refresh) }, "Revoke"),
+        ),
+        fieldLine("labels", runnerLabelsText(r.labels)),
+        fieldLine("last seen", r.last_seen_at ? `${ago(r.last_seen_at)} (${new Date(r.last_seen_at).toLocaleString()})` : "never — it has not checked in yet"),
+        r.revoked_at ? fieldLine("revoked", new Date(r.revoked_at).toLocaleString()) : null,
+      )))
+    : emptyState(
+        "No runners registered",
+        "A self-hosted runner runs your suites on a machine you control — your laptop, a build box, a CI job — so a run can reach an app on localhost, a device simulator, or anything behind your firewall. It dials out to Playtest; nothing ever connects to it.",
+      );
+
+  mount(slot, h("div.stack", {},
+    h("section", {},
+      h("h3.section-title", { style: "margin-top:0" }, "Runners"),
+      h("p.dim", { style: "font-size:12.5px;margin:-4px 0 12px" },
+        "Machines that execute this project's runs. Register one here, start it with the command shown, then give an environment the same labels under Test targets — a run is placed on a runner advertising every label its environment asks for."),
+      h("div", { style: "display:flex;justify-content:flex-end;margin-bottom:12px" }, add),
+      body,
+      live.length
+        ? null
+        : h("p.faint", { style: "font-size:11.5px;margin-top:12px" },
+            "Until a runner is checked in, runs placed on this project wait on the board and then fail with the labels nothing served."),
+    ),
+  ));
+}
+
+/**
+ * Register, then reveal — once. The credential is stored hashed, so this dialog
+ * is the only place it will ever exist; the second step says so plainly and
+ * hands over the exact command rather than a shape to assemble.
+ */
+function registerRunnerModal(projectKey: WebDynamic, refresh: WebDynamic) {
+  const close = formModal("Register runner", () => {
+    const name = h("input", { type: "text", placeholder: "adas-laptop" });
+    const labels = h("input", { type: "text", placeholder: "macos, ios-sim" });
+    const submitBtn = h("button.btn.primary", { type: "submit" }, "Register");
+    return h("form", { onsubmit: submit },
+      fld("Name", name, "How this machine appears in run history. Unique in this project."),
+      fld("Labels", labels, "What this machine can do — an environment asking for these labels places its runs here. Comma separated; leave blank to take any of this project's runs."),
+      h("div.modal-actions", {}, h("button.btn.ghost", { type: "button", onclick: () => close() }, "Cancel"), submitBtn),
+    );
+    async function submit(e: WebDynamic) {
+      e.preventDefault();
+      const payload: WebDynamic = {
+        name: name.value.trim(),
+        labels: labels.value.split(",").map((s: WebDynamic) => s.trim()).filter(Boolean),
+      };
+      if (!payload.name) return toast("Name the runner", "Give this machine a name you'll recognize in run history.", "err");
+      submitBtn.disabled = true;
+      try {
+        const runner = await api.post(`/projects/${projectKey}/runners`, payload);
+        revealRunnerCredential(runner, close, refresh);
+      } catch (err: WebDynamic) { toastError(err); submitBtn.disabled = false; }
+    }
+  });
+}
+
+/** The one and only sight of a runner credential. */
+function revealRunnerCredential(runner: WebDynamic, close: WebDynamic, refresh: WebDynamic) {
+  // A one-shot box, not a variable: a re-render, a reopened dialog or a stray
+  // reference cannot show this twice, because the server itself cannot.
+  const secret = oneShot(runner.credential);
+  const command = startCommand({ server: location.origin, credential: secret.take() || "", labels: runner.labels || [] });
+  const root = document.querySelector("#modal-root .modal");
+  const copyBtn = h("button.btn.primary", {
+    onclick: async () => {
+      const ok = await copyText(command);
+      toast(ok ? "Command copied" : "Couldn't copy", ok ? "Paste it into a terminal on that machine." : "Select the command and copy it manually.", ok ? "ok" : "err");
+    },
+  }, "Copy command");
+  mount(root,
+    h("h3", {}, `${runner.name} is registered`),
+    h("p.dim", { style: "font-size:12.5px;margin:-4px 0 12px" },
+      "Run this on the machine you want your suites to execute on. It is the only time this credential is shown — Playtest stores a hash of it and cannot show it again."),
+    h("pre.mono", {
+      style: "background:var(--bg2);padding:12px;border-radius:6px;overflow:auto;font-size:12px;white-space:pre-wrap;word-break:break-all",
+      // The command is the payload of this dialog; make it selectable as one
+      // unit for people who copy with the keyboard rather than the button.
+      tabindex: "0",
+      "aria-label": "Runner start command",
+    }, command),
+    h("p.faint", { style: "font-size:11.5px;margin:10px 0 0" },
+      "Run it from your Playtest checkout. The credential travels in the environment, never as an argument, so it stays out of your process list. The runner then waits for work and prints what it is doing."),
+    h("p.faint", { style: "font-size:11.5px;margin:6px 0 0" },
+      `Give an environment the ${(runner.labels || []).length ? `labels ${runnerLabelsText(runner.labels)}` : "runner labels you want"} under Test targets to place its runs here.`),
+    h("div.modal-actions", {}, copyBtn, h("button.btn.ghost", { onclick: () => { close(); refresh(); } }, "Done")),
+  );
+}
+
+async function revokeRunner(projectKey: WebDynamic, runner: WebDynamic, refresh: WebDynamic) {
+  const ok = await confirmModal({
+    title: `Revoke ${runner.name}?`,
+    body: "Its credential stops working: it can no longer check in or claim work. A run already in flight finishes. To use that machine again, register it and paste the new command.",
+    confirmLabel: "Revoke",
+    danger: true,
+  });
+  if (!ok) return;
+  try { await api.del(`/projects/${projectKey}/runners/${runner.id}`); toast("Runner revoked", runner.name, "ok"); refresh(); }
+  catch (err: WebDynamic) { toastError(err); }
 }
 
 // ---------- models ----------
@@ -287,14 +415,14 @@ async function environmentsTab(projectKey: WebDynamic, project: WebDynamic, slot
           h("button.btn.btn-sm.danger", { "aria-label": `Delete environment ${e.name}`, onclick: () => delEnv(e, () => environmentsTab(projectKey, project, slot)) }, "Delete"),
         ),
         // Readable fields first — the config JSON is an escape hatch behind Advanced.
-        envFieldLine("fallback URL", e.config?.app?.base_url || "— suites set their own"),
+        fieldLine("fallback URL", e.config?.app?.base_url || "— suites set their own"),
         Object.keys(e.config?.app?.cookies || {}).length
-          ? envFieldLine("cookies", formatCookieList(e.config.app.cookies))
+          ? fieldLine("cookies", formatCookieList(e.config.app.cookies))
           : null,
-        e.suite_id ? envFieldLine("owned by", e.suite?.name || e.suite_id) : null,
-        envFieldLine("discovery", e.discovery_allowed ? "allowed" : "not allowed"),
-        envFieldLine("runner labels", (e.runner_labels || []).join(", ") || "—"),
-        envFieldLine("secret references", secretRefSummary(e.config) || "—"),
+        e.suite_id ? fieldLine("owned by", e.suite?.name || e.suite_id) : null,
+        fieldLine("discovery", e.discovery_allowed ? "allowed" : "not allowed"),
+        fieldLine("runner labels", (e.runner_labels || []).join(", ") || "—"),
+        fieldLine("secret references", secretRefSummary(e.config) || "—"),
         h("details.advanced", { style: "margin-top:8px" },
           h("summary", {}, "Advanced — raw config JSON"),
           h("pre.mono", { style: "margin-top:8px;background:var(--bg2);padding:10px;border-radius:6px;overflow:auto;font-size:12px" }, JSON.stringify(maskSecretEnv(e.config), null, 2)),
@@ -304,7 +432,7 @@ async function environmentsTab(projectKey: WebDynamic, project: WebDynamic, slot
   mount(slot, h("div", {}, h("div", { style: "display:flex;justify-content:flex-end;margin-bottom:12px" }, add), body));
 }
 
-const envFieldLine = (k: WebDynamic, v: WebDynamic) => h("div.dim", { style: "margin-top:6px;font-size:12px" }, `${k}: `, h("span.mono", {}, v));
+const fieldLine = (k: WebDynamic, v: WebDynamic) => h("div.dim", { style: "margin-top:6px;font-size:12px" }, `${k}: `, h("span.mono", {}, v));
 
 /** Readable one-liner of an environment's secret_env references (never values). */
 function secretRefSummary(config: WebDynamic) {

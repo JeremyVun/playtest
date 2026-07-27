@@ -570,10 +570,26 @@
                   "type": "string"
                 },
                 "description": "Per-env identity map { <label>: <storage-state path> } (paths relative to this file) \u2014 each environment maps the same abstract labels to its own saved sessions, so the suite's app.auth labels stay environment-agnostic."
+              },
+              "platform": {
+                "enum": ["ios", "android"],
+                "description": "mobile only: this environment's target platform (Appium XCUITest for ios, UiAutomator2 for android)."
+              },
+              "app": {
+                "type": "string",
+                "description": "mobile only: path (relative to this file, or absolute) to the app binary this environment installs \u2014 a .app/.ipa (ios) or .apk (android). Per-env because the build lives on the machine the device is attached to."
+              },
+              "device": {
+                "type": "string",
+                "description": "mobile only: this environment's target device/emulator/simulator name or udid. Omit to let the driver pick a default available device."
+              },
+              "appium_url": {
+                "type": "string",
+                "description": "mobile only: URL of the Appium server this environment's runner talks to, e.g. http://127.0.0.1:4723."
               }
             }
           },
-          "description": "Named environment overlays selected with --env <name>. Each <name> is a partial app.* block (base_url/cookies/storage_state/init) whose keys SHALLOW-override the top-level app.* (an env inherits the defaults, then replaces per key \u2014 e.g. envs.stg.cookies replaces the top-level cookies wholesale, no deep merge). Use for the same story across dev/staging/prod. Usually set on the suite's playtest.yaml. With no --env the top-level app.* runs; --base-url still wins over --env. Transport-level keys (driver/compose/mobile/api config) are deliberately NOT per-env, and envs cannot nest."
+          "description": "Named environment overlays selected with --env <name>. Each <name> is a partial app.* block (base_url/cookies/storage_state/init, plus the mobile device target platform/app/device/appium_url) whose keys SHALLOW-override the top-level app.* (an env inherits the defaults, then replaces per key \u2014 e.g. envs.stg.cookies replaces the top-level cookies wholesale, no deep merge). Use for the same story across dev/staging/prod. Usually set on the suite's playtest.yaml. With no --env the top-level app.* runs; --base-url still wins over --env. Driver SELECTION (app.driver) and compose/api configuration are deliberately NOT per-env, and envs cannot nest."
         }
       },
       "description": "App under test. Merges per-key down the defaults chain, so a case can override just base_url. The app.driver key selects which subset applies (see its enum); a key set for the wrong driver is a config error. app.envs declares named environment overlays selected at run time with --env <name>."

@@ -1,0 +1,18 @@
+# Fixture suite for the hosted MOBILE pool path (tests/mobile/pool-mobile.test.ts).
+#
+# The device target is environment-owned: the runner-agent's overlay rewrites
+# app.envs.<name>.{platform,app,device,appium_url} to the simulator and the
+# freshly built .app on the RUNNER's own disk, and the case runs with
+# --env <name>. That is the whole point of this path — the binary is a plain
+# local path on the machine holding the device, never an uploaded artifact.
+#
+# `app:` below is a placeholder that is never installed. It exists because the
+# control plane resolves and lists a suite's cases with NO --env selected
+# (packages/platform/control-plane/src/suites/resolve.ts → core discoverCases),
+# and core requires app.app for the mobile driver at that stage
+# (packages/core/src/config.ts: "the mobile driver needs app.app"). The
+# environment overlay replaces it wholesale the moment a real run happens.
+app:
+  driver: mobile
+  platform: ios
+  app: ./placeholder.app

@@ -73,6 +73,12 @@ and enables local dispatch. Runner-agent processes start automatically when
 jobs are launched; the web and runner workspaces are not separate services to
 start manually.
 
+A remotely hosted control plane cannot reach an app on your `localhost`, a build
+on your disk, or a device simulator. For those, run a **self-hosted runner** on
+the machine that already has them: register it under Settings → Runners, start it
+with the one command shown, and label an environment for it —
+[`docs/hosted-runners.md`](docs/hosted-runners.md) is the walkthrough.
+
 ## Quickstart
 
 **1. Against your own app.** The CLI does **not** load `.env`; export both

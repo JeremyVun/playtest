@@ -15,11 +15,30 @@ import { resolveBudget, schedulePool, willRecord } from "@playtest/core/run";
 import { writeBundle, baselinePaths } from "@playtest/core/artifacts";
 import { modeDoing, PHASE_DOING } from "@playtest/core/reporting";
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (invokedDirectly()) {
   execFromCli().catch((e) => {
     console.error(firstLine(e));
     process.exit(2);
   });
+}
+
+/**
+ * Was this module started as a program, rather than imported? `argv[1]` is
+ * whatever the shell typed, which for the installed executable is npm's
+ * `node_modules/.bin/runner-agent` SYMLINK while `import.meta.url` is its
+ * target — comparing them raw makes a real launch look like an import and the
+ * process exits silently having done nothing.
+ */
+function invokedDirectly(): boolean {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  const self = fileURLToPath(import.meta.url);
+  if (entry === self) return true;
+  try {
+    return fs.realpathSync(entry) === fs.realpathSync(self);
+  } catch {
+    return false;
+  }
 }
 
 export async function execFromCli(argv: string[] = process.argv.slice(2), env: NodeJS.ProcessEnv = process.env): Promise<RunnerDynamic> {
@@ -29,6 +48,12 @@ export async function execFromCli(argv: string[] = process.argv.slice(2), env: N
     if (result.exitCode) process.exitCode = result.exitCode;
     return result;
   }
+  // The long-lived self-hosted runner: it claims its own work instead of being
+  // spawned per group, and never exits with a group's verdict (pool.ts).
+  if (argv[0] === "pool") {
+    const { runPool, parsePoolArgs } = await import("./pool.ts");
+    return await runPool(parsePoolArgs(argv.slice(1), env));
+  }
   const opts = parseArgs(argv, env);
   const result = await execGroup(opts);
   if (result.exitCode) process.exitCode = result.exitCode;
@@ -36,10 +61,14 @@ export async function execFromCli(argv: string[] = process.argv.slice(2), env: N
 }
 
 export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
-  const bootstrap = new ApiClient(opts.server);
+  // A pooled runner presents its registration credential on the exchange and
+  // names the dispatch it CLAIMED; every other placement presents an OIDC token
+  // (or the dev-only insecure grant) and names the group. Either way the answer
+  // is the same short-lived bearer scoped to this one run group, and the
+  // isolation reported here is what the run records as producing its evidence.
+  const bootstrap = new ApiClient(opts.server, opts.credential || null);
   const exchange = await bootstrap.json("POST", "/runner/exchange", {
-    github_oidc_token: opts.oidcToken || "local-dev",
-    run_group_id: opts.group,
+    ...(opts.credential ? {} : { github_oidc_token: opts.oidcToken || "local-dev", run_group_id: opts.group }),
     // GitHub's dispatch API returns 204 with no run id; presenting the dispatch
     // id (a workflow input) lets the control plane bind this verified exchange
     // to its ledger row and backfill workflow_run_id from the OIDC claims.
@@ -57,6 +86,8 @@ export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
   let redactor = (s: RunnerDynamic): string => String(s);
   // GHA cancel delivers SIGTERM/SIGINT (§3): stop starting cases, `docker stop`
   // whatever is in flight, report what we have, post a best-effort complete.
+  // A pooled runner learns of a cancel on its heartbeat instead — nothing can
+  // dial in to signal it — and aborts `opts.signal` to run this same path.
   let canceled = false;
   const onSignal = () => {
     canceled = true;
@@ -64,6 +95,7 @@ export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
   };
   process.on("SIGTERM", onSignal);
   process.on("SIGINT", onSignal);
+  opts.signal?.addEventListener?.("abort", onSignal);
   try {
     // Inside the try: a claim/materialize failure must still post `complete`
     // with the real error — dying here used to leave the group to the
@@ -176,6 +208,7 @@ export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
   } finally {
     process.removeListener("SIGTERM", onSignal);
     process.removeListener("SIGINT", onSignal);
+    opts.signal?.removeEventListener?.("abort", onSignal);
     warnings.push(...(await cleanupWorkspace(workspace)));
   }
   return { exitCode: results.some((r) => r.status === "fail") ? 1 : results.some((r) => r.status === "infra") ? 2 : 0, results };
@@ -421,7 +454,11 @@ function parseArgs(argv: string[], env: NodeJS.ProcessEnv): RunnerDynamic {
     else if (a === "exec") {
       /* accepted for `runner-agent exec --group ...` */
     } else if (a === "--help" || a === "-h") {
-      process.stdout.write("usage: runner-agent exec --group <id> [--server <url>] [--isolation process|container]\n");
+      process.stdout.write(
+        "usage: runner-agent exec --group <id> [--server <url>] [--isolation process|container]\n" +
+          "       runner-agent mint --claim <id> [--server <url>]\n" +
+          "       runner-agent pool --server <url> [--labels a,b]   (long-lived self-hosted runner)\n",
+      );
       process.exit(0);
     } else {
       throw new Error(`unknown argument: ${a}`);

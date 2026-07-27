@@ -364,6 +364,34 @@ export async function getRunGroupView(ctx: HostedDynamic, id: HostedDynamic) {
   return {
     ...group,
     runs: rows.map(runView),
+    placement: await placementView(ctx, id),
+  };
+}
+
+/**
+ * What produced this group's evidence: the newest attempt's placement, the
+ * self-hosted runner that claimed it (pool dispatch only — the other adapters
+ * leave `runner_id` null), and the isolation that runner reported at the
+ * exchange. Evidence trust is stated, not laundered: a persistent shared runner
+ * without per-case containers is visible as `process` here.
+ */
+async function placementView(ctx: HostedDynamic, groupId: HostedDynamic) {
+  const { rows } = await ctx.db.query(
+    `SELECT d.id, d.attempt, d.status, d.runner_id, r.name AS runner_name, e.isolation
+       FROM dispatches d
+       LEFT JOIN runners r ON r.id = d.runner_id
+       LEFT JOIN executors e ON e.id = d.executor_id
+      WHERE d.kind = 'group' AND d.ref_id = $1
+      ORDER BY d.attempt DESC, d.requested_at DESC LIMIT 1`,
+    [groupId],
+  );
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    dispatch_id: row.id,
+    attempt: row.attempt ?? null,
+    isolation: row.isolation ?? null,
+    runner: row.runner_id ? { id: row.runner_id, name: row.runner_name ?? null } : null,
   };
 }
 

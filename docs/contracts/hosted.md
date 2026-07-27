@@ -448,7 +448,42 @@ it. Case reports for already-finished cases remain accepted.
 **Isolation is stated, not laundered.** A developer laptop is process isolation,
 which this contract already allows for local development and fresh ephemeral
 machines; a persistent shared runner requires per-case containers and reports
-what it used, so a reviewer can see what produced the evidence.
+what it used, so a reviewer can see what produced the evidence. The runner sends
+its real mode on the exchange (`isolation`), the control plane records it on the
+executor, and a run group states its placement: `placement` on
+`GET /api/v1/run-groups/:id` carries the newest attempt's `dispatch_id`,
+`attempt`, the `isolation` its executor reported, and the `runner` that claimed
+it (`null` for adapters that place work without a registered runner).
+
+### The pool runner process
+
+`runner-agent pool --server <url> [--labels a,b] [--isolation process|container]
+[--work-dir <dir>] [--credential-file <path>]` is the long-lived agent, beside
+the existing per-group `exec` and `mint` entries. Its loop is check in →
+long-poll → claim → exchange → execute through the unchanged group or mint
+executor → complete → poll again.
+
+- **The credential never rides argv.** It arrives in `PLAYTEST_RUNNER_CREDENTIAL`
+  or in a file named by `--credential-file` / `PLAYTEST_RUNNER_CREDENTIAL_FILE`,
+  so it cannot be read out of a process list. Offering it as an argument is
+  refused with the remedy.
+- **The first check-in does not hold**, so a misconfigured runner is diagnosable
+  at once: startup output states the runner name, project, server, labels,
+  isolation, work directory, and that it is waiting for work. Later check-ins
+  long-poll.
+- **A refused credential stops the process** with one actionable line (401/403 —
+  unknown, or revoked). Any other failure to reach the control plane is retried
+  with exponential backoff and jitter, reported once per outage rather than once
+  per attempt. A lost claim race (`409`) is not an error and is not backed off.
+- **One group at a time**, and a runner restarted mid-group resumes the claim the
+  board still says it holds instead of abandoning it.
+- **Cancellation and shutdown share one path.** A `canceled` heartbeat aborts the
+  group exactly as `SIGTERM` does: stop starting cases, stop what is in flight,
+  report what exists, post a best-effort completion. `SIGTERM` while idle exits
+  immediately; `SIGTERM` mid-group finishes that teardown first, then exits.
+- **A failed group never takes the runner down.** The executor posts its own
+  completion carrying the error; the agent reports one actionable line — never a
+  stack — and returns to the board.
 
 ## Script authoring jobs
 
@@ -667,6 +702,14 @@ another is still running; persistent runners keep per-case container isolation.
 An environment supplies a named overlay, runner capability labels, secret
 references, auth-provider bindings, and whether discovery is allowed. The
 runner materializes the overlay and delegates merge precedence to core.
+
+For a mobile suite the overlay also carries the device target — `config.app`'s
+`platform`, `app`, `device`, and `appium_url` — because all four belong to the
+machine the device is attached to rather than to the suite. `app` is a plain
+path on that runner's own disk: the platform never uploads, stores, or ships an
+app binary, and the suite snapshot carries only the authored suite files. A
+mobile environment is therefore only launchable on a runner whose labels reach
+the machine holding that build.
 
 An environment is owned either by the project or by one suite. A project-owned
 environment (`suite_id` null) is a deployment ring every suite may launch
@@ -1507,17 +1550,28 @@ author stories, run them, inspect evidence, make a human decision.
   offers "Review all changed stories" only when several candidates are pending,
   and it is not on the rail. A single pending candidate is decidable from its own
   run page.
-- Settings exposes exactly five sections: **Test targets** (environments —
+- Settings exposes exactly six sections: **Test targets** (environments —
   discovery permission, runner labels, browser cookies (`config.app.cookies`,
   sent on every web run against the ring), auth identities, and secret
   references, with the fallback base URL, provider, and raw environment JSON
   behind Advanced; a suite's own environments are listed here too, marked with the
-  suite that owns them), **Runs** (project concurrency), **Models**
+  suite that owns them), **Runners** (`developer`: register a self-hosted runner,
+  list what each advertises and when it last checked in, revoke), **Runs**
+  (project concurrency), **Models**
   (project model and finding-dedupe policy), **Team**
   (members, roles, and permanent project deletion for admins), and **Audit**.
   Secret values are never rendered. Project API tokens remain supported through
   the existing API/CLI boundary; the console adds no token-management UI.
   Plugins, Integrations, and Retention are not configured from the console.
+- Registering a runner reveals its credential **exactly once**, together with the
+  complete one-line start command for that server and those labels; the value is
+  stored hashed and is unreachable afterwards, so the console cannot show it a
+  second time either and says so. The credential appears in the command as an
+  environment assignment, never as an argument.
+- A suite's mobile **App binary** field is optional and means a file inside the
+  suite tree (a small fixture app). Real builds exceed the suite upload caps, so
+  the copy directs the usual case to the environment instead — a path on the
+  runner that executes the suite.
 - Every page's `nav:` value resolves to exactly one rail item through
   `railFor` (`packages/platform/web/src/lib/nav.ts`). Surfaces that live under a rail
   item say so: the suite page, story editor, suite settings, Versions and run
@@ -1744,7 +1798,7 @@ nothing here about rendering, keyboard operation, contrast, or focus is
 machine-verified. What *is* asserted hermetically, in
 `packages/platform/web/tests/web-ia.test.ts`, is the information
 architecture above: the four nav items and their targets, the rail item every
-page's `nav:` value resolves to, the three Settings sections and their role
+page's `nav:` value resolves to, the Settings sections and their role
 disclosure, the finding buckets and their state mapping, the display vocabulary
 for every engine enum a person can see, redirect targets for removed surfaces,
 and secret masking. `tests/unit/web-run-stats.test.ts` asserts the run
@@ -1754,7 +1808,9 @@ reports no wall clock, and that a run holding a failure never reads as a plain
 "done". `tests/unit/web-statusbar.test.ts` does the same for the
 status bar's vocabulary — including the rule that every unhealthy state (a
 silent reconciler, a queue at its cap) is legible as words and not only as a
-colour. Treat any claim of verified accessibility as unmade until
+colour. `tests/web-runners.test.ts` pins the runner surface's two load-bearing
+properties: the exact start command (credential in the environment, never in an
+argument) and the one-time reveal. Treat any claim of verified accessibility as unmade until
 such a harness exists.
 
 `tools/ux-lab` is the manual counterpart: it boots the control plane against a

@@ -1,0 +1,23 @@
+description: Open the todo app on the simulator and confirm the seeded list is there.
+story: |
+  You are checking that the todo app still opens on a clean install.
+
+  Look at the screen the app opens on. If it shows the todo list with the
+  seeded items already on it, you are done — there is nothing to change.
+
+# Deliberately the smallest possible journey: the actor reads the launch screen
+# and finishes, so nothing here depends on the model guessing an element ref.
+# The verdict rests on the deterministic gate below, which the mobile driver
+# answers through finalPageCheck (screen_shows) against the real device.
+success:
+  - label: the app opened on its own screen
+    screen_shows: "~app-title"
+  - label: the seeded todo list is on screen
+    screen_shows: "~todo-row-1"
+
+limits:
+  # Generous on purpose: creating an XCUITest session installs the build and, the
+  # first time on a machine, also builds WebDriverAgent. The journey itself is
+  # one step.
+  timeout: 15m
+  max_steps: 5

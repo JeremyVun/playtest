@@ -439,7 +439,7 @@ export function newSuiteModal(projectKey: WebDynamic) {
     const name = h("input", { type: "text", placeholder: "Checkout journeys" });
     const where = urlPreview(name, "checkout-journeys", (k: WebDynamic) => `/p/${projectKey}/suites/${k}`);
     const baseUrl = h("input", { type: "text", placeholder: "https://staging.example.com" });
-    const appBinary = h("input", { type: "text", placeholder: "builds/app.apk" });
+    const appBinary = h("input", { type: "text", placeholder: "/Users/you/builds/app.apk" });
     const driver = h("select", { "aria-label": "Driver" },
       ...DRIVERS.map((d: WebDynamic) => h("option", { value: d }, driverLabel(d))));
     const targetSlot = h("div");
@@ -448,7 +448,11 @@ export function newSuiteModal(projectKey: WebDynamic) {
 
     const paintTarget = () => {
       mount(targetSlot, driver.value === "mobile"
-        ? field("App binary", appBinary, "Path to the .app/.ipa/.apk to install, relative to the suite's playtest.yaml.")
+        // Optional on purpose: a real .apk is far past the upload caps, so the
+        // usual answer is a path on the machine that runs the suite, set on the
+        // environment. Only a small fixture app belongs in the suite tree.
+        ? field("App binary", appBinary,
+            "Optional. The .app/.ipa/.apk to install — an absolute path on the runner that executes this suite, or a path inside the suite for a small fixture app. Leave blank to provide it from the environment.")
         : field("Base URL", baseUrl, "Where these stories run by default. An environment picked at launch can override it."));
     };
     driver.addEventListener("change", paintTarget);
@@ -467,9 +471,10 @@ export function newSuiteModal(projectKey: WebDynamic) {
     async function submit(e: WebDynamic) {
       e.preventDefault();
       const isMobile = driver.value === "mobile";
-      const problem = isMobile
-        ? (appBinary.value.trim() ? null : "Name the app binary to install.")
-        : baseUrlProblem(baseUrl.value);
+      // A mobile suite may legitimately leave the binary to its environment, so
+      // the field no longer blocks creation — the launch path is what refuses a
+      // run with no resolvable app.
+      const problem = isMobile ? null : baseUrlProblem(baseUrl.value);
       if (problem) {
         mount(err, h("span.status.fail", {}, h("span.glyph", {}, "✗"), problem));
         return (isMobile ? appBinary : baseUrl).focus();

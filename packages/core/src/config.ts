@@ -1049,12 +1049,14 @@ async function loadYaml(
     };
     resolveAuthStates(doc.app);
     // Per-env overlays carry the same path-bearing keys (init/storage_state/
-    // auth_states), resolved against the declaring file too so an env's path is
-    // portable.
+    // app/auth_states), resolved against the declaring file too so an env's path
+    // is portable. `app` is the mobile binary: per-env because the build lives on
+    // whichever machine the device is attached to, and usually written absolute
+    // (path.resolve leaves an absolute path alone).
     if (doc.app.envs && typeof doc.app.envs === "object") {
       for (const overlay of Object.values(doc.app.envs)) {
         if (overlay && typeof overlay === "object") {
-          resolvePaths(overlay, ["init", "storage_state"]);
+          resolvePaths(overlay, ["init", "storage_state", "app"]);
           resolveAuthStates(overlay);
         }
       }

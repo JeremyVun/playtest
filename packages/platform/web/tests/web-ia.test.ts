@@ -165,20 +165,22 @@ test("vocab: every engine enum a person can see has a plain-English word", () =>
   assert.deepEqual(["record", "check", "explore"].map(nextRunLabel), ["record", "check", "explore"]);
 });
 
-test("settings: exactly five sections, no plugins/integrations/retention", () => {
-  assert.deepEqual(SETTINGS_SECTIONS.map((s: WebDynamic) => s.id), ["test-targets", "runs", "models", "team", "audit"]);
-  assert.deepEqual(SETTINGS_SECTIONS.map((s: WebDynamic) => s.label), ["Test targets", "Runs", "Models", "Team", "Audit"]);
+test("settings: exactly six sections, no plugins/integrations/retention", () => {
+  // Runners joined the five when placement became something a person owns: it
+  // says which machine executes a run, next to what a run points at.
+  assert.deepEqual(SETTINGS_SECTIONS.map((s: WebDynamic) => s.id), ["test-targets", "runners", "runs", "models", "team", "audit"]);
+  assert.deepEqual(SETTINGS_SECTIONS.map((s: WebDynamic) => s.label), ["Test targets", "Runners", "Runs", "Models", "Team", "Audit"]);
   for (const gone of ["plugins", "integrations", "retention", "environments", "secrets"]) {
     assert.ok(!SETTINGS_SECTIONS.some((s: WebDynamic) => s.id === gone), `no ${gone} section`);
   }
 });
 
-test("settings: role disclosure — developer sees test targets; runs/models/team/audit are admin", () => {
+test("settings: role disclosure — developer sees test targets and runners; runs/models/team/audit are admin", () => {
   const rank: WebDynamic = { viewer: 0, editor: 1, reviewer: 2, developer: 3, admin: 4 };
   const has = (role: WebDynamic) => (min: WebDynamic) => rank[role] >= rank[min];
   assert.deepEqual(visibleSections(has("editor")).map((s: WebDynamic) => s.id), []);
-  assert.deepEqual(visibleSections(has("developer")).map((s: WebDynamic) => s.id), ["test-targets"]);
-  assert.deepEqual(visibleSections(has("admin")).map((s: WebDynamic) => s.id), ["test-targets", "runs", "models", "team", "audit"]);
+  assert.deepEqual(visibleSections(has("developer")).map((s: WebDynamic) => s.id), ["test-targets", "runners"]);
+  assert.deepEqual(visibleSections(has("admin")).map((s: WebDynamic) => s.id), ["test-targets", "runners", "runs", "models", "team", "audit"]);
 });
 
 test("secret masking: literal values are masked; references stay readable", () => {

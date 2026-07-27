@@ -5,6 +5,9 @@
     "allowImportingTsExtensions": true,
     "types": ["node"]
   },
-  "include": ["src/**/*.ts", "tests/**/*.ts"],
+  // Root-owned test support travels with the suites that import it (the pool
+  // agent test drives the shared loopback fixtures), so its ambient types have
+  // to be in this project too — the same include `packages/core` carries.
+  "include": ["src/**/*.ts", "tests/**/*.ts", "../../../tests/support/**/*.ts"],
   "exclude": ["tests/fixtures"]
 }

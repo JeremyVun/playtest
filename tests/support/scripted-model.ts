@@ -91,20 +91,49 @@ export async function startScriptedAuthoringModel(turns: Array<AuthoringTurn | s
   };
 }
 
+/** What a graded run gets back when the caller does not script its own grade. */
+const DEFAULT_GRADE = {
+  score: 90,
+  completion: "full",
+  efficiency: { assessment: "the journey took the direct path", wasted_steps: 0 },
+  findings: [],
+  summary: "The scripted journey completed as written.",
+};
+
 /**
  * Agent steps carry `{ thought, action, expectation }`.
+ *
+ * A run that also grades (hosted always does) reaches the same gateway with the
+ * `grade` tool offered instead of `step`; answering it here is what lets a whole
+ * hosted run group finish offline. `grade` replaces the canned verdict.
  */
-export async function startScriptedModel(steps: AgentStep[]) {
+export async function startScriptedModel(steps: AgentStep[], { grade = DEFAULT_GRADE }: { grade?: object } = {}) {
   const calls: unknown[] = [];
   let i = 0;
   const server = http.createServer((req, res) => {
     let raw = "";
     req.on("data", (c) => (raw += c));
     req.on("end", () => {
+      let parsed: { tools?: Array<{ function?: { name?: string } }> } | null = null;
       try {
-        calls.push(JSON.parse(raw));
+        parsed = JSON.parse(raw);
+        calls.push(parsed);
       } catch {
         calls.push({ unparseable: raw });
+      }
+      if ((parsed?.tools ?? []).some((tool) => tool?.function?.name === "grade")) {
+        const graded = JSON.stringify({
+          choices: [
+            {
+              finish_reason: "tool_calls",
+              message: { role: "assistant", content: "", tool_calls: [{ id: "call_grade", type: "function", function: { name: "grade", arguments: JSON.stringify(grade) } }] },
+            },
+          ],
+          usage: { prompt_tokens: 10, completion_tokens: 5 },
+        });
+        res.writeHead(200, { "content-type": "application/json", "content-length": Buffer.byteLength(graded) });
+        res.end(graded);
+        return;
       }
       const step = steps[i++] ?? { thought: "out of script", action: { type: "give_up", reason: "script exhausted" }, expectation: "the run ends" };
       const body = JSON.stringify({

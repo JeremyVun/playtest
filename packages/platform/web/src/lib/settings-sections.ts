@@ -10,6 +10,10 @@ export const SETTINGS_SECTIONS: WebDynamic = [
   // Test targets is visible to developers (environments/auth are developer
   // surfaces); the secret sub-panel inside is gated to admin at render time.
   { id: "test-targets", label: "Test targets", min: "developer" },
+  // Runners is the other half of "where does a run happen": Test targets says
+  // what a run points at, Runners says which machine executes it. Registering
+  // and revoking are developer acts, like the environments they serve.
+  { id: "runners", label: "Runners", min: "developer" },
   { id: "runs", label: "Runs", min: "admin" },
   { id: "models", label: "Models", min: "admin" },
   { id: "team", label: "Team", min: "admin" },

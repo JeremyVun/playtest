@@ -9,10 +9,11 @@ import { ApiClient } from "./api-client.ts";
 import { runMintScript } from "./mint.ts";
 
 export async function execMint(opts: RunnerDynamic): Promise<RunnerDynamic> {
-  const bootstrap = new ApiClient(opts.server);
+  // As in exec-group: a pooled runner exchanges its registration credential for
+  // the claimed dispatch; anything else presents an OIDC token and the claim id.
+  const bootstrap = new ApiClient(opts.server, opts.credential || null);
   const exchange = await bootstrap.json("POST", "/runner/exchange", {
-    github_oidc_token: opts.oidcToken || "local-dev",
-    mint_claim_id: opts.claim,
+    ...(opts.credential ? {} : { github_oidc_token: opts.oidcToken || "local-dev", mint_claim_id: opts.claim }),
     dispatch_id: opts.dispatchId || undefined,
     isolation: opts.isolation,
     versions: { node: process.version, isolation: opts.isolation, job_image: process.env.PLAYTEST_JOB_IMAGE || null },

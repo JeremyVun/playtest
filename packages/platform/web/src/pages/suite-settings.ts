@@ -202,7 +202,7 @@ function render(main: WebDynamic, st: WebDynamic) {
 
     const binInput = h("input", {
       type: "text", value: app.app || "",
-      placeholder: "builds/app.apk",
+      placeholder: "/Users/you/builds/app.apk",
       onchange: (e: WebDynamic) => setKey("app", e.target.value.trim() || null),
     });
 
@@ -212,7 +212,10 @@ function render(main: WebDynamic, st: WebDynamic) {
         ? "A browser app, driven by Chromium."
         : driver === "api" ? "An HTTP API, driven by fetch." : "A native app, driven by Appium."),
       driver === "mobile"
-        ? formField("App binary", binInput, "Path to the .app/.ipa/.apk to install, relative to this file.")
+        // Optional: a real .apk exceeds what a suite may hold, so the usual
+        // answer is a path on the machine that runs it, set on the environment.
+        ? formField("App binary", binInput,
+            "Optional. The .app/.ipa/.apk to install — an absolute path on the runner that executes this suite, or a path relative to this file for a small fixture app. Leave blank to provide it from the environment.")
         : null,
     );
 

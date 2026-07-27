@@ -137,14 +137,19 @@ absent. A top-level `env` key is rejected with the migration to `app`.
 
 Relative paths resolve against the YAML file that declared them. This applies
 to `app.compose`, `app.init`, `app.storage_state`, each `app.auth_states` value,
-`app.app`, and `app.openapi`. Durations accept a millisecond number or strings
-using `ms`, `s`, or `m`.
+`app.app`, and `app.openapi`, and to the path-bearing keys of an environment
+overlay (`init`, `storage_state`, `app`, `auth_states`). Durations accept a
+millisecond number or strings using `ms`, `s`, or `m`.
 
-`app.envs.<name>` is a named partial overlay containing only environment keys
-such as `base_url`, cookies, storage state, init, and auth states. It
-shallow-overrides the merged top-level `app` after the defaults chain. It
-cannot contain transport selection, compose, mobile/API configuration, or a
-nested `envs`. Naming an unknown environment reports the available names.
+`app.envs.<name>` is a named partial overlay containing only environment keys:
+`base_url`, cookies, storage state, init, auth/auth states, and the mobile
+device target (`platform`, `app`, `device`, `appium_url`). It
+shallow-overrides the merged top-level `app` after the defaults chain. The
+mobile device target is per-environment because the app binary, the device and
+the Appium endpoint all belong to the machine the device is attached to — a
+suite stays portable while each environment names its own build. The overlay
+cannot contain driver selection, compose, API configuration, or a nested
+`envs`. Naming an unknown environment reports the available names.
 `--base-url` wins over the selected environment and forces external mode.
 
 ### Web identity

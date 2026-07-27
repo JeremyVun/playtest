@@ -29,10 +29,12 @@ interface LocalRun {
 // runner module with this Node process instead of depending on npm's
 // node_modules/.bin symlink. The latter gives the module a different argv[1]
 // from import.meta.url and can make its import-safe main guard treat a real
-// launch as an import. The future pull-based pool starts a long-lived runner
-// independently; this adapter remains the short-lived local equivalent.
+// launch as an import. The entry is located through package resolution — a
+// process-spawn edge, not a code import, so the workspace boundary holds. The
+// future pull-based pool starts a long-lived runner independently; this
+// adapter remains the short-lived local equivalent.
 const RUNNER_AGENT_ENTRY = fileURLToPath(
-  new URL("../../../runner-agent/src/exec-group.ts", import.meta.url),
+  import.meta.resolve("@playtest/runner-agent/src/exec-group.ts"),
 );
 
 export function localRunnerInvocation(

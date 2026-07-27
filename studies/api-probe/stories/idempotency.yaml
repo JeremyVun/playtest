@@ -1,0 +1,36 @@
+description: Falsify idempotency — one key and one body must mean one transfer and one ledger effect.
+tags: [invariant]
+story: |
+  Try to falsify this rule:
+
+  Two POST /transfers requests carrying the same Idempotency-Key and the same
+  request body produce exactly one transfer and exactly one set of ledger
+  effects. The second request returns the first transfer.
+
+  It applies to POST /transfers with an Idempotency-Key header, per
+  authenticated principal. There is one declared exception: the same key with a
+  *different* body is a conflict and creates nothing — that is correct
+  behaviour, not a violation.
+
+  Build the state a transfer needs — active, funded accounts — and then abuse
+  the key. Send the same request twice in a row and compare what comes back.
+  Send it again much later in the run, after other transfers and after
+  settlement has advanced. Reuse a key whose first request was rejected. Reuse a
+  key across a cancel. Try a key with a body that differs in a way that should
+  not matter and a way that should. Try replaying a key on both sides of an
+  admin tick.
+
+  What you are looking for is a second *effect*, not a second response: the
+  response may be identical while the ledger quietly grew. So after every replay,
+  read the ledger back — list the transfers, and enumerate the entries of both
+  accounts and of the system fee account for the currency (acc_fee_usd,
+  acc_fee_eur), following the cursor to the end. A ledger entry belonging to a
+  transfer you never created is the loudest form of this failure; two transfers
+  where you sent one key is the other.
+
+  Start the run with a reset so "a transfer you never created" is a claim that
+  can be checked. If you find a second effect, minimize the sequence that
+  produces it and stop.
+
+success:
+  - ledger_idempotency: "one Idempotency-Key, one ledger effect"

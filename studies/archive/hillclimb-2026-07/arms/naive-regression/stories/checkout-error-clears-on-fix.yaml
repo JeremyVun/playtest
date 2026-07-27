@@ -1,0 +1,15 @@
+description: A checkout field's validation error must clear as soon as the shopper corrects the field, not linger and look active after the value is fixed.
+story: |
+  You are checking out with a plant in your cart. In the delivery details, clear
+  the City field and click Place order so a red error appears under City telling
+  you to enter a city. Now type a real city name back into the field and watch
+  the error message. It should clear promptly as soon as the field is valid
+  again — you should not be left looking at a red error that still seems active
+  under a field you have already corrected. Then finish entering valid payment
+  details and place the order, and confirm no leftover error blocks or confuses
+  you.
+persona: [cautious-first-timer]
+report:
+  - After you triggered the City error and then typed a valid city back in, did the red error under that field clear promptly rather than staying visible?
+  - Did any field you had already corrected keep showing a stale error that made you unsure whether the shop had accepted your fix?
+  - Once every field was valid, were you able to place the order without a leftover validation message blocking or confusing you?

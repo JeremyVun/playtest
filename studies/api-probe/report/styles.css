@@ -1,0 +1,198 @@
+/* P1 agentic invariant probe — decision report.
+   Direction: accounting paper. The subject is a double-entry ledger whose
+   entries must sum to zero, so the page borrows its vocabulary — greenbar
+   banding, ruled columns, a double rule under a total — and inverts the usual
+   type pairing: monospace carries the display, because every claim here is a
+   machine-checkable artifact and the prose is only the argument around it. */
+
+:root {
+  --paper: #fbfbf9;
+  --band: #e6eee4;          /* greenbar; data surfaces only */
+  --panel: #ffffff;
+  --ink: #12171c;           /* blue-black, fountain pen */
+  --ink-soft: #4b565e;
+  --ink-faint: #78838a;
+  --rule: #c7d0c8;
+  --rule-hard: #12171c;
+  --violation: #a81e22;     /* accounting red */
+  --held: #1f6b4a;
+  --probe: #143c8c;         /* the arm under test */
+  --neutral: #7a8489;       /* comparator arms, deliberately quiet */
+  --measure: 66ch;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, "IBM Plex Mono", Menlo, monospace;
+  --serif: Charter, "Bitstream Charter", "Iowan Old Style", "Source Serif Pro", Georgia, serif;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 17px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--probe); text-underline-offset: .18em; text-decoration-thickness: from-font; }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--probe); outline-offset: 3px; }
+
+.skip-link {
+  position: absolute; left: -9999px; top: 0; z-index: 20;
+  background: var(--ink); color: var(--paper); padding: .6rem 1rem; font-family: var(--mono); font-size: .8rem;
+}
+.skip-link:focus { left: 0; }
+
+/* ---- structure ------------------------------------------------------- */
+
+.wrap { max-width: var(--measure); margin: 0 auto; padding: 0 1.5rem; }
+.slab { max-width: 1120px; margin: 0 auto; padding: 0 1.5rem; }
+
+section { padding: 4.5rem 0; border-top: 1px solid var(--rule); }
+section:first-of-type { border-top: 0; padding-top: 2.5rem; }
+
+.eyebrow {
+  font-family: var(--mono);
+  font-size: .72rem;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin: 0 0 1.1rem;
+}
+
+h1, h2, h3 { font-family: var(--mono); font-weight: 600; letter-spacing: -.02em; line-height: 1.12; }
+h1 { font-size: clamp(1.7rem, 4.4vw, 2.6rem); margin: 0 0 1.3rem; text-wrap: balance; }
+h2 { font-size: clamp(1.4rem, 2.8vw, 1.9rem); margin: 0 0 1rem; }
+h3 { font-size: 1.05rem; margin: 2.2rem 0 .6rem; letter-spacing: -.01em; }
+
+p { margin: 0 0 1.1rem; }
+.lede { font-size: 1.17rem; color: var(--ink-soft); }
+.fine { font-size: .93rem; color: var(--ink-soft); }
+strong { font-weight: 600; }
+em.term { font-style: normal; font-family: var(--mono); font-size: .92em; }
+
+/* ---- masthead -------------------------------------------------------- */
+
+.masthead { padding: 2.2rem 0 0; }
+.masthead .wrap { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
+.wordmark { font-family: var(--mono); font-size: .82rem; letter-spacing: .1em; text-transform: uppercase; }
+.wordmark b { font-weight: 600; }
+.status-chip {
+  font-family: var(--mono); font-size: .7rem; letter-spacing: .1em; text-transform: uppercase;
+  border: 1px solid var(--rule); padding: .25rem .6rem; color: var(--ink-soft); background: var(--panel);
+}
+
+/* ---- the tape: the signature element --------------------------------- */
+
+.tape { background: var(--panel); border: 1px solid var(--rule); margin: 2.5rem 0 0; }
+.tape-head {
+  display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+  padding: .85rem 1.15rem; border-bottom: 1px solid var(--rule);
+  font-family: var(--mono); font-size: .74rem; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-faint);
+}
+.tape-rule { padding: 1.15rem 1.15rem .35rem; font-family: var(--serif); font-size: 1.02rem; color: var(--ink-soft); }
+.tape-rule b { color: var(--ink); font-weight: 600; }
+
+.ticks { display: flex; gap: 3px; align-items: flex-end; padding: 1rem 1.15rem 1.25rem; flex-wrap: wrap; }
+.tick {
+  width: 9px; height: 26px; background: var(--rule); flex: none;
+  animation: tick-in .35s ease-out backwards;
+}
+.tick.ok { background: #b9c6bb; }
+.tick.hit { background: var(--violation); height: 44px; position: relative; }
+.tick.hit::after {
+  content: ""; position: absolute; inset-inline-start: 0; top: -9px; width: 9px; height: 6px; background: var(--violation);
+}
+@keyframes tick-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+/* the balancing ledger — debits and credits that fail to sum to zero */
+.entries { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: .86rem; }
+.entries caption {
+  text-align: left; padding: .2rem 1.15rem 1rem; color: var(--ink-faint);
+  font-size: .74rem; letter-spacing: .08em; text-transform: uppercase;
+}
+.entries th {
+  text-align: left; font-weight: 600; color: var(--ink-faint); font-size: .72rem;
+  letter-spacing: .08em; text-transform: uppercase; padding: .4rem 1.15rem; border-bottom: 1px solid var(--rule);
+}
+.entries td { padding: .5rem 1.15rem; border-bottom: 1px solid var(--rule); }
+.entries tbody tr:nth-child(odd) { background: var(--band); }
+.entries .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.entries .debit { color: var(--violation); }
+.entries tfoot td {
+  padding: .7rem 1.15rem 1.1rem; font-weight: 600;
+  border-top: 3px double var(--rule-hard); border-bottom: 0;
+}
+.entries tfoot .num { font-size: 1.05rem; }
+.sum-bad { color: var(--violation); }
+
+.tape-foot {
+  padding: .9rem 1.15rem; border-top: 1px solid var(--rule); background: var(--band);
+  font-family: var(--mono); font-size: .78rem; color: var(--ink-soft);
+}
+
+/* ---- data tables ------------------------------------------------------ */
+
+.table-wrap { overflow-x: auto; margin: 1.6rem 0; border: 1px solid var(--rule); background: var(--panel); }
+table.data { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: .82rem; }
+table.data caption { text-align: left; padding: .9rem 1rem; color: var(--ink-soft); font-family: var(--serif); font-size: .95rem; border-bottom: 1px solid var(--rule); }
+table.data th {
+  text-align: left; font-weight: 600; color: var(--ink-faint); font-size: .7rem; letter-spacing: .09em;
+  text-transform: uppercase; padding: .6rem 1rem; border-bottom: 1px solid var(--rule); white-space: nowrap;
+}
+table.data td { padding: .55rem 1rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+table.data tbody tr:nth-child(even) { background: var(--band); }
+table.data tbody tr:last-child td { border-bottom: 0; }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+.yes { color: var(--held); font-weight: 600; }
+.no { color: var(--violation); font-weight: 600; }
+.dash { color: var(--ink-faint); }
+.arm-probe { color: var(--probe); font-weight: 600; }
+.arm-other { color: var(--neutral); }
+
+/* ---- procedure: the one genuine sequence ----------------------------- */
+
+ol.steps { list-style: none; counter-reset: step; padding: 0; margin: 1.5rem 0 0; }
+ol.steps li { counter-increment: step; position: relative; padding-inline-start: 3.2rem; margin-bottom: 1.6rem; }
+ol.steps li::before {
+  content: counter(step, decimal-leading-zero);
+  position: absolute; inset-inline-start: 0; top: .1rem;
+  font-family: var(--mono); font-size: .8rem; color: var(--violation); font-weight: 600; letter-spacing: .04em;
+}
+ol.steps b { font-family: var(--mono); font-size: .92em; font-weight: 600; }
+
+/* ---- callouts --------------------------------------------------------- */
+
+.note {
+  border-inline-start: 3px solid var(--rule); padding: .2rem 0 .2rem 1.15rem;
+  margin: 1.6rem 0; color: var(--ink-soft); font-size: .97rem;
+}
+.note.caution { border-inline-start-color: var(--violation); }
+.note b { color: var(--ink); }
+
+.pending {
+  border: 1px dashed var(--rule); background: var(--panel);
+  padding: 1.6rem; margin: 1.6rem 0; font-family: var(--mono); font-size: .86rem; color: var(--ink-soft);
+}
+.pending b { display: block; color: var(--ink); font-size: .95rem; margin-bottom: .5rem; letter-spacing: -.01em; }
+
+.criteria { list-style: none; padding: 0; margin: 1.4rem 0; }
+.criteria li { display: flex; gap: .9rem; padding: .8rem 0; border-bottom: 1px solid var(--rule); align-items: baseline; }
+.criteria li:last-child { border-bottom: 0; }
+.criteria .key { font-family: var(--mono); font-weight: 600; color: var(--violation); flex: none; }
+
+footer { padding: 3rem 0 4rem; border-top: 3px double var(--rule-hard); }
+footer .wrap { font-family: var(--mono); font-size: .76rem; color: var(--ink-faint); line-height: 1.7; }
+
+@media (max-width: 520px) {
+  body { font-size: 16px; }
+  .lede { font-size: 1.08rem; }
+  .masthead .wrap { gap: .6rem; }
+  section { padding: 3.2rem 0; }
+}

@@ -1,0 +1,11 @@
+# Discovery study over Playtest's own run viewer, served from the frozen
+# fixtures (same managed compose as the self-test suite — never live runs/).
+mode: discovery
+# GPT tiers, not Claude names: behind the codex gateway only GPT tiers route
+# for real (tools/codex-gateway/README.md "Model routing"); a Claude pin would
+# silently run on the gateway default while the manifest claims otherwise.
+actor_model: gpt5_4_mini
+grader_model: gpt5_5
+app:
+  compose: ../viewer-self-test/docker-compose.yml
+  base_url: http://viewer:4317

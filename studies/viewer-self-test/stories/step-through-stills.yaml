@@ -1,0 +1,9 @@
+# Film strip: step navigation within a run.
+description: Walk a recording's film strip to its final step.
+story: |
+  Open the newest recording of the journey whose id is exactly "add-todo"
+  and walk through what the agent did, ending on the run's final step —
+  you want to see how the run concluded.
+success:
+  - url_matches: "*run=*d926*"
+  - assert: 'the film-strip caption shows the final step is selected: "step 3 / 3"'

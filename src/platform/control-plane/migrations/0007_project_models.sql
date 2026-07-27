@@ -1,0 +1,15 @@
+-- Project-level model defaults (docs/contracts/hosted.md, "Model selection").
+--
+-- Which model plays the actor and which grades is a cost/quality policy a team
+-- sets once, not something every suite should have to repeat. This column holds
+-- that policy: `{ "actor_model": …, "grader_model": … }`, each value a short
+-- tier enum ("sonnet") or an already-qualified gateway name, absent when the
+-- project defers to the engine default.
+--
+-- Precedence is per key, most specific wins, and the suite always beats the
+-- project: case file > any playtest.yaml in the suite (nearest wins) > this
+-- column > the engine's built-in defaults. The runner workspace applies the
+-- column by filling only UNSET top-level keys of the materialized suite's
+-- playtest.yaml, so a suite that says nothing inherits the project's choice and
+-- a suite that chooses keeps its choice.
+ALTER TABLE projects ADD COLUMN models TEXT_JSON NOT NULL DEFAULT '{}';

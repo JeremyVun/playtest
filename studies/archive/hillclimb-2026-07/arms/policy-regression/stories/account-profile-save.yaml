@@ -1,0 +1,11 @@
+description: Saving the account profile (name and email) visibly succeeds and the new email carries through to checkout.
+story: |
+  You are moving and want your receipts to go to a new email address. Go to
+  your account, change the email on your profile, and save it. Make sure the
+  save actually took — you want proof, not a guess. Then start a checkout and
+  confirm the receipt email is the new one, without you having to retype it.
+persona: [returning-regular]
+report:
+  - "After clicking Save profile, did you get a visible confirmation that the change was saved?"
+  - "When you reached checkout, was the receipt email the updated one, or did you have to correct it again?"
+  - "Did the Save profile button behave any differently from the Save address button, or did both work?"

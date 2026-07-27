@@ -1,0 +1,3737 @@
+{
+  "script_report_version": 1,
+  "contract_version": 1,
+  "script": {
+    "path": "suite.mjs",
+    "sha256": "1aa4451c5de4bc72318ffdb255cc1aba0aa8a34d1e5bd39b71e35d1d9441601b",
+    "bytes": 87052
+  },
+  "run": {
+    "started_at": "2026-07-26T05:36:18.516Z",
+    "finished_at": "2026-07-26T05:36:19.076Z",
+    "duration_ms": 560,
+    "base_url": "http://127.0.0.1:4302",
+    "allowed_origins": [],
+    "mode": "read-write",
+    "write_grant": {
+      "origin": "http://127.0.0.1:4302",
+      "approved_by": "S0 study owner — disposable loopback ledger fixture (studies/api-suite/TARGET-AUTHORIZATION.md)",
+      "approved_at": "2026-07-26"
+    },
+    "budget": {
+      "limit": 360,
+      "used": 246,
+      "remaining": 114
+    },
+    "timeout_ms": 600000,
+    "read_only_methods": [
+      "GET",
+      "HEAD"
+    ],
+    "secrets_declared": [
+      "LEDGER_ADMIN_TOKEN",
+      "LEDGER_CUSTOMER_B_TOKEN",
+      "LEDGER_CUSTOMER_TOKEN"
+    ],
+    "params": {
+      "seed": "ledger-dev-seed"
+    },
+    "exit": {
+      "code": 0
+    }
+  },
+  "checks": [
+    {
+      "id": "determinism-replay",
+      "obligation": "rule:round-trip-consistency-and-determinism",
+      "title": "the same request sequence after the same seeded reset yields identical ids, timestamps and resources",
+      "pass": true,
+      "exercised": true,
+      "expected": "both replays return byte-identical resources (ids, created_at, entry ids and sequences)",
+      "observed": "the two replays agreed on all 9 steps",
+      "evidence": {
+        "har_entries": [
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19
+        ],
+        "subject": {
+          "steps": 9
+        }
+      }
+    },
+    {
+      "id": "reset-is-clean",
+      "obligation": "rule:round-trip-consistency-and-determinism",
+      "title": "POST /admin/reset returns the seeded initial state",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 200 {ok:true, seed:\"ledger-dev-seed\", day:0}",
+      "observed": "HTTP 200 {\"ok\":true,\"seed\":\"ledger-dev-seed\",\"day\":0}",
+      "evidence": {
+        "har_entries": [
+          20
+        ]
+      }
+    },
+    {
+      "id": "split-customer-tick-forbidden",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "a customer principal calling POST /admin/tick is 403",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 403 (forbidden)",
+      "observed": "HTTP 403 {\"error\":{\"code\":\"forbidden\",\"message\":\"this operation requires the admin role\"}}",
+      "evidence": {
+        "har_entries": [
+          21
+        ]
+      }
+    },
+    {
+      "id": "own-admin-tick-is-admin-only",
+      "obligation": "rule:ownership",
+      "title": "only the administrator may advance settlement",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 403 for a customer principal",
+      "observed": "HTTP 403 {\"error\":{\"code\":\"forbidden\",\"message\":\"this operation requires the admin role\"}}",
+      "evidence": {
+        "har_entries": [
+          21
+        ]
+      }
+    },
+    {
+      "id": "split-customer-reset-forbidden",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "a customer principal calling POST /admin/reset is 403",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 403 (forbidden)",
+      "observed": "HTTP 403 {\"error\":{\"code\":\"forbidden\",\"message\":\"this operation requires the admin role\"}}",
+      "evidence": {
+        "har_entries": [
+          22
+        ]
+      }
+    },
+    {
+      "id": "own-admin-reset-is-admin-only",
+      "obligation": "rule:ownership",
+      "title": "only the administrator may reset the service",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 403 for a customer principal",
+      "observed": "HTTP 403 {\"error\":{\"code\":\"forbidden\",\"message\":\"this operation requires the admin role\"}}",
+      "evidence": {
+        "har_entries": [
+          22
+        ]
+      }
+    },
+    {
+      "id": "split-missing-credential-get",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "a request with no credential is 401",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 401 (unauthorized)",
+      "observed": "HTTP 401 {\"error\":{\"code\":\"unauthorized\",\"message\":\"a valid Bearer token is required\"}}",
+      "evidence": {
+        "har_entries": [
+          23
+        ]
+      }
+    },
+    {
+      "id": "err-401-www-authenticate",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "a 401 response carries a WWW-Authenticate header",
+      "pass": true,
+      "exercised": true,
+      "expected": "WWW-Authenticate present on 401",
+      "observed": "headers {\"connection\":\"keep-alive\",\"content-length\":\"79\",\"content-type\":\"application/json; charset=utf-8\",\"date\":\"Sun, 26 Jul 2026 05:36:18 GMT\",\"keep-alive\":\"timeout=5\",\"www-authenticate\":\"Bearer realm=\\\"minibank\\\"\"}",
+      "evidence": {
+        "har_entries": [
+          23
+        ]
+      }
+    },
+    {
+      "id": "split-missing-credential-post",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "an unauthenticated write is 401",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 401 (unauthorized)",
+      "observed": "HTTP 401 {\"error\":{\"code\":\"unauthorized\",\"message\":\"a valid Bearer token is required\"}}",
+      "evidence": {
+        "har_entries": [
+          24
+        ]
+      }
+    },
+    {
+      "id": "split-unknown-credential",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "an unrecognized bearer token is 401",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 401 (unauthorized)",
+      "observed": "HTTP 401 {\"error\":{\"code\":\"unauthorized\",\"message\":\"a valid Bearer token is required\"}}",
+      "evidence": {
+        "har_entries": [
+          25
+        ]
+      }
+    },
+    {
+      "id": "own-unauthenticated-sees-nothing",
+      "obligation": "rule:ownership",
+      "title": "an unauthenticated caller is shown no account state",
+      "pass": true,
+      "exercised": true,
+      "expected": "401 with no items array",
+      "observed": "HTTP 401 {\"error\":{\"code\":\"unauthorized\",\"message\":\"a valid Bearer token is required\"}}",
+      "evidence": {
+        "har_entries": [
+          23,
+          25
+        ]
+      }
+    },
+    {
+      "id": "life-new-account-is-pending",
+      "obligation": "rule:lifecycle-legality",
+      "title": "a newly created account is 'pending' and holds no money",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 201 with status \"pending\", balance 0, activated_at null",
+      "observed": "HTTP 201 {\"id\":\"acc_8n36k615kk\",\"kind\":\"customer\",\"owner\":\"ada-main\",\"owner_principal\":\"customer_a\",\"currency\":\"USD\",\"status\":\"pending\",\"balance\":0,\"created_at\":\"2026-01-01T00:00:01.000Z\",\"activated_at\":null,\"closed_at\":null}",
+      "evidence": {
+        "har_entries": [
+          26
+        ]
+      }
+    },
+    {
+      "id": "own-admin-may-open-for-another-principal",
+      "obligation": "rule:ownership",
+      "title": "the administrator may open an account owned by another principal",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 201 with owner_principal \"customer_b\"",
+      "observed": "HTTP 201 {\"id\":\"acc_m8d4wgsckp\",\"kind\":\"customer\",\"owner\":\"bob-by-admin\",\"owner_principal\":\"customer_b\",\"currency\":\"USD\",\"status\":\"pending\",\"balance\":0,\"created_at\":\"2026-01-01T00:00:35.000Z\",\"activated_at\":null,\"closed_at\":null}",
+      "evidence": {
+        "har_entries": [
+          60
+        ]
+      }
+    },
+    {
+      "id": "fixtures-available",
+      "obligation": "rule:lifecycle-legality",
+      "title": "the accounts the rest of the suite transacts against were created and activated",
+      "pass": true,
+      "exercised": true,
+      "expected": "every fixture account created with an id",
+      "observed": "14 fixture accounts created",
+      "evidence": {
+        "har_entries": [
+          26,
+          29,
+          31,
+          32,
+          35,
+          38,
+          41,
+          44,
+          47,
+          50,
+          53,
+          55,
+          58,
+          60
+        ]
+      }
+    },
+    {
+      "id": "rt-account-create-vs-read",
+      "obligation": "rule:round-trip-consistency-and-determinism",
+      "title": "the account returned by POST /accounts is the account GET /accounts/{id} returns",
+      "pass": true,
+      "exercised": true,
+      "expected": "identical id, kind, owner, owner_principal, currency and created_at",
+      "observed": "diff []",
+      "evidence": {
+        "har_entries": [
+          26,
+          62
+        ],
+        "subject": {
+          "created": {
+            "id": "acc_8n36k615kk",
+            "kind": "customer",
+            "owner": "ada-main",
+            "owner_principal": "customer_a",
+            "currency": "USD",
+            "created_at": "2026-01-01T00:00:01.000Z"
+          },
+          "read": {
+            "id": "acc_8n36k615kk",
+            "kind": "customer",
+            "owner": "ada-main",
+            "owner_principal": "customer_a",
+            "currency": "USD",
+            "created_at": "2026-01-01T00:00:01.000Z"
+          }
+        }
+      }
+    },
+    {
+      "id": "rt-deposit-create-vs-read",
+      "obligation": "rule:round-trip-consistency-and-determinism",
+      "title": "the deposit returned by POST /deposits is the deposit GET /deposits/{id} returns, field for field",
+      "pass": true,
+      "exercised": true,
+      "expected": "identical resource on both reads",
+      "observed": "diff []",
+      "evidence": {
+        "har_entries": [
+          28,
+          63
+        ]
+      }
+    },
+    {
+      "id": "rt-deposit-settles-immediately",
+      "obligation": "rule:round-trip-consistency-and-determinism",
+      "title": "a deposit is returned settled, with its amount and currency echoed",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 201 {status:\"settled\", amount:200000, currency:\"USD\"}",
+      "observed": "HTTP 201 {\"id\":\"dep_rkf1pgvt6k\",\"account_id\":\"acc_8n36k615kk\",\"amount\":200000,\"currency\":\"USD\",\"status\":\"settled\",\"created_at\":\"2026-01-01T00:00:03.000Z\",\"entry_id\":\"ent_h1ggs61g6z\"}",
+      "evidence": {
+        "har_entries": [
+          28
+        ]
+      }
+    },
+    {
+      "id": "own-read-other-account",
+      "obligation": "rule:ownership",
+      "title": "reading another principal's account is refused",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 403",
+      "observed": "HTTP 403 {\"error\":{\"code\":\"forbidden\",\"message\":\"account acc_8n36k615kk does not belong to this principal\",\"details\":{\"id\":\"acc_8n36k615kk\"}}}",
+      "evidence": {
+        "har_entries": [
+          64
+        ]
+      }
+    },
+    {
+      "id": "split-forbidden-read-other-account",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "reading another principal's account is refused with 403",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 403 (forbidden)",
+      "observed": "HTTP 403 {\"error\":{\"code\":\"forbidden\",\"message\":\"account acc_8n36k615kk does not belong to this principal\",\"details\":{\"id\":\"acc_8n36k615kk\"}}}",
+      "evidence": {
+        "har_entries": [
+          64
+        ]
+      }
+    },
+    {
+      "id": "own-read-other-entries",
+      "obligation": "rule:ownership",
+      "title": "reading another principal's ledger entries is refused",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 403",
+      "observed": "HTTP 403 {\"error\":{\"code\":\"forbidden\",\"message\":\"account acc_8n36k615kk does not belong to this principal\",\"details\":{\"id\":\"acc_8n36k615kk\"}}}",
+      "evidence": {
+        "har_entries": [
+          65
+        ]
+      }
+    },
+    {
+      "id": "split-forbidden-read-other-entries",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "reading another principal's ledger entries is refused with 403",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 403 (forbidden)",
+      "observed": "HTTP 403 {\"error\":{\"code\":\"forbidden\",\"message\":\"account acc_8n36k615kk does not belong to this principal\",\"details\":{\"id\":\"acc_8n36k615kk\"}}}",
+      "evidence": {
+        "har_entries": [
+          65
+        ]
+      }
+    },
+    {
+      "id": "own-fund-other-account",
+      "obligation": "rule:ownership",
+      "title": "funding another principal's account is refused",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 403",
+      "observed": "HTTP 403 {\"error\":{\"code\":\"forbidden\",\"message\":\"account acc_8n36k615kk does not belong to this principal\",\"details\":{\"id\":\"acc_8n36k615kk\"}}}",
+      "evidence": {
+        "har_entries": [
+          66
+        ]
+      }
+    },
+    {
+      "id": "split-forbidden-fund-other-account",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "funding another principal's account is refused with 403",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 403 (forbidden)",
+      "observed": "HTTP 403 {\"error\":{\"code\":\"forbidden\",\"message\":\"account acc_8n36k615kk does not belong to this principal\",\"details\":{\"id\":\"acc_8n36k615kk\"}}}",
+      "evidence": {
+        "har_entries": [
+          66
+        ]
+      }
+    },
+    {
+      "id": "own-activate-other-account",
+      "obligation": "rule:ownership",
+      "title": "activating another principal's account is refused",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 403",
+      "observed": "HTTP 403 {\"error\":{\"code\":\"forbidden\",\"message\":\"account acc_m2hjkt7x68 does not belong to this principal\",\"details\":{\"id\":\"acc_m2hjkt7x68\"}}}",
+      "evidence": {
+        "har_entries": [
+          67
+        ]
+      }
+    },
+    {
+      "id": "split-forbidden-activate-other-account",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "activating another principal's account is refused with 403",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 403 (forbidden)",
+      "observed": "HTTP 403 {\"error\":{\"code\":\"forbidden\",\"message\":\"account acc_m2hjkt7x68 does not belong to this principal\",\"details\":{\"id\":\"acc_m2hjkt7x68\"}}}",
+      "evidence": {
+        "har_entries": [
+          67
+        ]
+      }
+    },
+    {
+      "id": "own-close-other-account",
+      "obligation": "rule:ownership",
+      "title": "closing another principal's account is refused",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 403",
+      "observed": "HTTP 403 {\"error\":{\"code\":\"forbidden\",\"message\":\"account acc_fp9tzwhd5t does not belong to this principal\",\"details\":{\"id\":\"acc_fp9tzwhd5t\"}}}",
+      "evidence": {
+        "har_entries": [
+          68
+        ]
+      }
+    },
+    {
+      "id": "split-forbidden-close-other-account",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "closing another principal's account is refused with 403",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 403 (forbidden)",
+      "observed": "HTTP 403 {\"error\":{\"code\":\"forbidden\",\"message\":\"account acc_fp9tzwhd5t does not belong to this principal\",\"details\":{\"id\":\"acc_fp9tzwhd5t\"}}}",
+      "evidence": {
+        "har_entries": [
+          68
+        ]
+      }
+    },
+    {
+      "id": "own-spend-from-other-account",
+      "obligation": "rule:ownership",
+      "title": "spending from another principal's account is refused",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 403",
+      "observed": "HTTP 403 {\"error\":{\"code\":\"forbidden\",\"message\":\"account acc_8n36k615kk does not belong to this principal\",\"details\":{\"id\":\"acc_8n36k615kk\"}}}",
+      "evidence": {
+        "har_entries": [
+          69
+        ]
+      }
+    },
+    {
+      "id": "split-forbidden-spend-from-other-account",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "spending from another principal's account is refused with 403",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 403 (forbidden)",
+      "observed": "HTTP 403 {\"error\":{\"code\":\"forbidden\",\"message\":\"account acc_8n36k615kk does not belong to this principal\",\"details\":{\"id\":\"acc_8n36k615kk\"}}}",
+      "evidence": {
+        "har_entries": [
+          69
+        ]
+      }
+    },
+    {
+      "id": "own-read-other-deposit",
+      "obligation": "rule:ownership",
+      "title": "reading a deposit into another principal's account is refused",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 403",
+      "observed": "HTTP 403 {\"error\":{\"code\":\"forbidden\",\"message\":\"account acc_8n36k615kk does not belong to this principal\",\"details\":{\"id\":\"acc_8n36k615kk\"}}}",
+      "evidence": {
+        "har_entries": [
+          70
+        ]
+      }
+    },
+    {
+      "id": "split-forbidden-read-other-deposit",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "reading a deposit into another principal's account is refused with 403",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 403 (forbidden)",
+      "observed": "HTTP 403 {\"error\":{\"code\":\"forbidden\",\"message\":\"account acc_8n36k615kk does not belong to this principal\",\"details\":{\"id\":\"acc_8n36k615kk\"}}}",
+      "evidence": {
+        "har_entries": [
+          70
+        ]
+      }
+    },
+    {
+      "id": "own-refusal-discloses-nothing",
+      "obligation": "rule:ownership",
+      "title": "a refusal to reach another principal's account carries no part of that account's state",
+      "pass": true,
+      "exercised": true,
+      "expected": "no owner, owner_principal, balance or status of the target account in the 403 body",
+      "observed": "7 refusal bodies carried only the id the caller supplied",
+      "evidence": {
+        "har_entries": [
+          64,
+          65,
+          66,
+          67,
+          68,
+          69,
+          70
+        ]
+      }
+    },
+    {
+      "id": "own-fee-account-readable",
+      "obligation": "rule:ownership",
+      "title": "the system fee accounts are readable by every principal",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 200 for both a customer read of the fee account and of its entries",
+      "observed": "HTTP 200 {\"id\":\"acc_fee_usd\",\"kind\":\"system\",\"owner\":\"minibank\",\"owner_principal\":\"minibank\",\"currency\":\"USD\",\"status\":\"active\",\"balance\":0,\"created_at\":\"2026-01-01T00:00:00.000Z\",\"activated_at\":\"2026-01-01T00:00:00.000Z\",\"closed_at\":null} / entries 200",
+      "evidence": {
+        "har_entries": [
+          71,
+          72
+        ]
+      }
+    },
+    {
+      "id": "own-fee-account-not-actable",
+      "obligation": "rule:ownership",
+      "title": "the system fee accounts are actable by no customer principal",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 403 for both a deposit into and an activation of a system fee account",
+      "observed": "deposit HTTP 403 {\"error\":{\"code\":\"forbidden\",\"message\":\"account acc_fee_usd does not belong to this principal\",\"details\":{\"id\":\"acc_fee_usd\"}}} / activate HTTP 403 {\"error\":{\"code\":\"forbidden\",\"message\":\"account acc_fee_eur does not belong to this principal\",\"details\":{\"id\":\"acc_fee_eur\"}}}",
+      "evidence": {
+        "har_entries": [
+          73,
+          74
+        ]
+      }
+    },
+    {
+      "id": "split-fee-account-fund",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "acting on a system fee account is 403",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 403 (forbidden)",
+      "observed": "HTTP 403 {\"error\":{\"code\":\"forbidden\",\"message\":\"account acc_fee_usd does not belong to this principal\",\"details\":{\"id\":\"acc_fee_usd\"}}}",
+      "evidence": {
+        "har_entries": [
+          73
+        ]
+      }
+    },
+    {
+      "id": "own-customer-cannot-open-for-another",
+      "obligation": "rule:ownership",
+      "title": "a customer principal may not open an account on another principal's behalf",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 403",
+      "observed": "HTTP 403 {\"error\":{\"code\":\"forbidden\",\"message\":\"only an administrator may open an account for another principal\",\"details\":{\"field\":\"owner_principal\"}}}",
+      "evidence": {
+        "har_entries": [
+          75
+        ]
+      }
+    },
+    {
+      "id": "split-customer-owner-principal",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "a customer supplying owner_principal is 403",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 403 (forbidden)",
+      "observed": "HTTP 403 {\"error\":{\"code\":\"forbidden\",\"message\":\"only an administrator may open an account for another principal\",\"details\":{\"field\":\"owner_principal\"}}}",
+      "evidence": {
+        "har_entries": [
+          75
+        ]
+      }
+    },
+    {
+      "id": "own-owner_principal-decides-reach",
+      "obligation": "rule:ownership",
+      "title": "an account opened on a principal's behalf is reachable by that principal and by no other customer",
+      "pass": true,
+      "exercised": true,
+      "expected": "owner reads 200, the other customer reads 403",
+      "observed": "owner HTTP 200 {\"id\":\"acc_m8d4wgsckp\",\"kind\":\"customer\",\"owner\":\"bob-by-admin\",\"owner_principal\":\"customer_b\",\"currency\":\"USD\",\"status\":\"active\",\"balance\":0,\"created_at\":\"2026-01-01T00:00:35.000Z\",\"activated_at\":\"2026-01-01T00:00:36.000Z\",\"closed_at\":null} / other HTTP 403 {\"error\":{\"code\":\"forbidden\",\"message\":\"account acc_m8d4wgsckp does not belong to this principal\",\"details\":{\"id\":\"acc_m8d4wgsckp\"}}}",
+      "evidence": {
+        "har_entries": [
+          76,
+          77
+        ]
+      }
+    },
+    {
+      "id": "own-listing-is-scoped",
+      "obligation": "rule:ownership",
+      "title": "GET /accounts shows a customer only its own accounts (plus the public system accounts)",
+      "pass": true,
+      "exercised": true,
+      "expected": "no account owned by another customer principal in the listing",
+      "observed": "5 items, all customer_b or system",
+      "evidence": {
+        "har_entries": [
+          78
+        ]
+      }
+    },
+    {
+      "id": "own-admin-unrestricted",
+      "obligation": "rule:ownership",
+      "title": "the administrator reaches an account it does not own",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 200 with the account",
+      "observed": "HTTP 200 {\"id\":\"acc_8n36k615kk\",\"kind\":\"customer\",\"owner\":\"ada-main\",\"owner_principal\":\"customer_a\",\"currency\":\"USD\",\"status\":\"active\",\"balance\":200000,\"created_at\":\"2026-01-01T00:00:01.000Z\",\"activated_at\":\"2026-01-01T00:00:02.000Z\",\"closed_at\":null}",
+      "evidence": {
+        "har_entries": [
+          79
+        ]
+      }
+    },
+    {
+      "id": "split-404-account-admin",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "an unknown account id is 404 for the administrator",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 404 (*_not_found)",
+      "observed": "HTTP 404 {\"error\":{\"code\":\"account_not_found\",\"message\":\"no account with id acc_absent_fixture\",\"details\":{\"id\":\"acc_absent_fixture\"}}}",
+      "evidence": {
+        "har_entries": [
+          80
+        ]
+      }
+    },
+    {
+      "id": "split-404-account-customer",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "an unknown account id is 404 for a customer too, not 403",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 404 (*_not_found)",
+      "observed": "HTTP 404 {\"error\":{\"code\":\"account_not_found\",\"message\":\"no account with id acc_absent_fixture\",\"details\":{\"id\":\"acc_absent_fixture\"}}}",
+      "evidence": {
+        "har_entries": [
+          81
+        ]
+      }
+    },
+    {
+      "id": "split-404-entries",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "an unknown account id after a resource-scoped path is 404",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 404 (*_not_found)",
+      "observed": "HTTP 404 {\"error\":{\"code\":\"account_not_found\",\"message\":\"no account with id acc_absent_fixture\",\"details\":{\"id\":\"acc_absent_fixture\"}}}",
+      "evidence": {
+        "har_entries": [
+          82
+        ]
+      }
+    },
+    {
+      "id": "split-404-transfer",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "an unknown transfer id is 404",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 404 (*_not_found)",
+      "observed": "HTTP 404 {\"error\":{\"code\":\"transfer_not_found\",\"message\":\"no transfer with id tr_absentfixture\",\"details\":{\"id\":\"tr_absentfixture\"}}}",
+      "evidence": {
+        "har_entries": [
+          83
+        ]
+      }
+    },
+    {
+      "id": "split-404-deposit",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "an unknown deposit id is 404",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 404 (*_not_found)",
+      "observed": "HTTP 404 {\"error\":{\"code\":\"deposit_not_found\",\"message\":\"no deposit with id dep_absentfixture\",\"details\":{\"id\":\"dep_absentfixture\"}}}",
+      "evidence": {
+        "har_entries": [
+          84
+        ]
+      }
+    },
+    {
+      "id": "split-404-cancel",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "cancelling an unknown transfer is 404",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 404 (*_not_found)",
+      "observed": "HTTP 404 {\"error\":{\"code\":\"transfer_not_found\",\"message\":\"no transfer with id tr_absentfixture\",\"details\":{\"id\":\"tr_absentfixture\"}}}",
+      "evidence": {
+        "har_entries": [
+          85
+        ]
+      }
+    },
+    {
+      "id": "split-404-activate",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "activating an unknown account is 404",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 404 (*_not_found)",
+      "observed": "HTTP 404 {\"error\":{\"code\":\"account_not_found\",\"message\":\"no account with id acc_absent_fixture\",\"details\":{\"id\":\"acc_absent_fixture\"}}}",
+      "evidence": {
+        "har_entries": [
+          86
+        ]
+      }
+    },
+    {
+      "id": "split-404-close",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "closing an unknown account is 404",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 404 (*_not_found)",
+      "observed": "HTTP 404 {\"error\":{\"code\":\"account_not_found\",\"message\":\"no account with id acc_absent_fixture\",\"details\":{\"id\":\"acc_absent_fixture\"}}}",
+      "evidence": {
+        "har_entries": [
+          87
+        ]
+      }
+    },
+    {
+      "id": "split-404-deposit-target",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "depositing into an unknown account is 404",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 404 (*_not_found)",
+      "observed": "HTTP 404 {\"error\":{\"code\":\"account_not_found\",\"message\":\"no account with id acc_absent_fixture\",\"details\":{\"id\":\"acc_absent_fixture\"}}}",
+      "evidence": {
+        "har_entries": [
+          88
+        ]
+      }
+    },
+    {
+      "id": "split-404-transfer-target",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "transferring to an unknown account is 404",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 404 (*_not_found)",
+      "observed": "HTTP 404 {\"error\":{\"code\":\"account_not_found\",\"message\":\"no account with id acc_absent_fixture\",\"details\":{\"id\":\"acc_absent_fixture\"}}}",
+      "evidence": {
+        "har_entries": [
+          89
+        ]
+      }
+    },
+    {
+      "id": "split-400-unparseable",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "an unparseable body is 400",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 400 (invalid_json)",
+      "observed": "HTTP 400 {\"error\":{\"code\":\"invalid_json\",\"message\":\"request body is not valid JSON\"}}",
+      "evidence": {
+        "har_entries": [
+          90
+        ]
+      }
+    },
+    {
+      "id": "split-400-limit-0",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "limit outside its documented range (limit-0) is 400",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 400 (invalid_limit)",
+      "observed": "HTTP 400 {\"error\":{\"code\":\"invalid_limit\",\"message\":\"limit must be an integer between 1 and 100\",\"details\":{\"field\":\"limit\",\"max\":100}}}",
+      "evidence": {
+        "har_entries": [
+          91
+        ]
+      }
+    },
+    {
+      "id": "split-400-limit-101",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "limit outside its documented range (limit-101) is 400",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 400 (invalid_limit)",
+      "observed": "HTTP 400 {\"error\":{\"code\":\"invalid_limit\",\"message\":\"limit must be an integer between 1 and 100\",\"details\":{\"field\":\"limit\",\"max\":100}}}",
+      "evidence": {
+        "har_entries": [
+          92
+        ]
+      }
+    },
+    {
+      "id": "split-400-limit-nan",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "limit outside its documented range (limit-nan) is 400",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 400 (invalid_limit)",
+      "observed": "HTTP 400 {\"error\":{\"code\":\"invalid_limit\",\"message\":\"limit must be an integer between 1 and 100\",\"details\":{\"field\":\"limit\",\"max\":100}}}",
+      "evidence": {
+        "har_entries": [
+          93
+        ]
+      }
+    },
+    {
+      "id": "split-400-limit-negative",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "limit outside its documented range (limit-negative) is 400",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 400 (invalid_limit)",
+      "observed": "HTTP 400 {\"error\":{\"code\":\"invalid_limit\",\"message\":\"limit must be an integer between 1 and 100\",\"details\":{\"field\":\"limit\",\"max\":100}}}",
+      "evidence": {
+        "har_entries": [
+          94
+        ]
+      }
+    },
+    {
+      "id": "param-limit-range-enforced",
+      "obligation": "rule:documented-parameters",
+      "title": "limit is refused outside its documented range of 1..100",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 400 for limit=0, limit=101, limit=abc and limit=-1",
+      "observed": "[400,400,400,400]",
+      "evidence": {
+        "har_entries": [
+          91,
+          92,
+          93,
+          94
+        ]
+      }
+    },
+    {
+      "id": "split-400-cursor",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "a cursor the endpoint never issued is 400",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 400 (invalid_cursor)",
+      "observed": "HTTP 400 {\"error\":{\"code\":\"invalid_cursor\",\"message\":\"cursor is not a cursor previously returned by this endpoint\"}}",
+      "evidence": {
+        "har_entries": [
+          95
+        ]
+      }
+    },
+    {
+      "id": "param-unknown-query-ignored",
+      "obligation": "rule:documented-parameters",
+      "title": "an unknown query parameter is ignored rather than refused",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 200 and the same collection as the request without it",
+      "observed": "with 200/16 items, without 200/16 items",
+      "evidence": {
+        "har_entries": [
+          96,
+          97
+        ]
+      }
+    },
+    {
+      "id": "param-limit-bounds-page",
+      "obligation": "rule:documented-parameters",
+      "title": "limit bounds the page size",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 200 with exactly 1 item for limit=1",
+      "observed": "1 items",
+      "evidence": {
+        "har_entries": [
+          98
+        ]
+      }
+    },
+    {
+      "id": "split-422-currency-mismatch",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "a cross-currency transfer is 422",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 422 (currency_mismatch)",
+      "observed": "HTTP 422 {\"error\":{\"code\":\"currency_mismatch\",\"message\":\"transfers are same-currency only\",\"details\":{\"source_currency\":\"USD\",\"destination_currency\":\"EUR\"}}}",
+      "evidence": {
+        "har_entries": [
+          99
+        ]
+      }
+    },
+    {
+      "id": "split-422-currency-assertion",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "a currency assertion that disagrees with the source account is 422",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 422 (currency_mismatch)",
+      "observed": "HTTP 422 {\"error\":{\"code\":\"currency_mismatch\",\"message\":\"currency must match the source account\",\"details\":{\"requested\":\"EUR\",\"source_currency\":\"USD\"}}}",
+      "evidence": {
+        "har_entries": [
+          100
+        ]
+      }
+    },
+    {
+      "id": "param-currency-assertion",
+      "obligation": "rule:documented-parameters",
+      "title": "the optional currency assertion on POST /transfers is honoured: a mismatch is refused",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 422 for currency:\"EUR\" against a USD source",
+      "observed": "HTTP 422 {\"error\":{\"code\":\"currency_mismatch\",\"message\":\"currency must match the source account\",\"details\":{\"requested\":\"EUR\",\"source_currency\":\"USD\"}}}",
+      "evidence": {
+        "har_entries": [
+          100
+        ]
+      }
+    },
+    {
+      "id": "split-422-same-account",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "a transfer to the source account itself is 422",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 422 (same_account)",
+      "observed": "HTTP 422 {\"error\":{\"code\":\"same_account\",\"message\":\"source and destination must differ\",\"details\":{\"id\":\"acc_8n36k615kk\"}}}",
+      "evidence": {
+        "har_entries": [
+          101
+        ]
+      }
+    },
+    {
+      "id": "split-422-zero-amount",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "a deposit of 0 is refused",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 422 (invalid_amount)",
+      "observed": "HTTP 422 {\"error\":{\"code\":\"invalid_amount\",\"message\":\"amount must be a positive integer in minor units\",\"details\":{\"field\":\"amount\"}}}",
+      "evidence": {
+        "har_entries": [
+          102
+        ]
+      }
+    },
+    {
+      "id": "split-422-negative-amount",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "a negative transfer amount is refused",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 422 (invalid_amount)",
+      "observed": "HTTP 422 {\"error\":{\"code\":\"invalid_amount\",\"message\":\"amount must be a positive integer in minor units\",\"details\":{\"field\":\"amount\"}}}",
+      "evidence": {
+        "har_entries": [
+          103
+        ]
+      }
+    },
+    {
+      "id": "split-422-insufficient-funds",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "a transfer the source cannot cover is 422",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 422 (insufficient_funds)",
+      "observed": "HTTP 422 {\"error\":{\"code\":\"insufficient_funds\",\"message\":\"the source account cannot cover the amount plus the fee\",\"details\":{\"id\":\"acc_r5p6w2g89v\",\"balance\":0,\"required\":1027}}}",
+      "evidence": {
+        "har_entries": [
+          104
+        ]
+      }
+    },
+    {
+      "id": "life-unfunded-source-creates-nothing",
+      "obligation": "rule:lifecycle-legality",
+      "title": "a transfer refused for want of funds is not created",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 422 and no transfer resource in the body",
+      "observed": "HTTP 422 {\"error\":{\"code\":\"insufficient_funds\",\"message\":\"the source account cannot cover the amount plus the fee\",\"details\":{\"id\":\"acc_r5p6w2g89v\",\"balance\":0,\"required\":1027}}}",
+      "evidence": {
+        "har_entries": [
+          104
+        ]
+      }
+    },
+    {
+      "id": "err-wrongly-typed-refused",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "a wrongly typed amount is refused, not accepted",
+      "pass": true,
+      "exercised": true,
+      "expected": "a 4xx refusal",
+      "observed": "HTTP 422 {\"error\":{\"code\":\"invalid_amount\",\"message\":\"amount must be a positive integer in minor units\",\"details\":{\"field\":\"amount\"}}}",
+      "evidence": {
+        "har_entries": [
+          105
+        ]
+      }
+    },
+    {
+      "id": "life-close-succeeds",
+      "obligation": "rule:lifecycle-legality",
+      "title": "an active account with no pending transfers can be closed, and the closure is recorded",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 200 with status \"closed\" and a closed_at timestamp",
+      "observed": "HTTP 200 {\"id\":\"acc_zc946y142d\",\"kind\":\"customer\",\"owner\":\"ada-closing\",\"owner_principal\":\"customer_a\",\"currency\":\"USD\",\"status\":\"closed\",\"balance\":500,\"created_at\":\"2026-01-01T00:00:07.000Z\",\"activated_at\":\"2026-01-01T00:00:08.000Z\",\"closed_at\":\"2026-01-01T00:00:38.000Z\"}",
+      "evidence": {
+        "har_entries": [
+          107
+        ]
+      }
+    },
+    {
+      "id": "life-transfer-from-pending",
+      "obligation": "rule:lifecycle-legality",
+      "title": "a transfer out of a never-activated account is rejected",
+      "pass": true,
+      "exercised": true,
+      "expected": "a 4xx refusal",
+      "observed": "HTTP 409 {\"error\":{\"code\":\"account_not_active\",\"message\":\"account acc_m2hjkt7x68 is not active\",\"details\":{\"id\":\"acc_m2hjkt7x68\",\"status\":\"pending\"}}}",
+      "evidence": {
+        "har_entries": [
+          108
+        ]
+      }
+    },
+    {
+      "id": "split-state-transfer-from-pending",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "a transfer out of a never-activated account is rejected: 409",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 409 (account_not_active/not_pending)",
+      "observed": "HTTP 409 {\"error\":{\"code\":\"account_not_active\",\"message\":\"account acc_m2hjkt7x68 is not active\",\"details\":{\"id\":\"acc_m2hjkt7x68\",\"status\":\"pending\"}}}",
+      "evidence": {
+        "har_entries": [
+          108
+        ]
+      }
+    },
+    {
+      "id": "life-transfer-to-pending",
+      "obligation": "rule:lifecycle-legality",
+      "title": "a transfer into a never-activated account is rejected",
+      "pass": true,
+      "exercised": true,
+      "expected": "a 4xx refusal",
+      "observed": "HTTP 409 {\"error\":{\"code\":\"account_not_active\",\"message\":\"account acc_m2hjkt7x68 is not active\",\"details\":{\"id\":\"acc_m2hjkt7x68\",\"status\":\"pending\"}}}",
+      "evidence": {
+        "har_entries": [
+          109
+        ]
+      }
+    },
+    {
+      "id": "split-state-transfer-to-pending",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "a transfer into a never-activated account is rejected: 409",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 409 (account_not_active/not_pending)",
+      "observed": "HTTP 409 {\"error\":{\"code\":\"account_not_active\",\"message\":\"account acc_m2hjkt7x68 is not active\",\"details\":{\"id\":\"acc_m2hjkt7x68\",\"status\":\"pending\"}}}",
+      "evidence": {
+        "har_entries": [
+          109
+        ]
+      }
+    },
+    {
+      "id": "life-deposit-pending",
+      "obligation": "rule:lifecycle-legality",
+      "title": "a deposit into a never-activated account is rejected",
+      "pass": true,
+      "exercised": true,
+      "expected": "a 4xx refusal",
+      "observed": "HTTP 409 {\"error\":{\"code\":\"account_not_active\",\"message\":\"account acc_m2hjkt7x68 is not active\",\"details\":{\"id\":\"acc_m2hjkt7x68\",\"status\":\"pending\"}}}",
+      "evidence": {
+        "har_entries": [
+          110
+        ]
+      }
+    },
+    {
+      "id": "split-state-deposit-pending",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "a deposit into a never-activated account is rejected: 409",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 409 (account_not_active/not_pending)",
+      "observed": "HTTP 409 {\"error\":{\"code\":\"account_not_active\",\"message\":\"account acc_m2hjkt7x68 is not active\",\"details\":{\"id\":\"acc_m2hjkt7x68\",\"status\":\"pending\"}}}",
+      "evidence": {
+        "har_entries": [
+          110
+        ]
+      }
+    },
+    {
+      "id": "life-activate-active",
+      "obligation": "rule:lifecycle-legality",
+      "title": "activating an already-active account is rejected",
+      "pass": true,
+      "exercised": true,
+      "expected": "a 4xx refusal",
+      "observed": "HTTP 409 {\"error\":{\"code\":\"account_not_pending\",\"message\":\"account acc_fp9tzwhd5t is already active\",\"details\":{\"id\":\"acc_fp9tzwhd5t\",\"status\":\"active\"}}}",
+      "evidence": {
+        "har_entries": [
+          111
+        ]
+      }
+    },
+    {
+      "id": "split-state-activate-active",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "activating an already-active account is rejected: 409",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 409 (account_not_active/not_pending)",
+      "observed": "HTTP 409 {\"error\":{\"code\":\"account_not_pending\",\"message\":\"account acc_fp9tzwhd5t is already active\",\"details\":{\"id\":\"acc_fp9tzwhd5t\",\"status\":\"active\"}}}",
+      "evidence": {
+        "har_entries": [
+          111
+        ]
+      }
+    },
+    {
+      "id": "life-transfer-from-closed",
+      "obligation": "rule:lifecycle-legality",
+      "title": "a transfer out of a closed account is rejected",
+      "pass": true,
+      "exercised": true,
+      "expected": "a 4xx refusal",
+      "observed": "HTTP 410 {\"error\":{\"code\":\"account_closed\",\"message\":\"account acc_zc946y142d is closed\",\"details\":{\"id\":\"acc_zc946y142d\",\"status\":\"closed\",\"closed_at\":\"2026-01-01T00:00:38.000Z\"}}}",
+      "evidence": {
+        "har_entries": [
+          112
+        ]
+      }
+    },
+    {
+      "id": "split-state-transfer-from-closed",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "a transfer out of a closed account is rejected: 410",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 410 (account_closed)",
+      "observed": "HTTP 410 {\"error\":{\"code\":\"account_closed\",\"message\":\"account acc_zc946y142d is closed\",\"details\":{\"id\":\"acc_zc946y142d\",\"status\":\"closed\",\"closed_at\":\"2026-01-01T00:00:38.000Z\"}}}",
+      "evidence": {
+        "har_entries": [
+          112
+        ]
+      }
+    },
+    {
+      "id": "life-transfer-to-closed",
+      "obligation": "rule:lifecycle-legality",
+      "title": "a transfer into a closed account is rejected",
+      "pass": true,
+      "exercised": true,
+      "expected": "a 4xx refusal",
+      "observed": "HTTP 410 {\"error\":{\"code\":\"account_closed\",\"message\":\"account acc_zc946y142d is closed\",\"details\":{\"id\":\"acc_zc946y142d\",\"status\":\"closed\",\"closed_at\":\"2026-01-01T00:00:38.000Z\"}}}",
+      "evidence": {
+        "har_entries": [
+          113
+        ]
+      }
+    },
+    {
+      "id": "split-state-transfer-to-closed",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "a transfer into a closed account is rejected: 410",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 410 (account_closed)",
+      "observed": "HTTP 410 {\"error\":{\"code\":\"account_closed\",\"message\":\"account acc_zc946y142d is closed\",\"details\":{\"id\":\"acc_zc946y142d\",\"status\":\"closed\",\"closed_at\":\"2026-01-01T00:00:38.000Z\"}}}",
+      "evidence": {
+        "har_entries": [
+          113
+        ]
+      }
+    },
+    {
+      "id": "life-deposit-closed",
+      "obligation": "rule:lifecycle-legality",
+      "title": "a deposit into a closed account is rejected",
+      "pass": true,
+      "exercised": true,
+      "expected": "a 4xx refusal",
+      "observed": "HTTP 410 {\"error\":{\"code\":\"account_closed\",\"message\":\"account acc_zc946y142d is closed\",\"details\":{\"id\":\"acc_zc946y142d\",\"status\":\"closed\",\"closed_at\":\"2026-01-01T00:00:38.000Z\"}}}",
+      "evidence": {
+        "har_entries": [
+          114
+        ]
+      }
+    },
+    {
+      "id": "split-state-deposit-closed",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "a deposit into a closed account is rejected: 410",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 410 (account_closed)",
+      "observed": "HTTP 410 {\"error\":{\"code\":\"account_closed\",\"message\":\"account acc_zc946y142d is closed\",\"details\":{\"id\":\"acc_zc946y142d\",\"status\":\"closed\",\"closed_at\":\"2026-01-01T00:00:38.000Z\"}}}",
+      "evidence": {
+        "har_entries": [
+          114
+        ]
+      }
+    },
+    {
+      "id": "life-activate-closed",
+      "obligation": "rule:lifecycle-legality",
+      "title": "a closed account is never activated again",
+      "pass": true,
+      "exercised": true,
+      "expected": "a 4xx refusal",
+      "observed": "HTTP 410 {\"error\":{\"code\":\"account_closed\",\"message\":\"account acc_zc946y142d is closed\",\"details\":{\"id\":\"acc_zc946y142d\",\"status\":\"closed\",\"closed_at\":\"2026-01-01T00:00:38.000Z\"}}}",
+      "evidence": {
+        "har_entries": [
+          115
+        ]
+      }
+    },
+    {
+      "id": "split-state-activate-closed",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "a closed account is never activated again: 410",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 410 (account_closed)",
+      "observed": "HTTP 410 {\"error\":{\"code\":\"account_closed\",\"message\":\"account acc_zc946y142d is closed\",\"details\":{\"id\":\"acc_zc946y142d\",\"status\":\"closed\",\"closed_at\":\"2026-01-01T00:00:38.000Z\"}}}",
+      "evidence": {
+        "har_entries": [
+          115
+        ]
+      }
+    },
+    {
+      "id": "life-close-closed",
+      "obligation": "rule:lifecycle-legality",
+      "title": "closing an already-closed account is rejected",
+      "pass": true,
+      "exercised": true,
+      "expected": "a 4xx refusal",
+      "observed": "HTTP 410 {\"error\":{\"code\":\"account_closed\",\"message\":\"account acc_zc946y142d is closed\",\"details\":{\"id\":\"acc_zc946y142d\",\"status\":\"closed\",\"closed_at\":\"2026-01-01T00:00:38.000Z\"}}}",
+      "evidence": {
+        "har_entries": [
+          116
+        ]
+      }
+    },
+    {
+      "id": "split-state-close-closed",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "closing an already-closed account is rejected: 410",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 410 (account_closed)",
+      "observed": "HTTP 410 {\"error\":{\"code\":\"account_closed\",\"message\":\"account acc_zc946y142d is closed\",\"details\":{\"id\":\"acc_zc946y142d\",\"status\":\"closed\",\"closed_at\":\"2026-01-01T00:00:38.000Z\"}}}",
+      "evidence": {
+        "har_entries": [
+          116
+        ]
+      }
+    },
+    {
+      "id": "split-410-tombstone",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "reading a closed account answers 410 with the tombstone",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 410 (account_closed)",
+      "observed": "HTTP 410 {\"error\":{\"code\":\"account_closed\",\"message\":\"account acc_zc946y142d is closed\",\"details\":{\"id\":\"acc_zc946y142d\",\"status\":\"closed\",\"closed_at\":\"2026-01-01T00:00:38.000Z\"}}}",
+      "evidence": {
+        "har_entries": [
+          117
+        ]
+      }
+    },
+    {
+      "id": "life-closure-terminal",
+      "obligation": "rule:lifecycle-legality",
+      "title": "after a refused activation the account is still closed",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 410 whose details still report status closed",
+      "observed": "HTTP 410 {\"error\":{\"code\":\"account_closed\",\"message\":\"account acc_zc946y142d is closed\",\"details\":{\"id\":\"acc_zc946y142d\",\"status\":\"closed\",\"closed_at\":\"2026-01-01T00:00:38.000Z\"}}}",
+      "evidence": {
+        "har_entries": [
+          117
+        ]
+      }
+    },
+    {
+      "id": "life-closed-account-keeps-history",
+      "obligation": "rule:lifecycle-legality",
+      "title": "a closed account is a soft delete: it still serves its ledger history",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 200 carrying the deposit entry made before closure",
+      "observed": "200 with 1 entries [[\"deposit\",500]]",
+      "evidence": {
+        "har_entries": [
+          118
+        ]
+      }
+    },
+    {
+      "id": "life-refusals-create-nothing",
+      "obligation": "rule:lifecycle-legality",
+      "title": "a transfer or deposit refused on lifecycle grounds creates no transfer and writes no entry",
+      "pass": true,
+      "exercised": true,
+      "expected": "no transfers naming the pending or closed account and no entries on the pending account",
+      "observed": "pending: 0 transfers / 0 entries; closed: 0 transfers",
+      "evidence": {
+        "har_entries": [
+          119,
+          120,
+          121
+        ]
+      }
+    },
+    {
+      "id": "fee-schedule-at-creation",
+      "obligation": "rule:the-fee-schedule",
+      "title": "the declared fee is 25 + round_half_up(amount * 15 / 10000) at every probed amount, including the exact half cases",
+      "pass": true,
+      "exercised": true,
+      "expected": "[\"1->25\",\"333->25\",\"334->26\",\"666->26\",\"1000->27\",\"3000->30\",\"3333->30\",\"3334->30\",\"50000->100\",\"1000->27\",\"3000->30\"]",
+      "observed": "[\"USD 1->25\",\"USD 333->25\",\"USD 334->26\",\"USD 666->26\",\"USD 1000->27\",\"USD 3000->30\",\"USD 3333->30\",\"USD 3334->30\",\"USD 50000->100\",\"EUR 1000->27\",\"EUR 3000->30\"]",
+      "evidence": {
+        "har_entries": [
+          122,
+          123,
+          124,
+          125,
+          126,
+          127,
+          128,
+          129,
+          130,
+          131,
+          132
+        ]
+      }
+    },
+    {
+      "id": "fee-one-schedule-both-currencies",
+      "obligation": "rule:the-fee-schedule",
+      "title": "the schedule is one schedule, not a per-currency table",
+      "pass": true,
+      "exercised": true,
+      "expected": "the same amount costs the same fee in USD and in EUR",
+      "observed": "[\"1000: USD 27 vs EUR 27\",\"3000: USD 30 vs EUR 30\"]",
+      "evidence": {
+        "har_entries": [
+          122,
+          123,
+          124,
+          125,
+          126,
+          127,
+          128,
+          129,
+          130,
+          131,
+          132
+        ]
+      }
+    },
+    {
+      "id": "ref-fee-account-matches-currency",
+      "obligation": "rule:reference-integrity",
+      "title": "a transfer's fee_account_id is the system fee account of the transfer's currency",
+      "pass": true,
+      "exercised": true,
+      "expected": "acc_fee_usd for USD transfers and acc_fee_eur for EUR transfers",
+      "observed": "all 11 transfers named the right fee account",
+      "evidence": {
+        "har_entries": [
+          122,
+          123,
+          124,
+          125,
+          126,
+          127,
+          128,
+          129,
+          130,
+          131,
+          132
+        ]
+      }
+    },
+    {
+      "id": "life-transfer-created-pending",
+      "obligation": "rule:lifecycle-legality",
+      "title": "a transfer between two active same-currency accounts is created pending, with the fee declared up front",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 201 {status:\"pending\", amount:25000, fee:63, settled_at:null}",
+      "observed": "HTTP 201 {\"id\":\"tr_qympd8w93f\",\"status\":\"pending\",\"source_account_id\":\"acc_8n36k615kk\",\"destination_account_id\":\"acc_hxf94wpr0h\",\"fee_account_id\":\"acc_fee_usd\",\"amount\":25000,\"fee\":63,\"currency\":\"USD\",\"idempotency_key\":null,\"failure_reason\":null,\"created_at\":\"2026-01-01T00:00:50.000Z\",\"settled_at\":null,\"canceled_at\":null}",
+      "evidence": {
+        "har_entries": [
+          133
+        ]
+      }
+    },
+    {
+      "id": "own-destination-need-not-be-owned",
+      "obligation": "rule:ownership",
+      "title": "the destination of a transfer need not belong to the caller",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 201 paying an account owned by the other customer principal",
+      "observed": "HTTP 201 {\"id\":\"tr_qympd8w93f\",\"status\":\"pending\",\"source_account_id\":\"acc_8n36k615kk\",\"destination_account_id\":\"acc_hxf94wpr0h\",\"fee_account_id\":\"acc_fee_usd\",\"amount\":25000,\"fee\":63,\"currency\":\"USD\",\"idempotency_key\":null,\"failure_reason\":null,\"created_at\":\"2026-01-01T00:00:50.000Z\",\"settled_at\":null,\"canceled_at\":null}",
+      "evidence": {
+        "har_entries": [
+          133,
+          55
+        ]
+      }
+    },
+    {
+      "id": "rt-transfer-create-vs-read",
+      "obligation": "rule:round-trip-consistency-and-determinism",
+      "title": "the transfer returned by POST /transfers is the transfer GET /transfers/{id} returns, field for field",
+      "pass": true,
+      "exercised": true,
+      "expected": "identical resource on both reads",
+      "observed": "diff []",
+      "evidence": {
+        "har_entries": [
+          133,
+          136
+        ]
+      }
+    },
+    {
+      "id": "life-no-close-with-pending",
+      "obligation": "rule:lifecycle-legality",
+      "title": "an account with a pending transfer against it — sending or receiving — cannot be closed",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 409 on both the sending and the receiving side",
+      "observed": "source HTTP 409 {\"error\":{\"code\":\"account_has_pending_transfers\",\"message\":\"account acc_8n36k615kk still has pending transfers\",\"details\":{\"id\":\"acc_8n36k615kk\",\"pending_transfer_ids\":[\"tr_qympd8w93f\",\"tr_zwyq5z81ph\"]}}} / destination HTTP 409 {\"error\":{\"code\":\"account_has_pending_transfers\",\"message\":\"account acc_hxf94wpr0h still has pending transfers\",\"details\":{\"id\":\"acc_hxf94wpr0h\",\"pending_transfer_ids\":[\"tr_qympd8w93f\",\"tr_zwyq5z81ph\"]}}}",
+      "evidence": {
+        "har_entries": [
+          137,
+          138,
+          133
+        ]
+      }
+    },
+    {
+      "id": "split-state-close-with-pending-source",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "closing an account that is sending a pending transfer is 409",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 409 (account_has_pending_transfers)",
+      "observed": "HTTP 409 {\"error\":{\"code\":\"account_has_pending_transfers\",\"message\":\"account acc_8n36k615kk still has pending transfers\",\"details\":{\"id\":\"acc_8n36k615kk\",\"pending_transfer_ids\":[\"tr_qympd8w93f\",\"tr_zwyq5z81ph\"]}}}",
+      "evidence": {
+        "har_entries": [
+          137
+        ]
+      }
+    },
+    {
+      "id": "split-state-close-with-pending-destination",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "closing an account that is receiving a pending transfer is 409",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 409 (account_has_pending_transfers)",
+      "observed": "HTTP 409 {\"error\":{\"code\":\"account_has_pending_transfers\",\"message\":\"account acc_hxf94wpr0h still has pending transfers\",\"details\":{\"id\":\"acc_hxf94wpr0h\",\"pending_transfer_ids\":[\"tr_qympd8w93f\",\"tr_zwyq5z81ph\"]}}}",
+      "evidence": {
+        "har_entries": [
+          138
+        ]
+      }
+    },
+    {
+      "id": "life-refused-close-leaves-account-active",
+      "obligation": "rule:lifecycle-legality",
+      "title": "an account whose closure was refused is still active",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 200 with status \"active\" and closed_at null",
+      "observed": "HTTP 200 {\"id\":\"acc_8n36k615kk\",\"kind\":\"customer\",\"owner\":\"ada-main\",\"owner_principal\":\"customer_a\",\"currency\":\"USD\",\"status\":\"active\",\"balance\":200000,\"created_at\":\"2026-01-01T00:00:01.000Z\",\"activated_at\":\"2026-01-01T00:00:02.000Z\",\"closed_at\":null}",
+      "evidence": {
+        "har_entries": [
+          137,
+          139
+        ]
+      }
+    },
+    {
+      "id": "own-transfer-visible-to-both-sides",
+      "obligation": "rule:ownership",
+      "title": "a transfer is readable by the principals owning either of its two sides",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 200 for the destination's owner",
+      "observed": "HTTP 200 {\"id\":\"tr_qympd8w93f\",\"status\":\"pending\",\"source_account_id\":\"acc_8n36k615kk\",\"destination_account_id\":\"acc_hxf94wpr0h\",\"fee_account_id\":\"acc_fee_usd\",\"amount\":25000,\"fee\":63,\"currency\":\"USD\",\"idempotency_key\":null,\"failure_reason\":null,\"created_at\":\"2026-01-01T00:00:50.000Z\",\"settled_at\":null,\"canceled_at\":null}",
+      "evidence": {
+        "har_entries": [
+          133,
+          140
+        ]
+      }
+    },
+    {
+      "id": "own-visible-transfer-does-not-expose-payer",
+      "obligation": "rule:ownership",
+      "title": "being paid by a stranger makes the transfer visible without making the payer's account visible",
+      "pass": true,
+      "exercised": true,
+      "expected": "the transfer reads 200 for the payee while the payer's account still reads 403",
+      "observed": "transfer 200 / payer account 403",
+      "evidence": {
+        "har_entries": [
+          140,
+          141
+        ]
+      }
+    },
+    {
+      "id": "own-only-source-owner-cancels",
+      "obligation": "rule:ownership",
+      "title": "only the principal owning the source account may cancel a transfer",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 403 for the destination's owner",
+      "observed": "HTTP 403 {\"error\":{\"code\":\"forbidden\",\"message\":\"account acc_8n36k615kk does not belong to this principal\",\"details\":{\"id\":\"acc_8n36k615kk\"}}}",
+      "evidence": {
+        "har_entries": [
+          142
+        ]
+      }
+    },
+    {
+      "id": "split-forbidden-cancel-by-payee",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "cancelling a transfer you do not send is 403",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 403 (forbidden)",
+      "observed": "HTTP 403 {\"error\":{\"code\":\"forbidden\",\"message\":\"account acc_8n36k615kk does not belong to this principal\",\"details\":{\"id\":\"acc_8n36k615kk\"}}}",
+      "evidence": {
+        "har_entries": [
+          142
+        ]
+      }
+    },
+    {
+      "id": "life-cancel-pending-transfer",
+      "obligation": "rule:lifecycle-legality",
+      "title": "a pending transfer can be canceled by the owner of its source account",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 200 with status \"canceled\" and a canceled_at timestamp",
+      "observed": "HTTP 200 {\"id\":\"tr_zwyq5z81ph\",\"status\":\"canceled\",\"source_account_id\":\"acc_8n36k615kk\",\"destination_account_id\":\"acc_hxf94wpr0h\",\"fee_account_id\":\"acc_fee_usd\",\"amount\":500,\"fee\":26,\"currency\":\"USD\",\"idempotency_key\":null,\"failure_reason\":null,\"created_at\":\"2026-01-01T00:00:52.000Z\",\"settled_at\":null,\"canceled_at\":\"2026-01-01T00:00:53.000Z\"}",
+      "evidence": {
+        "har_entries": [
+          143
+        ]
+      }
+    },
+    {
+      "id": "split-state-cancel-canceled",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "cancelling an already-canceled transfer is 409",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 409 (transfer_not_pending)",
+      "observed": "HTTP 409 {\"error\":{\"code\":\"transfer_not_pending\",\"message\":\"transfer tr_zwyq5z81ph is canceled\",\"details\":{\"id\":\"tr_zwyq5z81ph\",\"status\":\"canceled\"}}}",
+      "evidence": {
+        "har_entries": [
+          144
+        ]
+      }
+    },
+    {
+      "id": "life-cancel-is-terminal",
+      "obligation": "rule:lifecycle-legality",
+      "title": "a transfer that is no longer pending cannot be canceled again",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 409",
+      "observed": "HTTP 409 {\"error\":{\"code\":\"transfer_not_pending\",\"message\":\"transfer tr_zwyq5z81ph is canceled\",\"details\":{\"id\":\"tr_zwyq5z81ph\",\"status\":\"canceled\"}}}",
+      "evidence": {
+        "har_entries": [
+          143,
+          144
+        ]
+      }
+    },
+    {
+      "id": "settle-nothing-left-pending",
+      "obligation": "rule:settlement",
+      "title": "a tick with no settle_limit leaves no transfer pending",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 200 with pending 0",
+      "observed": "HTTP 200 {\"settled\":[\"tr_9nm37t6hwf\",\"tr_c2383241bp\",\"tr_y2rmdjtw8m\",\"tr_phgjdk21n3\",\"tr_zy0xdqg5r1\",\"tr_dq5rbypvbm\",\"tr_wczrq1mbd8\",\"tr_35bsr4px3c\",\"tr_rjy206mn9d\",\"tr_6dr7r3zcyc\",\"tr_rznz5f89v0\",\"tr_qympd8w93f\",\"tr_skh44g50gg\"],\"failed\":[],\"pending\":0,\"day\":0}",
+      "evidence": {
+        "har_entries": [
+          145
+        ]
+      }
+    },
+    {
+      "id": "settle-every-pending-resolved",
+      "obligation": "rule:settlement",
+      "title": "every transfer pending at the tick ends the tick either settled or failed",
+      "pass": true,
+      "exercised": true,
+      "expected": "all 13 pending transfers named in settled ∪ failed",
+      "observed": "settled 13, failed 0",
+      "evidence": {
+        "har_entries": [
+          145
+        ],
+        "subject": {
+          "settled": [
+            "tr_9nm37t6hwf",
+            "tr_c2383241bp",
+            "tr_y2rmdjtw8m",
+            "tr_phgjdk21n3",
+            "tr_zy0xdqg5r1",
+            "tr_dq5rbypvbm",
+            "tr_wczrq1mbd8",
+            "tr_35bsr4px3c",
+            "tr_rjy206mn9d",
+            "tr_6dr7r3zcyc",
+            "tr_rznz5f89v0",
+            "tr_qympd8w93f",
+            "tr_skh44g50gg"
+          ],
+          "failed": []
+        }
+      }
+    },
+    {
+      "id": "settle-creation-order",
+      "obligation": "rule:settlement",
+      "title": "a tick settles pending transfers in creation order",
+      "pass": true,
+      "exercised": true,
+      "expected": "settled in creation order [\"tr_9nm37t6hwf\",\"tr_c2383241bp\",\"tr_y2rmdjtw8m\",\"tr_phgjdk21n3\",\"tr_zy0xdqg5r1\",\"tr_dq5rbypvbm\",\"tr_wczrq1mbd8\",\"tr_35bsr4px3c\",\"tr_rjy206mn9d\",\"tr_6dr7r3zcyc\",\"tr_rznz5f89v0\",\"tr_qympd8w93f\",\"tr_skh44g50gg\"]",
+      "observed": "[\"tr_9nm37t6hwf\",\"tr_c2383241bp\",\"tr_y2rmdjtw8m\",\"tr_phgjdk21n3\",\"tr_zy0xdqg5r1\",\"tr_dq5rbypvbm\",\"tr_wczrq1mbd8\",\"tr_35bsr4px3c\",\"tr_rjy206mn9d\",\"tr_6dr7r3zcyc\",\"tr_rznz5f89v0\",\"tr_qympd8w93f\",\"tr_skh44g50gg\"]",
+      "evidence": {
+        "har_entries": [
+          145,
+          122,
+          123,
+          124,
+          125,
+          126,
+          127,
+          128,
+          129,
+          130,
+          131,
+          132,
+          133,
+          134
+        ]
+      }
+    },
+    {
+      "id": "settle-canceled-not-settled",
+      "obligation": "rule:settlement",
+      "title": "a transfer canceled before the tick is not settled by it",
+      "pass": true,
+      "exercised": true,
+      "expected": "status still \"canceled\", settled_at null, and absent from the tick's settled list",
+      "observed": "HTTP 200 {\"id\":\"tr_zwyq5z81ph\",\"status\":\"canceled\",\"source_account_id\":\"acc_8n36k615kk\",\"destination_account_id\":\"acc_hxf94wpr0h\",\"fee_account_id\":\"acc_fee_usd\",\"amount\":500,\"fee\":26,\"currency\":\"USD\",\"idempotency_key\":null,\"failure_reason\":null,\"created_at\":\"2026-01-01T00:00:52.000Z\",\"settled_at\":null,\"canceled_at\":\"2026-01-01T00:00:53.000Z\"}",
+      "evidence": {
+        "har_entries": [
+          145,
+          146
+        ]
+      }
+    },
+    {
+      "id": "conservation-usd",
+      "obligation": "rule:conservation",
+      "title": "a settled USD transfer writes exactly one debit, one credit and one fee row summing to zero",
+      "pass": true,
+      "exercised": true,
+      "expected": "debit -25063 on acc_8n36k615kk, credit 25000 on acc_hxf94wpr0h, fee 63 on acc_fee_usd, sum 0",
+      "observed": "3 rows [[\"transfer_debit\",\"acc_8n36k615kk\",-25063],[\"transfer_credit\",\"acc_hxf94wpr0h\",25000],[\"fee\",\"acc_fee_usd\",63]], sum 0",
+      "evidence": {
+        "har_entries": [
+          147,
+          148,
+          149,
+          150,
+          151,
+          152,
+          133
+        ],
+        "subject": {
+          "transfer": "tr_qympd8w93f",
+          "amount": 25000,
+          "fee": 63
+        }
+      }
+    },
+    {
+      "id": "fee-settles-at-declared-value-usd",
+      "obligation": "rule:the-fee-schedule",
+      "title": "the fee a transfer declares when it is created is the fee it settles at, credited to the currency's fee account",
+      "pass": true,
+      "exercised": true,
+      "expected": "one fee row of 63 on acc_fee_usd",
+      "observed": "[[\"acc_fee_usd\",63]]",
+      "evidence": {
+        "har_entries": [
+          147,
+          148,
+          149,
+          150,
+          151,
+          152,
+          133
+        ]
+      }
+    },
+    {
+      "id": "conservation-eur",
+      "obligation": "rule:conservation",
+      "title": "a settled EUR transfer writes exactly one debit, one credit and one fee row summing to zero",
+      "pass": true,
+      "exercised": true,
+      "expected": "debit -10040 on acc_n1bsvj2wr9, credit 10000 on acc_1vdkmyt8dp, fee 40 on acc_fee_eur, sum 0",
+      "observed": "3 rows [[\"transfer_debit\",\"acc_n1bsvj2wr9\",-10040],[\"transfer_credit\",\"acc_1vdkmyt8dp\",10000],[\"fee\",\"acc_fee_eur\",40]], sum 0",
+      "evidence": {
+        "har_entries": [
+          147,
+          148,
+          149,
+          150,
+          151,
+          152,
+          134
+        ],
+        "subject": {
+          "transfer": "tr_skh44g50gg",
+          "amount": 10000,
+          "fee": 40
+        }
+      }
+    },
+    {
+      "id": "fee-settles-at-declared-value-eur",
+      "obligation": "rule:the-fee-schedule",
+      "title": "the fee a transfer declares when it is created is the fee it settles at, credited to the currency's fee account",
+      "pass": true,
+      "exercised": true,
+      "expected": "one fee row of 40 on acc_fee_eur",
+      "observed": "[[\"acc_fee_eur\",40]]",
+      "evidence": {
+        "har_entries": [
+          147,
+          148,
+          149,
+          150,
+          151,
+          152,
+          134
+        ]
+      }
+    },
+    {
+      "id": "conservation-cancel-writes-nothing",
+      "obligation": "rule:conservation",
+      "title": "a transfer canceled before settlement writes no ledger entries at all",
+      "pass": true,
+      "exercised": true,
+      "expected": "no entry carries the canceled transfer's id",
+      "observed": "no rows found on either side or on the fee account",
+      "evidence": {
+        "har_entries": [
+          147,
+          148,
+          149,
+          150,
+          151,
+          152
+        ],
+        "subject": {
+          "transfer": "tr_zwyq5z81ph"
+        }
+      }
+    },
+    {
+      "id": "fee-every-probe-settles-at-schedule",
+      "obligation": "rule:the-fee-schedule",
+      "title": "every probed amount is credited to the fee account at exactly the scheduled fee",
+      "pass": true,
+      "exercised": true,
+      "expected": "[\"USD 1->25\",\"USD 333->25\",\"USD 334->26\",\"USD 666->26\",\"USD 1000->27\",\"USD 3000->30\",\"USD 3333->30\",\"USD 3334->30\",\"USD 50000->100\",\"EUR 1000->27\",\"EUR 3000->30\"]",
+      "observed": "all 11 fee rows matched the schedule",
+      "evidence": {
+        "har_entries": [
+          147,
+          148,
+          149,
+          150,
+          151,
+          152,
+          122,
+          123,
+          124,
+          125,
+          126,
+          127,
+          128,
+          129,
+          130,
+          131,
+          132
+        ]
+      }
+    },
+    {
+      "id": "ref-deposit-entry",
+      "obligation": "rule:reference-integrity",
+      "title": "a deposit's entry_id names a ledger entry on the deposit's own account, for its amount, whose deposit_id is that deposit",
+      "pass": true,
+      "exercised": true,
+      "expected": "an entry ent_h1ggs61g6z on acc_8n36k615kk of 200000 with deposit_id dep_rkf1pgvt6k",
+      "observed": "{\"id\":\"ent_h1ggs61g6z\",\"account_id\":\"acc_8n36k615kk\",\"kind\":\"deposit\",\"amount\":200000,\"currency\":\"USD\",\"transfer_id\":null,\"deposit_id\":\"dep_rkf1pgvt6k\",\"sequence\":1,\"created_at\":\"2026-01-01T00:00:03.000Z\"}",
+      "evidence": {
+        "har_entries": [
+          28,
+          147
+        ]
+      }
+    },
+    {
+      "id": "ref-entry-currency-matches-account",
+      "obligation": "rule:reference-integrity",
+      "title": "a ledger entry's currency is the currency of the account it sits on",
+      "pass": true,
+      "exercised": true,
+      "expected": "every entry carries its account's currency",
+      "observed": "24 entries checked",
+      "evidence": {
+        "har_entries": [
+          147,
+          148,
+          149,
+          150,
+          151,
+          152
+        ]
+      }
+    },
+    {
+      "id": "ref-entry-transfer-resolves",
+      "obligation": "rule:reference-integrity",
+      "title": "a ledger entry's transfer_id, when present, names a transfer that exists",
+      "pass": true,
+      "exercised": true,
+      "expected": "all 3 sampled transfer_id references resolve with HTTP 200",
+      "observed": "3 of 3 resolved",
+      "evidence": {
+        "har_entries": [
+          147,
+          148,
+          149,
+          150,
+          151,
+          152,
+          153,
+          154,
+          155
+        ]
+      }
+    },
+    {
+      "id": "settle-once-only",
+      "obligation": "rule:settlement",
+      "title": "a transfer settles once: a second tick settles nothing again and moves no money",
+      "pass": true,
+      "exercised": true,
+      "expected": "an empty settled and failed list, an unchanged balance, an unchanged entry count and an unchanged settled_at",
+      "observed": "settled [], failed [], balance 174937 -> 174937, entries 2 -> 2, settled_at \"2026-01-01T00:01:05.000Z\" -> \"2026-01-01T00:01:05.000Z\"",
+      "evidence": {
+        "har_entries": [
+          156,
+          157,
+          158,
+          159,
+          160,
+          161
+        ]
+      }
+    },
+    {
+      "id": "idem-replay-returns-first",
+      "obligation": "rule:idempotency",
+      "title": "a second POST /transfers with the same key and body returns the first transfer",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 200 carrying the transfer the first request created",
+      "observed": "first tr_9fb8nbyyt1 -> replay HTTP 200 {\"id\":\"tr_9fb8nbyyt1\",\"status\":\"pending\",\"source_account_id\":\"acc_jvxcyy43sz\",\"destination_account_id\":\"acc_hxf94wpr0h\",\"fee_account_id\":\"acc_fee_usd\",\"amount\":1000,\"fee\":27,\"currency\":\"USD\",\"idempotency_key\":\"suite-key-cancelled\",\"failure_reason\":null,\"created_at\":\"2026-01-01T00:01:07.000Z\",\"settled_at\":null,\"canceled_at\":null}",
+      "evidence": {
+        "har_entries": [
+          162,
+          163
+        ]
+      }
+    },
+    {
+      "id": "param-idempotency-replayed-header",
+      "obligation": "rule:documented-parameters",
+      "title": "a replay is marked with the documented Idempotency-Replayed header",
+      "pass": true,
+      "exercised": true,
+      "expected": "Idempotency-Replayed: \"true\"",
+      "observed": "\"true\"",
+      "evidence": {
+        "har_entries": [
+          163
+        ]
+      }
+    },
+    {
+      "id": "split-state-idempotency-conflict",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "the same key with a different body is 409",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 409 (idempotency_key_conflict)",
+      "observed": "HTTP 409 {\"error\":{\"code\":\"idempotency_key_conflict\",\"message\":\"this Idempotency-Key was used with a different request body\",\"details\":{\"idempotency_key\":\"suite-key-cancelled\"}}}",
+      "evidence": {
+        "har_entries": [
+          164
+        ]
+      }
+    },
+    {
+      "id": "idem-conflict-is-refused",
+      "obligation": "rule:idempotency",
+      "title": "the same key with a different body is refused as a conflict, not answered with the earlier transfer",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 409 and no transfer resource in the body",
+      "observed": "HTTP 409 {\"error\":{\"code\":\"idempotency_key_conflict\",\"message\":\"this Idempotency-Key was used with a different request body\",\"details\":{\"idempotency_key\":\"suite-key-cancelled\"}}}",
+      "evidence": {
+        "har_entries": [
+          162,
+          164
+        ]
+      }
+    },
+    {
+      "id": "idem-scoped-per-principal",
+      "obligation": "rule:idempotency",
+      "title": "two principals may use the same key for different transfers",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 201 creating a distinct transfer for the other principal",
+      "observed": "HTTP 201 {\"id\":\"tr_12h3ptyk4k\",\"status\":\"pending\",\"source_account_id\":\"acc_hxf94wpr0h\",\"destination_account_id\":\"acc_fp9tzwhd5t\",\"fee_account_id\":\"acc_fee_usd\",\"amount\":60,\"fee\":25,\"currency\":\"USD\",\"idempotency_key\":\"suite-key-cancelled\",\"failure_reason\":null,\"created_at\":\"2026-01-01T00:01:08.000Z\",\"settled_at\":null,\"canceled_at\":null} (first principal's transfer was tr_9fb8nbyyt1)",
+      "evidence": {
+        "har_entries": [
+          162,
+          165
+        ]
+      }
+    },
+    {
+      "id": "idem-key-survives-cancellation",
+      "obligation": "rule:idempotency",
+      "title": "cancelling the transfer does not release its idempotency key",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 200 returning the same, now canceled, transfer — not a new one",
+      "observed": "HTTP 200 {\"id\":\"tr_9fb8nbyyt1\",\"status\":\"canceled\",\"source_account_id\":\"acc_jvxcyy43sz\",\"destination_account_id\":\"acc_hxf94wpr0h\",\"fee_account_id\":\"acc_fee_usd\",\"amount\":1000,\"fee\":27,\"currency\":\"USD\",\"idempotency_key\":\"suite-key-cancelled\",\"failure_reason\":null,\"created_at\":\"2026-01-01T00:01:07.000Z\",\"settled_at\":null,\"canceled_at\":\"2026-01-01T00:01:09.000Z\"}",
+      "evidence": {
+        "har_entries": [
+          162,
+          166,
+          167
+        ]
+      }
+    },
+    {
+      "id": "idem-key-survives-settlement",
+      "obligation": "rule:idempotency",
+      "title": "settling the transfer does not release its idempotency key",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 200 returning the same, now settled, transfer",
+      "observed": "HTTP 200 {\"id\":\"tr_tfzvpk81p3\",\"status\":\"settled\",\"source_account_id\":\"acc_jvxcyy43sz\",\"destination_account_id\":\"acc_hxf94wpr0h\",\"fee_account_id\":\"acc_fee_usd\",\"amount\":2000,\"fee\":28,\"currency\":\"USD\",\"idempotency_key\":\"suite-key-settled\",\"failure_reason\":null,\"created_at\":\"2026-01-01T00:01:10.000Z\",\"settled_at\":\"2026-01-01T00:01:12.000Z\",\"canceled_at\":null}",
+      "evidence": {
+        "har_entries": [
+          168,
+          169,
+          170
+        ]
+      }
+    },
+    {
+      "id": "idem-one-transfer-per-key",
+      "obligation": "rule:idempotency",
+      "title": "each key produced exactly one transfer despite four requests carrying it",
+      "pass": true,
+      "exercised": true,
+      "expected": "exactly one transfer per idempotency key",
+      "observed": "key1 1, key2 1 out of 2 transfers on the account",
+      "evidence": {
+        "har_entries": [
+          162,
+          163,
+          167,
+          168,
+          170,
+          171
+        ],
+        "subject": {
+          "key1": [
+            "tr_9fb8nbyyt1"
+          ],
+          "key2": [
+            "tr_tfzvpk81p3"
+          ]
+        }
+      }
+    },
+    {
+      "id": "idem-one-set-of-effects",
+      "obligation": "rule:idempotency",
+      "title": "the replayed key produced exactly one set of ledger effects, and the canceled one produced none",
+      "pass": true,
+      "exercised": true,
+      "expected": "3 rows summing to zero for the settled key, 0 rows for the canceled key",
+      "observed": "settled key 3 rows [[\"transfer_debit\",-2028],[\"transfer_credit\",2000],[\"fee\",28]], canceled key 0 rows",
+      "evidence": {
+        "har_entries": [
+          172,
+          173,
+          174,
+          168,
+          170
+        ]
+      }
+    },
+    {
+      "id": "param-settle-limit",
+      "obligation": "rule:documented-parameters",
+      "title": "settle_limit settles at most that many transfers and leaves the rest pending on purpose",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 200 with 2 settled and 1 still pending",
+      "observed": "HTTP 200 {\"settled\":[\"tr_ff52mpd18c\",\"tr_ng7dq287sp\"],\"failed\":[],\"pending\":1,\"day\":0}",
+      "evidence": {
+        "har_entries": [
+          175,
+          176,
+          177,
+          178
+        ]
+      }
+    },
+    {
+      "id": "settle-limit-takes-oldest-first",
+      "obligation": "rule:settlement",
+      "title": "a limited tick settles the oldest pending transfers first",
+      "pass": true,
+      "exercised": true,
+      "expected": "[\"tr_ff52mpd18c\",\"tr_ng7dq287sp\"]",
+      "observed": "[\"tr_ff52mpd18c\",\"tr_ng7dq287sp\"]",
+      "evidence": {
+        "har_entries": [
+          175,
+          176,
+          177,
+          178
+        ]
+      }
+    },
+    {
+      "id": "settle-remainder-on-next-tick",
+      "obligation": "rule:settlement",
+      "title": "the transfer a limited tick left pending settles on the next unlimited tick, and only it",
+      "pass": true,
+      "exercised": true,
+      "expected": "[\"tr_fn5xb95q6q\"]",
+      "observed": "settled [\"tr_fn5xb95q6q\"], pending 0",
+      "evidence": {
+        "har_entries": [
+          178,
+          179
+        ]
+      }
+    },
+    {
+      "id": "settle-overcommit-accepted-at-creation",
+      "obligation": "rule:settlement",
+      "title": "two transfers each covered by the balance are both accepted at creation",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 201 twice from a 60 000 balance for 40 000 + fee each",
+      "observed": "201/201",
+      "evidence": {
+        "har_entries": [
+          46,
+          180,
+          181
+        ]
+      }
+    },
+    {
+      "id": "settle-recheck-funds",
+      "obligation": "rule:settlement",
+      "title": "funds are re-checked at settlement: the transfer the balance can no longer cover ends failed",
+      "pass": true,
+      "exercised": true,
+      "expected": "tr_d9qzwhsntd settled and tr_xx8k7356dg failed, nothing left pending",
+      "observed": "settled [\"tr_d9qzwhsntd\"], failed [\"tr_xx8k7356dg\"], pending 0",
+      "evidence": {
+        "har_entries": [
+          180,
+          181,
+          182
+        ]
+      }
+    },
+    {
+      "id": "settle-failed-transfer-state",
+      "obligation": "rule:settlement",
+      "title": "a transfer that could not be covered reads back \"failed\"",
+      "pass": true,
+      "exercised": true,
+      "expected": "status \"failed\" with settled_at null",
+      "observed": "HTTP 200 {\"id\":\"tr_xx8k7356dg\",\"status\":\"failed\",\"source_account_id\":\"acc_g6995hjcd6\",\"destination_account_id\":\"acc_fp9tzwhd5t\",\"fee_account_id\":\"acc_fee_usd\",\"amount\":40000,\"fee\":85,\"currency\":\"USD\",\"idempotency_key\":null,\"failure_reason\":\"insufficient_funds\",\"created_at\":\"2026-01-01T00:01:20.000Z\",\"settled_at\":null,\"canceled_at\":null}",
+      "evidence": {
+        "har_entries": [
+          182,
+          183
+        ]
+      }
+    },
+    {
+      "id": "conservation-failed-writes-nothing",
+      "obligation": "rule:conservation",
+      "title": "a transfer that ends failed writes no ledger entries at all",
+      "pass": true,
+      "exercised": true,
+      "expected": "no entry on either side or on the fee account carries the failed transfer's id",
+      "observed": "no rows found",
+      "evidence": {
+        "har_entries": [
+          182,
+          184,
+          185,
+          186
+        ],
+        "subject": {
+          "transfer": "tr_xx8k7356dg"
+        }
+      }
+    },
+    {
+      "id": "settle-failed-costs-nothing",
+      "obligation": "rule:settlement",
+      "title": "the failed transfer left the source balance untouched: only the settled one was debited",
+      "pass": true,
+      "exercised": true,
+      "expected": "balance 19915",
+      "observed": "balance 19915",
+      "evidence": {
+        "har_entries": [
+          46,
+          180,
+          181,
+          182,
+          187
+        ]
+      }
+    },
+    {
+      "id": "daily-boundary-inclusive",
+      "obligation": "rule:the-daily-limit",
+      "title": "an amount bringing the day's total exactly to 100 000 is accepted",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 201 for 99 999 and then for the final 1",
+      "observed": "201/201",
+      "evidence": {
+        "har_entries": [
+          188,
+          189
+        ]
+      }
+    },
+    {
+      "id": "daily-beyond-boundary-refused",
+      "obligation": "rule:the-daily-limit",
+      "title": "anything beyond the limit is refused, even by one minor unit",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 422 daily_limit_exceeded",
+      "observed": "HTTP 422 {\"error\":{\"code\":\"daily_limit_exceeded\",\"message\":\"the source account's daily transfer limit would be exceeded\",\"details\":{\"id\":\"acc_s06zk51yhs\",\"day\":0,\"limit\":100000,\"used\":100000,\"requested\":1}}}",
+      "evidence": {
+        "har_entries": [
+          188,
+          189,
+          190
+        ]
+      }
+    },
+    {
+      "id": "split-422-daily-limit",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "a transfer over the daily limit is 422",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 422 (daily_limit_exceeded)",
+      "observed": "HTTP 422 {\"error\":{\"code\":\"daily_limit_exceeded\",\"message\":\"the source account's daily transfer limit would be exceeded\",\"details\":{\"id\":\"acc_s06zk51yhs\",\"day\":0,\"limit\":100000,\"used\":100000,\"requested\":1}}}",
+      "evidence": {
+        "har_entries": [
+          190
+        ]
+      }
+    },
+    {
+      "id": "daily-cancellation-does-not-refund-usage",
+      "obligation": "rule:the-daily-limit",
+      "title": "cancelling a transfer does not give the day's room back",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 422 daily_limit_exceeded after cancelling 99 999 of the day's 100 000",
+      "observed": "cancel 200, retry HTTP 422 {\"error\":{\"code\":\"daily_limit_exceeded\",\"message\":\"the source account's daily transfer limit would be exceeded\",\"details\":{\"id\":\"acc_s06zk51yhs\",\"day\":0,\"limit\":100000,\"used\":100000,\"requested\":1}}}",
+      "evidence": {
+        "har_entries": [
+          188,
+          191,
+          192
+        ]
+      }
+    },
+    {
+      "id": "daily-failure-does-not-refund-usage",
+      "obligation": "rule:the-daily-limit",
+      "title": "a transfer that failed at settlement still counts against the day: only 20 000 of room is left, not 60 000",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 422 daily_limit_exceeded for 20 001 against a well-funded account",
+      "observed": "HTTP 422 {\"error\":{\"code\":\"daily_limit_exceeded\",\"message\":\"the source account's daily transfer limit would be exceeded\",\"details\":{\"id\":\"acc_g6995hjcd6\",\"day\":0,\"limit\":100000,\"used\":80000,\"requested\":20001}}}",
+      "evidence": {
+        "har_entries": [
+          180,
+          181,
+          193,
+          194
+        ]
+      }
+    },
+    {
+      "id": "daily-usage-counts-amounts-not-fees",
+      "obligation": "rule:the-daily-limit",
+      "title": "usage counts transfer amounts and not fees: 80 000 + 20 000 is exactly the limit and is accepted",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 201 — the 165 minor units of fees already charged do not consume the allowance",
+      "observed": "HTTP 201 {\"id\":\"tr_72zh6vjkkz\",\"status\":\"pending\",\"source_account_id\":\"acc_g6995hjcd6\",\"destination_account_id\":\"acc_fp9tzwhd5t\",\"fee_account_id\":\"acc_fee_usd\",\"amount\":20000,\"fee\":55,\"currency\":\"USD\",\"idempotency_key\":null,\"failure_reason\":null,\"created_at\":\"2026-01-01T00:01:27.000Z\",\"settled_at\":null,\"canceled_at\":null}",
+      "evidence": {
+        "har_entries": [
+          180,
+          181,
+          194,
+          195
+        ]
+      }
+    },
+    {
+      "id": "param-advance-day",
+      "obligation": "rule:documented-parameters",
+      "title": "advance_day rolls the ledger day over",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 200 with day 1",
+      "observed": "HTTP 200 {\"settled\":[\"tr_d1gd1wkh6x\",\"tr_72zh6vjkkz\"],\"failed\":[],\"pending\":0,\"day\":1}",
+      "evidence": {
+        "har_entries": [
+          20,
+          196
+        ]
+      }
+    },
+    {
+      "id": "settle-day-rolling-tick-still-settles",
+      "obligation": "rule:settlement",
+      "title": "a tick that rolls the day over is still a tick: it settles what was pending",
+      "pass": true,
+      "exercised": true,
+      "expected": "the pending transfer named in settled, and pending 0",
+      "observed": "HTTP 200 {\"settled\":[\"tr_d1gd1wkh6x\",\"tr_72zh6vjkkz\"],\"failed\":[],\"pending\":0,\"day\":1}",
+      "evidence": {
+        "har_entries": [
+          195,
+          196
+        ]
+      }
+    },
+    {
+      "id": "daily-rollover-resets-usage",
+      "obligation": "rule:the-daily-limit",
+      "title": "rolling the ledger day over starts the next day's count at zero",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 201 from an account that had exhausted the previous day's limit",
+      "observed": "HTTP 201 {\"id\":\"tr_zdgmwg9r2r\",\"status\":\"pending\",\"source_account_id\":\"acc_s06zk51yhs\",\"destination_account_id\":\"acc_fp9tzwhd5t\",\"fee_account_id\":\"acc_fee_usd\",\"amount\":1,\"fee\":25,\"currency\":\"USD\",\"idempotency_key\":null,\"failure_reason\":null,\"created_at\":\"2026-01-01T00:01:30.000Z\",\"settled_at\":null,\"canceled_at\":null}",
+      "evidence": {
+        "har_entries": [
+          190,
+          196,
+          197
+        ]
+      }
+    },
+    {
+      "id": "idem-key-survives-day-rollover",
+      "obligation": "rule:idempotency",
+      "title": "an idempotency key does not expire when the ledger day rolls over",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 200 returning the transfer created on the previous day",
+      "observed": "HTTP 200 {\"id\":\"tr_tfzvpk81p3\",\"status\":\"settled\",\"source_account_id\":\"acc_jvxcyy43sz\",\"destination_account_id\":\"acc_hxf94wpr0h\",\"fee_account_id\":\"acc_fee_usd\",\"amount\":2000,\"fee\":28,\"currency\":\"USD\",\"idempotency_key\":\"suite-key-settled\",\"failure_reason\":null,\"created_at\":\"2026-01-01T00:01:10.000Z\",\"settled_at\":\"2026-01-01T00:01:12.000Z\",\"canceled_at\":null}",
+      "evidence": {
+        "har_entries": [
+          196,
+          198
+        ]
+      }
+    },
+    {
+      "id": "settle-final-quiesce",
+      "obligation": "rule:settlement",
+      "title": "a final tick leaves the service with nothing pending",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 200 with pending 0",
+      "observed": "HTTP 200 {\"settled\":[\"tr_zdgmwg9r2r\"],\"failed\":[],\"pending\":0,\"day\":1}",
+      "evidence": {
+        "har_entries": [
+          197,
+          199
+        ]
+      }
+    },
+    {
+      "id": "page-accounts-pages-answered",
+      "obligation": "rule:pagination-identity-and-page-discipline",
+      "title": "GET /accounts: every page of the enumeration answers 200 with an items array",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 200 and a well-formed page on every step of the enumeration",
+      "observed": "6 page(s), all 200",
+      "evidence": {
+        "har_entries": [
+          201,
+          202,
+          203,
+          204,
+          205,
+          206
+        ]
+      }
+    },
+    {
+      "id": "page-accounts-no-duplicates",
+      "obligation": "rule:pagination-identity-and-page-discipline",
+      "title": "GET /accounts: no item id is returned twice in one enumeration",
+      "pass": true,
+      "exercised": true,
+      "expected": "every item id appears at most once",
+      "observed": "17 items over 6 pages, all distinct",
+      "evidence": {
+        "har_entries": [
+          201,
+          202,
+          203,
+          204,
+          205,
+          206
+        ],
+        "subject": {
+          "limit": 3,
+          "pages": 6
+        }
+      }
+    },
+    {
+      "id": "page-accounts-terminates",
+      "obligation": "rule:pagination-identity-and-page-discipline",
+      "title": "GET /accounts: following next_cursor terminates",
+      "pass": true,
+      "exercised": true,
+      "expected": "the enumeration reaches a page with next_cursor null",
+      "observed": "terminated after 6 page(s)",
+      "evidence": {
+        "har_entries": [
+          201,
+          202,
+          203,
+          204,
+          205,
+          206
+        ]
+      }
+    },
+    {
+      "id": "page-accounts-respects-limit",
+      "obligation": "rule:pagination-identity-and-page-discipline",
+      "title": "GET /accounts: no page carries more items than the requested limit",
+      "pass": true,
+      "exercised": true,
+      "expected": "every page has at most 3 items",
+      "observed": "page sizes [3,3,3,3,3,2]",
+      "evidence": {
+        "har_entries": [
+          201,
+          202,
+          203,
+          204,
+          205,
+          206
+        ]
+      }
+    },
+    {
+      "id": "page-accounts-short-page-is-last",
+      "obligation": "rule:pagination-identity-and-page-discipline",
+      "title": "GET /accounts: a page shorter than the limit is the last page",
+      "pass": true,
+      "exercised": true,
+      "expected": "a short page carries next_cursor null",
+      "observed": "page sizes [3,3,3,3,3,2] with final next_cursor null",
+      "evidence": {
+        "har_entries": [
+          201,
+          202,
+          203,
+          204,
+          205,
+          206
+        ]
+      }
+    },
+    {
+      "id": "page-accounts-complete",
+      "obligation": "rule:pagination-identity-and-page-discipline",
+      "title": "GET /accounts: the enumeration returns every item that qualified when it began",
+      "pass": true,
+      "exercised": true,
+      "expected": "all 17 items reachable by cursor",
+      "observed": "all 17 items were returned",
+      "evidence": {
+        "har_entries": [
+          201,
+          202,
+          203,
+          204,
+          205,
+          206
+        ],
+        "subject": {
+          "baseline": 17,
+          "enumerated": 17
+        }
+      }
+    },
+    {
+      "id": "page-transfers-pages-answered",
+      "obligation": "rule:pagination-identity-and-page-discipline",
+      "title": "GET /transfers: every page of the enumeration answers 200 with an items array",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 200 and a well-formed page on every step of the enumeration",
+      "observed": "7 page(s), all 200",
+      "evidence": {
+        "har_entries": [
+          208,
+          209,
+          210,
+          211,
+          212,
+          213,
+          214
+        ]
+      }
+    },
+    {
+      "id": "page-transfers-no-duplicates",
+      "obligation": "rule:pagination-identity-and-page-discipline",
+      "title": "GET /transfers: no item id is returned twice in one enumeration",
+      "pass": true,
+      "exercised": true,
+      "expected": "every item id appears at most once",
+      "observed": "26 items over 7 pages, all distinct",
+      "evidence": {
+        "har_entries": [
+          208,
+          209,
+          210,
+          211,
+          212,
+          213,
+          214
+        ],
+        "subject": {
+          "limit": 4,
+          "pages": 7
+        }
+      }
+    },
+    {
+      "id": "page-transfers-terminates",
+      "obligation": "rule:pagination-identity-and-page-discipline",
+      "title": "GET /transfers: following next_cursor terminates",
+      "pass": true,
+      "exercised": true,
+      "expected": "the enumeration reaches a page with next_cursor null",
+      "observed": "terminated after 7 page(s)",
+      "evidence": {
+        "har_entries": [
+          208,
+          209,
+          210,
+          211,
+          212,
+          213,
+          214
+        ]
+      }
+    },
+    {
+      "id": "page-transfers-respects-limit",
+      "obligation": "rule:pagination-identity-and-page-discipline",
+      "title": "GET /transfers: no page carries more items than the requested limit",
+      "pass": true,
+      "exercised": true,
+      "expected": "every page has at most 4 items",
+      "observed": "page sizes [4,4,4,4,4,4,2]",
+      "evidence": {
+        "har_entries": [
+          208,
+          209,
+          210,
+          211,
+          212,
+          213,
+          214
+        ]
+      }
+    },
+    {
+      "id": "page-transfers-short-page-is-last",
+      "obligation": "rule:pagination-identity-and-page-discipline",
+      "title": "GET /transfers: a page shorter than the limit is the last page",
+      "pass": true,
+      "exercised": true,
+      "expected": "a short page carries next_cursor null",
+      "observed": "page sizes [4,4,4,4,4,4,2] with final next_cursor null",
+      "evidence": {
+        "har_entries": [
+          208,
+          209,
+          210,
+          211,
+          212,
+          213,
+          214
+        ]
+      }
+    },
+    {
+      "id": "page-transfers-complete",
+      "obligation": "rule:pagination-identity-and-page-discipline",
+      "title": "GET /transfers: the enumeration returns every item that qualified when it began",
+      "pass": true,
+      "exercised": true,
+      "expected": "all 26 items reachable by cursor",
+      "observed": "all 26 items were returned",
+      "evidence": {
+        "har_entries": [
+          208,
+          209,
+          210,
+          211,
+          212,
+          213,
+          214
+        ],
+        "subject": {
+          "baseline": 26,
+          "enumerated": 26
+        }
+      }
+    },
+    {
+      "id": "page-entries-pages-answered",
+      "obligation": "rule:pagination-identity-and-page-discipline",
+      "title": "GET /accounts/{accountId}/entries: every page of the enumeration answers 200 with an items array",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 200 and a well-formed page on every step of the enumeration",
+      "observed": "4 page(s), all 200",
+      "evidence": {
+        "har_entries": [
+          216,
+          217,
+          218,
+          219
+        ]
+      }
+    },
+    {
+      "id": "page-entries-no-duplicates",
+      "obligation": "rule:pagination-identity-and-page-discipline",
+      "title": "GET /accounts/{accountId}/entries: no item id is returned twice in one enumeration",
+      "pass": true,
+      "exercised": true,
+      "expected": "every item id appears at most once",
+      "observed": "10 items over 4 pages, all distinct",
+      "evidence": {
+        "har_entries": [
+          216,
+          217,
+          218,
+          219
+        ],
+        "subject": {
+          "limit": 3,
+          "pages": 4
+        }
+      }
+    },
+    {
+      "id": "page-entries-terminates",
+      "obligation": "rule:pagination-identity-and-page-discipline",
+      "title": "GET /accounts/{accountId}/entries: following next_cursor terminates",
+      "pass": true,
+      "exercised": true,
+      "expected": "the enumeration reaches a page with next_cursor null",
+      "observed": "terminated after 4 page(s)",
+      "evidence": {
+        "har_entries": [
+          216,
+          217,
+          218,
+          219
+        ]
+      }
+    },
+    {
+      "id": "page-entries-respects-limit",
+      "obligation": "rule:pagination-identity-and-page-discipline",
+      "title": "GET /accounts/{accountId}/entries: no page carries more items than the requested limit",
+      "pass": true,
+      "exercised": true,
+      "expected": "every page has at most 3 items",
+      "observed": "page sizes [3,3,3,1]",
+      "evidence": {
+        "har_entries": [
+          216,
+          217,
+          218,
+          219
+        ]
+      }
+    },
+    {
+      "id": "page-entries-short-page-is-last",
+      "obligation": "rule:pagination-identity-and-page-discipline",
+      "title": "GET /accounts/{accountId}/entries: a page shorter than the limit is the last page",
+      "pass": true,
+      "exercised": true,
+      "expected": "a short page carries next_cursor null",
+      "observed": "page sizes [3,3,3,1] with final next_cursor null",
+      "evidence": {
+        "har_entries": [
+          216,
+          217,
+          218,
+          219
+        ]
+      }
+    },
+    {
+      "id": "page-entries-complete",
+      "obligation": "rule:pagination-identity-and-page-discipline",
+      "title": "GET /accounts/{accountId}/entries: the enumeration returns every item that qualified when it began",
+      "pass": true,
+      "exercised": true,
+      "expected": "all 10 items reachable by cursor",
+      "observed": "all 10 items were returned",
+      "evidence": {
+        "har_entries": [
+          216,
+          217,
+          218,
+          219
+        ],
+        "subject": {
+          "baseline": 10,
+          "enumerated": 10
+        }
+      }
+    },
+    {
+      "id": "page-transfers-filtered-pages-answered",
+      "obligation": "rule:pagination-identity-and-page-discipline",
+      "title": "GET /transfers?account_id=acc_cc8jf33gg9: every page of the enumeration answers 200 with an items array",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 200 and a well-formed page on every step of the enumeration",
+      "observed": "5 page(s), all 200",
+      "evidence": {
+        "har_entries": [
+          220,
+          221,
+          222,
+          223,
+          224
+        ]
+      }
+    },
+    {
+      "id": "page-transfers-filtered-no-duplicates",
+      "obligation": "rule:pagination-identity-and-page-discipline",
+      "title": "GET /transfers?account_id=acc_cc8jf33gg9: no item id is returned twice in one enumeration",
+      "pass": true,
+      "exercised": true,
+      "expected": "every item id appears at most once",
+      "observed": "9 items over 5 pages, all distinct",
+      "evidence": {
+        "har_entries": [
+          220,
+          221,
+          222,
+          223,
+          224
+        ],
+        "subject": {
+          "limit": 2,
+          "pages": 5
+        }
+      }
+    },
+    {
+      "id": "page-transfers-filtered-terminates",
+      "obligation": "rule:pagination-identity-and-page-discipline",
+      "title": "GET /transfers?account_id=acc_cc8jf33gg9: following next_cursor terminates",
+      "pass": true,
+      "exercised": true,
+      "expected": "the enumeration reaches a page with next_cursor null",
+      "observed": "terminated after 5 page(s)",
+      "evidence": {
+        "har_entries": [
+          220,
+          221,
+          222,
+          223,
+          224
+        ]
+      }
+    },
+    {
+      "id": "page-transfers-filtered-respects-limit",
+      "obligation": "rule:pagination-identity-and-page-discipline",
+      "title": "GET /transfers?account_id=acc_cc8jf33gg9: no page carries more items than the requested limit",
+      "pass": true,
+      "exercised": true,
+      "expected": "every page has at most 2 items",
+      "observed": "page sizes [2,2,2,2,1]",
+      "evidence": {
+        "har_entries": [
+          220,
+          221,
+          222,
+          223,
+          224
+        ]
+      }
+    },
+    {
+      "id": "page-transfers-filtered-short-page-is-last",
+      "obligation": "rule:pagination-identity-and-page-discipline",
+      "title": "GET /transfers?account_id=acc_cc8jf33gg9: a page shorter than the limit is the last page",
+      "pass": true,
+      "exercised": true,
+      "expected": "a short page carries next_cursor null",
+      "observed": "page sizes [2,2,2,2,1] with final next_cursor null",
+      "evidence": {
+        "har_entries": [
+          220,
+          221,
+          222,
+          223,
+          224
+        ]
+      }
+    },
+    {
+      "id": "page-filter-holds-on-every-page",
+      "obligation": "rule:pagination-identity-and-page-discipline",
+      "title": "every item on every page of a filtered enumeration satisfies the filter",
+      "pass": true,
+      "exercised": true,
+      "expected": "every transfer names the filtered account on one side",
+      "observed": "9 transfers over 5 pages, all naming acc_cc8jf33gg9",
+      "evidence": {
+        "har_entries": [
+          220,
+          221,
+          222,
+          223,
+          224
+        ]
+      }
+    },
+    {
+      "id": "param-account-id-filter",
+      "obligation": "rule:documented-parameters",
+      "title": "account_id on GET /transfers restricts the collection to transfers naming that account on either side",
+      "pass": true,
+      "exercised": true,
+      "expected": "the 9 transfers sent from that account and nothing else",
+      "observed": "9 transfers, 0 of them off-filter",
+      "evidence": {
+        "har_entries": [
+          220,
+          221,
+          222,
+          223,
+          224
+        ]
+      }
+    },
+    {
+      "id": "own-transfer-listing-is-scoped",
+      "obligation": "rule:ownership",
+      "title": "GET /transfers shows a customer only the transfers naming one of its own accounts",
+      "pass": true,
+      "exercised": true,
+      "expected": "every listed transfer names an account owned by the calling principal on one side",
+      "observed": "8 transfers, all naming one of [\"acc_hxf94wpr0h\",\"acc_1vdkmyt8dp\",\"acc_m8d4wgsckp\"]",
+      "evidence": {
+        "har_entries": [
+          225
+        ]
+      }
+    },
+    {
+      "id": "param-include-closed",
+      "obligation": "rule:documented-parameters",
+      "title": "include_closed=true includes closed accounts and its absence excludes them",
+      "pass": true,
+      "exercised": true,
+      "expected": "the closed account present with include_closed=true and absent without it",
+      "observed": "with: true, without: false, closed items leaked without the flag: 0",
+      "evidence": {
+        "har_entries": [
+          200,
+          226
+        ]
+      }
+    },
+    {
+      "id": "page-closed-filter-holds",
+      "obligation": "rule:pagination-identity-and-page-discipline",
+      "title": "every item of the default (unfiltered-by-closed) accounts collection satisfies the filter",
+      "pass": true,
+      "exercised": true,
+      "expected": "no closed account without include_closed=true",
+      "observed": "16 items, none closed",
+      "evidence": {
+        "har_entries": [
+          226
+        ]
+      }
+    },
+    {
+      "id": "balance-agrees-with-entries",
+      "obligation": "rule:balance-agreement",
+      "title": "every account's stored balance equals the sum of its ledger entry amounts",
+      "pass": true,
+      "exercised": true,
+      "expected": "balance === Σ entries for all 17 accounts, read with no write in between",
+      "observed": "17 accounts agreed exactly",
+      "evidence": {
+        "har_entries": [
+          200,
+          227,
+          228,
+          229,
+          230,
+          231,
+          232,
+          233,
+          234,
+          235,
+          236,
+          237,
+          238,
+          239,
+          240,
+          241,
+          242,
+          243
+        ],
+        "subject": {
+          "accounts": 17
+        }
+      }
+    },
+    {
+      "id": "balance-fee-accounts",
+      "obligation": "rule:balance-agreement",
+      "title": "the system fee accounts' balances are exactly the fees they have collected",
+      "pass": true,
+      "exercised": true,
+      "expected": "each fee account's balance equals the sum of its fee rows, and it holds only fee rows",
+      "observed": "USD 700 vs 700 over 19 rows; EUR 97 vs 97 over 3 rows",
+      "evidence": {
+        "har_entries": [
+          200,
+          244,
+          245
+        ]
+      }
+    },
+    {
+      "id": "balance-is-an-integer",
+      "obligation": "rule:balance-agreement",
+      "title": "every balance is an integer in minor units — no rounding anywhere",
+      "pass": true,
+      "exercised": true,
+      "expected": "Number.isInteger on every balance",
+      "observed": "17 integral balances",
+      "evidence": {
+        "har_entries": [
+          200
+        ]
+      }
+    },
+    {
+      "id": "err-envelope-everywhere",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "every 4xx and 5xx body in this run is {\"error\":{code,message,details?}} with string code and message",
+      "pass": true,
+      "exercised": true,
+      "expected": "the single error envelope on all 58 refusals",
+      "observed": "58 refusal bodies all matched the envelope",
+      "evidence": {
+        "har_entries": [
+          21,
+          22,
+          23,
+          24,
+          25,
+          64,
+          65,
+          66,
+          67,
+          68,
+          69,
+          70,
+          73,
+          74,
+          75,
+          77,
+          80,
+          81,
+          82,
+          83
+        ],
+        "subject": {
+          "refusals": 58,
+          "malformed": 0
+        }
+      }
+    },
+    {
+      "id": "err-no-5xx",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "no operation answers 5xx",
+      "pass": true,
+      "exercised": true,
+      "expected": "no status >= 500 across all 246 recorded exchanges",
+      "observed": "246 exchanges, none 5xx",
+      "evidence": {
+        "har_entries": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ]
+      }
+    },
+    {
+      "id": "err-service-answered",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "the service answered every request the suite made",
+      "pass": true,
+      "exercised": true,
+      "expected": "no transport failure and no unanswered request",
+      "observed": "246 exchanges answered",
+      "evidence": {
+        "har_entries": [
+          0,
+          1,
+          2
+        ]
+      }
+    },
+    {
+      "id": "err-refusals-are-4xx",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "a request the service refuses is reported with a 4xx status, never a 2xx carrying the failure inside it",
+      "pass": true,
+      "exercised": true,
+      "expected": "all 53 deliberately refused requests answered 4xx",
+      "observed": "53 refusals, all 4xx",
+      "evidence": {
+        "har_entries": [
+          21,
+          22,
+          23,
+          24,
+          25,
+          64,
+          65,
+          66,
+          67,
+          68,
+          69,
+          70,
+          73,
+          75,
+          80,
+          81,
+          82,
+          83,
+          84,
+          85,
+          86,
+          87,
+          88,
+          89,
+          90
+        ]
+      }
+    },
+    {
+      "id": "err-status-split",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "when the service refuses, the status says why: 400 malformed, 401 no credential, 403 wrong principal, 404 unknown id, 409 resource state, 410 closed, 422 business rule",
+      "pass": true,
+      "exercised": true,
+      "expected": "all 53 refusals carried the status the split assigns them",
+      "observed": "53 refusals matched the split",
+      "evidence": {
+        "har_entries": [
+          21,
+          22,
+          23,
+          24,
+          25,
+          64,
+          65,
+          66,
+          67,
+          68,
+          69,
+          70,
+          73,
+          75,
+          80,
+          81,
+          82,
+          83,
+          84,
+          85,
+          86,
+          87,
+          88,
+          89,
+          90
+        ]
+      }
+    },
+    {
+      "id": "err-json-content-type",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "every answer, refusal included, is served as application/json",
+      "pass": true,
+      "exercised": true,
+      "expected": "content-type application/json on every response",
+      "observed": "246 responses",
+      "evidence": {
+        "har_entries": [
+          0,
+          1
+        ]
+      }
+    },
+    {
+      "id": "err-health-and-document",
+      "obligation": "rule:error-shape-and-the-status-split-three-rules",
+      "title": "the unauthenticated liveness probe and the OpenAPI document answer 200",
+      "pass": true,
+      "exercised": true,
+      "expected": "HTTP 200 from GET /health and GET /openapi.json",
+      "observed": "health 200, document 200",
+      "evidence": {
+        "har_entries": [
+          0,
+          1
+        ]
+      }
+    }
+  ],
+  "advisories": [
+    {
+      "title": "a wrongly typed \"amount\" answers 422 (invalid_amount), not the 400 the status split names",
+      "detail": "INVARIANTS.md §11 says \"A malformed, unparseable, or wrongly typed request is 400\", but openapi.json enumerates the 400 codes as invalid_request, invalid_json, invalid_cursor and invalid_limit, and puts amount validation at 422. Observed: HTTP 422 {\"error\":{\"code\":\"invalid_amount\",\"message\":\"amount must be a positive integer in minor units\",\"details\":{\"field\":\"amount\"}}}. Recorded as an advisory because the document resolves the ambiguity in favour of 422.",
+      "evidence": {
+        "requests": [
+          105
+        ]
+      }
+    },
+    {
+      "title": "an undocumented request-body property is accepted rather than refused",
+      "detail": "CreateAccountRequest declares additionalProperties:false, and the one declared exception in INVARIANTS.md §8 is scoped to unknown *query* parameters. POST /accounts with an extra body property answered 201. Recorded as an advisory, not a failing check: the invariant statements never say an unknown body property must be refused.",
+      "evidence": {
+        "requests": [
+          106
+        ]
+      }
+    }
+  ],
+  "defects": [],
+  "hygiene": {
+    "leak_findings": []
+  },
+  "guard": [],
+  "obligations": {
+    "manifest_version": 1,
+    "summary": {
+      "total": 33,
+      "covered": 33,
+      "skipped": 0,
+      "unsupported": 0,
+      "unaccounted": 0
+    },
+    "entries": [
+      {
+        "id": "policy:no_server_error",
+        "source": "policy",
+        "statement": "the no_server_error policy holds over this execution's traffic",
+        "status": "covered",
+        "checks": []
+      },
+      {
+        "id": "policy:documented_status",
+        "source": "policy",
+        "statement": "the documented_status policy holds over this execution's traffic",
+        "status": "covered",
+        "checks": []
+      },
+      {
+        "id": "policy:response_schema",
+        "source": "policy",
+        "statement": "the response_schema policy holds over this execution's traffic",
+        "status": "covered",
+        "checks": []
+      },
+      {
+        "id": "policy:content_type",
+        "source": "policy",
+        "statement": "the content_type policy holds over this execution's traffic",
+        "status": "covered",
+        "checks": []
+      },
+      {
+        "id": "operation:GET /health",
+        "source": "operation",
+        "statement": "GET /health is exercised",
+        "status": "covered",
+        "checks": []
+      },
+      {
+        "id": "operation:GET /openapi.json",
+        "source": "operation",
+        "statement": "GET /openapi.json is exercised",
+        "status": "covered",
+        "checks": []
+      },
+      {
+        "id": "operation:GET /accounts",
+        "source": "operation",
+        "statement": "GET /accounts is exercised",
+        "status": "covered",
+        "checks": []
+      },
+      {
+        "id": "operation:POST /accounts",
+        "source": "operation",
+        "statement": "POST /accounts is exercised",
+        "status": "covered",
+        "checks": []
+      },
+      {
+        "id": "operation:GET /accounts/{accountId}",
+        "source": "operation",
+        "statement": "GET /accounts/{accountId} is exercised",
+        "status": "covered",
+        "checks": []
+      },
+      {
+        "id": "operation:POST /accounts/{accountId}/activate",
+        "source": "operation",
+        "statement": "POST /accounts/{accountId}/activate is exercised",
+        "status": "covered",
+        "checks": []
+      },
+      {
+        "id": "operation:POST /accounts/{accountId}/close",
+        "source": "operation",
+        "statement": "POST /accounts/{accountId}/close is exercised",
+        "status": "covered",
+        "checks": []
+      },
+      {
+        "id": "operation:GET /accounts/{accountId}/entries",
+        "source": "operation",
+        "statement": "GET /accounts/{accountId}/entries is exercised",
+        "status": "covered",
+        "checks": []
+      },
+      {
+        "id": "operation:POST /deposits",
+        "source": "operation",
+        "statement": "POST /deposits is exercised",
+        "status": "covered",
+        "checks": []
+      },
+      {
+        "id": "operation:GET /deposits/{depositId}",
+        "source": "operation",
+        "statement": "GET /deposits/{depositId} is exercised",
+        "status": "covered",
+        "checks": []
+      },
+      {
+        "id": "operation:GET /transfers",
+        "source": "operation",
+        "statement": "GET /transfers is exercised",
+        "status": "covered",
+        "checks": []
+      },
+      {
+        "id": "operation:POST /transfers",
+        "source": "operation",
+        "statement": "POST /transfers is exercised",
+        "status": "covered",
+        "checks": []
+      },
+      {
+        "id": "operation:GET /transfers/{transferId}",
+        "source": "operation",
+        "statement": "GET /transfers/{transferId} is exercised",
+        "status": "covered",
+        "checks": []
+      },
+      {
+        "id": "operation:POST /transfers/{transferId}/cancel",
+        "source": "operation",
+        "statement": "POST /transfers/{transferId}/cancel is exercised",
+        "status": "covered",
+        "checks": []
+      },
+      {
+        "id": "operation:POST /admin/tick",
+        "source": "operation",
+        "statement": "POST /admin/tick is exercised",
+        "status": "covered",
+        "checks": []
+      },
+      {
+        "id": "operation:POST /admin/reset",
+        "source": "operation",
+        "statement": "POST /admin/reset is exercised",
+        "status": "covered",
+        "checks": []
+      },
+      {
+        "id": "rule:conservation",
+        "source": "rule",
+        "statement": "For a settled transfer, the ledger entries carrying its transfer id — the source debit, the destination credit, and the fee credit — sum to exactly zero. There is exactly one row of each of those three kinds, the debit is the amount plus the fee taken from the source, the credit is the amount given to the destination, and the fee credit is the fee, on the currency's system fee account.",
+        "applicability": "It applies to transfers whose status is \"settled\". Deposits are a declared exception: external funding has no counter-entry and is excluded. A transfer that ends \"failed\", or that is canceled before it settles, writes no entries at all, so it is not a counterexample either.",
+        "status": "covered",
+        "checks": [
+          "conservation-usd",
+          "conservation-eur",
+          "conservation-cancel-writes-nothing",
+          "conservation-failed-writes-nothing"
+        ]
+      },
+      {
+        "id": "rule:the-fee-schedule",
+        "source": "rule",
+        "statement": "The fee for a transfer is `25 + round_half_up(amount * 15 / 10000)` minor units — a flat component plus fifteen basis points of the amount, rounded half away from zero. It is charged to the source account on top of the amount, and credited to the system fee account of the transfer's currency.",
+        "applicability": "It applies to every transfer, in every currency: the schedule is one schedule, not a per-currency table. The fee a transfer declares when it is created is the fee it settles at. There are no declared exceptions.",
+        "status": "covered",
+        "checks": [
+          "fee-schedule-at-creation",
+          "fee-one-schedule-both-currencies",
+          "fee-settles-at-declared-value-usd",
+          "fee-settles-at-declared-value-eur",
+          "fee-every-probe-settles-at-schedule"
+        ]
+      },
+      {
+        "id": "rule:idempotency",
+        "source": "rule",
+        "statement": "Two POST /transfers requests carrying the same Idempotency-Key and the same request body produce exactly one transfer and exactly one set of ledger effects. The second request returns the first transfer. This holds for as long as the service is running and whatever happens to that transfer in the meantime — the record of a key is not released by cancelling, failing, or settling the transfer it created, and it does not expire when the ledger day rolls over.",
+        "applicability": "It applies to POST /transfers with an Idempotency-Key header, per authenticated principal: two principals may use the same key for different transfers without violating anything. There is one declared exception, and it is a rule in its own right: the same key with a *different* body is refused as a conflict and creates nothing at all. Returning the earlier transfer for a request that asked for something else is not idempotency; it is a lost write.",
+        "status": "covered",
+        "checks": [
+          "idem-replay-returns-first",
+          "idem-conflict-is-refused",
+          "idem-scoped-per-principal",
+          "idem-key-survives-cancellation",
+          "idem-key-survives-settlement",
+          "idem-one-transfer-per-key",
+          "idem-one-set-of-effects",
+          "idem-key-survives-day-rollover"
+        ]
+      },
+      {
+        "id": "rule:lifecycle-legality",
+        "source": "rule",
+        "statement": "Only active accounts transact. A transfer naming an account that has never been activated is rejected, on either side of the transfer. A transfer naming a closed account is rejected. A deposit into an account that is not active is rejected. An account with a pending transfer against it — sending or receiving — cannot be closed. A transfer that has already settled, or failed, cannot be canceled. Closure is terminal: a closed account is never activated, reopened, or brought back to any other state.",
+        "applicability": "It applies to POST /transfers, POST /deposits, POST /accounts/{accountId}/activate, POST /accounts/{accountId}/close, and POST /transfers/{transferId}/cancel. There are no declared exceptions. Note that closure is a soft delete, so a closed account still answers with a tombstone and still serves its entry history: that is documented behaviour and is not a counterexample.",
+        "status": "covered",
+        "checks": [
+          "life-new-account-is-pending",
+          "fixtures-available",
+          "life-unfunded-source-creates-nothing",
+          "life-close-succeeds",
+          "life-transfer-from-pending",
+          "life-transfer-to-pending",
+          "life-deposit-pending",
+          "life-activate-active",
+          "life-transfer-from-closed",
+          "life-transfer-to-closed",
+          "life-deposit-closed",
+          "life-activate-closed",
+          "life-close-closed",
+          "life-closure-terminal",
+          "life-closed-account-keeps-history",
+          "life-refusals-create-nothing",
+          "life-transfer-created-pending",
+          "life-no-close-with-pending",
+          "life-refused-close-leaves-account-active",
+          "life-cancel-pending-transfer",
+          "life-cancel-is-terminal"
+        ]
+      },
+      {
+        "id": "rule:settlement",
+        "source": "rule",
+        "statement": "A tick settles every pending transfer, in creation order, and each one ends the tick either \"settled\" or \"failed\" — never still pending. Funds are re-checked at settlement time against the current balance, and a transfer that can no longer be covered ends \"failed\" and writes no entries at all. A transfer settles once; a second tick does not settle it again.",
+        "applicability": "It applies to POST /admin/tick with no `settle_limit`, whether or not the same call also advances the ledger day: a tick that rolls the day over is still a tick. The declared exception is `settle_limit`, which asks for at most that many settlements and leaves the rest pending on purpose.",
+        "status": "covered",
+        "checks": [
+          "settle-nothing-left-pending",
+          "settle-every-pending-resolved",
+          "settle-creation-order",
+          "settle-canceled-not-settled",
+          "settle-once-only",
+          "settle-limit-takes-oldest-first",
+          "settle-remainder-on-next-tick",
+          "settle-overcommit-accepted-at-creation",
+          "settle-recheck-funds",
+          "settle-failed-transfer-state",
+          "settle-failed-costs-nothing",
+          "settle-day-rolling-tick-still-settles",
+          "settle-final-quiesce"
+        ]
+      },
+      {
+        "id": "rule:ownership",
+        "source": "rule",
+        "statement": "Every account belongs to the principal named in its `owner_principal`, fixed when the account is created. A customer principal reaches only its own accounts: reading one, funding it, activating it, closing it, spending from it, and cancelling a transfer that spends from it. Reaching any other principal's account — its representation, its ledger entries, or its money — is refused, and no part of that account's state comes back with the refusal. Only the principal that owns the source account may create a transfer from it or cancel one; only the administrator may open an account on another principal's behalf.",
+        "applicability": "It applies to every account-scoped and transfer-scoped operation, for principals whose role is customer; the administrator is unrestricted. The declared exceptions are three. The system fee accounts are readable by every principal, because the fee side of your own transfer has to be auditable, and actable by none. The *destination* of a transfer need not belong to the caller: paying an account you cannot read is the ordinary case. And a transfer is readable by the principals owning either of its two sides, so being paid by a stranger makes the transfer visible without making the payer's account visible.",
+        "status": "covered",
+        "checks": [
+          "own-admin-tick-is-admin-only",
+          "own-admin-reset-is-admin-only",
+          "own-unauthenticated-sees-nothing",
+          "own-admin-may-open-for-another-principal",
+          "own-read-other-account",
+          "own-read-other-entries",
+          "own-fund-other-account",
+          "own-activate-other-account",
+          "own-close-other-account",
+          "own-spend-from-other-account",
+          "own-read-other-deposit",
+          "own-refusal-discloses-nothing",
+          "own-fee-account-readable",
+          "own-fee-account-not-actable",
+          "own-customer-cannot-open-for-another",
+          "own-owner_principal-decides-reach",
+          "own-listing-is-scoped",
+          "own-admin-unrestricted",
+          "own-destination-need-not-be-owned",
+          "own-transfer-visible-to-both-sides",
+          "own-visible-transfer-does-not-expose-payer",
+          "own-only-source-owner-cancels",
+          "own-transfer-listing-is-scoped"
+        ]
+      },
+      {
+        "id": "rule:pagination-identity-and-page-discipline",
+        "source": "rule",
+        "statement": "Within one cursor enumeration, no item id is ever returned twice, and following next_cursor terminates. A page never carries more items than the requested limit, and a page carrying *fewer* items than the requested limit is the last page of that enumeration: its next_cursor is null. When a collection is filtered — by account, or by whether closed accounts are included — every item on every page satisfies the filter, and, provided nothing is written to that collection while the enumeration is in flight, every item that satisfied the filter when the enumeration began is returned by the time it ends.",
+        "applicability": "It applies to every cursor-paginated collection the service exposes — GET /accounts, GET /transfers, GET /accounts/{accountId}/entries — to an enumeration that starts *without* a cursor and then follows the next_cursor values the service hands back. The exceptions are declared and generous: items written after an enumeration begins may be missed entirely, so the completeness half of this rule is only claimed for an enumeration nothing wrote into. Missing a concurrently written item is not a violation. Seeing one twice is, and so is a short page that claims there is more to come.",
+        "status": "covered",
+        "checks": [
+          "page-accounts-pages-answered",
+          "page-accounts-no-duplicates",
+          "page-accounts-terminates",
+          "page-accounts-respects-limit",
+          "page-accounts-short-page-is-last",
+          "page-accounts-complete",
+          "page-transfers-pages-answered",
+          "page-transfers-no-duplicates",
+          "page-transfers-terminates",
+          "page-transfers-respects-limit",
+          "page-transfers-short-page-is-last",
+          "page-transfers-complete",
+          "page-entries-pages-answered",
+          "page-entries-no-duplicates",
+          "page-entries-terminates",
+          "page-entries-respects-limit",
+          "page-entries-short-page-is-last",
+          "page-entries-complete",
+          "page-transfers-filtered-pages-answered",
+          "page-transfers-filtered-no-duplicates",
+          "page-transfers-filtered-terminates",
+          "page-transfers-filtered-respects-limit",
+          "page-transfers-filtered-short-page-is-last",
+          "page-filter-holds-on-every-page",
+          "page-closed-filter-holds"
+        ]
+      },
+      {
+        "id": "rule:documented-parameters",
+        "source": "rule",
+        "statement": "Every documented request parameter has its documented effect. `limit` bounds the page size and is refused outside its documented range. `include_closed=true` on GET /accounts includes closed accounts, and its absence excludes them. `account_id` on GET /transfers restricts the collection to transfers naming that account on either side. An `Idempotency-Key` header is honoured. `settle_limit` and `advance_day` on POST /admin/tick do what they say.",
+        "applicability": "It applies to every operation the document declares a parameter for. There is one declared exception: an unknown or unsupported *query* parameter is ignored rather than refused.",
+        "status": "covered",
+        "checks": [
+          "param-limit-range-enforced",
+          "param-unknown-query-ignored",
+          "param-limit-bounds-page",
+          "param-currency-assertion",
+          "param-idempotency-replayed-header",
+          "param-settle-limit",
+          "param-advance-day",
+          "param-account-id-filter",
+          "param-include-closed"
+        ]
+      },
+      {
+        "id": "rule:reference-integrity",
+        "source": "rule",
+        "statement": "An identifier one resource carries resolves to the resource it names, and the two agree. A deposit's entry_id names a ledger entry on the deposit's own account, for the deposit's own amount, whose deposit_id is that deposit. A ledger entry's transfer_id, when it has one, names a transfer that exists, and the entry's currency is the currency of the account it sits on. A transfer's fee_account_id is the system fee account of the transfer's currency.",
+        "applicability": "It applies wherever one resource names another. The declared exception is absence, not disagreement: these reference fields are optional and nullable, and a resource may legitimately omit them or return them as null. A reference that is *present* must be right.",
+        "status": "covered",
+        "checks": [
+          "ref-fee-account-matches-currency",
+          "ref-deposit-entry",
+          "ref-entry-currency-matches-account",
+          "ref-entry-transfer-resolves"
+        ]
+      },
+      {
+        "id": "rule:the-daily-limit",
+        "source": "rule",
+        "statement": "A source account may create at most 100 000 minor units of transfers per ledger day. The boundary is inclusive: an amount bringing the day's total exactly to the limit is accepted, and anything beyond it is refused. Usage counts transfer amounts — not fees — and is reserved when the transfer is created, so cancelling a transfer or having it fail at settlement does not give the room back. Rolling the ledger day over starts the next day's count at zero.",
+        "applicability": "It applies per source account, per ledger day, to POST /transfers. The ledger day advances only via POST /admin/tick with `advance_day: true`; there is no other clock. There are no declared exceptions.",
+        "status": "covered",
+        "checks": [
+          "daily-boundary-inclusive",
+          "daily-beyond-boundary-refused",
+          "daily-cancellation-does-not-refund-usage",
+          "daily-failure-does-not-refund-usage",
+          "daily-usage-counts-amounts-not-fees",
+          "daily-rollover-resets-usage"
+        ]
+      },
+      {
+        "id": "rule:error-shape-and-the-status-split-three-rules",
+        "source": "rule",
+        "statement": "Every 4xx and 5xx response body is `{\"error\":{\"code\",\"message\",\"details\"?}}`, with code and message both strings, and a request the service refuses is always reported with a 4xx status — never a 2xx carrying a failure inside it.",
+        "applicability": "The plainer one: no operation answers 5xx at all. And the split — when the service refuses, the status says why. A malformed, unparseable, or wrongly typed request is 400. A well-formed request refused by a business rule is 422. A request refused because of the state a resource is in is 409. A closed account's tombstone is 410. A principal that may not reach the resource is 403, and a missing credential is 401. An identifier that names nothing is 404 — including after a resource-scoped path, and whichever principal asks. They apply to every operation. The only declared exception is that 401 responses additionally carry a WWW-Authenticate header, which is fine. The split is a statement about *which* refusal you get for a given reason, not an exhaustive list of the statuses the service may ever emit.",
+        "status": "covered",
+        "checks": [
+          "split-customer-tick-forbidden",
+          "split-customer-reset-forbidden",
+          "split-missing-credential-get",
+          "err-401-www-authenticate",
+          "split-missing-credential-post",
+          "split-unknown-credential",
+          "split-forbidden-read-other-account",
+          "split-forbidden-read-other-entries",
+          "split-forbidden-fund-other-account",
+          "split-forbidden-activate-other-account",
+          "split-forbidden-close-other-account",
+          "split-forbidden-spend-from-other-account",
+          "split-forbidden-read-other-deposit",
+          "split-fee-account-fund",
+          "split-customer-owner-principal",
+          "split-404-account-admin",
+          "split-404-account-customer",
+          "split-404-entries",
+          "split-404-transfer",
+          "split-404-deposit",
+          "split-404-cancel",
+          "split-404-activate",
+          "split-404-close",
+          "split-404-deposit-target",
+          "split-404-transfer-target",
+          "split-400-unparseable",
+          "split-400-limit-0",
+          "split-400-limit-101",
+          "split-400-limit-nan",
+          "split-400-limit-negative",
+          "split-400-cursor",
+          "split-422-currency-mismatch",
+          "split-422-currency-assertion",
+          "split-422-same-account",
+          "split-422-zero-amount",
+          "split-422-negative-amount",
+          "split-422-insufficient-funds",
+          "err-wrongly-typed-refused",
+          "split-state-transfer-from-pending",
+          "split-state-transfer-to-pending",
+          "split-state-deposit-pending",
+          "split-state-activate-active",
+          "split-state-transfer-from-closed",
+          "split-state-transfer-to-closed",
+          "split-state-deposit-closed",
+          "split-state-activate-closed",
+          "split-state-close-closed",
+          "split-410-tombstone",
+          "split-state-close-with-pending-source",
+          "split-state-close-with-pending-destination",
+          "split-forbidden-cancel-by-payee",
+          "split-state-cancel-canceled",
+          "split-state-idempotency-conflict",
+          "split-422-daily-limit",
+          "err-envelope-everywhere",
+          "err-no-5xx",
+          "err-service-answered",
+          "err-refusals-are-4xx",
+          "err-status-split",
+          "err-json-content-type",
+          "err-health-and-document"
+        ]
+      },
+      {
+        "id": "rule:balance-agreement",
+        "source": "rule",
+        "statement": "An account's stored balance equals the sum of the amounts of all its ledger entries. Entry amounts are signed and every money field is an integer in minor units, so the two sides should agree exactly, with no rounding. Every effect the service records for an account moves both together: an entry without the balance, or a balance without the entry, is the violation.",
+        "applicability": "It applies to every account, including the system fee accounts (acc_fee_usd, acc_fee_eur), whose balances are the fees they have collected. The one declared condition is on how you read it: the comparison is only meaningful between a balance read and a *complete* entry enumeration with no write in between. A number that moved because you moved it is not a counterexample.",
+        "status": "covered",
+        "checks": [
+          "balance-agrees-with-entries",
+          "balance-fee-accounts",
+          "balance-is-an-integer"
+        ]
+      },
+      {
+        "id": "rule:round-trip-consistency-and-determinism",
+        "source": "rule",
+        "statement": "A resource returned by the request that created it is the same resource a later read returns, field for field, as long as nothing has changed it in between. And the service is deterministic: after `POST /admin/reset` with a given seed, the same sequence of requests produces the same identifiers, the same timestamps, and the same resources, every time.",
+        "applicability": "It applies to every resource the service creates, and to any request sequence replayed from a reset. The declared exception is optionality: a field the document marks optional and nullable may be returned as null or omitted entirely, and the two are the same answer — a resource is not inconsistent for choosing one of them.",
+        "status": "covered",
+        "checks": [
+          "determinism-replay",
+          "reset-is-clean",
+          "rt-account-create-vs-read",
+          "rt-deposit-create-vs-read",
+          "rt-deposit-settles-immediately",
+          "rt-transfer-create-vs-read"
+        ]
+      }
+    ]
+  },
+  "gate": {
+    "pass": true,
+    "checks": [
+      {
+        "policy": "no_server_error",
+        "tier": 1,
+        "spec": "invariant: no_server_error",
+        "obligation": "policy:no_server_error",
+        "applicable": true,
+        "pass": true,
+        "detail": "246 response(s), none 5xx",
+        "har_entries": []
+      },
+      {
+        "policy": "documented_status",
+        "tier": 1,
+        "spec": "invariant: documented_status",
+        "obligation": "policy:documented_status",
+        "applicable": true,
+        "pass": true,
+        "detail": "246 response(s) carried a documented status",
+        "har_entries": []
+      },
+      {
+        "policy": "response_schema",
+        "tier": 1,
+        "spec": "invariant: response_schema",
+        "obligation": "policy:response_schema",
+        "applicable": true,
+        "pass": true,
+        "detail": "246 response(s) matched their declared schema",
+        "har_entries": []
+      },
+      {
+        "policy": "content_type",
+        "tier": 1,
+        "spec": "invariant: content_type",
+        "obligation": "policy:content_type",
+        "applicable": true,
+        "pass": true,
+        "detail": "246 response(s) carried a declared media type",
+        "har_entries": []
+      }
+    ]
+  },
+  "soundness": {
+    "ok": true,
+    "reasons": []
+  },
+  "verdict": {
+    "pass": true,
+    "report_pass": true,
+    "gate_pass": true,
+    "sound": true,
+    "failing_checks": [],
+    "exit_code": 0
+  }
+}

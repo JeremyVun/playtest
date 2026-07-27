@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Source evidence for the Playtest hill-climb study.">
+  <title>Evidence reader · Playtest hill-climb report</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="evidence-body">
+  <a class="skip-link" href="#evidence-content">Skip to evidence</a>
+  <header class="topbar evidence-topbar">
+    <a class="brand" href="index.html#top" aria-label="Playtest report home">
+      <span class="brand-mark" aria-hidden="true">P/</span>
+      <span>Playtest <i>Research</i></span>
+    </a>
+    <nav class="nav" aria-label="Report sections">
+      <a href="index.html#experiment">Experiment</a>
+      <a href="index.html#results" class="active">Run record</a>
+      <a href="index.html#evidence">Analysis</a>
+      <a href="index.html#ledger">Ledger</a>
+    </nav>
+    <a class="source-link" href="index.html#results">Back to report <span aria-hidden="true">↙</span></a>
+  </header>
+
+  <main class="evidence-shell" id="main">
+    <aside class="evidence-sidebar" aria-label="Evidence documents">
+      <div class="evidence-sidebar-heading"><span class="label">Source archive</span><strong id="document-total">Evidence</strong></div>
+      <nav id="evidence-nav"></nav>
+    </aside>
+    <article class="evidence-document" id="evidence-content" tabindex="-1">
+      <div class="evidence-loading">Loading evidence…</div>
+    </article>
+  </main>
+
+  <dialog id="lightbox" class="lightbox"><button class="dialog-close" aria-label="Close image">×</button><img alt="Expanded trajectory evidence"></dialog>
+  <script src="evidence-data.js"></script>
+  <script src="evidence.js"></script>
+</body>
+</html>

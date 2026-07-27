@@ -1,0 +1,560 @@
+{
+  "schema_version": 1,
+  "notes": {
+    "pre_registration": "docs/backlog/hillclimb-evidence.md",
+    "authoring_order": "Authored after the instrument freeze commit (suite/ stories + personas, commit 87bab35). Stories were written from subject/SPEC.md only and could not know these seeds; git order is the proof.",
+    "masking_design": "Faults were deliberately placed off the purchase trunk so the fully-broken baseline keeps every journey completable (validation faults are recoverable, the declined card is opt-in). Two masking chains are seeded on purpose to exercise reachable-recall: (1) f-receipt-eta-wrong lives on past-order receipts, which only order history links to, and f-order-history-removed deletes that section; (2) f-no-results-jargon and f-clear-search-self-link live on the no-results empty state, which only search reaches, and f-search-removed deletes the search UI (the server still honors direct ?q= URLs, which is how their manifestation tests probe them).",
+    "taxonomy": {
+      "low-contrast": "WCAG 2.x 1.4.3 / W3C BAD barrier: insufficient text contrast",
+      "misleading-copy": "Nielsen #1 visibility of system status, #4 consistency: copy contradicts actual state",
+      "confusing-empty-state": "Nielsen #2 match between system and the real world: developer jargon at a user moment",
+      "dead-control": "Swag Labs seeded-bug pattern: control present, wired to nothing",
+      "action-without-receipt": "Nielsen #1 visibility of system status: mutation succeeds with no acknowledgment",
+      "broken-validation": "Nielsen #5/#9 error prevention & recovery: validator rejects valid input",
+      "swallowed-error": "Nielsen #9: failure produces no visible message",
+      "lost-input": "Nielsen #5 error prevention / user control: an error costs the user their typed work",
+      "misrouted-link": "Swag Labs pattern / deceptive-pattern adjacent: affordance navigates to the wrong place",
+      "edge-case-break": "boundary defect inside an otherwise working journey",
+      "capability-removed": "a spec capability absent entirely — tests detection of absence (H2/L4)",
+      "navigation-removed": "a dedicated onward/backward route absent; only global nav remains"
+    }
+  },
+  "faults": [
+    {
+      "id": "f-price-contrast",
+      "level": "L1",
+      "class": "low-contrast",
+      "severity": "minor",
+      "surface": "catalog",
+      "oracle": "a user scanning the catalog can barely read the prices on product cards",
+      "masked_by": [],
+      "injection": {
+        "kind": "css-mutation",
+        "note": "card price text set to near-background gray-green (~1.8:1 on white)",
+        "edits": [
+          {
+            "file": "pages.js",
+            "find": "  .card .price { font-weight: 600; }",
+            "replace": "  .card .price { font-weight: 600; color: #c3cdc6; }"
+          }
+        ]
+      }
+    },
+    {
+      "id": "f-error-text-contrast",
+      "level": "L1",
+      "class": "low-contrast",
+      "severity": "minor",
+      "surface": "checkout",
+      "oracle": "a user who triggers a form error can barely read the message telling them what went wrong",
+      "masked_by": [],
+      "injection": {
+        "kind": "css-mutation",
+        "note": "field-error text set to pale pink (~1.6:1 on the page background)",
+        "edits": [
+          {
+            "file": "pages.js",
+            "find": "  .field-error { color: var(--danger); font-size: 14px; margin: 4px 0 0; }",
+            "replace": "  .field-error { color: #e4c7c7; font-size: 14px; margin: 4px 0 0; }"
+          }
+        ]
+      }
+    },
+    {
+      "id": "f-oos-says-in-stock",
+      "level": "L1",
+      "class": "misleading-copy",
+      "severity": "minor",
+      "surface": "product-detail",
+      "oracle": "a user on the fiddle-leaf fig page reads 'In stock' next to a purchase button that refuses to work",
+      "masked_by": [],
+      "injection": {
+        "kind": "copy-mutation",
+        "note": "out-of-stock stock-line claims availability; button and note still say out of stock",
+        "edits": [
+          {
+            "file": "pages.js",
+            "find": "<p class=\"stock-line out\">Out of stock</p>",
+            "replace": "<p class=\"stock-line\">In stock — more arriving daily</p>"
+          }
+        ]
+      }
+    },
+    {
+      "id": "f-free-shipping-label",
+      "level": "L1",
+      "class": "misleading-copy",
+      "severity": "minor",
+      "surface": "checkout",
+      "oracle": "a user reads 'Free shipping' in the order summary while $6.00 is added to their total",
+      "masked_by": [],
+      "injection": {
+        "kind": "copy-mutation",
+        "note": "summary shipping label contradicts the charged amount",
+        "edits": [
+          {
+            "file": "pages.js",
+            "find": "<li style=\"padding:2px 0\"><span>Shipping</span><span>${money(SHIPPING_CENTS)}</span></li>",
+            "replace": "<li style=\"padding:2px 0\"><span>Free shipping</span><span>${money(SHIPPING_CENTS)}</span></li>"
+          }
+        ]
+      }
+    },
+    {
+      "id": "f-receipt-eta-wrong",
+      "level": "L1",
+      "class": "misleading-copy",
+      "severity": "minor",
+      "surface": "order-receipt",
+      "oracle": "a user opening a delivered order's receipt is told it is 'confirmed · arrives in 3–5 days'",
+      "masked_by": [
+        "f-order-history-removed"
+      ],
+      "injection": {
+        "kind": "logic-simplified",
+        "note": "status-aware delivery estimate flattened to the fresh-order text for every status; only past (shipped/delivered) orders show the contradiction, and only order history links to them",
+        "edits": [
+          {
+            "file": "pages.js",
+            "find": "  const eta =\n    order.status === \"delivered\"\n      ? \"delivered — we hope everything is thriving\"\n      : order.status === \"shipped\"\n        ? \"shipped · arriving in the next few days\"\n        : \"confirmed · arrives in 3–5 days\";",
+            "replace": "  const eta = \"confirmed · arrives in 3–5 days\";"
+          }
+        ]
+      }
+    },
+    {
+      "id": "f-empty-cart-jargon",
+      "level": "L1",
+      "class": "confusing-empty-state",
+      "severity": "info",
+      "surface": "cart",
+      "oracle": "a user with an empty cart reads 'Cart collection returned 0 rows.' instead of plain words",
+      "masked_by": [],
+      "injection": {
+        "kind": "copy-mutation",
+        "note": "empty-cart message replaced with developer jargon",
+        "edits": [
+          {
+            "file": "pages.js",
+            "find": "    <p>Your cart is empty.</p>",
+            "replace": "    <p>Cart collection returned 0 rows.</p>"
+          }
+        ]
+      }
+    },
+    {
+      "id": "f-no-results-jargon",
+      "level": "L1",
+      "class": "confusing-empty-state",
+      "severity": "info",
+      "surface": "catalog",
+      "oracle": "a user whose search matches nothing reads 'Query returned no product rows' instead of what to do next",
+      "masked_by": [
+        "f-search-removed"
+      ],
+      "injection": {
+        "kind": "copy-mutation",
+        "note": "no-results message replaced with developer jargon (recovery link untouched)",
+        "edits": [
+          {
+            "file": "pages.js",
+            "find": "      <p>Nothing in the shop matches “${esc(q)}”${activeCat ? ` in ${esc(activeCat.label)}` : \"\"}.</p>",
+            "replace": "      <p>Query returned no product rows for the given term.</p>"
+          }
+        ]
+      }
+    },
+    {
+      "id": "f-sort-inert",
+      "level": "L2",
+      "class": "dead-control",
+      "severity": "minor",
+      "surface": "catalog",
+      "oracle": "a user picks 'Price: low to high' and the product order never changes",
+      "masked_by": [],
+      "injection": {
+        "kind": "handler-detached",
+        "note": "server-side sorting disabled; the select still renders and echoes its selection",
+        "edits": [
+          {
+            "file": "server.js",
+            "find": "    if (sort === \"price-asc\") list.sort((a, b) => a.price - b.price);\n    if (sort === \"price-desc\") list.sort((a, b) => b.price - a.price);\n    if (sort === \"name\") list.sort((a, b) => a.name.localeCompare(b.name));",
+            "replace": "    // sorting temporarily disabled during catalogue migration"
+          }
+        ]
+      }
+    },
+    {
+      "id": "f-save-profile-dead",
+      "level": "L2",
+      "class": "dead-control",
+      "severity": "major",
+      "surface": "account",
+      "oracle": "a user clicks 'Save profile' and nothing whatsoever happens",
+      "masked_by": [],
+      "injection": {
+        "kind": "handler-detached",
+        "note": "profile save button demoted to type=button — it no longer submits the form",
+        "edits": [
+          {
+            "file": "pages.js",
+            "find": "      <p style=\"margin-top:16px\"><button class=\"btn small\" type=\"submit\">Save profile</button></p>",
+            "replace": "      <p style=\"margin-top:16px\"><button class=\"btn small\" type=\"button\">Save profile</button></p>"
+          }
+        ]
+      }
+    },
+    {
+      "id": "f-add-cart-silent",
+      "level": "L2",
+      "class": "action-without-receipt",
+      "severity": "major",
+      "surface": "product-detail",
+      "oracle": "a user presses 'Add to cart', it works, and the page gives no sign anything happened",
+      "masked_by": [],
+      "injection": {
+        "kind": "receipt-removed",
+        "note": "success toast and header-badge update dropped; the API call still succeeds",
+        "edits": [
+          {
+            "file": "pages.js",
+            "find": "      .then(function (cart) {\n        setCartBadge(cart.count);\n        toast(\"Added \" + ${JSON.stringify(p.name)} + (qty > 1 ? \" ×\" + qty : \"\") + \" to your cart.\", { href: \"/cart\", label: \"View cart\" });\n      })",
+            "replace": "      .then(function (cart) {})"
+          }
+        ]
+      }
+    },
+    {
+      "id": "f-place-order-no-feedback",
+      "level": "L2",
+      "class": "action-without-receipt",
+      "severity": "minor",
+      "surface": "checkout",
+      "oracle": "a user presses 'Place order' and the button shows no in-progress state while the order is being placed",
+      "masked_by": [],
+      "injection": {
+        "kind": "receipt-removed",
+        "note": "submit button no longer disables or says 'Placing your order…' (an internal flag still prevents double submission)",
+        "edits": [
+          {
+            "file": "pages.js",
+            "find": "      btn.disabled = true; btn.textContent = \"Placing your order…\";",
+            "replace": "      ;"
+          }
+        ]
+      }
+    },
+    {
+      "id": "f-postcode-validation",
+      "level": "L2",
+      "class": "broken-validation",
+      "severity": "major",
+      "surface": "checkout",
+      "oracle": "a user's own saved 4-digit postcode is rejected at checkout with 'Enter a 5-digit postcode.'",
+      "masked_by": [],
+      "injection": {
+        "kind": "validator-tightened",
+        "note": "client-side postcode check demands exactly 5 digits; the seed account and the server accept 4 (recoverable by typing any 5 digits)",
+        "edits": [
+          {
+            "file": "pages.js",
+            "find": "      [\"postcode\", function (v) { return v.trim() ? \"\" : \"Enter a postcode.\"; }],\n      [\"card_number\"",
+            "replace": "      [\"postcode\", function (v) { return /^\\\\d{5}$/.test(v.trim()) ? \"\" : \"Enter a 5-digit postcode.\"; }],\n      [\"card_number\""
+          }
+        ]
+      }
+    },
+    {
+      "id": "f-card-spaces-validation",
+      "level": "L2",
+      "class": "broken-validation",
+      "severity": "minor",
+      "surface": "checkout",
+      "oracle": "a user typing their card number without spaces is told to 'Enter the 16-digit number' they just entered",
+      "masked_by": [],
+      "injection": {
+        "kind": "validator-tightened",
+        "note": "card check now requires the 4-4-4-4 spaced format; unspaced 16-digit input is rejected with an unchanged, unhelpful message",
+        "edits": [
+          {
+            "file": "pages.js",
+            "find": "      [\"card_number\", function (v) { var d = v.replace(/[\\\\s-]/g, \"\"); return /^\\\\d{15,16}$/.test(d) ? \"\" : \"Enter the 16-digit number on the card.\"; }],",
+            "replace": "      [\"card_number\", function (v) { return /^\\\\d{4}( \\\\d{4}){3}$/.test(v.trim()) ? \"\" : \"Enter the 16-digit number on the card.\"; }],"
+          }
+        ]
+      }
+    },
+    {
+      "id": "f-decline-swallowed",
+      "level": "L2",
+      "class": "swallowed-error",
+      "severity": "major",
+      "surface": "checkout",
+      "oracle": "a user whose card is declined sees no message at all — the button quietly resets and they are left guessing",
+      "masked_by": [],
+      "injection": {
+        "kind": "error-suppressed",
+        "note": "server error message no longer written to the checkout banner",
+        "edits": [
+          {
+            "file": "pages.js",
+            "find": "        .catch(function (e) {\n          banner.textContent = e.message;\n          banner.hidden = false;\n          banner.scrollIntoView({ block: \"nearest\" });\n          submitting = false; btn.disabled = false; btn.textContent = label;\n        });",
+            "replace": "        .catch(function (e) {\n          submitting = false; btn.disabled = false; btn.textContent = label;\n        });"
+          }
+        ]
+      }
+    },
+    {
+      "id": "f-account-error-swallowed",
+      "level": "L2",
+      "class": "swallowed-error",
+      "severity": "minor",
+      "surface": "account",
+      "oracle": "a user saving an invalid email on their profile gets no error and no success — nothing visibly happens and the change is silently dropped",
+      "masked_by": [],
+      "injection": {
+        "kind": "error-suppressed",
+        "note": "client email check removed and the server's rejection swallowed",
+        "edits": [
+          {
+            "file": "pages.js",
+            "find": "    wire(\"profile-form\", [\n      [\"name\", function (v) { return v.trim() ? \"\" : \"Enter your name.\"; }],\n      [\"email\", function (v) { return /^[^@\\\\s]+@[^@\\\\s]+\\\\.[^@\\\\s]+$/.test(v.trim()) ? \"\" : \"Enter a valid email address.\"; }],\n    ], \"Profile saved.\");",
+            "replace": "    wire(\"profile-form\", [\n      [\"name\", function (v) { return v.trim() ? \"\" : \"Enter your name.\"; }],\n      [\"email\", null],\n    ], \"Profile saved.\");"
+          },
+          {
+            "file": "pages.js",
+            "find": "          .catch(function (e) { toast(e.message); })\n          .then(function () { btn.disabled = false; });",
+            "replace": "          .catch(function (e) {})\n          .then(function () { btn.disabled = false; });"
+          }
+        ]
+      }
+    },
+    {
+      "id": "f-validation-wipes-payment",
+      "level": "L3",
+      "class": "lost-input",
+      "severity": "major",
+      "surface": "checkout",
+      "oracle": "a user who gets any checkout field wrong loses everything they typed into the payment fields",
+      "masked_by": [],
+      "injection": {
+        "kind": "state-clobbered",
+        "note": "failed client validation clears card number, expiry, and security code",
+        "edits": [
+          {
+            "file": "pages.js",
+            "find": "      if (firstBad) { firstBad.focus(); return; }",
+            "replace": "      if (firstBad) { $(\"#card_number\").value = \"\"; $(\"#expiry\").value = \"\"; $(\"#cvc\").value = \"\"; firstBad.focus(); return; }"
+          }
+        ]
+      }
+    },
+    {
+      "id": "f-account-form-resets",
+      "level": "L3",
+      "class": "lost-input",
+      "severity": "minor",
+      "surface": "account",
+      "oracle": "a user who leaves one account field invalid watches the whole form snap back to the old saved values",
+      "masked_by": [],
+      "injection": {
+        "kind": "state-clobbered",
+        "note": "any validation error resets every field in that form to its saved value",
+        "edits": [
+          {
+            "file": "pages.js",
+            "find": "        if (bad) { bad.focus(); return; }",
+            "replace": "        if (bad) { fields.forEach(function (f) { var input = $(\"#\" + f[0]); input.value = input.defaultValue; }); bad.focus(); return; }"
+          }
+        ]
+      }
+    },
+    {
+      "id": "f-continue-shopping-loop",
+      "level": "L3",
+      "class": "misrouted-link",
+      "severity": "minor",
+      "surface": "order-receipt",
+      "oracle": "a user pressing 'Continue shopping' on their receipt is bounced to checkout, which bounces them to their now-empty cart",
+      "masked_by": [],
+      "injection": {
+        "kind": "link-misrouted",
+        "note": "receipt's continue-shopping button points at /checkout instead of the catalog",
+        "edits": [
+          {
+            "file": "pages.js",
+            "find": "    <a class=\"btn secondary\" href=\"/\">Continue shopping</a>\n    <a class=\"btn secondary\" href=\"/account#orders\">View your orders</a>",
+            "replace": "    <a class=\"btn secondary\" href=\"/checkout\">Continue shopping</a>\n    <a class=\"btn secondary\" href=\"/account#orders\">View your orders</a>"
+          }
+        ]
+      }
+    },
+    {
+      "id": "f-clear-search-self-link",
+      "level": "L3",
+      "class": "misrouted-link",
+      "severity": "minor",
+      "surface": "catalog",
+      "oracle": "a user clicking 'Clear the search' on an empty result reloads the same empty result forever",
+      "masked_by": [
+        "f-search-removed"
+      ],
+      "injection": {
+        "kind": "link-misrouted",
+        "note": "the recovery link keeps the failed query in its href",
+        "edits": [
+          {
+            "file": "pages.js",
+            "find": "      <p><a href=\"${esc(catalogHref({ category, sort }))}\">Clear the search</a> to browse everything${activeCat ? \" in this category\" : \"\"}.</p>",
+            "replace": "      <p><a href=\"${esc(catalogHref({ q, category, sort }))}\">Clear the search</a> to browse everything${activeCat ? \" in this category\" : \"\"}.</p>"
+          }
+        ]
+      }
+    },
+    {
+      "id": "f-cant-buy-last-unit",
+      "level": "L3",
+      "class": "edge-case-break",
+      "severity": "major",
+      "surface": "product-detail",
+      "oracle": "a user trying to buy everything in stock of an item is refused and told they 'can add N more' — which then fails too",
+      "masked_by": [],
+      "injection": {
+        "kind": "off-by-one",
+        "note": "stock-cap comparison flipped from > to >=: the last unit can never be added, and the error's arithmetic is off by one",
+        "edits": [
+          {
+            "file": "server.js",
+            "find": "        if (already + qty > p.stock) {",
+            "replace": "        if (already + qty >= p.stock) {"
+          }
+        ]
+      }
+    },
+    {
+      "id": "f-checkout-empty-guard-gone",
+      "level": "L3",
+      "class": "edge-case-break",
+      "severity": "minor",
+      "surface": "checkout",
+      "oracle": "a user reaching checkout with an empty cart gets a payable $6.00 form for nothing instead of being routed back",
+      "masked_by": [],
+      "injection": {
+        "kind": "guard-removed",
+        "note": "the empty-cart redirect on GET /checkout is gone; submitting the empty form fails with a server error after the user has filled everything in",
+        "edits": [
+          {
+            "file": "server.js",
+            "find": "        if (cart.items.length === 0) return redirect(res, \"/cart?notice=empty-checkout\");",
+            "replace": "        // empty carts fall through to the form"
+          }
+        ]
+      }
+    },
+    {
+      "id": "f-search-removed",
+      "level": "L4",
+      "class": "capability-removed",
+      "severity": "major",
+      "surface": "catalog",
+      "oracle": "a user who knows what they want has no way to search for it — the capability simply isn't there",
+      "masked_by": [],
+      "injection": {
+        "kind": "feature-removed",
+        "note": "search input removed from the catalog UI; the server still honors direct ?q= URLs, so the no-results surface stays live (and masked) behind this fault",
+        "edits": [
+          {
+            "file": "pages.js",
+            "find": "    <input type=\"search\" name=\"q\" value=\"${esc(q || \"\")}\" placeholder=\"Search plants, pots, tools…\" aria-label=\"Search the shop\">\n",
+            "replace": ""
+          }
+        ]
+      }
+    },
+    {
+      "id": "f-qty-edit-removed",
+      "level": "L4",
+      "class": "capability-removed",
+      "severity": "major",
+      "surface": "cart",
+      "oracle": "a user wanting two instead of three of something finds no way to change a quantity in the cart",
+      "masked_by": [],
+      "injection": {
+        "kind": "feature-removed",
+        "note": "quantity steppers and input replaced by static text; remove-and-re-add is the only workaround",
+        "edits": [
+          {
+            "file": "pages.js",
+            "find": "        <div class=\"stepper\">\n          <button type=\"button\" class=\"dec\" aria-label=\"Decrease quantity of ${esc(it.name)}\">−</button>\n          <input type=\"number\" class=\"qty\" inputmode=\"numeric\" min=\"1\" max=\"${it.stock}\" value=\"${it.qty}\" aria-label=\"Quantity of ${esc(it.name)}\">\n          <button type=\"button\" class=\"inc\" aria-label=\"Increase quantity of ${esc(it.name)}\">+</button>\n        </div>",
+            "replace": "        <span>${it.qty}</span>"
+          },
+          {
+            "file": "pages.js",
+            "find": "        row.querySelector(\".qty\").value = it.qty;\n        row.querySelector(\".line\").textContent = money(it.line_total);",
+            "replace": "        var q = row.querySelector(\".qty\"); if (q) q.value = it.qty;\n        row.querySelector(\".line\").textContent = money(it.line_total);"
+          }
+        ]
+      }
+    },
+    {
+      "id": "f-order-history-removed",
+      "level": "L4",
+      "class": "capability-removed",
+      "severity": "major",
+      "surface": "account",
+      "oracle": "a user looking for what they ordered finds no order history anywhere in their account",
+      "masked_by": [],
+      "injection": {
+        "kind": "feature-removed",
+        "note": "the entire order-history section is gone; receipts become unreachable once the confirmation page is left",
+        "edits": [
+          {
+            "file": "pages.js",
+            "find": "\n  <section class=\"panel\" aria-labelledby=\"orders-h\" id=\"orders\">\n    <h2 id=\"orders-h\">Order history</h2>\n    <p class=\"hint\">Every order you have placed with us.</p>\n    ${orders.length === 0 ? '<p class=\"sub\">No orders yet — your first one will show up here.</p>' : `<table class=\"orders\">\n      <thead><tr><th scope=\"col\">Order</th><th scope=\"col\">Placed</th><th scope=\"col\">Items</th><th scope=\"col\">Total</th><th scope=\"col\">Status</th></tr></thead>\n      <tbody>\n    ${rows}\n      </tbody>\n    </table>`}\n  </section>",
+            "replace": ""
+          }
+        ]
+      }
+    },
+    {
+      "id": "f-product-crumb-removed",
+      "level": "L4",
+      "class": "navigation-removed",
+      "severity": "minor",
+      "surface": "product-detail",
+      "oracle": "a user on a product page has no link back to the category they came from — only the global header",
+      "masked_by": [],
+      "injection": {
+        "kind": "feature-removed",
+        "note": "the category breadcrumb is gone",
+        "edits": [
+          {
+            "file": "pages.js",
+            "find": "  <p class=\"crumb\"><a href=\"/?category=${esc(p.category)}\">← ${esc(cat ? cat.label : \"Shop\")}</a></p>\n",
+            "replace": ""
+          }
+        ]
+      }
+    },
+    {
+      "id": "f-cart-continue-removed",
+      "level": "L4",
+      "class": "navigation-removed",
+      "severity": "minor",
+      "surface": "cart",
+      "oracle": "a user in their cart has no 'continue shopping' route back to the catalog — only the global header",
+      "masked_by": [],
+      "injection": {
+        "kind": "feature-removed",
+        "note": "the cart's continue-shopping link is gone (a spacer keeps the layout)",
+        "edits": [
+          {
+            "file": "pages.js",
+            "find": "    <a href=\"/\">← Continue shopping</a>\n",
+            "replace": "    <span></span>\n"
+          }
+        ]
+      }
+    }
+  ]
+}

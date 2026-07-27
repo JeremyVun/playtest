@@ -1,0 +1,134 @@
+{
+  "arm": "t1",
+  "seed": "4adf038b88f9421c",
+  "recorded_at": "2026-07-26T06:22:41.478Z",
+  "recorder": "runner",
+  "max_requests": 360,
+  "jitter_ms": 250,
+  "order": [
+    {
+      "id": "clean.jitter-1",
+      "label": "clean.jitter"
+    },
+    {
+      "id": "clean-3",
+      "label": "clean"
+    },
+    {
+      "id": "clean.jitter-9",
+      "label": "clean.jitter"
+    },
+    {
+      "id": "clean.jitter-7",
+      "label": "clean.jitter"
+    },
+    {
+      "id": "clean.trailing-page",
+      "label": "clean.trailing-page"
+    },
+    {
+      "id": "clean.jitter-4",
+      "label": "clean.jitter"
+    },
+    {
+      "id": "f-activate-after-close",
+      "label": "f-activate-after-close"
+    },
+    {
+      "id": "f-same-account-envelope-bare",
+      "label": "f-same-account-envelope-bare"
+    },
+    {
+      "id": "clean-2",
+      "label": "clean"
+    },
+    {
+      "id": "clean.all-variants",
+      "label": "clean.all-variants"
+    },
+    {
+      "id": "clean.jitter-10",
+      "label": "clean.jitter"
+    },
+    {
+      "id": "f-idempotency-freed-by-cancel",
+      "label": "f-idempotency-freed-by-cancel"
+    },
+    {
+      "id": "f-transfers-filter-after-page",
+      "label": "f-transfers-filter-after-page"
+    },
+    {
+      "id": "clean.jitter-5",
+      "label": "clean.jitter"
+    },
+    {
+      "id": "clean-1",
+      "label": "clean"
+    },
+    {
+      "id": "clean.jitter-2",
+      "label": "clean.jitter"
+    },
+    {
+      "id": "clean.jitter-6",
+      "label": "clean.jitter"
+    },
+    {
+      "id": "f-transfer-to-pending-destination",
+      "label": "f-transfer-to-pending-destination"
+    },
+    {
+      "id": "f-eur-fee-flat",
+      "label": "f-eur-fee-flat"
+    },
+    {
+      "id": "f-tick-day-skips-settlement",
+      "label": "f-tick-day-skips-settlement"
+    },
+    {
+      "id": "f-idempotency-conflict-ignored",
+      "label": "f-idempotency-conflict-ignored"
+    },
+    {
+      "id": "clean.wide-ids",
+      "label": "clean.wide-ids"
+    },
+    {
+      "id": "f-fee-account-balance-untouched",
+      "label": "f-fee-account-balance-untouched"
+    },
+    {
+      "id": "f-transfer-source-unowned",
+      "label": "f-transfer-source-unowned"
+    },
+    {
+      "id": "clean.jitter-8",
+      "label": "clean.jitter"
+    },
+    {
+      "id": "clean.terse-optionals",
+      "label": "clean.terse-optionals"
+    },
+    {
+      "id": "clean.jitter-3",
+      "label": "clean.jitter"
+    },
+    {
+      "id": "f-day-usage-carryover",
+      "label": "f-day-usage-carryover"
+    },
+    {
+      "id": "f-include-closed-ignored",
+      "label": "f-include-closed-ignored"
+    },
+    {
+      "id": "f-entries-cross-principal",
+      "label": "f-entries-cross-principal"
+    },
+    {
+      "id": "f-deposit-entry-mismatch",
+      "label": "f-deposit-entry-mismatch"
+    }
+  ]
+}

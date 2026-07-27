@@ -1,0 +1,30 @@
+{
+  "run_id": "run-a",
+  "case": {
+    "id": "shop/buy-gift@gift-rusher",
+    "mode": "discovery",
+    "persona": "gift-rusher",
+    "persona_description": "Needs a gift quickly"
+  },
+  "mode": "explore",
+  "pins": {
+    "actor_model": "gpt5_4_mini",
+    "grader_model": "gpt5_5",
+    "gateway": "http://127.0.0.1:8899",
+    "harness_version": "test",
+    "prompts_version": "test",
+    "driver": "playwright"
+  },
+  "result": { "status": "explored", "end_reason": "done" },
+  "totals": {
+    "steps": 3,
+    "executed_steps": 3,
+    "tokens": { "in": 10, "out": 20, "cache_read": 3 },
+    "cost_usd": 0.12,
+    "console_errors": 0,
+    "confusion_events": 1
+  },
+  "started_at": "2026-07-10T00:00:00.000Z",
+  "finished_at": "2026-07-10T00:00:10.000Z",
+  "duration_ms": 10000
+}

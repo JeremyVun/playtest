@@ -1,0 +1,13 @@
+description: Work out from cold which journey failed and what exactly broke.
+story: |
+  You have been pinged: "something went red overnight in the todo
+  checks — can you take a look?" Starting from the app's front page,
+  work out which journey failed and what exactly went wrong — enough
+  that you could tell the team what broke and hand it off, without
+  re-running anything.
+persona: [triaging-dev, first-time-evaluator]
+report:
+  - Where did they look first (home needs-attention, runs list, suite page), and how many wrong turns before opening the failing run?
+  - Did they get from the red status to concrete evidence — the failing criterion, the step, the screenshot? Which claim lacked a link to evidence?
+  - Did the embedded run viewer feel like part of the same product (navigation, styling, vocabulary), or like a different app bolted in?
+  - What did they conclude broke, and is that supported by the run's actual evidence? Where did they look for a "hand it off" affordance?

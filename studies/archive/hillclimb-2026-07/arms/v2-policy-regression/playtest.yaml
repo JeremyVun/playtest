@@ -1,0 +1,11 @@
+# Arm v2-policy regression suite — one story per fix, pinned by the blind
+# policy operator (BUILD_PLAN P4 / DESIGN §6). Runs every climb round; a
+# regressed fix must turn a story's report answers bad. Stories must force
+# the precondition they protect. Actor/grader match instrument v2.
+mode: discovery
+actor_model: grok-4.5
+grader_model: gpt5_5
+timeout: "60m"
+app:
+  base_url: http://127.0.0.1:4183
+  init: ./reset.mjs

@@ -1,0 +1,12 @@
+app:
+  auth: none
+tags: [smoke]
+description: Sign up and add "Sign me up" to the list.
+story: |
+  You're a brand-new, signed-out visitor. Use this todo app to add a todo
+  called "Sign me up" so it shows up in your list.
+success:
+  - element_exists: "[data-testid=todo-item]"
+  - api_called: "POST /api/todos"
+  - assert: the list shows a todo called "Sign me up"
+  - console_errors: 0

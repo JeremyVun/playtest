@@ -1,0 +1,53 @@
+# The agentic invariant probe (docs/backlog/api-testing/BUILD_PLAN.md P1,
+# DESIGN.md §4). Six stories, one per approvable invariant, each pointing the
+# api-fuzzer persona at a rule and asking it to break the rule rather than
+# demonstrate a workflow. The verdict is never the model's: each story's
+# success key routes to a deterministic assertion under assertions/, which
+# re-runs the same oracle the study's measurement bench scores every arm with.
+#
+# This suite is deliberately FAULT-AGNOSTIC. It names no fault, no fault
+# environment variable, and no tier. Which build it is pointed at is a property
+# of the process running the fixture, never of anything committed here, so the
+# same instrument runs unchanged against the clean build, the development
+# faults, and the sealed held-out set.
+#
+# Run it (see README.md for the full setup):
+#   node <ledger-fixture>/server.js                       # a fresh, clean fixture
+#   playtest ./studies/api-probe --fresh --no-grade
+#
+# Journey mode, not discovery: the whole point is the deterministic gate.
+mode: journey
+persona: api-fuzzer
+
+# A strong actor on both ends. Falsification is a reasoning task — a weak actor
+# writes a happy path and calls it a day — and the grader is skipped in probe
+# runs anyway (--no-grade); grader_model still resolves for anyone running the
+# suite with grading on.
+actor_model: gpt5_5
+grader_model: gpt5_5
+
+# 60 steps is the preregistered per-run budget (BUILD_PLAN P1: a per-fault arm
+# budget spent as 5 fresh runs at max_steps 60). The wall clock is generous
+# because a reasoning actor's turns are slow and a run that dies mid-search
+# wastes the budget without producing evidence; steps, not minutes, are the
+# intended limit.
+max_steps: 60
+timeout: "60m"
+
+# Serial. Every case shares one fixture instance and the isolation below resets
+# it wholesale, so two cases in flight would destroy each other's state. This is
+# also the auto-selected default for an external app — set explicitly because
+# here it is load-bearing, not a preference.
+parallel: 1
+
+app:
+  driver: api
+  base_url: http://127.0.0.1:4180
+  # A vendored copy of the fixture's OpenAPI document — the operation list the
+  # actor sees. See vendor/PROVENANCE.md for why it is a copy and how to re-sync.
+  openapi: ./vendor/openapi.json
+  # Harness-owned isolation (DESIGN §3): every case starts from a seeded reset,
+  # however the previous run ended. A probe run that reproduces a violation stops
+  # on the spot and leaves its state behind by design, so isolation can never be
+  # the actor's job.
+  init: ./reset.mjs

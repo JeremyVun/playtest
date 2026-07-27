@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Playtest</title>
+    <link rel="stylesheet" href="/style.css" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%235cc8ff' d='M4 3l9 5-9 5z'/%3E%3C/svg%3E" />
+  </head>
+  <body>
+    <div id="app" aria-busy="true">
+      <div class="boot">Loading Playtest…</div>
+    </div>
+    <!-- Desktop-first console. Below the supported width we show this instead of
+         a clipped rail and tables (see the #scope-gate media query in style.css).
+         It keeps the brand and offers a way forward: an unbranded wall with no
+         exit reads as a broken site, and a half-width laptop window lands here. -->
+    <div id="scope-gate" role="alert">
+      <div class="scope-bar">
+        <a class="brand" href="/projects">
+          <svg viewBox="0 0 16 16"><path d="M4 3l9 5-9 5z"/></svg>
+          Playtest
+        </a>
+      </div>
+      <div class="scope-body">
+        <div class="scope-card">
+          <h1>This window is a little narrow</h1>
+          <p>The Playtest console is desktop-first — its navigation, tables and run evidence are laid out for a window at least 900&nbsp;pixels wide.</p>
+          <p class="dim">The applications Playtest tests may still be mobile; this only applies to the console itself.</p>
+          <div class="scope-actions">
+            <button class="btn primary" id="scope-continue">Continue anyway</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="toasts" aria-live="polite"></div>
+    <div id="modal-root"></div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

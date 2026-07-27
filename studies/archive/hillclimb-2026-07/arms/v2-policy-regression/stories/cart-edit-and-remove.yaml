@@ -1,0 +1,14 @@
+description: Cart quantity steppers and Remove work with live totals.
+persona: weekend-browser
+story: |
+  You already know this shop has a cart. Open the shop, add Monstera Deliciosa
+  with quantity 2 to your cart (set the product quantity to 2 before adding once —
+  do not click Add twice). Go to Cart. You must change the quantity down to 1 using
+  the quantity control on the cart line (stepper, +/−, or editable field — not by
+  leaving the cart). Confirm the line total and subtotal drop to a single plant.
+  Then click Remove on that line and confirm the cart becomes empty (or the line
+  disappears) and the header cart badge updates.
+report:
+  - Could the user change the Monstera quantity from 2 to 1 on the cart page itself?
+  - Did Remove clear the line and update the badge/subtotal?
+  - Did every total stay consistent after each edit?

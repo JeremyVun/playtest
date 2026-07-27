@@ -1,0 +1,15 @@
+description: Force an invalid profile email save and observe error / form state.
+tags: [risk]
+story: |
+  Open Account. Leave the name as it is. Change the email field to the
+  deliberately invalid value "not-an-email" (no @, no domain). Save the
+  profile. Watch carefully: does any error or confirmation appear? Do the
+  name and email fields keep what you typed, snap back, or go blank?
+  Then set a valid email (riley.fixed@example.com), save again, and confirm
+  whether that second save visibly succeeds.
+persona: [adversarial-tester]
+report:
+  - After saving the invalid email, what exactly appeared on screen (error, success, nothing)?
+  - Did the form keep the invalid email the user typed, reset to the old value, or clear fields?
+  - After the valid email save, was success visible, and did the field show the new address?
+  - Was anything broken, misleading, or missing that a real shopper would notice? Be specific.

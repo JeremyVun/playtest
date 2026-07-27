@@ -1,0 +1,63 @@
+{
+  "generated_at": "2026-07-26T05:33:44.495Z",
+  "arm": "proposal-quality trial (phase 2)",
+  "base_url": "http://127.0.0.1:4304",
+  "openapi_source": "live: http://127.0.0.1:4304/openapi.json",
+  "statements": {
+    "source": "INVARIANTS.md",
+    "rules": 8
+  },
+  "read_only_by_default": false,
+  "budget": 360,
+  "timeout_ms": 600000,
+  "authoring_budget": {
+    "executions": 12,
+    "wallClockHours": 3,
+    "requests": 1500,
+    "observationRequests": 60,
+    "observationMinutes": 30
+  },
+  "obligations": {
+    "total": 28,
+    "policy": 4,
+    "operation": 16,
+    "rule": 8
+  },
+  "files": [
+    {
+      "path": "BRIEF.md",
+      "sha256": "648f9029e0f8ed1c76c2a721e7aeeea80f032a18cf081e1a1849aae9097b6d8d",
+      "bytes": 5075
+    },
+    {
+      "path": "handout/CLIENT.md",
+      "sha256": "a290d223c6dc9cbb5b0584093d371db9fb46d8c366a3d4a715983f0ec8238f06",
+      "bytes": 16888
+    },
+    {
+      "path": "handout/INVARIANTS.md",
+      "sha256": "0bbc0dd67460f5b3bb6696ccd87c23dc048f24d668c5e77fd52d0a81106ec956",
+      "bytes": 5726
+    },
+    {
+      "path": "handout/obligations.json",
+      "sha256": "ff69003dea1fc783421e13cc7258bd8b684ee1e8827be8c47ee1a822618e0542",
+      "bytes": 9171
+    },
+    {
+      "path": "handout/openapi.json",
+      "sha256": "b8eda449e2b79ca95a6efdc52a96ef4bf8547210b913d80771eed21553b0641c",
+      "bytes": 51866
+    },
+    {
+      "path": "PROPOSAL-BRIEF.md",
+      "sha256": "0deb7092b4a25d847b734d79be5a45319cd2fd087406b269be8712ba8b97248f",
+      "bytes": 2402
+    },
+    {
+      "path": "run.sh",
+      "sha256": "02369806f2418c9e50cefe1d883907aec157e86a51e976891681bd9da6c6cee5",
+      "bytes": 635
+    }
+  ]
+}

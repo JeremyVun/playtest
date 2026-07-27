@@ -1,0 +1,13 @@
+description: Search finds products; empty search recovers with one clear click.
+persona: adversarial-tester
+story: |
+  On the shop home page, use the visible search text field (not only a button) to
+  search for "monstera". Confirm Monstera Deliciosa appears in the results and the
+  page states what you searched. Then search for the nonsense term
+  "zxqq9-no-such-plant-ever". Confirm a plain-language empty state (no database
+  jargon) and click "Clear the search" (or equivalent). Confirm the query leaves
+  the URL/state and products return.
+report:
+  - Was there a typeable search field on the catalog?
+  - Did a nonsense query show a plain empty state and one-click clear restore products?
+  - Did clear actually remove the query rather than leaving an empty results page?

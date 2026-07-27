@@ -1,0 +1,146 @@
+{
+  "openapi": "3.0.3",
+  "info": { "title": "Widget Registry", "version": "1.0.0" },
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "health",
+        "summary": "liveness",
+        "responses": {
+          "200": {
+            "description": "alive",
+            "content": {
+              "application/json": {
+                "schema": { "type": "object", "required": ["ok"], "properties": { "ok": { "type": "boolean" } } }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/reset": {
+      "post": {
+        "operationId": "reset",
+        "summary": "restore the seeded state",
+        "responses": { "204": { "description": "reset" } }
+      }
+    },
+    "/widgets": {
+      "get": {
+        "operationId": "listWidgets",
+        "summary": "list widgets, newest first",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string", "enum": ["draft", "published"] }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "the widgets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["widgets"],
+                  "properties": { "widgets": { "type": "array", "items": { "$ref": "#/components/schemas/Widget" } } }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" }
+        }
+      },
+      "post": {
+        "operationId": "createWidget",
+        "summary": "create a widget in status draft",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "type": "object", "required": ["name"], "properties": { "name": { "type": "string" } } }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "created",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Widget" } } }
+          },
+          "422": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/widgets/{id}": {
+      "get": {
+        "operationId": "getWidget",
+        "summary": "read one widget",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "200": {
+            "description": "the widget",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Widget" } } }
+          },
+          "404": { "$ref": "#/components/responses/Error" }
+        }
+      },
+      "delete": {
+        "operationId": "deleteWidget",
+        "summary": "delete a widget",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "204": { "description": "deleted" },
+          "404": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/widgets/{id}/publish": {
+      "post": {
+        "operationId": "publishWidget",
+        "summary": "move a draft widget to published",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "200": {
+            "description": "published",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Widget" } } }
+          },
+          "404": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Widget": {
+        "type": "object",
+        "required": ["id", "name", "status", "created_at"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "status": { "type": "string", "enum": ["draft", "published"] },
+          "created_at": { "type": "string" }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["code", "message"],
+            "properties": { "code": { "type": "string" }, "message": { "type": "string" } }
+          }
+        }
+      }
+    },
+    "responses": {
+      "Error": {
+        "description": "an error envelope",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      }
+    }
+  }
+}

@@ -1,0 +1,25 @@
+# Instrument v2 freeze — post-hillclimb re-measure.
+# Design and outcomes are summarized in ../README.md and MATRIX-v2.md.
+#
+# Changes vs v1 (ledger/baseline/*, actor gpt5_4_mini, gateway :8899):
+#   - actor_model: grok-4.5 (pass-through; gateway :8900 → CLIProxy/xAI)
+#   - grader_model: gpt5_5 (unchanged strong grader via Codex on same gateway)
+#   - personas: core 3 + study-local adversarial-tester; gift-rusher stress-only
+#   - additive forced-risk stories under suite/risk/ (tags: [risk])
+#   - matrix freeze: suite/MATRIX-v2.md
+#
+# Gateway ops (not stored in this file): PLAYTEST_LLM_BASE_URL=http://127.0.0.1:8900
+# Historical commands use the original studies/hillclimb path; see ../OPERATOR.md.
+#
+# v1 trunk stories/personas stay for continuity; any change after this freeze
+# is a ledger amendment. Do not start a ledgered detection round until the
+# freeze commit sha is recorded (BUILD_PLAN P1 exit gate).
+mode: discovery
+actor_model: grok-4.5
+grader_model: gpt5_5
+# Same wall-clock as v1 amendment: codex/Grok turns can run long; 30m default
+# timed out the longest journeys before grade.
+timeout: "60m"
+app:
+  base_url: http://127.0.0.1:4183
+  init: ./reset.mjs

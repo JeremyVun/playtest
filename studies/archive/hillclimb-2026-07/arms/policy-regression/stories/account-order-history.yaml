@@ -1,0 +1,12 @@
+description: The account page shows order history — past and newly placed orders — each linking to its receipt.
+story: |
+  An order you placed recently seems to be running late and you want to check
+  on it. Starting from where a shopper would naturally look for past purchases,
+  find your order history: what you bought, what you paid, and the current
+  status. Then open one order to see its full receipt.
+persona: [returning-regular]
+report:
+  - "Could you find a list of your past orders, and roughly how many wrong turns did it take?"
+  - "Does each order show its number, date, item count, total, and status?"
+  - "Could you open an order to see its full receipt?"
+  - "Was the order history reachable from the account page without dead-ending on just profile and address forms?"

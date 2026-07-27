@@ -1,0 +1,11 @@
+description: Reaching checkout with an empty cart routes back to the cart with an explanation; product pages offer a category-preserving way back to the catalog.
+story: |
+  You are browsing without a firm plan. From a plant's page, look for a way
+  back to the group of plants you were viewing rather than the whole shop.
+  Separately, with nothing in your cart, try to go to checkout and see what the
+  shop does — you should never land on a broken, empty payment form.
+persona: [weekend-browser]
+report:
+  - "From a product page, was there a clear link back to the catalog that kept you in the same category?"
+  - "When you went to checkout with an empty cart, did the shop route you back to the cart and explain, rather than showing an empty form?"
+  - "Did you ever hit a dead end with no obvious next step?"

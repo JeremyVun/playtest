@@ -1,0 +1,9 @@
+# Run navigator: sibling pager in the topbar. The adjacent older sibling of
+# the newest "add-todo" run (d926, 04:22:51) is the healed run (1b72, 04:22:01).
+description: Jump from a run to its previous sibling, no picker round-trip.
+story: |
+  You are looking at the newest run of the journey whose id is exactly
+  "add-todo" and want the one just before it for comparison. Switch to the
+  previous run of the same journey without returning to the run list.
+success:
+  - url_matches: "*run=*1b72*"

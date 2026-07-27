@@ -1,0 +1,21 @@
+# Phase 1 shakedown: one discovery round against the CLEAN reference app
+# (studies/hillclimb/subject/). Every finding here is either an instrument
+# false positive (calibration — sets the precision floor) or a real defect in
+# the reference (fix before the instrument freeze). This suite is NOT the
+# frozen instrument — that lives in studies/hillclimb/suite/ and is authored
+# from SPEC.md after this shakedown passes.
+#
+# Setup (see studies/hillclimb/README.md):
+#   PORT=4183 node studies/hillclimb/subject/server.js
+#   PLAYTEST_LLM_BASE_URL=http://127.0.0.1:8900 PLAYTEST_LLM_API_KEY=subscription \
+#   PLAYTEST_LLM_TIMEOUT_MS=185000 \
+#     playtest studies/hillclimb/shakedown/
+#
+# Standalone codex-gateway on :8900 (../codex-gateway). Pass-through
+# actor_model: grok-4.5 routes to CLIProxy/xAI; GPT tier enums use the Codex adapter.
+mode: discovery
+actor_model: gpt5_4_mini
+grader_model: gpt5_5
+app:
+  base_url: http://127.0.0.1:4183
+  init: ./reset.mjs

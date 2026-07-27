@@ -1,0 +1,12 @@
+description: The checkout order summary must label the shipping fee honestly and not contradict the amount shown.
+story: |
+  You are deciding whether this shop feels trustworthy before paying. Add a
+  product to the cart and go to checkout. Read the order summary line by line:
+  subtotal, the shipping line, and the total. Pay attention to whether the
+  shipping line's label matches the number beside it and whether the three
+  figures add up.
+persona: [cautious-first-timer]
+report:
+  - Does the shipping line's label agree with the amount shown, or does it claim "Free shipping" while charging $6.00?
+  - Do the subtotal, shipping, and total in the summary add up correctly?
+  - Did anything in the order summary make the shop feel sloppy or untrustworthy before payment?

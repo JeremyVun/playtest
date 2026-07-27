@@ -1,0 +1,16 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "types": ["node"]
+  },
+  "include": [
+    "src/**/*.ts",
+    "tests/**/*.ts",
+    "../../../tests/support/legacy-types.d.ts"
+  ],
+  "exclude": [
+    "tests/fixtures/script-attacks/**"
+  ]
+}

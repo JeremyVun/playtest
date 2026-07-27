@@ -1,0 +1,58 @@
+{
+  "generated_at": "2026-07-26T05:15:16.438Z",
+  "arm": "statements-trial",
+  "base_url": "http://127.0.0.1:4302",
+  "openapi_source": "live: http://127.0.0.1:4302/openapi.json",
+  "statements": {
+    "source": "INVARIANTS.md",
+    "rules": 13
+  },
+  "read_only_by_default": false,
+  "budget": 360,
+  "timeout_ms": 600000,
+  "authoring_budget": {
+    "executions": 12,
+    "wallClockHours": 3,
+    "requests": 1500,
+    "observationRequests": 60,
+    "observationMinutes": 30
+  },
+  "obligations": {
+    "total": 33,
+    "policy": 4,
+    "operation": 16,
+    "rule": 13
+  },
+  "files": [
+    {
+      "path": "BRIEF.md",
+      "sha256": "648f9029e0f8ed1c76c2a721e7aeeea80f032a18cf081e1a1849aae9097b6d8d",
+      "bytes": 5075
+    },
+    {
+      "path": "handout/CLIENT.md",
+      "sha256": "a290d223c6dc9cbb5b0584093d371db9fb46d8c366a3d4a715983f0ec8238f06",
+      "bytes": 16888
+    },
+    {
+      "path": "handout/INVARIANTS.md",
+      "sha256": "ce0c94438ce0155432b869d50acdcc50481b71a81fa19ab01827387719012ccb",
+      "bytes": 12098
+    },
+    {
+      "path": "handout/obligations.json",
+      "sha256": "734eeffce704df192f7dc929c03032262b4578d85c69863bbada5436ea8e0add",
+      "bytes": 15322
+    },
+    {
+      "path": "handout/openapi.json",
+      "sha256": "b8eda449e2b79ca95a6efdc52a96ef4bf8547210b913d80771eed21553b0641c",
+      "bytes": 51866
+    },
+    {
+      "path": "run.sh",
+      "sha256": "04ca8578b8fb0e1aa33c92bccd2f0ac95d1e00298f7dad38e4132103617c28ff",
+      "bytes": 635
+    }
+  ]
+}

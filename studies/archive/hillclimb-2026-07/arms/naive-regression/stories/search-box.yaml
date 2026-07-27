@@ -1,0 +1,11 @@
+description: The catalog must offer a working search box that finds products by name or description.
+story: |
+  You know exactly what you want — a monstera — and would rather search than
+  scroll. On the shop page, look in the catalog toolbar next to the sort control
+  for a text box to type into. Type "monstera" and run the search. Confirm the
+  results narrow to matching products and state what you searched for.
+persona: [gift-rusher]
+report:
+  - Is there a visible text search box in the catalog toolbar, not just a lone Search button?
+  - After searching "monstera", did the grid narrow to matching products and state the search term and match count?
+  - Could you find a named product by typing rather than being forced to scroll the whole grid?

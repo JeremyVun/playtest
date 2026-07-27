@@ -1,0 +1,231 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://playtest.dev/schemas/script-report.schema.json",
+  "title": "Playtest script report",
+  "description": "The report one script execution writes beside its har.json (docs/contracts/scripts.md#report-schema). Versioned: script_report_version is bumped for any incompatible change.",
+  "type": "object",
+  "required": [
+    "script_report_version",
+    "contract_version",
+    "script",
+    "run",
+    "checks",
+    "advisories",
+    "defects",
+    "obligations",
+    "gate",
+    "soundness",
+    "verdict"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "script_report_version": { "const": 1 },
+    "contract_version": { "type": "integer", "minimum": 1 },
+    "script": {
+      "type": "object",
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "type": "string" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "bytes": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "run": {
+      "type": "object",
+      "required": ["started_at", "finished_at", "base_url", "mode", "budget"],
+      "properties": {
+        "started_at": { "type": "string" },
+        "finished_at": { "type": "string" },
+        "duration_ms": { "type": "integer", "minimum": 0 },
+        "base_url": { "type": "string" },
+        "allowed_origins": { "type": "array", "items": { "type": "string" } },
+        "mode": { "enum": ["read-only", "read-write"] },
+        "write_grant": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "required": ["origin", "approved_by"],
+              "properties": {
+                "origin": { "type": "string" },
+                "approved_by": { "type": "string" },
+                "approved_at": { "type": ["string", "null"] }
+              }
+            }
+          ]
+        },
+        "budget": {
+          "type": "object",
+          "required": ["limit", "used"],
+          "properties": {
+            "limit": { "type": "integer", "minimum": 1 },
+            "used": { "type": "integer", "minimum": 0 },
+            "remaining": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "timeout_ms": { "type": "integer", "minimum": 1 },
+        "secrets_declared": { "type": "array", "items": { "type": "string" } },
+        "namespace": { "type": "string" }
+      }
+    },
+    "test_data": {
+      "type": "object",
+      "description": "what this execution created, counted by the parent from the recorded traffic",
+      "properties": {
+        "namespace": { "type": "string" },
+        "created": { "type": "integer", "minimum": 0 },
+        "namespaced": { "type": "integer", "minimum": 0 },
+        "unnamespaced": { "type": "integer", "minimum": 0 },
+        "deleted": { "type": "integer", "minimum": 0 },
+        "outstanding": { "type": "integer", "minimum": 0 },
+        "by_collection": { "type": "object" },
+        "accumulation_cap": { "type": ["integer", "null"] },
+        "over_cap": { "type": "boolean" }
+      }
+    },
+    "cleanup": {
+      "type": "object",
+      "description": "the target's declared cleanup policy and what happened when it ran",
+      "properties": {
+        "policy": { "enum": ["reset", "teardown", "none"] },
+        "reset": { "type": ["string", "null"] },
+        "attempted": { "type": "boolean" },
+        "ok": { "type": "boolean" },
+        "detail": { "type": ["string", "null"] },
+        "outstanding": { "type": "integer", "minimum": 0 },
+        "accumulation_cap": { "type": ["integer", "null"] }
+      }
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "obligation", "title", "pass", "exercised", "evidence"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "obligation": { "type": "string", "minLength": 1 },
+          "title": { "type": "string" },
+          "pass": { "type": "boolean" },
+          "exercised": { "type": "boolean" },
+          "expected": { "type": "string" },
+          "observed": { "type": "string" },
+          "note": { "type": "string" },
+          "evidence": {
+            "type": "object",
+            "required": ["har_entries"],
+            "properties": {
+              "har_entries": { "type": "array", "items": { "type": "integer", "minimum": 0 } },
+              "subject": {}
+            }
+          }
+        }
+      }
+    },
+    "advisories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["title"],
+        "properties": { "title": { "type": "string" }, "detail": { "type": ["string", "null"] } }
+      }
+    },
+    "defects": {
+      "type": "array",
+      "description": "The script-defect channel: never a statement about the API. Any entry makes the execution unsound.",
+      "items": {
+        "type": "object",
+        "required": ["kind", "message"],
+        "properties": {
+          "kind": { "type": "string" },
+          "message": { "type": "string" },
+          "detail": { "type": ["string", "null"] },
+          "code": { "type": "string" },
+          "check": { "type": "string" },
+          "request": { "type": "string" }
+        }
+      }
+    },
+    "hygiene": {
+      "type": "object",
+      "properties": { "leak_findings": { "type": "array" } }
+    },
+    "guard": { "type": "array" },
+    "obligations": {
+      "type": "object",
+      "required": ["manifest_version", "summary", "entries"],
+      "properties": {
+        "manifest_version": { "type": "integer", "minimum": 1 },
+        "summary": {
+          "type": "object",
+          "required": ["total", "covered", "skipped", "unsupported", "unaccounted"],
+          "properties": {
+            "total": { "type": "integer", "minimum": 0 },
+            "covered": { "type": "integer", "minimum": 0 },
+            "skipped": { "type": "integer", "minimum": 0 },
+            "unsupported": { "type": "integer", "minimum": 0 },
+            "unaccounted": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "source", "statement", "status", "checks"],
+            "properties": {
+              "id": { "type": "string" },
+              "source": { "enum": ["policy", "operation", "rule"] },
+              "statement": { "type": "string" },
+              "status": { "enum": ["covered", "skipped", "unsupported", "unaccounted"] },
+              "reason": { "type": "string" },
+              "applicability": { "type": "string" },
+              "approved_skip_reasons": { "type": "array", "items": { "type": "string" } },
+              "unsupported": { "type": "boolean" },
+              "checks": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        }
+      }
+    },
+    "gate": {
+      "type": "object",
+      "required": ["pass", "checks"],
+      "properties": {
+        "pass": { "type": "boolean" },
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["policy", "spec", "obligation", "applicable", "pass", "detail"],
+            "properties": {
+              "policy": { "type": "string" },
+              "tier": { "type": "integer" },
+              "spec": { "type": "string" },
+              "obligation": { "type": "string" },
+              "applicable": { "type": "boolean" },
+              "pass": { "type": "boolean" },
+              "detail": { "type": "string" },
+              "har_entries": { "type": "array", "items": { "type": "integer" } }
+            }
+          }
+        }
+      }
+    },
+    "soundness": {
+      "type": "object",
+      "required": ["ok", "reasons"],
+      "properties": { "ok": { "type": "boolean" }, "reasons": { "type": "array", "items": { "type": "string" } } }
+    },
+    "verdict": {
+      "type": "object",
+      "required": ["pass", "report_pass", "gate_pass", "sound", "exit_code"],
+      "properties": {
+        "pass": { "type": "boolean" },
+        "report_pass": { "type": "boolean" },
+        "gate_pass": { "type": "boolean" },
+        "sound": { "type": "boolean" },
+        "failing_checks": { "type": "array", "items": { "type": "string" } },
+        "exit_code": { "enum": [0, 1, 2] }
+      }
+    }
+  }
+}

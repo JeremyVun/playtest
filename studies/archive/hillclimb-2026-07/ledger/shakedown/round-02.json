@@ -1,0 +1,441 @@
+{
+  "schema_version": 1,
+  "arm": "shakedown",
+  "round": 2,
+  "preregistration_sha": null,
+  "fingerprint": {
+    "captured_at": "2026-07-10T05:40:28.086Z",
+    "repo_head": "60e43a1d2f68bb68ce7d5be1832c9bd81cdd50e6",
+    "repo_dirty": false,
+    "app_dir": "studies/hillclimb/subject",
+    "fault_set": null,
+    "gateway": {
+      "base_url": "http://127.0.0.1:8899",
+      "healthz_ok": true,
+      "usage_limit_hits": 0
+    },
+    "models": {
+      "actor_model": "gpt5_4_mini",
+      "grader_model": "gpt5_5"
+    },
+    "checks": [
+      {
+        "name": "app-dir",
+        "ok": true,
+        "message": ""
+      },
+      {
+        "name": "base-url",
+        "ok": true,
+        "message": "expected HTTP 200, got 200"
+      },
+      {
+        "name": "reset",
+        "ok": true,
+        "message": "expected HTTP 2xx, got 200"
+      },
+      {
+        "name": "fault-set",
+        "ok": true,
+        "message": ""
+      },
+      {
+        "name": "gateway-healthz",
+        "ok": true,
+        "message": "expected {\"ok\":true}, got status 200"
+      },
+      {
+        "name": "gateway-log",
+        "ok": true,
+        "message": "0 usage limit hits"
+      },
+      {
+        "name": "git",
+        "ok": true,
+        "message": ""
+      }
+    ]
+  },
+  "instrument": {
+    "suite": "studies/hillclimb/shakedown",
+    "stories": [
+      "buy-what-you-need",
+      "settle-in"
+    ],
+    "personas": [
+      "exploratory"
+    ],
+    "repeats": 1
+  },
+  "runs": [
+    {
+      "run_id": "2026-07-10T0524-bbce",
+      "case_id": "buy-what-you-need@exploratory",
+      "persona": "exploratory",
+      "status": "explored",
+      "end_reason": "done",
+      "steps": 14,
+      "tokens": {
+        "in": 210799,
+        "out": 14084,
+        "cache_read": 133632
+      },
+      "cost_usd": 0.1899418,
+      "grade_score": 87
+    },
+    {
+      "run_id": "2026-07-10T0524-bbce",
+      "case_id": "settle-in@exploratory",
+      "persona": "exploratory",
+      "status": "infra",
+      "end_reason": "error",
+      "steps": 6,
+      "tokens": {
+        "in": 83500,
+        "out": 6036,
+        "cache_read": 61952
+      },
+      "cost_usd": 0.0479694,
+      "grade_score": null
+    },
+    {
+      "run_id": "2026-07-10T0535-91f6",
+      "case_id": "settle-in@exploratory",
+      "persona": "exploratory",
+      "status": "explored",
+      "end_reason": "done",
+      "steps": 7,
+      "tokens": {
+        "in": 133503,
+        "out": 13474,
+        "cache_read": 81920
+      },
+      "cost_usd": 0.19730674999999998,
+      "grade_score": 86
+    }
+  ],
+  "findings": [
+    {
+      "finding_id": "2026-07-10T0524-bbce/buy-what-you-need@exploratory#f0",
+      "source": "finding",
+      "severity": "info",
+      "note": "The main product grid supported the first decision well: Snake Plant was visible and read as the obvious low-maintenance desk plant without search or category exploration.",
+      "step": 1,
+      "evidence": "?run=2026-07-10T0524-bbce/buy-what-you-need@exploratory&step=1"
+    },
+    {
+      "finding_id": "2026-07-10T0524-bbce/buy-what-you-need@exploratory#f1",
+      "source": "finding",
+      "severity": "minor",
+      "note": "The plant product page did not expose related accessories or add-ons, so the user had to infer that watering supplies lived back on the Shop page instead of continuing naturally from the selected plant.",
+      "step": 3,
+      "evidence": "?run=2026-07-10T0524-bbce/buy-what-you-need@exploratory&step=3"
+    },
+    {
+      "finding_id": "2026-07-10T0524-bbce/buy-what-you-need@exploratory#f2",
+      "source": "finding",
+      "severity": "info",
+      "note": "The Care & Tools category matched the user's mental model for watering supplies, and the Long-Spout Watering Can was visible as the first relevant card after filtering.",
+      "step": 4,
+      "evidence": "?run=2026-07-10T0524-bbce/buy-what-you-need@exploratory&step=4"
+    },
+    {
+      "finding_id": "2026-07-10T0524-bbce/buy-what-you-need@exploratory#f3",
+      "source": "finding",
+      "severity": "info",
+      "note": "Add-to-cart worked clearly for both products: the primary product-page button was prominent, and the success toast plus cart count provided visible feedback before checkout.",
+      "step": 2,
+      "evidence": "?run=2026-07-10T0524-bbce/buy-what-you-need@exploratory&step=2"
+    },
+    {
+      "finding_id": "2026-07-10T0524-bbce/buy-what-you-need@exploratory#f4",
+      "source": "finding",
+      "severity": "minor",
+      "note": "The checkout submit path was partially below the fold: after entering the card number, the user had to scroll to find expiry, security code, and the Place order button.",
+      "step": 10,
+      "evidence": "?run=2026-07-10T0524-bbce/buy-what-you-need@exploratory&step=10"
+    },
+    {
+      "finding_id": "2026-07-10T0524-bbce/buy-what-you-need@exploratory#f5",
+      "source": "finding",
+      "severity": "info",
+      "note": "The order confirmation page made verification straightforward with a success headline, order number, item list, total, delivery address, and receipt message.",
+      "step": 14,
+      "evidence": "?run=2026-07-10T0524-bbce/buy-what-you-need@exploratory&step=14"
+    },
+    {
+      "finding_id": "2026-07-10T0524-bbce/buy-what-you-need@exploratory#q0",
+      "source": "report",
+      "question": "Where, if anywhere, did the user hesitate, backtrack, or get confused — and what on the screen caused it?",
+      "answer": "There was no true confusion, but two mild hesitations: after adding the plant, the user expected an accessory/add-on route on the product page and used Shop because none was visible; on checkout, the pay action was below the fold, so they scrolled to find the rest of payment and Place order controls.",
+      "evidence_steps": [
+        3,
+        10
+      ]
+    },
+    {
+      "finding_id": "2026-07-10T0524-bbce/buy-what-you-need@exploratory#q1",
+      "source": "report",
+      "question": "Did every action the user took produce a visible confirmation that it worked? Name any that did not.",
+      "answer": "Yes for the important state-changing actions: adding items showed a success toast/cart count, cart review showed both items and subtotal, and placing the order landed on a confirmation page. Form typing and scrolling behaved as expected but did not need separate success confirmations.",
+      "evidence_steps": [
+        2,
+        3,
+        6,
+        7,
+        8,
+        13,
+        14
+      ]
+    },
+    {
+      "finding_id": "2026-07-10T0524-bbce/buy-what-you-need@exploratory#q2",
+      "source": "report",
+      "question": "Was anything broken, misleading, or missing that a real shopper would notice? Be specific.",
+      "answer": "Nothing appeared broken or misleading. The notable missing affordance was a related watering/care add-on from the plant product page; a real shopper buying a plant plus supplies might expect that before returning to the full shop grid.",
+      "evidence_steps": [
+        3
+      ]
+    },
+    {
+      "finding_id": "2026-07-10T0524-bbce/buy-what-you-need@exploratory#q3",
+      "source": "report",
+      "question": "Could the user verify their order was placed, and how?",
+      "answer": "Yes. The final page stated “Thanks, Riley — order FF-1053 is confirmed,” showed the confirmed status, both purchased items, total, delivery address, and receipt destination.",
+      "evidence_steps": [
+        14
+      ]
+    },
+    {
+      "finding_id": "2026-07-10T0535-91f6/settle-in@exploratory#f0",
+      "source": "finding",
+      "severity": "info",
+      "note": "The product grid on the home page immediately communicated the shop category as plants, pots, and care tools, satisfying the browsing/reminder part before the user entered Account.",
+      "step": 1,
+      "evidence": "?run=2026-07-10T0535-91f6/settle-in@exploratory&step=1"
+    },
+    {
+      "finding_id": "2026-07-10T0535-91f6/settle-in@exploratory#f1",
+      "source": "finding",
+      "severity": "info",
+      "note": "The Account destination matched the user's expectation for both order history and delivery details; they went there first without confusion.",
+      "step": 1,
+      "evidence": "?run=2026-07-10T0535-91f6/settle-in@exploratory&step=1"
+    },
+    {
+      "finding_id": "2026-07-10T0535-91f6/settle-in@exploratory#f2",
+      "source": "finding",
+      "severity": "minor",
+      "note": "Important account content was below the fold: the user had to scroll to reveal the full shipping form and order history, and repeatedly noted the shipping card was cut off.",
+      "step": 2,
+      "evidence": "?run=2026-07-10T0535-91f6/settle-in@exploratory&step=2"
+    },
+    {
+      "finding_id": "2026-07-10T0535-91f6/settle-in@exploratory#f3",
+      "source": "finding",
+      "severity": "info",
+      "note": "Order history was discoverable once scrolled, and order numbers were the clearest actionable affordance for checking a specific order.",
+      "step": 3,
+      "evidence": "?run=2026-07-10T0535-91f6/settle-in@exploratory&step=3"
+    },
+    {
+      "finding_id": "2026-07-10T0535-91f6/settle-in@exploratory#f4",
+      "source": "finding",
+      "severity": "minor",
+      "note": "Order status was present but visually weak; the user repeatedly described the status pills as small/easy to skim past and clicked into the order detail to verify whether 'shipped' meant arrived.",
+      "step": 3,
+      "evidence": "?run=2026-07-10T0535-91f6/settle-in@exploratory&step=3"
+    },
+    {
+      "finding_id": "2026-07-10T0535-91f6/settle-in@exploratory#f5",
+      "source": "finding",
+      "severity": "info",
+      "note": "The order detail page answered delivery state clearly enough for the user to conclude the latest order was still in transit, then navigate back to Account for address changes.",
+      "step": 4,
+      "evidence": "?run=2026-07-10T0535-91f6/settle-in@exploratory&step=4"
+    },
+    {
+      "finding_id": "2026-07-10T0535-91f6/settle-in@exploratory#f6",
+      "source": "finding",
+      "severity": "minor",
+      "note": "The address update flow produced a visible 'Address saved.' status after clicking Save address, but the run only saved prefilled values because no new address was supplied or entered.",
+      "step": 6,
+      "evidence": "?run=2026-07-10T0535-91f6/settle-in@exploratory&step=6"
+    },
+    {
+      "finding_id": "2026-07-10T0535-91f6/settle-in@exploratory#q0",
+      "source": "report",
+      "question": "Could the user find their past orders and tell what state each was in? What did they conclude?",
+      "answer": "Yes. After scrolling on Account, they found Order history, opened FF-1052, and concluded FF-1052 was shipped/still in transit while FF-1041 was delivered.",
+      "evidence_steps": [
+        3,
+        4,
+        7
+      ]
+    },
+    {
+      "finding_id": "2026-07-10T0535-91f6/settle-in@exploratory#q1",
+      "source": "report",
+      "question": "Did updating account details visibly succeed, and would the user trust the change took effect?",
+      "answer": "Yes for visible success: clicking Save address produced an 'Address saved.' status, which the user treated as confirmation. Caveat: the run saved the existing prefilled address rather than demonstrating changed values persisting.",
+      "evidence_steps": [
+        6,
+        7
+      ]
+    },
+    {
+      "finding_id": "2026-07-10T0535-91f6/settle-in@exploratory#q2",
+      "source": "report",
+      "question": "Where, if anywhere, did the user hesitate, backtrack, or get confused — and what on the screen caused it?",
+      "answer": "There was no explicit confusion, but they did backtrack from the order detail page to Account because the order page confirmed shipment only; address editing remained on Account. They also had to scroll because the shipping card/order area was below the fold.",
+      "evidence_steps": [
+        2,
+        4,
+        5
+      ]
+    },
+    {
+      "finding_id": "2026-07-10T0535-91f6/settle-in@exploratory#q3",
+      "source": "report",
+      "question": "Was anything broken, misleading, or missing that a real shopper would notice? Be specific.",
+      "answer": "Nothing appeared broken: no errors or accessibility violations were recorded. The main product issues were visual hierarchy: Account was small in the nav, order statuses were easy to miss, and the latest order state required interpretation because 'shipped' did not directly say 'not delivered yet.'",
+      "evidence_steps": [
+        1,
+        3,
+        4,
+        7
+      ]
+    }
+  ],
+  "adjudication": [
+    {
+      "finding_id": "2026-07-10T0524-bbce/buy-what-you-need@exploratory#f0",
+      "verdict": "false-positive",
+      "rationale": "Observation/positive note, not a defect."
+    },
+    {
+      "finding_id": "2026-07-10T0524-bbce/buy-what-you-need@exploratory#f1",
+      "verdict": "false-positive",
+      "rationale": "Related-product suggestions are explicitly out of SPEC scope."
+    },
+    {
+      "finding_id": "2026-07-10T0524-bbce/buy-what-you-need@exploratory#f2",
+      "verdict": "false-positive",
+      "rationale": "Observation/positive note, not a defect."
+    },
+    {
+      "finding_id": "2026-07-10T0524-bbce/buy-what-you-need@exploratory#f3",
+      "verdict": "false-positive",
+      "rationale": "Observation/positive note, not a defect. (Confirms the round-01 toast fix reads as clear feedback.)"
+    },
+    {
+      "finding_id": "2026-07-10T0524-bbce/buy-what-you-need@exploratory#f4",
+      "verdict": "false-positive",
+      "rationale": "Long-form pages scroll at 1280x720; no SPEC capability is violated (summary stays beside the checkout form, C4.2; account sections all present, C6). Accepted trade-off."
+    },
+    {
+      "finding_id": "2026-07-10T0524-bbce/buy-what-you-need@exploratory#f5",
+      "verdict": "false-positive",
+      "rationale": "Observation/positive note, not a defect."
+    },
+    {
+      "finding_id": "2026-07-10T0524-bbce/buy-what-you-need@exploratory#q0",
+      "verdict": "duplicate-of",
+      "rationale": "Restates f1 (related products) and scroll friction.",
+      "duplicate_of": "2026-07-10T0524-bbce/buy-what-you-need@exploratory#f1"
+    },
+    {
+      "finding_id": "2026-07-10T0524-bbce/buy-what-you-need@exploratory#q1",
+      "verdict": "false-positive",
+      "rationale": "Observation/positive note, not a defect."
+    },
+    {
+      "finding_id": "2026-07-10T0524-bbce/buy-what-you-need@exploratory#q2",
+      "verdict": "duplicate-of",
+      "rationale": "Restates f1 and f4.",
+      "duplicate_of": "2026-07-10T0524-bbce/buy-what-you-need@exploratory#f1"
+    },
+    {
+      "finding_id": "2026-07-10T0524-bbce/buy-what-you-need@exploratory#q3",
+      "verdict": "false-positive",
+      "rationale": "Observation/positive note, not a defect."
+    },
+    {
+      "finding_id": "2026-07-10T0535-91f6/settle-in@exploratory#f0",
+      "verdict": "false-positive",
+      "rationale": "Observation/positive note, not a defect."
+    },
+    {
+      "finding_id": "2026-07-10T0535-91f6/settle-in@exploratory#f1",
+      "verdict": "false-positive",
+      "rationale": "Observation/positive note, not a defect."
+    },
+    {
+      "finding_id": "2026-07-10T0535-91f6/settle-in@exploratory#f2",
+      "verdict": "false-positive",
+      "rationale": "Long-form pages scroll at 1280x720; no SPEC capability is violated (summary stays beside the checkout form, C4.2; account sections all present, C6). Accepted trade-off."
+    },
+    {
+      "finding_id": "2026-07-10T0535-91f6/settle-in@exploratory#f3",
+      "verdict": "false-positive",
+      "rationale": "Observation/positive note, not a defect."
+    },
+    {
+      "finding_id": "2026-07-10T0535-91f6/settle-in@exploratory#f4",
+      "verdict": "false-positive",
+      "rationale": "Status chips are readable and AA-contrast; 'visually weak' is a taste-level suggestion, no SPEC capability violated (C6.3). Accepted trade-off."
+    },
+    {
+      "finding_id": "2026-07-10T0535-91f6/settle-in@exploratory#f5",
+      "verdict": "false-positive",
+      "rationale": "Observation/positive note, not a defect."
+    },
+    {
+      "finding_id": "2026-07-10T0535-91f6/settle-in@exploratory#f6",
+      "verdict": "false-positive",
+      "rationale": "Actor chose not to type a new address; the save receipt behaved per C6.2. Actor-behavior note, not an app defect."
+    },
+    {
+      "finding_id": "2026-07-10T0535-91f6/settle-in@exploratory#q0",
+      "verdict": "false-positive",
+      "rationale": "Observation/positive note, not a defect."
+    },
+    {
+      "finding_id": "2026-07-10T0535-91f6/settle-in@exploratory#q1",
+      "verdict": "duplicate-of",
+      "rationale": "Restates f6's caveat.",
+      "duplicate_of": "2026-07-10T0535-91f6/settle-in@exploratory#f6"
+    },
+    {
+      "finding_id": "2026-07-10T0535-91f6/settle-in@exploratory#q2",
+      "verdict": "duplicate-of",
+      "rationale": "Restates below-fold scrolling.",
+      "duplicate_of": "2026-07-10T0535-91f6/settle-in@exploratory#f2"
+    },
+    {
+      "finding_id": "2026-07-10T0535-91f6/settle-in@exploratory#q3",
+      "verdict": "duplicate-of",
+      "rationale": "Restates weak status pills.",
+      "duplicate_of": "2026-07-10T0535-91f6/settle-in@exploratory#f4"
+    }
+  ],
+  "fixes": [],
+  "verification": {
+    "regression_green": true,
+    "regression_run_ids": []
+  },
+  "exclusions": [
+    {
+      "run_id": "2026-07-10T0524-bbce",
+      "criterion": "gateway error",
+      "note": "settle-in@exploratory INFRA again at the 55s gateway deadline; deadline raised to 180s and the case re-ran clean as 2026-07-10T0535-91f6 (in this round's runs)."
+    }
+  ],
+  "amendments": [
+    {
+      "at": "2026-07-10T05:42:33.462Z",
+      "note": "Verification is the offline regression pin suite (node --test studies/hillclimb/tests/) — no per-arm regression stories exist during shakedown."
+    }
+  ],
+  "clean_round": true
+}

@@ -1,0 +1,30 @@
+{
+  "run_id": "run-b",
+  "case": {
+    "id": "checkout@careful-buyer",
+    "mode": "journey",
+    "persona": "careful-buyer",
+    "persona_description": "Checks every checkout detail"
+  },
+  "mode": "act",
+  "pins": {
+    "actor_model": "gpt5_4_mini",
+    "grader_model": "gpt5_5",
+    "gateway": "http://127.0.0.1:8899",
+    "harness_version": "test",
+    "prompts_version": "test",
+    "driver": "playwright"
+  },
+  "result": { "status": "pass", "end_reason": "done" },
+  "totals": {
+    "steps": 2,
+    "executed_steps": 2,
+    "tokens": { "in": 5, "out": 7, "cache_read": 1 },
+    "cost_usd": 0.08,
+    "console_errors": 0,
+    "confusion_events": 0
+  },
+  "started_at": "2026-07-10T00:01:00.000Z",
+  "finished_at": "2026-07-10T00:01:05.000Z",
+  "duration_ms": 5000
+}

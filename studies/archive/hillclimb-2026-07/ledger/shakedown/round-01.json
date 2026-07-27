@@ -1,0 +1,308 @@
+{
+  "schema_version": 1,
+  "arm": "shakedown",
+  "round": 1,
+  "preregistration_sha": null,
+  "fingerprint": {
+    "captured_at": "2026-07-10T05:40:28.086Z",
+    "repo_head": "60e43a1d2f68bb68ce7d5be1832c9bd81cdd50e6",
+    "repo_dirty": false,
+    "app_dir": "studies/hillclimb/subject",
+    "fault_set": null,
+    "gateway": {
+      "base_url": "http://127.0.0.1:8899",
+      "healthz_ok": true,
+      "usage_limit_hits": 0
+    },
+    "models": {
+      "actor_model": "gpt5_4_mini",
+      "grader_model": "gpt5_5"
+    },
+    "checks": [
+      {
+        "name": "app-dir",
+        "ok": true,
+        "message": ""
+      },
+      {
+        "name": "base-url",
+        "ok": true,
+        "message": "expected HTTP 200, got 200"
+      },
+      {
+        "name": "reset",
+        "ok": true,
+        "message": "expected HTTP 2xx, got 200"
+      },
+      {
+        "name": "fault-set",
+        "ok": true,
+        "message": ""
+      },
+      {
+        "name": "gateway-healthz",
+        "ok": true,
+        "message": "expected {\"ok\":true}, got status 200"
+      },
+      {
+        "name": "gateway-log",
+        "ok": true,
+        "message": "0 usage limit hits"
+      },
+      {
+        "name": "git",
+        "ok": true,
+        "message": ""
+      }
+    ]
+  },
+  "instrument": {
+    "suite": "studies/hillclimb/shakedown",
+    "stories": [
+      "buy-what-you-need",
+      "settle-in"
+    ],
+    "personas": [
+      "exploratory"
+    ],
+    "repeats": 1
+  },
+  "runs": [
+    {
+      "run_id": "2026-07-10T0509-ed80",
+      "case_id": "buy-what-you-need@exploratory",
+      "persona": "exploratory",
+      "status": "explored",
+      "end_reason": "done",
+      "steps": 18,
+      "tokens": {
+        "in": 294446,
+        "out": 17996,
+        "cache_read": 110592
+      },
+      "cost_usd": 0.3291669,
+      "grade_score": 82
+    },
+    {
+      "run_id": "2026-07-10T0509-ed80",
+      "case_id": "settle-in@exploratory",
+      "persona": "exploratory",
+      "status": "infra",
+      "end_reason": "error",
+      "steps": 6,
+      "tokens": {
+        "in": 112445,
+        "out": 7121,
+        "cache_read": 88576
+      },
+      "cost_usd": 0.05658945,
+      "grade_score": null
+    }
+  ],
+  "findings": [
+    {
+      "finding_id": "2026-07-10T0509-ed80/buy-what-you-need@exploratory#f0",
+      "source": "finding",
+      "severity": "info",
+      "note": "The Snake Plant was immediately discoverable from the main product grid as the low-maintenance desk plant; the user found it where they first expected to start.",
+      "step": 1,
+      "evidence": "?run=2026-07-10T0509-ed80/buy-what-you-need@exploratory&step=1"
+    },
+    {
+      "finding_id": "2026-07-10T0509-ed80/buy-what-you-need@exploratory#f1",
+      "source": "finding",
+      "severity": "minor",
+      "note": "After adding the plant, the product page offered no related care/watering recommendation, so the user backtracked to the catalog and had to infer that watering supplies lived under Care & Tools.",
+      "step": 4,
+      "evidence": "?run=2026-07-10T0509-ed80/buy-what-you-need@exploratory&step=4"
+    },
+    {
+      "finding_id": "2026-07-10T0509-ed80/buy-what-you-need@exploratory#f2",
+      "source": "finding",
+      "severity": "info",
+      "note": "The Care & Tools category did match the user's mental model for watering supplies, and the Long-Spout Watering Can appeared as the first visible relevant item once that filter was selected.",
+      "step": 6,
+      "evidence": "?run=2026-07-10T0509-ed80/buy-what-you-need@exploratory&step=6"
+    },
+    {
+      "finding_id": "2026-07-10T0509-ed80/buy-what-you-need@exploratory#f3",
+      "source": "finding",
+      "severity": "minor",
+      "note": "The bottom add-to-cart toast became the expected cart path twice, but attempts to use its View cart action failed with an unavailable reference; the user recovered through the small header cart badge.",
+      "step": 3,
+      "evidence": "?run=2026-07-10T0509-ed80/buy-what-you-need@exploratory&step=3"
+    },
+    {
+      "finding_id": "2026-07-10T0509-ed80/buy-what-you-need@exploratory#f4",
+      "source": "finding",
+      "severity": "minor",
+      "note": "Cart and checkout were understandable once reached: the cart showed both items and the Checkout button was prominent in the summary area.",
+      "step": 10,
+      "evidence": "?run=2026-07-10T0509-ed80/buy-what-you-need@exploratory&step=10"
+    },
+    {
+      "finding_id": "2026-07-10T0509-ed80/buy-what-you-need@exploratory#f5",
+      "source": "finding",
+      "severity": "minor",
+      "note": "On checkout, the Place order button sat below the fold and the user first submitted before all payment fields were complete, then had to fill expiry and security code before retrying.",
+      "step": 13,
+      "evidence": "?run=2026-07-10T0509-ed80/buy-what-you-need@exploratory&step=13"
+    },
+    {
+      "finding_id": "2026-07-10T0509-ed80/buy-what-you-need@exploratory#f6",
+      "source": "finding",
+      "severity": "info",
+      "note": "The final confirmation page clearly proved completion with an order number, confirmed status, both purchased items, total, delivery details, and receipt notice.",
+      "step": 18,
+      "evidence": "?run=2026-07-10T0509-ed80/buy-what-you-need@exploratory&step=18"
+    },
+    {
+      "finding_id": "2026-07-10T0509-ed80/buy-what-you-need@exploratory#f7",
+      "source": "finding",
+      "severity": "info",
+      "note": "No axe-core accessibility violations or console errors were recorded across the run."
+    },
+    {
+      "finding_id": "2026-07-10T0509-ed80/buy-what-you-need@exploratory#q0",
+      "source": "report",
+      "question": "Where, if anywhere, did the user hesitate, backtrack, or get confused — and what on the screen caused it?",
+      "answer": "The main hesitation was after adding each item: the user looked for the toast's View cart path, but the action failed twice, then they used the small header cart badge. They also backtracked from the plant product page because no watering-supply or related-products affordance was visible, and on checkout they had to scroll because Place order was below the fold.",
+      "evidence_steps": [
+        3,
+        4,
+        8,
+        9,
+        12
+      ]
+    },
+    {
+      "finding_id": "2026-07-10T0509-ed80/buy-what-you-need@exploratory#q1",
+      "source": "report",
+      "question": "Did every action the user took produce a visible confirmation that it worked? Name any that did not.",
+      "answer": "Add-to-cart actions produced visible bottom toasts and cart-count evidence, and the final order produced a strong confirmation page. The two attempted toast View cart clicks did not successfully navigate because the referenced control was unavailable; the first Place order attempt also did not complete the order because required payment fields were still empty.",
+      "evidence_steps": [
+        3,
+        8,
+        13,
+        17,
+        18
+      ]
+    },
+    {
+      "finding_id": "2026-07-10T0509-ed80/buy-what-you-need@exploratory#q2",
+      "source": "report",
+      "question": "Was anything broken, misleading, or missing that a real shopper would notice? Be specific.",
+      "answer": "The likely real-shopper issues were the unstable or hard-to-use toast View cart action, the missing related watering-supply suggestion on the plant page, the small header cart badge as the fallback path, and the final checkout button being below the fold.",
+      "evidence_steps": [
+        3,
+        4,
+        8,
+        9,
+        12
+      ]
+    },
+    {
+      "finding_id": "2026-07-10T0509-ed80/buy-what-you-need@exploratory#q3",
+      "source": "report",
+      "question": "Could the user verify their order was placed, and how?",
+      "answer": "Yes. The confirmation page explicitly said order FF-1053 was confirmed, showed both the Snake Plant and Long-Spout Watering Can, listed the $54.00 total, delivery address, and receipt notice.",
+      "evidence_steps": [
+        18
+      ]
+    }
+  ],
+  "adjudication": [
+    {
+      "finding_id": "2026-07-10T0509-ed80/buy-what-you-need@exploratory#f0",
+      "verdict": "false-positive",
+      "rationale": "Observation/positive note, not a defect."
+    },
+    {
+      "finding_id": "2026-07-10T0509-ed80/buy-what-you-need@exploratory#f1",
+      "verdict": "false-positive",
+      "rationale": "Related-product suggestions are not a SPEC capability (explicitly out of scope as of 60e43a1)."
+    },
+    {
+      "finding_id": "2026-07-10T0509-ed80/buy-what-you-need@exploratory#f2",
+      "verdict": "false-positive",
+      "rationale": "Observation/positive note, not a defect."
+    },
+    {
+      "finding_id": "2026-07-10T0509-ed80/buy-what-you-need@exploratory#f3",
+      "verdict": "new-real-issue",
+      "rationale": "Real defect in the clean reference: 6s toast auto-dismiss made its 'View cart' action unusable (C7.1). Fixed in 60e43a1."
+    },
+    {
+      "finding_id": "2026-07-10T0509-ed80/buy-what-you-need@exploratory#f4",
+      "verdict": "false-positive",
+      "rationale": "Observation/positive note, not a defect."
+    },
+    {
+      "finding_id": "2026-07-10T0509-ed80/buy-what-you-need@exploratory#f5",
+      "verdict": "false-positive",
+      "rationale": "Long-form pages scroll at 1280x720; no SPEC capability is violated (summary stays beside the checkout form, C4.2; account sections all present, C6). Accepted trade-off. Premature submit was caught by designed validation (C4.3)."
+    },
+    {
+      "finding_id": "2026-07-10T0509-ed80/buy-what-you-need@exploratory#f6",
+      "verdict": "false-positive",
+      "rationale": "Observation/positive note, not a defect."
+    },
+    {
+      "finding_id": "2026-07-10T0509-ed80/buy-what-you-need@exploratory#f7",
+      "verdict": "false-positive",
+      "rationale": "Observation/positive note, not a defect."
+    },
+    {
+      "finding_id": "2026-07-10T0509-ed80/buy-what-you-need@exploratory#q0",
+      "verdict": "duplicate-of",
+      "rationale": "Restates the toast failure and the related-products note.",
+      "duplicate_of": "2026-07-10T0509-ed80/buy-what-you-need@exploratory#f3"
+    },
+    {
+      "finding_id": "2026-07-10T0509-ed80/buy-what-you-need@exploratory#q1",
+      "verdict": "duplicate-of",
+      "rationale": "Restates the toast action failure.",
+      "duplicate_of": "2026-07-10T0509-ed80/buy-what-you-need@exploratory#f3"
+    },
+    {
+      "finding_id": "2026-07-10T0509-ed80/buy-what-you-need@exploratory#q2",
+      "verdict": "duplicate-of",
+      "rationale": "Restates f1/f3/f5.",
+      "duplicate_of": "2026-07-10T0509-ed80/buy-what-you-need@exploratory#f3"
+    },
+    {
+      "finding_id": "2026-07-10T0509-ed80/buy-what-you-need@exploratory#q3",
+      "verdict": "false-positive",
+      "rationale": "Observation/positive note, not a defect."
+    }
+  ],
+  "fixes": [
+    {
+      "commit": "60e43a1d2f68bb68ce7d5be1832c9bd81cdd50e6",
+      "finding_ids": [
+        "2026-07-10T0509-ed80/buy-what-you-need@exploratory#f3"
+      ],
+      "fault_id": null,
+      "description": "Raised toast auto-dismiss 6s->20s so its 'View cart' action is usable (C7.1); SPEC amended to list product recommendations as out of scope.",
+      "regression_story": "studies/hillclimb/tests/subject-sanity.test.js"
+    }
+  ],
+  "verification": {
+    "regression_green": true,
+    "regression_run_ids": []
+  },
+  "exclusions": [
+    {
+      "run_id": "2026-07-10T0509-ed80",
+      "criterion": "gateway error",
+      "note": "settle-in@exploratory INFRA: 3x 'gateway deadline exceeded' at the default 55s CODEX_GATEWAY_DEADLINE_MS; no grade produced."
+    }
+  ],
+  "amendments": [
+    {
+      "at": "2026-07-10T05:42:33.407Z",
+      "note": "Round ran before the bench was wired into the procedure: fingerprint captured retroactively at 60e43a1 (the runs executed on the pre-toast-fix reference, gateway deadline still 55s). Calibration round."
+    }
+  ],
+  "clean_round": false
+}

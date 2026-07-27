@@ -1,0 +1,26 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "types": ["node"]
+  },
+  "include": [
+    "src/core/**/*.ts",
+    "src/cli/**/*.ts",
+    "src/run-viewer/node.ts",
+    "tests/**/*.ts"
+  ],
+  "exclude": [
+    "examples/**",
+    "studies/**",
+    "tools/**",
+    "skills/**",
+    "src/platform/web/vendor/**",
+    "src/core/shared/**",
+    "src/run-viewer/web/**",
+    "tests/fixtures/script-suites/**",
+    "tests/fixtures/authoring-api/drafts/**",
+    "src/platform/runner-agent/tests/fixtures/script-attacks/**"
+  ]
+}

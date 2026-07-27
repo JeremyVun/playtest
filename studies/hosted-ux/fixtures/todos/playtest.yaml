@@ -1,0 +1,5 @@
+# Study-owned suite imported into the hosted product by seed.mjs. Keep it
+# self-contained because the hosted runner receives only this directory.
+app:
+  base_url: http://127.0.0.1:4173
+  init: ./reset.mjs

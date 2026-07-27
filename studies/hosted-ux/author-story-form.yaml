@@ -1,0 +1,14 @@
+description: Author a new story through the form without touching YAML.
+story: |
+  Your team's todo app keeps shipping regressions in completing a task.
+  You want the tool to watch for that: add a check, in your own words,
+  that a user can mark an existing todo as done and see it move to the
+  completed list. Get it saved so it will run with the rest — using
+  plain forms only; if something demands code or markup, that is a
+  failure worth noting.
+persona: [pm-storyteller]
+report:
+  - What path did they take to "new story", and was the entry point where they expected it?
+  - Could they complete the whole authoring in the form, or did YAML/markup/jargon leak into their path? Quote the exact words that felt developer-only.
+  - How did they handle success criteria — did the builder guide them to something meaningful, or did they fall back to prose? Did validation/lint messages help or read as errors "not for them"?
+  - Did they end up confident the story was saved and will run next time? What told them so (or failed to)?

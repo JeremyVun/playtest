@@ -1,0 +1,127 @@
+{
+  "schema_version": 1,
+  "faults": [
+    {
+      "id": "f-contrast-banner",
+      "level": "L1",
+      "class": "a11y-contrast",
+      "severity": "minor",
+      "surface": "home",
+      "oracle": "a user reading the promo banner cannot distinguish the text",
+      "injection": {
+        "kind": "mutation",
+        "note": "low contrast color",
+        "edits": [
+          {
+            "file": "public/home.js",
+            "find": "BEFORE-f-contrast-banner",
+            "replace": "AFTER-f-contrast-banner"
+          }
+        ]
+      },
+      "masked_by": []
+    },
+    {
+      "id": "f-copy-help",
+      "level": "L1",
+      "class": "misleading-copy",
+      "severity": "info",
+      "surface": "help",
+      "oracle": "a user seeking help sees stale shipping copy",
+      "injection": {
+        "kind": "mutation",
+        "note": "wrong copy",
+        "edits": [
+          {
+            "file": "public/help.js",
+            "find": "BEFORE-f-copy-help",
+            "replace": "AFTER-f-copy-help"
+          }
+        ]
+      },
+      "masked_by": []
+    },
+    {
+      "id": "f-dead-add-cart",
+      "level": "L2",
+      "class": "dead-control",
+      "severity": "major",
+      "surface": "product-detail",
+      "oracle": "a user pressing Add to cart sees nothing happen",
+      "injection": {
+        "kind": "mutation",
+        "note": "handler detached",
+        "edits": [
+          {
+            "file": "public/product.js",
+            "find": "BEFORE-f-dead-add-cart",
+            "replace": "AFTER-f-dead-add-cart"
+          }
+        ]
+      },
+      "masked_by": []
+    },
+    {
+      "id": "f-quantity-update",
+      "level": "L2",
+      "class": "stale-state",
+      "severity": "minor",
+      "surface": "cart",
+      "oracle": "a user changing cart quantity still sees the old subtotal",
+      "injection": {
+        "kind": "mutation",
+        "note": "subtotal not recomputed",
+        "edits": [
+          {
+            "file": "public/cart.js",
+            "find": "BEFORE-f-quantity-update",
+            "replace": "AFTER-f-quantity-update"
+          }
+        ]
+      },
+      "masked_by": []
+    },
+    {
+      "id": "f-checkout-route",
+      "level": "L3",
+      "class": "broken-flow",
+      "severity": "major",
+      "surface": "checkout",
+      "oracle": "a user with cart contents is sent back to the product page at checkout",
+      "injection": {
+        "kind": "mutation",
+        "note": "wrong redirect target",
+        "edits": [
+          {
+            "file": "server.mjs",
+            "find": "BEFORE-f-checkout-route",
+            "replace": "AFTER-f-checkout-route"
+          }
+        ]
+      },
+      "masked_by": [
+        "f-dead-add-cart"
+      ]
+    },
+    {
+      "id": "f-missing-search",
+      "level": "L4",
+      "class": "missing-capability",
+      "severity": "major",
+      "surface": "catalog",
+      "oracle": "a user cannot search the catalog at all",
+      "injection": {
+        "kind": "mutation",
+        "note": "route removed",
+        "edits": [
+          {
+            "file": "public/search.js",
+            "find": "BEFORE-f-missing-search",
+            "replace": "AFTER-f-missing-search"
+          }
+        ]
+      },
+      "masked_by": []
+    }
+  ]
+}

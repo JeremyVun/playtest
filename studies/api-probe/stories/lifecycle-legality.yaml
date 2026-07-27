@@ -1,0 +1,35 @@
+description: Falsify lifecycle legality — inactive and closed accounts must not transact, and settled transfers must not cancel.
+tags: [invariant]
+story: |
+  Try to falsify this rule:
+
+  Only active accounts transact. A transfer naming an account that has never
+  been activated is rejected. A transfer naming a closed account is rejected. An
+  account with a pending transfer against it cannot be closed. A transfer that
+  has already settled — or failed — cannot be canceled.
+
+  It applies to POST /transfers, POST /accounts/{accountId}/close, and
+  POST /transfers/{transferId}/cancel. There are no declared exceptions. Note
+  that closure is a soft delete, so a closed account still answers with a
+  tombstone and still serves its entry history: that is documented behaviour and
+  is not a counterexample.
+
+  Every clause here is a state machine you can attack from the outside. Try to
+  transact against an account you never activated, and against one you closed —
+  as the payer and as the payee. Close an account while a transfer naming it is
+  still pending, from either side. Close one twice. Activate one twice. Cancel a
+  transfer after settlement has advanced, cancel one twice, cancel one that
+  already failed. Interleave the operations: close between creating a transfer
+  and ticking, cancel between two ticks, activate after closing.
+
+  The rule is about what the service *accepted*, so make the account and transfer
+  states legible in your trace before you use them: read an account back after
+  you create, activate, or close it, and read a transfer back — or read the tick
+  result — so its status at the moment you act on it is recorded. An acceptance
+  the trace cannot connect to a state is not evidence.
+
+  A refusal is the rule working. An acceptance where the rule says refusal is
+  the counterexample: reproduce it minimally and stop.
+
+success:
+  - ledger_lifecycle_legality: "transfers, closures, and cancellations against observed account and transfer states"

@@ -1,0 +1,12 @@
+# Cross-run history: the todos/add-todo family has 6 fixture runs (5 pass,
+# 1 fail), enough for the trend view to be meaningful.
+description: Surface the cross-run trend for the todos/add-todo journey.
+tags: ["test"]
+story: |
+  You want to see how the "todos/add-todo" journey's quality has trended
+  across its recent runs — the chart that plots each run against the ones
+  before it, with the "vs prev" comparison. A plain list of the runs is not
+  enough: open one of this journey's runs and find that history panel.
+success:
+  - url_matches: "*run=*"
+  - assert: 'a cross-run history for the journey is visible, including the "vs prev" comparison'

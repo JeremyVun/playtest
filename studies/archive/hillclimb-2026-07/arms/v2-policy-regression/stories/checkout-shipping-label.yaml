@@ -1,0 +1,9 @@
+description: Checkout labels flat $6 shipping honestly (not free).
+persona: weekend-browser
+story: |
+  Add any in-stock plant to the cart and open Checkout. In the order summary,
+  read the shipping line label and amount. Confirm shipping is charged $6.00 and
+  is not labeled "Free shipping" while still showing a dollar amount.
+report:
+  - What exact label and amount did the shipping line show?
+  - Did the label match the amount charged (no free-vs-paid contradiction)?

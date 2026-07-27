@@ -1,0 +1,15 @@
+description: On cart mid-shop, find a page-local continue-shopping path.
+tags: [risk]
+story: |
+  Add any one in-stock plant to the cart, then open the cart page. Stay on
+  /cart. Look for a page-local "continue shopping" (or equivalent) link in
+  the cart body — not only the global header Shop / shop name. Note whether
+  that local path exists. If it does, click it and confirm you return to
+  the catalog. If it does not, say clearly that only global nav remains and
+  do not pretend the local link was there.
+persona: [adversarial-tester]
+report:
+  - Was there a continue-shopping (or equivalent) control in the cart page body?
+  - If yes, where did it go? If no, what options remained to keep shopping?
+  - Did the cart contents and badge stay consistent while checking?
+  - Was anything broken, misleading, or missing that a real shopper would notice? Be specific.

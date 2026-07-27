@@ -1,0 +1,14 @@
+description: Checkout accepts a plausible short postcode, never discards typed payment details on a validation trip, and shows a clear reason when a card is declined.
+story: |
+  You are checking out one plant to a delivery address whose postcode is four
+  digits ("6220"). Fill in the whole form, including card details, and place
+  the order. If the shop objects to anything, fix only what it asks for and try
+  again — you should not have to retype things you already entered. If your card
+  is declined, you expect the shop to say so plainly and tell you whether you
+  were charged.
+persona: [cautious-first-timer]
+report:
+  - "Did the four-digit postcode 6220 go through, or were you forced to pad it to five digits?"
+  - "After any validation message, were your card number, expiry, and security code still there, or had they been wiped?"
+  - "When the temperamental card (4000 0000 0000 0002) was declined, did the shop show a clear message, including whether you had been charged?"
+  - "While the order was being placed, was there a visible in-progress state, and were you prevented from double-submitting?"

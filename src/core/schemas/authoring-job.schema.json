@@ -1,0 +1,141 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Playtest script authoring job",
+  "description": "One bounded authoring job: a target the owner authorized, where its OpenAPI document comes from, the rule statements they approved, and the budgets the loop may spend. See docs/contracts/scripts.md#the-authoring-loop.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["target"],
+  "properties": {
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base_url", "authorization"],
+      "description": "The one API this job authors against.",
+      "properties": {
+        "base_url": {
+          "type": "string",
+          "description": "The target's base URL. Every path a script uses is appended to it, and its origin is the only one the client may reach by default."
+        },
+        "allowed_origins": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "description": "Extra origins the client may reach besides base_url's own — bare http(s) origins, same semantics as the API driver's egress allowlist. A credential reference never resolves for one of these."
+        },
+        "authorization": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["origin", "approved_by"],
+          "description": "The recorded target authorization (DESIGN §4 step 2): the owner's answer to \"safe to write test data to this environment?\". Authoring refuses to start without it, and it covers exactly the origin it names — an origin change invalidates it.",
+          "properties": {
+            "origin": {
+              "type": "string",
+              "description": "The origin this authorization covers. It must be base_url's origin."
+            },
+            "approved_by": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Who declared it. An authorization records a person, not a flag."
+            },
+            "approved_at": { "type": "string", "description": "When it was declared." },
+            "record": { "type": "string", "description": "Where the declaration is written down — a document path or a URL." },
+            "write": {
+              "type": "boolean",
+              "default": true,
+              "description": "Whether the owner authorized writes. false keeps the client in read-only mode: only GET and HEAD are forwarded, at the wire."
+            }
+          }
+        }
+      }
+    },
+    "spec": {
+      "description": "Where the OpenAPI document comes from. Omit it to auto-discover the document on the target. There is no way to declare that a job has no spec: every operation obligation comes from the document.",
+      "oneOf": [
+        { "type": "string", "description": "A local path, or an http(s) URL." },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "file": { "type": "string", "description": "A path to the document, resolved relative to this file." },
+            "url": { "type": "string", "description": "An http(s) URL the document is fetched from." },
+            "document": { "type": "object", "description": "The document itself, pasted or uploaded." },
+            "text": { "type": "string", "description": "The document as JSON or YAML text." },
+            "discover": { "type": "boolean", "description": "Probe the target for the document (the default when nothing else is named)." },
+            "paths": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Override the conventional paths auto-discovery probes, e.g. [\"/openapi.json\", \"/swagger.json\"]."
+            }
+          }
+        }
+      ]
+    },
+    "rules": {
+      "description": "The approved rule statements. Only sentences a human approved reach a handout or a gate. Until rule cards ship (S3), this is a hand-written list or an INVARIANTS.md document.",
+      "oneOf": [
+        { "type": "string", "description": "A path to an INVARIANTS.md (or .json) document, resolved relative to this file." },
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["statement"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+$", "description": "The rule's obligation id becomes rule:<id>. Derived from the title or statement when omitted." },
+              "title": { "type": "string" },
+              "statement": { "type": "string", "minLength": 1, "description": "The approved sentence, exactly as the owner approved it." },
+              "applicability": { "type": "string", "description": "Where the rule applies, and its declared exceptions." },
+              "notes": {
+                "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }],
+                "description": "The owner's notes on the card. They steer authoring and appear in the handout beside their rule."
+              },
+              "approved_skip_reasons": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Reasons a suite may cite to leave this obligation uncovered. Any other reason leaves it unaccounted, which is unsound."
+              },
+              "unsupported": { "type": "boolean", "description": "The owner marked this rule as inexpressible on this substrate." },
+              "provenance": { "type": "string", "description": "Where the card came from, e.g. \"POST /transfers · status enum\"." }
+            }
+          }
+        }
+      ]
+    },
+    "secrets": {
+      "type": "array",
+      "description": "The PLAYTEST_SECRET_<NAME> references this job permits. A script can cause an authenticated request with one; it can never read the value.",
+      "items": {
+        "oneOf": [
+          { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name"],
+            "properties": {
+              "name": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+              "role": { "type": "string", "description": "Who this credential authenticates, as one line in the handout. What it can reach is for the author to discover." }
+            }
+          }
+        ]
+      }
+    },
+    "params": { "type": "object", "description": "A frozen JSON object handed to the script. It must never carry a secret reference." },
+    "reset": { "type": "string", "description": "The target's reset affordance, in one sentence, e.g. \"POST /admin/reset with {\\\"seed\\\":\\\"dev\\\"} restores the seeded state\". Stated in the handout so every execution starts from a known state." },
+    "model": { "type": "string", "description": "The model that authors. Defaults to the configured actor model." },
+    "out_dir": { "type": "string", "description": "Where the handout, executions, transcript, and bundle are written. Resolved relative to this file." },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Three ceilings, all enforced. Defaults are productized from what the S0 trials actually used (docs/contracts/scripts.md#authoring-budgets).",
+      "properties": {
+        "iterations": { "type": "integer", "minimum": 1, "description": "Model turns for the whole job (default 8)." },
+        "requests": { "type": "integer", "minimum": 1, "description": "Requests across every execution of the job (default 1500)." },
+        "wall_clock_ms": { "type": "integer", "minimum": 1, "description": "Wall clock for the whole job (default 2700000 — 45 minutes)." },
+        "execution_budget": { "type": "integer", "minimum": 1, "description": "Wire-enforced request budget for one execution (default 400)." },
+        "execution_timeout_ms": { "type": "integer", "minimum": 1, "description": "Wall clock for one execution (default 300000)." },
+        "request_timeout_ms": { "type": "integer", "minimum": 1, "description": "Per-request abort (default 15000)." },
+        "max_output_tokens": { "type": "integer", "minimum": 1, "description": "Output ceiling for one model turn. A whole suite comes back every turn, so this is large by default (64000)." }
+      }
+    }
+  }
+}

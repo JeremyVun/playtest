@@ -1,0 +1,9 @@
+# Probe baselines stay untracked until P2 fixes baseline hygiene: an API
+# baseline today persists the actor's request headers and bodies and the prior
+# response body (DESIGN §2, BUILD_PLAN P1 standing rules). A --fresh run that
+# happens to pass will write one here; nothing about it is worth committing.
+results/
+
+# Run artifacts, if anyone points a runs root at the suite. har.json is flagged
+# sensitive and is never committed.
+runs/

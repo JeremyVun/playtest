@@ -1,0 +1,11 @@
+description: Cart empty copy is plain English; non-empty cart has continue-shopping link.
+persona: weekend-browser
+story: |
+  Open Cart while it is empty. Confirm the empty message is ordinary shopper language
+  (not "collection returned 0 rows" or similar) and offers a link back to the shop.
+  Then add any plant from the shop, return to Cart, and confirm a "Continue shopping"
+  (or equivalent) link in the cart body/footer — not only the global header Shop link —
+  returns you to the catalog.
+report:
+  - Was the empty-cart copy free of implementation jargon?
+  - With items in the cart, was there a page-local continue-shopping path?

@@ -1,0 +1,11 @@
+[
+  {
+    "description": "B18 (phase 3) — Empty states no longer leak implementation/database prose to the shopper; fixed as one class. (1) Empty-cart copy 'Cart collection returned 0 rows.' -> 'Your cart is empty for now — nothing added yet.' (SPEC C3.4 'says so warmly', C7.2). (2) No-match search copy 'Query returned no product rows for the given term.' -> 'We couldn't find anything matching \"<term>\".' (SPEC C1.5 'says so in plain words'); this second instance was caught proactively from code + SPEC, not from a reported finding — deduped into the same class. In-scope side-fix judged on its own merits: the adjacent 'Clear the search' link passed `q` back into catalogHref, rebuilding the same failing search instead of clearing it; dropped `q` so it truly clears (category/sort preserved), satisfying C1.5 'one-click recovery'. The reported finding surfaced only because the phase-1 B15 redirect made the empty-cart page reachable through checkout.",
+    "files": ["pages.js"],
+    "finding_ids": [
+      "empty-cart-and-back-link@weekend-browser#f4"
+    ],
+    "regression_story": "studies/hillclimb/arms/policy-regression/stories/empty-states-are-warm.yaml",
+    "skipped": false
+  }
+]

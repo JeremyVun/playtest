@@ -1,0 +1,12 @@
+app:
+  auth: admin
+tags: [smoke]
+description: Add "Audit log" and see it appear in the list.
+story: |
+  As an admin reviewing site activity, add a todo called "Audit log" so it
+  shows up in the list for later review.
+success:
+  - element_exists: "[data-testid=todo-item]"
+  - api_called: "POST /api/todos"
+  - assert: the list shows a todo called "Audit log"
+  - console_errors: 0

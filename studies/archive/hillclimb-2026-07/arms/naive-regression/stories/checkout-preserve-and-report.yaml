@@ -1,0 +1,14 @@
+description: A failed checkout must never wipe typed payment fields and must state the server's reason (e.g. a declined card, with no-charge reassurance).
+story: |
+  Add a plant to the cart and go to checkout. First, deliberately clear the city
+  field, fill in full card details, and press Place order — you expect a
+  validation message, but you should NOT have to retype your card number, expiry,
+  and security code afterward. Fix the city. Then, to test a declined payment,
+  enter the card number 4000 0000 0000 0002 and place the order again. Read
+  carefully what the shop tells you about the payment and whether you were
+  charged, and whether the button showed any in-progress state.
+persona: [cautious-first-timer]
+report:
+  - After a validation error, were your card number, expiry, and security code still filled in, or had they been wiped?
+  - When the 4000...0002 card was declined, did the shop show a clear message stating the card was declined and no charge was made?
+  - Did Place order show a visible in-progress state and prevent silent no-op submits where nothing at all appears to happen?

@@ -1,0 +1,11 @@
+description: Out-of-stock products never claim to be in stock.
+persona: adversarial-tester
+story: |
+  Open the Fiddle-Leaf Fig product page (/product/fiddle-leaf-fig). Read the stock
+  line under the price and the main purchase button. Confirm the page plainly says
+  the plant is out of stock (not "In stock"), the button is disabled and labeled
+  out of stock, and nothing on the purchase block claims units are available.
+report:
+  - What did the stock line say?
+  - What did the purchase button say, and was it enabled or disabled?
+  - Did stock line and button agree that the item cannot be bought?

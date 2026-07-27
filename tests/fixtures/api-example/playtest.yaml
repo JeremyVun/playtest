@@ -1,0 +1,28 @@
+# A committed API journey suite, baseline and all.
+#
+# It exists to prove the whole regression loop end to end on the api driver:
+# a recorded journey is a portable program (its baseline carries no instance's
+# ids), it replays deterministically with no model in the loop, its Tier-1/2
+# invariant policies hold against a healthy target, and when the surface moves
+# the run heals into a reviewable changed journey that a human can accept.
+#
+# The target is the test-owned ledger fixture at ../invariant-api/server.ts.
+# Run it against a fresh instance with --base-url; the committed baseline is
+# base-aware, so it does not care which port the instance came up on. The suite
+# is self-contained on purpose — spec included — so it can be copied somewhere
+# else and still run.
+app:
+  driver: api
+  # Overridden per run with --base-url: the fixture binds an ephemeral port.
+  base_url: http://127.0.0.1:4180
+  openapi: ./openapi.yaml
+
+# The ledger's ids and timestamps are fresh per instance. Shape projection
+# already absorbs both; `updated_at` is excluded because it moves within a
+# single run, and `$.status` is compared by value because the account's
+# lifecycle state is the thing this journey is actually about.
+match:
+  exclude:
+    - $.updated_at
+  compare:
+    - $.status

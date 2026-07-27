@@ -1,0 +1,17 @@
+{
+  "score": 62,
+  "completion": "partial",
+  "summary": "The cart path stalled.",
+  "findings": [
+    { "severity": "major", "note": "Add to cart did not change the cart.", "step": 2 },
+    { "severity": "minor", "note": "The help text was confusing." }
+  ],
+  "report": [
+    { "question": "Could the user reach checkout?", "answer": "No, the cart never updated.", "evidence_steps": [3, 1] }
+  ],
+  "a11y": {
+    "total_violations": 0,
+    "steps_with_violations": 0,
+    "top_rules": []
+  }
+}

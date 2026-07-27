@@ -1,0 +1,13 @@
+description: Take a reported product problem from queue to a handed-off ticket.
+story: |
+  The tool claims it noticed a product problem while exploring the todo
+  app. Find that claim, judge whether it is real or noise using the
+  evidence behind it, and if it is real, get it out of the tool and on
+  its way to your team's tracker — or dismiss it if it is not worth
+  anyone's time.
+persona: [triaging-dev]
+report:
+  - Where did they find the finding (Findings, a queue, home), and did the app's name for it match what they were hunting?
+  - Could they get from the claim to its evidence (run, step, screenshot) in one click? Did they trust it enough to decide?
+  - What did the accept/dismiss/export affordances look like to them — did they find the hand-off, and did its output (ticket body/link) carry the evidence?
+  - Did any state change silently, or did every action confirm itself?

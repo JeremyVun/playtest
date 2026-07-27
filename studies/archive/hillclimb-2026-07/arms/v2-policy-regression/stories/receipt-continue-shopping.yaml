@@ -1,0 +1,13 @@
+description: Receipt Continue shopping returns to the catalog, not checkout.
+persona: gift-rusher
+story: |
+  Buy a cheap in-stock care item (Gentle Plant Food is fine): add one to cart,
+  checkout with the prefilled delivery details and a valid-looking card
+  (4242 4242 4242 4242, future expiry, any 3-digit CVC), and reach the order
+  receipt. On the receipt, click the receipt's own "Continue shopping" control
+  (not the header). Confirm you land on the shop catalog (/), not on an empty
+  checkout form.
+report:
+  - Did the order complete and show a receipt?
+  - Where did the receipt Continue shopping control take the user?
+  - Was that destination the catalog, not an empty checkout dead end?

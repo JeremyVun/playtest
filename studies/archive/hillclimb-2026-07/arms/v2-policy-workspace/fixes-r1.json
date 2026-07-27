@@ -1,0 +1,212 @@
+[
+  {
+    "description": "Restore cart quantity steppers/input and working Remove; fix empty-cart plain copy and continue-shopping link (C3.2–C3.5).",
+    "files": ["pages.js"],
+    "finding_ids": [
+      "2026-07-13T0812-23cf/buy-a-specific-gift@cautious-first-timer#f4",
+      "2026-07-13T0812-23cf/buy-a-specific-gift@cautious-first-timer#f5",
+      "2026-07-13T0812-ade1/change-your-mind@cautious-first-timer#f0",
+      "2026-07-13T0812-ade1/change-your-mind@weekend-browser#f0",
+      "2026-07-13T0812-ade1/change-your-mind@weekend-browser#f1",
+      "2026-07-13T0812-23cf/checkout-hiccup@cautious-first-timer#f3",
+      "2026-07-13T0812-ade1/checkout-hiccup@gift-rusher#f2",
+      "2026-07-13T0812-ade1/checkout-hiccup@gift-rusher#f3",
+      "2026-07-13T0825-64e7/club-order@returning-regular#f4",
+      "2026-07-13T0825-64e7/club-order@returning-regular#f5",
+      "2026-07-13T0856-2a58/club-order@weekend-browser#f4",
+      "2026-07-13T0856-2a58/outfit-a-shelf@returning-regular#f4",
+      "2026-07-13T0856-2a58/outfit-a-shelf@returning-regular#f5",
+      "2026-07-13T0825-51dc/outfit-a-shelf@weekend-browser#f5",
+      "2026-07-13T0825-51dc/outfit-a-shelf@weekend-browser#f6",
+      "2026-07-13T0856-2a58/risk/risk-card-unspaced@adversarial-tester#f2",
+      "2026-07-13T0825-64e7/risk/risk-cart-local-continue@adversarial-tester#f0"
+    ],
+    "regression_story": "studies/hillclimb/arms/v2-policy-regression/stories/cart-edit-and-remove.yaml",
+    "skipped": false
+  },
+  {
+    "description": "Add-to-cart immediate toast naming the item + cart link and header badge update without leaving the page (C2.3, C7.1).",
+    "files": ["pages.js"],
+    "finding_ids": [
+      "2026-07-13T0812-23cf/buy-a-specific-gift@cautious-first-timer#f3",
+      "2026-07-13T0812-ade1/change-your-mind@cautious-first-timer#f2",
+      "2026-07-13T0812-ade1/checkout-hiccup@gift-rusher#f1",
+      "2026-07-13T0856-2a58/club-order@weekend-browser#f3",
+      "2026-07-13T0856-2a58/outfit-a-shelf@returning-regular#f3",
+      "2026-07-13T0856-2a58/risk/risk-last-unit@adversarial-tester#f3",
+      "2026-07-13T0825-64e7/risk/risk-cart-local-continue@adversarial-tester#f1"
+    ],
+    "regression_story": "studies/hillclimb/arms/v2-policy-regression/stories/add-to-cart-feedback.yaml",
+    "skipped": false
+  },
+  {
+    "description": "Restore catalog search input, clear-search recovery that drops q, plain empty-results copy (C1.2, C1.5).",
+    "files": ["pages.js"],
+    "finding_ids": [
+      "2026-07-13T0825-51dc/risk/risk-no-results-clear@adversarial-tester#f0",
+      "2026-07-13T0825-51dc/risk/risk-no-results-clear@adversarial-tester#f1",
+      "2026-07-13T0825-51dc/risk/risk-no-results-clear@adversarial-tester#f4",
+      "2026-07-13T0825-51dc/risk/risk-no-results-clear@adversarial-tester#f5",
+      "2026-07-13T0812-ade1/checkout-hiccup@gift-rusher#f0"
+    ],
+    "regression_story": "studies/hillclimb/arms/v2-policy-regression/stories/catalog-search-and-clear.yaml",
+    "skipped": false
+  },
+  {
+    "description": "Re-enable price/name sort in filteredProducts (C1.4).",
+    "files": ["server.js"],
+    "finding_ids": [
+      "2026-07-13T0825-64e7/risk/risk-sort-order@adversarial-tester#f1",
+      "2026-07-13T0825-64e7/risk/risk-sort-order@adversarial-tester#f2",
+      "2026-07-13T0825-64e7/risk/risk-sort-order@cautious-first-timer#f2",
+      "2026-07-13T0812-a709/first-impressions@weekend-browser#f2"
+    ],
+    "regression_story": "studies/hillclimb/arms/v2-policy-regression/stories/catalog-sort.yaml",
+    "skipped": false
+  },
+  {
+    "description": "OOS product stock line says Out of stock, not In stock (C2.2).",
+    "files": ["pages.js"],
+    "finding_ids": [
+      "2026-07-13T0825-51dc/risk/risk-oos-copy@adversarial-tester#f2",
+      "2026-07-13T0825-51dc/risk/risk-oos-copy@cautious-first-timer#f2"
+    ],
+    "regression_story": "studies/hillclimb/arms/v2-policy-regression/stories/oos-stock-honesty.yaml",
+    "skipped": false
+  },
+  {
+    "description": "Empty cart visiting /checkout redirects to cart with empty-checkout notice (C3.4).",
+    "files": ["server.js"],
+    "finding_ids": [
+      "2026-07-13T0856-2a58/risk/risk-empty-checkout@adversarial-tester#f1",
+      "2026-07-13T0856-2a58/risk/risk-empty-checkout@adversarial-tester#f3"
+    ],
+    "regression_story": "studies/hillclimb/arms/v2-policy-regression/stories/empty-checkout-guard.yaml",
+    "skipped": false
+  },
+  {
+    "description": "Checkout summary shipping label is Shipping not Free shipping while charging $6 (C4.2).",
+    "files": ["pages.js"],
+    "finding_ids": [
+      "2026-07-13T0812-a709/first-impressions@weekend-browser#f4",
+      "2026-07-13T0812-ade1/change-your-mind@cautious-first-timer#q1"
+    ],
+    "regression_story": "studies/hillclimb/arms/v2-policy-regression/stories/checkout-shipping-label.yaml",
+    "skipped": false
+  },
+  {
+    "description": "Checkout client: 15–16 digit card with optional spaces; postcode presence; never wipe payment fields; place-order progress + surface decline/errors (C4.3–C4.4).",
+    "files": ["pages.js"],
+    "finding_ids": [
+      "2026-07-13T0856-2a58/risk/risk-card-unspaced@adversarial-tester#f4",
+      "2026-07-13T0812-a709/moving-house@cautious-first-timer#f2",
+      "2026-07-13T0812-a709/moving-house@cautious-first-timer#f3",
+      "2026-07-13T0856-2a58/club-order@weekend-browser#f7",
+      "2026-07-13T0856-2a58/risk/risk-card-unspaced@adversarial-tester#f3"
+    ],
+    "regression_story": "studies/hillclimb/arms/v2-policy-regression/stories/checkout-validation-honesty.yaml",
+    "skipped": false
+  },
+  {
+    "description": "Profile Save is submit; email validated; no field wipe; toast + signed-in update; errors not swallowed (C6.1, C7.1).",
+    "files": ["pages.js"],
+    "finding_ids": [
+      "2026-07-13T0812-a709/moving-house@cautious-first-timer#f0",
+      "2026-07-13T0856-2a58/moving-house@returning-regular#f0",
+      "2026-07-13T0856-2a58/risk/risk-invalid-email@adversarial-tester#f1",
+      "2026-07-13T0856-2a58/risk/risk-invalid-email@adversarial-tester#f3"
+    ],
+    "regression_story": "studies/hillclimb/arms/v2-policy-regression/stories/profile-save.yaml",
+    "skipped": false
+  },
+  {
+    "description": "Render order history on Account; status-consistent receipt ETA for delivered/shipped (C6.3, C5.1).",
+    "files": ["pages.js"],
+    "finding_ids": [
+      "2026-07-13T0825-51dc/wheres-my-order@returning-regular#f0",
+      "2026-07-13T0825-51dc/wheres-my-order@returning-regular#f1",
+      "2026-07-13T0825-64e7/risk/risk-receipt-eta@adversarial-tester#f1",
+      "2026-07-13T0825-64e7/risk/risk-receipt-eta@adversarial-tester#f2",
+      "2026-07-13T0825-64e7/risk/risk-receipt-eta@adversarial-tester#f3",
+      "2026-07-13T0825-64e7/risk/risk-receipt-eta@cautious-first-timer#f1",
+      "2026-07-13T0825-64e7/risk/risk-receipt-eta@cautious-first-timer#f2"
+    ],
+    "regression_story": "studies/hillclimb/arms/v2-policy-regression/stories/order-history-and-receipt.yaml",
+    "skipped": false
+  },
+  {
+    "description": "Receipt Continue shopping links to catalog / not /checkout (C5.3).",
+    "files": ["pages.js"],
+    "finding_ids": [
+      "2026-07-13T0825-51dc/risk/risk-receipt-continue@adversarial-tester#f0"
+    ],
+    "regression_story": "studies/hillclimb/arms/v2-policy-regression/stories/receipt-continue-shopping.yaml",
+    "skipped": false
+  },
+  {
+    "description": "Allow adding qty up to full stock (fix off-by-one already+qty >= stock) (C2.3).",
+    "files": ["server.js"],
+    "finding_ids": [
+      "2026-07-13T0856-2a58/risk/risk-last-unit@adversarial-tester#f2",
+      "2026-07-13T0856-2a58/risk/risk-last-unit@adversarial-tester#f4"
+    ],
+    "regression_story": "studies/hillclimb/arms/v2-policy-regression/stories/buy-full-stock.yaml",
+    "skipped": false
+  },
+  {
+    "description": "Empty cart jargon fix + cart-body Continue shopping (paired with cart-edit pack; separate story forces empty + continue paths).",
+    "files": ["pages.js"],
+    "finding_ids": [
+      "2026-07-13T0825-64e7/risk/risk-cart-local-continue@adversarial-tester#f0"
+    ],
+    "regression_story": "studies/hillclimb/arms/v2-policy-regression/stories/cart-continue-and-empty-copy.yaml",
+    "skipped": false
+  },
+  {
+    "description": "Product crumb back to catalog preserving category (C2.4).",
+    "files": ["pages.js"],
+    "finding_ids": [],
+    "regression_story": "studies/hillclimb/arms/v2-policy-regression/stories/product-category-back-link.yaml",
+    "skipped": false
+  },
+  {
+    "description": "Readable field-error and card price colors (WCAG-aligned; errors/prices were near-invisible).",
+    "files": ["pages.js"],
+    "finding_ids": [
+      "2026-07-13T0812-a709/first-impressions@cautious-first-timer#f7",
+      "2026-07-13T0856-2a58/outfit-a-shelf@returning-regular#f8"
+    ],
+    "regression_story": "studies/hillclimb/arms/v2-policy-regression/stories/checkout-validation-honesty.yaml",
+    "skipped": false
+  },
+  {
+    "description": "Trust/policy pages, returns, privacy, About, Help — not in SPEC.",
+    "files": [],
+    "finding_ids": [
+      "2026-07-13T0812-a709/first-impressions@cautious-first-timer#f2",
+      "2026-07-13T0812-a709/first-impressions@weekend-browser#f6"
+    ],
+    "regression_story": null,
+    "skipped": true
+  },
+  {
+    "description": "Footer placeholder domain and demo prefilled account — fixture scope.",
+    "files": [],
+    "finding_ids": [
+      "2026-07-13T0812-a709/first-impressions@cautious-first-timer#f3",
+      "2026-07-13T0812-a709/first-impressions@cautious-first-timer#f4"
+    ],
+    "regression_story": null,
+    "skipped": true
+  },
+  {
+    "description": "Compare/recommendations and listing-card add buttons — out of SPEC / soft-ux.",
+    "files": [],
+    "finding_ids": [
+      "2026-07-13T0825-51dc/outfit-a-shelf@weekend-browser#f3",
+      "2026-07-13T0812-ade1/change-your-mind@cautious-first-timer#f5"
+    ],
+    "regression_story": null,
+    "skipped": true
+  }
+]

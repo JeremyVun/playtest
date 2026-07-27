@@ -1,0 +1,35 @@
+description: Falsify pagination identity — one cursor enumeration must never return the same entry twice.
+tags: [invariant]
+story: |
+  Try to falsify this rule:
+
+  Within one cursor enumeration of GET /accounts/{accountId}/entries, no ledger
+  entry id is ever returned twice, and following next_cursor terminates.
+
+  It applies to an enumeration that starts *without* a cursor and then follows
+  the next_cursor values the service hands back. The exceptions are declared and
+  generous: entries written after an enumeration begins may be missed entirely,
+  and no "no skips" or exact-total guarantee is offered. Missing an entry is not
+  a violation. Seeing one twice is.
+
+  First give yourself an account with enough history to page through — many
+  entries, more than one page at whatever page size you choose. Deposits and
+  settled transfers both write entries, so build up a real ledger. Then
+  enumerate it, and while you are in the middle of the enumeration, do the thing
+  the rule is most likely to break on: write. Fund the account between two
+  pages. Settle a transfer between two pages. Advance the ledger day between two
+  pages. Change the page size mid-enumeration, ask for a page size of one, ask
+  for the largest the service allows, hand back a cursor you were given earlier
+  rather than the latest one, hand back a cursor you made up.
+
+  Keep the enumeration honest so it can be scored: begin with a request that
+  carries no cursor, then pass back exactly the next_cursor the previous page
+  returned, and keep going until next_cursor comes back empty. A page fetched
+  with an invented or out-of-order cursor is worth trying, but it is not part of
+  a scored enumeration.
+
+  A duplicated entry id inside one enumeration is the counterexample. Reproduce
+  it with the fewest writes and pages you can, then stop.
+
+success:
+  - ledger_pagination_identity: "one anchored cursor enumeration of an account's entries"

@@ -1,0 +1,12 @@
+# Arm A (naive) regression suite — one story per fix, authored by the round's
+# blind fixer (fresh-context, findings-report-only; see the arm's ledger).
+# Runs every climb round alongside the discovery subset; a regressed fix must
+# turn a story's report answers bad. Environmental config mirrors the frozen
+# instrument (ledger/baseline/round-01.json amendments).
+mode: discovery
+actor_model: gpt5_4_mini
+grader_model: gpt5_5
+timeout: "60m"
+app:
+  base_url: http://127.0.0.1:4183
+  init: ./reset.mjs

@@ -1,0 +1,140 @@
+openapi: 3.1.0
+info:
+  title: Todo API
+  version: "1.0.0"
+  description: |
+    The HTTP surface underneath the todo app's UI (tests/fixtures/todo-app).
+    Nobody drives this API directly in this suite — a browser does, on the
+    journey's behalf. Paths are written exactly as the page requests them
+    (spec paths are matched against request paths verbatim; there is no server
+    base-path rewriting), so `/api/todos`, not `/todos`.
+components:
+  parameters:
+    TodoId:
+      name: todoId
+      in: path
+      required: true
+      description: The todo's numeric identifier.
+      schema: { type: integer }
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+    Todo:
+      type: object
+      required: [id, title, completed]
+      properties:
+        id: { type: integer }
+        title: { type: string }
+        completed: { type: boolean }
+    CreateTodoRequest:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string }
+    DeleteResult:
+      type: object
+      required: [deleted]
+      properties:
+        deleted: { type: integer }
+paths:
+  /api/todos:
+    get:
+      operationId: listTodos
+      summary: Every todo, in creation order.
+      responses:
+        "200":
+          description: The todo list.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Todo" }
+    post:
+      operationId: createTodo
+      summary: Add a todo.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateTodoRequest" }
+      responses:
+        "201":
+          description: The created todo.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Todo" }
+        "400":
+          description: The title was missing or blank.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    delete:
+      operationId: clearCompleted
+      summary: Delete every completed todo. Requires ?completed=true.
+      responses:
+        "200":
+          description: How many todos were deleted.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeleteResult" }
+        "400":
+          description: The ?completed=true filter was missing.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /api/todos/{todoId}:
+    parameters:
+      - $ref: "#/components/parameters/TodoId"
+    get:
+      operationId: readTodo
+      summary: One todo. The UI never calls it; the advisory lifecycle policy would.
+      responses:
+        "200":
+          description: The todo.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Todo" }
+        "404":
+          description: No such todo.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    patch:
+      operationId: updateTodo
+      summary: Toggle a todo's completed flag.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                completed: { type: boolean }
+      responses:
+        "200":
+          description: The updated todo.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Todo" }
+        "404":
+          description: No such todo.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    delete:
+      operationId: deleteTodo
+      summary: Delete one todo.
+      responses:
+        "200":
+          description: How many todos were deleted.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeleteResult" }
+        "404":
+          description: No such todo.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }

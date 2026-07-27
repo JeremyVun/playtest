@@ -1,0 +1,11 @@
+{
+  "sonnet": "claude-sonnet-4-6",
+  "haiku": "claude-haiku-4-5",
+  "opus": "claude-opus-5",
+  "gpt5_6_sol": "claude-gpt-5.6-sol",
+  "gpt5_6_terra": "claude-gpt-5.6-terra",
+  "gpt5_6_luna": "claude-gpt-5.6-luna",
+  "gpt5_5": "claude-gpt-5.5",
+  "gpt5_4": "claude-gpt-5.4",
+  "gpt5_4_mini": "claude-gpt-5.4-mini"
+}

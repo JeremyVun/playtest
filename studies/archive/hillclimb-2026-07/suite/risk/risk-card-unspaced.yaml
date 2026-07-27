@@ -1,0 +1,15 @@
+description: Enter a full card number as 16 digits with no spaces at checkout.
+tags: [risk]
+story: |
+  Put one in-stock plant in the cart and go to checkout. Fill delivery if
+  needed. For the card number, type exactly 4242424242424242 with no spaces
+  and no dashes — sixteen digits in a single run. Expiry 09/28, CVC 442.
+  Submit. If the shop rejects the card format, quote the message and note
+  whether your other fields survived. Then re-enter the same card as
+  4242 4242 4242 4242 (with spaces) and finish the order if you can.
+persona: [adversarial-tester]
+report:
+  - When the unspaced 16-digit card was submitted, what did the shop say?
+  - Did the unspaced number look like a valid card the user had already typed, or did the message make sense?
+  - Were card / expiry / CVC (and delivery fields) preserved after any rejection?
+  - Did the spaced format complete the purchase? Was anything broken or misleading?

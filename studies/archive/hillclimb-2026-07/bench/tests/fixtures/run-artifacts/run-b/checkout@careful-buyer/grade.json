@@ -1,0 +1,9 @@
+{
+  "score": 88,
+  "completion": "full",
+  "summary": "Checkout completed but noted an issue.",
+  "findings": [
+    { "severity": "minor", "note": "The order confirmation copy was vague.", "step": 1 }
+  ],
+  "report": []
+}

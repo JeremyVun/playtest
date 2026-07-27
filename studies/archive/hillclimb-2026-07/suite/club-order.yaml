@@ -1,0 +1,14 @@
+description: Push against stock limits and recover — bulk order with substitutions.
+story: |
+  Your plant club is putting together thank-you bundles and you volunteered
+  to buy eight of the same small care item from this shop. If they can't
+  sell you eight of one thing, get as many as they'll let you and make up
+  the difference with the closest alternative — the bundles just need to
+  match roughly. Place the order for the best combination you can get.
+persona: [weekend-browser, returning-regular]
+report:
+  - How did the user discover how many of an item they could actually buy, and was the shop upfront about it or did they find out the hard way?
+  - When the shop couldn't meet the request, what did it offer the user to work with, and how did they adapt?
+  - Did the user lose any work (cart contents, typed input) at any point while adapting? Describe it.
+  - Where, if anywhere, did the user hesitate, backtrack, or get confused — and what on the screen caused it?
+  - Was anything broken, misleading, or missing that a real shopper would notice? Be specific.

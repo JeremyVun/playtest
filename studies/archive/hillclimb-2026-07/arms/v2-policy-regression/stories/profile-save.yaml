@@ -1,0 +1,13 @@
+description: Profile email save validates, confirms, and updates signed-in identity.
+persona: returning-regular
+story: |
+  Open Account. Under Profile, change Email to "not-an-email" and click Save profile.
+  Confirm a visible validation error (no silent no-op) and that the invalid text is
+  not treated as saved. Then change Email to "riley.chen@fastmail.example", keep a
+  valid name, and Save profile. Confirm a success acknowledgment and that "Signed
+  in as" (or equivalent) shows the new email. Reload Account and confirm the new
+  email still appears in the Email field.
+report:
+  - After saving the invalid email, what appeared on screen?
+  - After the valid email save, was success visible and did signed-in identity update?
+  - Did the new email survive reload?

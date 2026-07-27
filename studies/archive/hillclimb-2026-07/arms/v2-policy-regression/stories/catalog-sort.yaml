@@ -1,0 +1,12 @@
+description: Price sort actually reorders the product grid.
+persona: adversarial-tester
+story: |
+  On the shop catalog with Everything selected, note the first three product prices
+  in the grid. Choose Sort "Price: low to high". Confirm the grid reorders so the
+  cheapest visible products come first (Terracotta Pot at $14 should lead or be
+  among the first). Then choose "Price: high to low" and confirm the most expensive
+  in-stock or listed items move toward the front (e.g. Fiddle-Leaf Fig at $52).
+report:
+  - Did low-to-high reorder the grid to match ascending prices?
+  - Did high-to-low reorder the grid to match descending prices?
+  - Did the sort control and the actual grid order agree?

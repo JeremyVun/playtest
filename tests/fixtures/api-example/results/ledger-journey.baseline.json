@@ -1,0 +1,61 @@
+{
+  "accepted_at": "2026-07-25T15:36:03.441Z",
+  "run_id": "2026-07-25T1536-da74",
+  "run_dir": "/Users/jeremy/projects/playtest/runs/api-example/2026-07-25T1536-da74/ledger-journey",
+  "healed_from_run_id": null,
+  "pins": {
+    "harness_version": "0.1.0",
+    "prompts_version": "prompts-v2",
+    "step_schema_version": 8,
+    "snapshot_format": "api-text-v4",
+    "settle": {
+      "name": "settle-api-v1",
+      "max_ms": 15000
+    },
+    "driver": "api",
+    "actor_model": "gpt5_4_mini",
+    "grader_model": "gpt5_5",
+    "gateway": "http://127.0.0.1:57845",
+    "headed": false,
+    "vision": false
+  },
+  "story_hash": "27df31e5c1f03648",
+  "base_url": "http://127.0.0.1:57844",
+  "verdicts": [
+    {
+      "spec": "response_status: POST /accounts 201 (all)",
+      "pass": true,
+      "detail": "1/1 POST /accounts response(s) answered 201"
+    },
+    {
+      "spec": "response_matches: GET /accounts/{accountId} $.balance == 250 (last)",
+      "pass": true,
+      "detail": "1/1 GET /accounts/{accountId} response(s): $.balance = 250"
+    },
+    {
+      "spec": "invariant: no_server_error",
+      "pass": true,
+      "detail": "4 response(s), none 5xx"
+    },
+    {
+      "spec": "invariant: documented_status",
+      "pass": true,
+      "detail": "4 response(s) carried a documented status"
+    },
+    {
+      "spec": "invariant: response_schema",
+      "pass": true,
+      "detail": "4 response(s) matched their declared schema"
+    },
+    {
+      "spec": "invariant: round_trip create=POST /accounts read=GET /accounts/{accountId} fields=$.owner",
+      "pass": true,
+      "detail": "1 client-owned field(s) survived POST /accounts → GET /accounts/{accountId}"
+    },
+    {
+      "spec": "invariant: idempotency op=POST /entries",
+      "pass": true,
+      "detail": "1 repeated POST /entries call(s) reached an equivalent normalized state"
+    }
+  ]
+}

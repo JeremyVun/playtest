@@ -1,0 +1,12 @@
+description: Shopper can add every unit of visible stock (last unit allowed).
+persona: adversarial-tester
+story: |
+  Open Calathea Orbifolia. Note the available stock count N on the page. Set
+  quantity to N and Add to cart once. Confirm the add succeeds (confirmation and/or
+  cart badge N). Open the cart and confirm quantity is N, not N-1 and not empty.
+  Optionally return to the product and try to add one more; that extra unit may be
+  refused with a clear stock message.
+report:
+  - Could the user add the full stated stock count in one add?
+  - Did the cart show that full quantity?
+  - If they tried one more, was the refusal clear?

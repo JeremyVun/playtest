@@ -1,0 +1,284 @@
+[
+  {
+    "description": "B1 — Add-to-cart now updates the header badge and shows a confirmation toast (with a View cart link) on success. The success handler was an empty function, so the badge stayed at 0 and shoppers re-clicked, causing accidental x2/x4/x16 orders. Fixes SPEC C2.3 / C7.1.",
+    "files": [
+      "pages.js"
+    ],
+    "finding_ids": [
+      "2026-07-10T0751-8e76/first-impressions@weekend-browser#f3",
+      "2026-07-10T1134-4567/moving-house@returning-regular#f4",
+      "2026-07-10T1134-4567/outfit-a-shelf@weekend-browser#f4",
+      "2026-07-10T1352-58b1/buy-a-specific-gift@gift-rusher#f1",
+      "2026-07-10T1502-0c56/club-order@returning-regular#f3",
+      "2026-07-10T1741-630d/buy-a-specific-gift@gift-rusher#f0",
+      "2026-07-10T1855-85f1/club-order@returning-regular#f2",
+      "2026-07-10T1830-308a/outfit-a-shelf@weekend-browser#f0",
+      "2026-07-10T1900-dc26/moving-house@cautious-first-timer#f4"
+    ],
+    "regression_story": "studies/hillclimb/arms/policy-regression/stories/add-to-cart-feedback.yaml",
+    "skipped": false
+  },
+  {
+    "description": "B2 — Cart lines now render a real quantity stepper (minus / number input / plus) instead of read-only text, so quantity is editable in place and totals/badge update immediately. Fixes SPEC C3.2.",
+    "files": [
+      "pages.js"
+    ],
+    "finding_ids": [
+      "2026-07-10T1417-1750/change-your-mind@weekend-browser#f2",
+      "2026-07-10T1417-24be/change-your-mind@cautious-first-timer#f1",
+      "2026-07-10T1543-83e9/change-your-mind@cautious-first-timer#f2",
+      "2026-07-11T0633-8cb1/change-your-mind@weekend-browser#f0",
+      "2026-07-10T1855-85f1/club-order@returning-regular#f3"
+    ],
+    "regression_story": "studies/hillclimb/arms/policy-regression/stories/cart-edit-and-remove.yaml",
+    "skipped": false
+  },
+  {
+    "description": "B3 — Cart Remove now works. Same root cause as B2: the click handler read `.qty`.value on an element that did not exist, throwing a TypeError before the remove branch ran. Rendering the stepper (B2) restores the `.qty` input and unbreaks Remove; a confirmation toast names what was removed. Fixes SPEC C3.3.",
+    "files": [
+      "pages.js"
+    ],
+    "finding_ids": [
+      "2026-07-10T1417-1750/change-your-mind@weekend-browser#f1",
+      "2026-07-10T1417-24be/change-your-mind@cautious-first-timer#f2",
+      "2026-07-10T1543-83e9/change-your-mind@cautious-first-timer#f3",
+      "2026-07-10T1913-9b89/club-order@weekend-browser#f3"
+    ],
+    "regression_story": "studies/hillclimb/arms/policy-regression/stories/cart-edit-and-remove.yaml",
+    "skipped": false
+  },
+  {
+    "description": "B4 — Removed the over-strict client postcode rule (required exactly 5 digits) that rejected the shop's own seeded 4-digit postcode 5041 and the story address 6220. Client now checks presence only, matching the server and SPEC C4.3 (which lists no postcode format rule).",
+    "files": [
+      "pages.js"
+    ],
+    "finding_ids": [
+      "2026-07-10T0751-8e76/moving-house@cautious-first-timer#f0",
+      "2026-07-10T1134-4567/moving-house@returning-regular#f5",
+      "2026-07-10T1515-b74f/checkout-hiccup@gift-rusher#f2",
+      "2026-07-10T1900-dc26/moving-house@cautious-first-timer#f6",
+      "2026-07-10T1832-2062/moving-house@returning-regular#f5"
+    ],
+    "regression_story": "studies/hillclimb/arms/policy-regression/stories/checkout-recovery.yaml",
+    "skipped": false
+  },
+  {
+    "description": "B5 — Checkout no longer wipes card number / expiry / CVC when a validation trip fails; it just focuses the first bad field. Nothing the shopper typed is lost. Fixes SPEC C4.3.",
+    "files": [
+      "pages.js"
+    ],
+    "finding_ids": [
+      "2026-07-10T0751-8e76/moving-house@cautious-first-timer#f1",
+      "2026-07-10T1352-58b1/buy-a-specific-gift@cautious-first-timer#f4",
+      "2026-07-10T1415-934f/checkout-hiccup@cautious-first-timer#f3",
+      "2026-07-10T1526-3e67/club-order@weekend-browser#f5",
+      "2026-07-10T1755-bd65/checkout-hiccup@cautious-first-timer#f4",
+      "2026-07-10T1830-308a/outfit-a-shelf@weekend-browser#f5"
+    ],
+    "regression_story": "studies/hillclimb/arms/policy-regression/stories/checkout-recovery.yaml",
+    "skipped": false
+  },
+  {
+    "description": "B6 — Place order now shows an in-progress state (button disabled + 'Placing your order...') and renders server errors in the alert banner, including the card-decline / no-charge message. Previously the catch block reset state silently, so declines and other server errors showed nothing. Fixes SPEC C4.4.",
+    "files": [
+      "pages.js"
+    ],
+    "finding_ids": [
+      "2026-07-10T0751-8e76/first-impressions@weekend-browser#f5",
+      "2026-07-10T1415-934f/checkout-hiccup@cautious-first-timer#f4",
+      "2026-07-10T1755-bd65/checkout-hiccup@cautious-first-timer#f3",
+      "2026-07-10T1811-842a/checkout-hiccup@gift-rusher#f4",
+      "2026-07-10T1837-9e63/first-impressions@weekend-browser#f7"
+    ],
+    "regression_story": "studies/hillclimb/arms/policy-regression/stories/checkout-recovery.yaml",
+    "skipped": false
+  },
+  {
+    "description": "B7 — Order-summary shipping line relabeled from 'Free shipping' to 'Shipping' so the label matches the $6.00 charged. Fixes SPEC C4.2.",
+    "files": [
+      "pages.js"
+    ],
+    "finding_ids": [
+      "2026-07-10T1515-b74f/checkout-hiccup@gift-rusher#f3",
+      "2026-07-10T1830-56e5/first-impressions@cautious-first-timer#f5"
+    ],
+    "regression_story": "studies/hillclimb/arms/policy-regression/stories/checkout-summary-shipping.yaml",
+    "skipped": false
+  },
+  {
+    "description": "B8 — 'Save profile' button changed from type=button to type=submit so it actually fires the form handler. It was inert, so the profile email never persisted and checkout kept showing the stale email (Save address worked because its button was type=submit). Fixes SPEC C6.1 and the C4.1 prefill.",
+    "files": [
+      "pages.js"
+    ],
+    "finding_ids": [
+      "2026-07-10T0751-8e76/moving-house@cautious-first-timer#f2",
+      "2026-07-10T1134-4567/moving-house@returning-regular#f1",
+      "2026-07-10T1832-2062/moving-house@returning-regular#f2",
+      "2026-07-10T1900-dc26/moving-house@cautious-first-timer#f3"
+    ],
+    "regression_story": "studies/hillclimb/arms/policy-regression/stories/account-profile-save.yaml",
+    "skipped": false
+  },
+  {
+    "description": "B9 — Added the Order history panel (id=orders) to the account page, rendering all orders newest-first with number, date, item count, total and status, each linking to its receipt. The rows were computed but never inserted into the page body, and the order page linked to a #orders anchor that did not exist. Fixes SPEC C6.3.",
+    "files": [
+      "pages.js"
+    ],
+    "finding_ids": [
+      "2026-07-10T1134-4567/wheres-my-order@returning-regular#f0",
+      "2026-07-10T1134-4567/wheres-my-order@returning-regular#f1",
+      "2026-07-10T1850-80c7/wheres-my-order@returning-regular#f0",
+      "2026-07-10T1855-85f1/club-order@returning-regular#f6"
+    ],
+    "regression_story": "studies/hillclimb/arms/policy-regression/stories/account-order-history.yaml",
+    "skipped": false
+  },
+  {
+    "description": "B10 — Re-enabled catalog sorting (price-asc, price-desc, name). filteredProducts had a 'sorting temporarily disabled' comment and returned the list unsorted, so the sort control had no effect. Fixes SPEC C1.4.",
+    "files": [
+      "server.js"
+    ],
+    "finding_ids": [
+      "2026-07-10T1830-308a/outfit-a-shelf@weekend-browser#f1"
+    ],
+    "regression_story": "studies/hillclimb/arms/policy-regression/stories/catalog-sort.yaml",
+    "skipped": false
+  },
+  {
+    "description": "B11 — Fixed two planted low-contrast colors: product-card price (#c3cdc6 -> var(--ink)) and field-error text (#e4c7c7 -> var(--danger)), both failing WCAG AA on white. These are the source of the repeated axe color-contrast violations. Fixes SPEC C7.3.",
+    "files": [
+      "pages.js"
+    ],
+    "finding_ids": [
+      "2026-07-10T0751-8e76/first-impressions@cautious-first-timer#f6",
+      "2026-07-10T1417-1750/change-your-mind@weekend-browser#f7",
+      "2026-07-10T1830-56e5/first-impressions@cautious-first-timer#f7"
+    ],
+    "regression_story": "studies/hillclimb/arms/policy-regression/stories/accessibility-contrast.yaml",
+    "skipped": false
+  },
+  {
+    "description": "B12 — Added the missing search text box to the catalog finder form. The form only had a Sort select and a 'Search' button with no input, so a shopper could never type a query even though the server and results/empty-state copy already handled `q`. Fixes SPEC C1.2 / C1.5.",
+    "files": [
+      "pages.js"
+    ],
+    "finding_ids": [
+      "2026-07-10T1515-b74f/checkout-hiccup@gift-rusher#f4",
+      "2026-07-10T1741-630d/buy-a-specific-gift@gift-rusher#q4"
+    ],
+    "regression_story": "studies/hillclimb/arms/policy-regression/stories/catalog-search.yaml",
+    "skipped": false
+  },
+  {
+    "description": "B13 — Relaxed the client card-number check from a spaces-required 16-digit pattern to strip separators and accept 15-16 digits, matching the server and SPEC C4.3 ('15-16 digit card'). Code-derived (the strict pattern would reject 15-digit or unspaced 16-digit cards); bundled with the checkout fixes.",
+    "files": [
+      "pages.js"
+    ],
+    "finding_ids": [],
+    "regression_story": "studies/hillclimb/arms/policy-regression/stories/checkout-recovery.yaml",
+    "skipped": false
+  },
+  {
+    "description": "B14 — Add-to-cart boundary fixed from `already+qty >= stock` to `> stock`, so a shopper can add exactly `stock` units and the refusal no longer self-contradicts (it previously refused qty==stock while saying 'you can add N more'). Code-derived from SPEC C2.3 / C7.2; no shopper hit the boundary in the two rounds.",
+    "files": [
+      "server.js"
+    ],
+    "finding_ids": [],
+    "regression_story": "studies/hillclimb/arms/policy-regression/stories/add-to-cart-feedback.yaml",
+    "skipped": false
+  },
+  {
+    "description": "B15 — GET /checkout with an empty cart now redirects to /cart?notice=empty-checkout (whose banner already existed) instead of rendering an empty payment form. Code-derived from SPEC C3.4; not surfaced in testing because every tester had items.",
+    "files": [
+      "server.js"
+    ],
+    "finding_ids": [],
+    "regression_story": "studies/hillclimb/arms/policy-regression/stories/empty-cart-and-back-link.yaml",
+    "skipped": false
+  },
+  {
+    "description": "B16 — Product page now has a breadcrumb link back to the catalog that preserves the product's category (/?category=...). The .crumb style existed but was unused. Fixes SPEC C2.4; weakly corroborated by a shopper who kept using top-nav Shop for lack of a nearby keep-shopping path.",
+    "files": [
+      "pages.js"
+    ],
+    "finding_ids": [
+      "2026-07-10T1134-4567/outfit-a-shelf@weekend-browser#f3"
+    ],
+    "regression_story": "studies/hillclimb/arms/policy-regression/stories/empty-cart-and-back-link.yaml",
+    "skipped": false
+  },
+  {
+    "description": "PROBE (not fixed) — Trust/policy content absent (shipping, returns, payment security). Ambiguous scope: rated 'major' twice, and SPEC 'Who it serves' names first-time trustworthiness as a goal, but no SPEC capability (C1-C7) mandates policy content and recommendations/reviews are explicitly out of scope. Probing whether the absence truly blocks a purchase before deciding to add a feature. Probe: policy-probes/stories/probe-trust-policy-content.yaml",
+    "files": [],
+    "finding_ids": [
+      "2026-07-10T0751-8e76/first-impressions@cautious-first-timer#f2",
+      "2026-07-10T1830-56e5/first-impressions@cautious-first-timer#f1",
+      "2026-07-10T0751-8e76/first-impressions@weekend-browser#f1"
+    ],
+    "regression_story": null,
+    "skipped": true
+  },
+  {
+    "description": "PROBE (not fixed this round) — Sort persistence across navigation. B10 makes sort work; unclear whether the 'reset after navigation' complaint is fully closed, since the new back link preserves category but not sort. Probing before spending a further fix. Probe: policy-probes/stories/probe-sort-persistence.yaml",
+    "files": [],
+    "finding_ids": [
+      "2026-07-10T1830-308a/outfit-a-shelf@weekend-browser#q0"
+    ],
+    "regression_story": null,
+    "skipped": true
+  },
+  {
+    "description": "REJECT — No product comparison / related items / bundle flow. SPEC 'Out of scope' explicitly excludes product recommendations and related-item suggestions. Not a defect.",
+    "files": [],
+    "finding_ids": [
+      "2026-07-10T1134-4567/outfit-a-shelf@weekend-browser#q1",
+      "2026-07-10T1830-308a/outfit-a-shelf@weekend-browser#f2"
+    ],
+    "regression_story": null,
+    "skipped": true
+  },
+  {
+    "description": "REJECT — Prominence/layout/scroll noise: 'cart badge is small', 'Remove link is small/red', 'payment/care items/submit below the fold', 'category pills understated'. SPEC mandates no above-the-fold placement or minimum control sizing; these are taste, not capability gaps. (Distinct from B1, where the badge was stuck at 0 — a real bug now fixed.)",
+    "files": [],
+    "finding_ids": [
+      "2026-07-10T0751-8e76/first-impressions@cautious-first-timer#f5",
+      "2026-07-10T0751-8e76/first-impressions@cautious-first-timer#f3",
+      "2026-07-10T1543-83e9/change-your-mind@cautious-first-timer#f4"
+    ],
+    "regression_story": null,
+    "skipped": true
+  },
+  {
+    "description": "REJECT — 'Demo shop, no real charge' note makes the store feel unfinished. Mock payment and the demo framing are SPEC scope boundaries ('not defects'). The honest no-charge note is required, not a flaw.",
+    "files": [],
+    "finding_ids": [
+      "2026-07-10T1830-56e5/first-impressions@cautious-first-timer#f6"
+    ],
+    "regression_story": null,
+    "skipped": true
+  },
+  {
+    "description": "B17 (phase 2, from probe P2) — Catalog state now survives the product round trip: product card links carry the current q/category/sort query, the server passes it to the product page, and the back link rebuilds the exact origin URL (direct visits still fall back to the product category). Previously the back link laundered sort away (probe: reverted to Featured after every round trip, sort reselected four times). Fixes SPEC C7.5 / C2.4.",
+    "files": [
+      "pages.js",
+      "server.js"
+    ],
+    "finding_ids": [
+      "probe-sort-persistence@weekend-browser#f1",
+      "probe-sort-persistence@weekend-browser#f2"
+    ],
+    "regression_story": "studies/hillclimb/arms/policy-regression/stories/sort-persists-round-trip.yaml",
+    "skipped": false
+  },
+  {
+    "description": "REJECT after probe P1 (trust/policy content) — the probe (escalated gpt5_5 actor, score 45) confirmed the harm is REAL: a genuine dealbreaker, clear no-buy decision, and explicitly primary over the demo-shop framing. Held as a reject on contract grounds: no C1-C7 capability requires policy content, and the specific dealbreakers (returns policy, pre-checkout delivery timing, security/privacy claims, business identity) do not exist in the product to surface — inventing them for a mock shop would be fabrication, and email/real-payment reassurance is SPEC-excluded. Escalating to the study owners as a SPEC gap: the \"Who it serves\" first-time-trust goal has no capability backing it; the correct instrument is a spec amendment, not an app fix.",
+    "files": [],
+    "finding_ids": [
+      "probe-trust-policy-content@cautious-first-timer#f0",
+      "probe-trust-policy-content@cautious-first-timer#f1",
+      "probe-trust-policy-content@cautious-first-timer#f2"
+    ],
+    "regression_story": null,
+    "skipped": true
+  }
+]

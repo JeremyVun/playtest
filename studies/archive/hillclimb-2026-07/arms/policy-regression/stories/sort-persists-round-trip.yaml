@@ -1,0 +1,13 @@
+description: A chosen catalog sort (and search/category) survives opening a product and returning via the back link — no reverting to Featured.
+story: |
+  You are comparing plants by price. On the shop page, filter to Plants and
+  sort them cheapest-first. Open the cheapest plant to read about it, then use
+  the page's own link back to the plant list — not the browser back button.
+  Check whether the list is still cheapest-first and the sort control still
+  shows your choice. Do one more product round trip to be sure.
+persona: [weekend-browser]
+report:
+  - "After returning from a product via the page's back link, was the list still sorted cheapest-first?"
+  - "Did the sort control still show 'Price: low to high', or had it reset to Featured?"
+  - "Across two product round trips, how many times did you have to reselect the sort?"
+  - "Did the back link also keep you in the Plants category you had filtered to?"

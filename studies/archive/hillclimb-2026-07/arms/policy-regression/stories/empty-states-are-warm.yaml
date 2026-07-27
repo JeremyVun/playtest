@@ -1,0 +1,14 @@
+description: The empty cart and the no-match search both speak to the shopper in plain, warm words (no system/implementation jargon) and each offers a working one-click way to recover.
+story: |
+  You are poking around a plant shop before committing to anything. First, open
+  your cart while it is still empty and read what the page says — you want it to
+  feel like a shop talking to you, not a database. Then go back to the shop and
+  search for something that plainly won't exist there, like "xyzzy", and read
+  what the shop tells you when nothing matches. In both places, look for and try
+  the obvious way to get back to browsing.
+persona: [weekend-browser]
+report:
+  - "When the cart was empty, was the message plain and friendly, or did it read like system/database output (for example anything about 'rows' or 'collection returned')?"
+  - "When your search matched nothing, did the shop explain in plain words and name what you searched for, rather than developer-speak?"
+  - "On the no-match page, did the 'Clear the search' link actually take you back to browsing everything, instead of repeating the same empty search?"
+  - "From the empty cart, did the 'Browse the shop' link get you back to the catalog?"

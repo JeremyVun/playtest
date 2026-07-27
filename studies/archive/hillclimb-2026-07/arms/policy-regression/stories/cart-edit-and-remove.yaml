@@ -1,0 +1,14 @@
+description: In the cart, quantities can be changed in place and any line can be removed, with totals and the count updating immediately.
+story: |
+  You are stocking a shelf on a budget. Starting from an empty cart, add a few
+  things — say two or three different plants and a pot, with more than one of at
+  least one item — until the basket has crept over what you wanted to spend.
+  Now go to your cart and bring the total back down: reduce the quantity of one
+  item, and remove another item entirely. Confirm the running total and the
+  cart count actually change as you do this.
+persona: [weekend-browser]
+report:
+  - "Could you change the quantity of an item directly in the cart, and did the line total and subtotal update right away?"
+  - "Did the Remove control actually remove the item, with a message confirming what was removed?"
+  - "After each change, did the cart count and subtotal stay consistent with what you had left?"
+  - "Were you ever forced back to the product page to try to edit the cart from there?"

@@ -1,0 +1,53 @@
+description: Open a ledger account, fund it, and read the balance back.
+story: |
+  You are checking that the ledger service still works end to end.
+
+  Open an account for "ada". Post an entry of 250 to it, using the
+  idempotency key "seed-1", and post the same entry again with the same key to
+  confirm the ledger does not double-count it. Then read the account back and
+  confirm its balance reflects a single entry of 250.
+
+success:
+  # Ordinary deterministic gate kinds, attributed to one operation each.
+  - label: the account is opened
+    response_status:
+      op: "POST /accounts"
+      status: "201"
+      occurrence: all
+  - label: the balance reflects exactly one entry
+    response_matches:
+      op: "GET /accounts/{accountId}"
+      match: "$.balance == 250"
+      occurrence: last
+
+  # Tier-1: the spec is the oracle. Free once app.openapi is configured.
+  - invariant: { policy: no_server_error }
+  - invariant: { policy: documented_status }
+  - invariant: { policy: response_schema }
+
+  # Tier-2: opt-in metamorphic policies, each declaring where it applies.
+  # The story above is written so every one of them is actually exercised —
+  # a policy with no qualifying trace is a gate FAILURE, not a quiet pass.
+  - label: the owner survives the write
+    invariant:
+      policy: round_trip
+      create: "POST /accounts"
+      read: "GET /accounts/{accountId}"
+      fields: ["$.owner"]
+  - label: replaying the entry reaches the same state
+    invariant:
+      policy: idempotency
+      op: "POST /entries"
+      key_header: "Idempotency-Key"
+      # The ledger refreshes created_at on an idempotent replay, which is
+      # legitimate: an idempotency policy compares STATE, not bytes.
+      ignore: ["$.created_at"]
+
+# Advisory: reported on the run page, never gates. The story does not provoke a
+# refusal, so this reports "not exercised" rather than failing the run — move it
+# under success: once the journey has a 4xx to check.
+observe:
+  - label: refusals use the error envelope
+    invariant:
+      policy: error_shape
+      require: ["$.error.code", "$.error.message"]

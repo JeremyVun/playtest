@@ -1,0 +1,29 @@
+{
+  "note": "sha256 of every file that can change a measured verdict. Verified by test/pins.test.js; re-record deliberately with `npm run bench:pins -- --write` and say why in the commit.",
+  "algorithm": "sha256",
+  "shared_oracle": {
+    "lib/oracles.js": "04a3c69f516fbced95b4dafc93ced3754249b89c191cf3a61660b435ce76131c",
+    "lib/trace.js": "8d822ce60f55f86a45ca15a7154cafca73bf76d9b00943a7f98a8590edf0df64"
+  },
+  "bench_scoring": {
+    "bench.js": "4ff556d408991e7fa6e4dbde36d1232d3ca59124c5faef23ef03ef5cc629fba1",
+    "lib/funnel.js": "eb60077fced2e49b6ed724b36a201b236da7668d66ded8924abb7244bb006c3d",
+    "lib/report.js": "954bfb1eedbafa3a7c32d9aa4f70eb2af63d9d09343dfe8f1c8b3b7c1150902e",
+    "lib/score.js": "38565dde923d520611e6e56f5f568c75c95c93b52a589a541b5c577a0bad54ed",
+    "lib/sources.js": "beba795aa5b7b25d62c58f8f19d2c1906001dd4c37a9cf74ba803d55499c7c83",
+    "lib/suite-report.js": "54967c862810dec7d446ef659af3e79cbac518e32e2591359b582d4dd42be28d",
+    "lib/witnesses.js": "5924fb6ed6f1c8db4154dc7d5d97d06436f63ce9095af64041a1a41a9a8e6f78",
+    "../src/faults.js": "3ef70436fe864d1d822f97838d3d371c942c62cbbdc21de99f79573ed2282ae4"
+  },
+  "vendored_copies": [
+    {
+      "instrument": "P1 agentic invariant probe (frozen at 9059797; its vendor/ copies are read-only)",
+      "status": "in-sync",
+      "note": "The probe rematch arm scores its traffic with these files, so a change to shared_oracle here silently makes the arms incomparable. If one ever has to change, flip this entry to \"diverged\", say what it costs, and re-score every arm on the new pin.",
+      "sha256": {
+        "lib/oracles.js": "04a3c69f516fbced95b4dafc93ced3754249b89c191cf3a61660b435ce76131c",
+        "lib/trace.js": "8d822ce60f55f86a45ca15a7154cafca73bf76d9b00943a7f98a8590edf0df64"
+      }
+    }
+  ]
+}

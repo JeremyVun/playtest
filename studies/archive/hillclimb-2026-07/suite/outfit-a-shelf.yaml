@@ -1,0 +1,13 @@
+description: Compare across categories and assemble a multi-item order.
+story: |
+  You are turning an empty bookshelf into a plant shelf. Put together an
+  order for it from this shop: something green, something to put it in, and
+  whatever you'd need to look after it. Compare a few options before you
+  commit — you care about price — and buy what you settle on.
+persona: [weekend-browser, returning-regular]
+report:
+  - Which tools for narrowing and comparing (categories, sorting, search) did the user find, and did each behave as they expected?
+  - Did the user compare options before choosing? What information did they lean on, and was any of it missing or unclear?
+  - As the cart grew, did its contents and totals always match what the user had chosen? Note any mismatch.
+  - Where, if anywhere, did the user hesitate, backtrack, or get confused — and what on the screen caused it?
+  - Was anything broken, misleading, or missing that a real shopper would notice? Be specific.

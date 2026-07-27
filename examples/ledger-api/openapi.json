@@ -1,0 +1,1655 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Minibank Ledger",
+    "version": "1.0.0",
+    "summary": "A small double-entry ledger service used as a Playtest API fixture.",
+    "description": "Minibank moves money between customer accounts and records every effect as double-entry ledger rows.\n\nAll monetary values are integers in the currency's minor unit (cents). There are no floats anywhere in the API.\n\n**Determinism.** The service has no wall clock and no background workers. Pending transfers settle only when an administrator calls `POST /admin/tick`, and `POST /admin/reset` rewinds the entire world to a seeded initial state. Timestamps are derived from a fixed epoch plus a mutation counter, so the same request sequence always produces the same resources.\n\n**Lifecycle.** An account is created `pending`, becomes `active` via `POST /accounts/{accountId}/activate`, and may be closed via `POST /accounts/{accountId}/close`. Closure is a soft delete: the account keeps its ledger history, `GET /accounts/{accountId}` answers `410` with a tombstone, and the account can no longer transact.\n\n**Money movement.** `POST /deposits` funds an account from outside the system and settles immediately. `POST /transfers` moves money between two active same-currency accounts and settles at the next tick, charging the source account a fee on top of the amount.\n\n**Principals and ownership.** Every request authenticates as a principal: the administrator, or one of the service's customers. An account records the principal that owns it in `owner_principal`. A customer principal reaches only the accounts it owns \u2014 reading them, funding them, activating and closing them, and spending from them \u2014 and may read the system fee accounts, whose ledger is public so that the fee side of a transfer can always be audited. A transfer is visible to the principals owning either of its two sides. Anything else answers `403`. The administrator is unrestricted and is the only principal that may open an account on another principal's behalf.",
+    "contact": {
+      "name": "Playtest fixture",
+      "url": "https://github.com/jeremyvun/playtest"
+    },
+    "license": {
+      "name": "MIT"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:4180",
+      "description": "Local fixture instance"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "accounts",
+      "description": "Customer accounts and their ledger history"
+    },
+    {
+      "name": "deposits",
+      "description": "External funding"
+    },
+    {
+      "name": "transfers",
+      "description": "Same-currency movement between accounts"
+    },
+    {
+      "name": "admin",
+      "description": "Settlement and full-state reset (admin role only)"
+    },
+    {
+      "name": "meta",
+      "description": "Unauthenticated service metadata"
+    }
+  ],
+  "x-ledger-invariants": [
+    {
+      "id": "conservation",
+      "statement": "For a settled transfer, the ledger entries carrying its transferId \u2014 the source debit, the destination credit, and the fee credit \u2014 sum to exactly zero.",
+      "applies_to": "Transfers whose status is 'settled'.",
+      "exceptions": "Deposit entries are external funding and are deliberately excluded: they have no counter-entry. Transfers that end 'failed' or 'canceled' before settlement produce no entries at all."
+    },
+    {
+      "id": "idempotency",
+      "statement": "Two POST /transfers requests carrying the same Idempotency-Key and the same request body produce exactly one transfer and exactly one set of ledger effects; the second request returns the first transfer.",
+      "applies_to": "POST /transfers with an Idempotency-Key header, per authenticated principal.",
+      "exceptions": "The same key with a different body is a 409 idempotency_key_conflict and creates nothing."
+    },
+    {
+      "id": "lifecycle-legality",
+      "statement": "Only active accounts transact. A transfer naming a pending account is rejected 409, a transfer naming a closed account is rejected 410, an account with pending transfers cannot be closed (409), and a transfer that has already settled cannot be canceled (409).",
+      "applies_to": "POST /transfers, POST /accounts/{accountId}/close, POST /transfers/{transferId}/cancel.",
+      "exceptions": "None."
+    },
+    {
+      "id": "pagination-identity",
+      "statement": "Within one cursor enumeration of GET /accounts/{accountId}/entries, no ledger entry id is ever returned twice, and following next_cursor terminates.",
+      "applies_to": "Any enumeration that starts without a cursor and follows the returned next_cursor values.",
+      "exceptions": "Entries written after an enumeration begins may be missed entirely \u2014 see the consistency model below. No-skip and exact-total guarantees are NOT offered."
+    },
+    {
+      "id": "ownership",
+      "statement": "A customer principal reaches only the accounts whose owner_principal is that principal: reading, funding, activating, closing, spending from, and cancelling against any other customer's account is refused 403, and no representation of it is returned.",
+      "applies_to": "Every account-scoped and transfer-scoped operation, for principals whose role is customer. The administrator is unrestricted.",
+      "exceptions": "The system fee accounts are readable by every principal \u2014 GET /accounts/{accountId} and its entries \u2014 because the fee side of a transfer is public. A transfer is readable by the principals owning either side, so being paid by a stranger makes that transfer visible without making the payer's account visible."
+    },
+    {
+      "id": "error-shape",
+      "statement": "Every 4xx and 5xx response body is {\"error\":{\"code\",\"message\",\"details\"?}} with string code and message, and a request the service refuses is always reported with a 4xx status \u2014 never a 2xx carrying a failure.",
+      "applies_to": "All operations.",
+      "exceptions": "None. 401 responses additionally carry a WWW-Authenticate header."
+    },
+    {
+      "id": "balance-agreement",
+      "statement": "An account's stored balance equals the sum of the amounts of all its ledger entries.",
+      "applies_to": "Every account, including the system fee accounts.",
+      "exceptions": "The two sides must be read consistently: compare a balance read against a complete entry enumeration with no intervening write."
+    }
+  ],
+  "x-ledger-consistency": {
+    "settlement": "Transfers settle only during POST /admin/tick, in creation order. Funds are re-checked at settlement time; a transfer that can no longer be covered ends 'failed' and writes no entries.",
+    "entry-pagination": "Entries are returned newest-first. A cursor encodes the position of the last returned entry, and a page contains only entries strictly older than the cursor. Concurrent writes therefore append ahead of any in-flight enumeration: they may be missed, but they can never duplicate or displace an entry already returned.",
+    "account-pagination": "GET /accounts and GET /transfers use the same newest-first, cursor-monotone scheme.",
+    "normalization": "Ledger entry amounts are signed: debits are negative, credits are positive. All money fields are integer minor units, so no rounding normalization is required when comparing them.",
+    "closed-accounts": "Closure is a soft delete. GET /accounts/{accountId} returns 410 with a tombstone, and the account is omitted from GET /accounts unless include_closed=true, but GET /accounts/{accountId}/entries keeps serving its history.",
+    "daily-limit": "The per-account daily limit is measured against the sum of transfer amounts created by the source account in the current ledger day and is reserved at creation: cancelling or failing a transfer does not release it. An amount that brings the total exactly to the limit is accepted; anything beyond is 422. The ledger day advances only via POST /admin/tick with advance_day=true.",
+    "ownership": "Ownership is fixed at creation: the principal that creates an account owns it, and the administrator may name another principal with owner_principal. Ownership never transfers. Authorization is evaluated after existence and before state, so an unknown id is 404, another principal's account is 403, and only a reachable account's state produces 409 or 410."
+  },
+  "x-ledger-fee-schedule": {
+    "flat": 25,
+    "basis_points": 15,
+    "formula": "fee = 25 + round_half_up(amount * 15 / 10000), in minor units",
+    "rounding": "half away from zero, to the nearest minor unit",
+    "charged_to": "the source account, on top of the transfer amount",
+    "credited_to": "the system fee account for the transfer's currency"
+  },
+  "x-ledger-limits": {
+    "daily_transfer_limit": 100000,
+    "max_page_size": 100,
+    "default_page_size": 20,
+    "fee_accounts": {
+      "USD": "acc_fee_usd",
+      "EUR": "acc_fee_eur"
+    }
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "meta"
+        ],
+        "operationId": "getHealth",
+        "summary": "Liveness probe",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "The service is up.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok",
+                    "service"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "service": {
+                      "type": "string"
+                    },
+                    "openapi": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "tags": [
+          "meta"
+        ],
+        "operationId": "getOpenApiDocument",
+        "summary": "This document",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "The OpenAPI 3.1 description of this service.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/accounts": {
+      "get": {
+        "tags": [
+          "accounts"
+        ],
+        "operationId": "listAccounts",
+        "summary": "List accounts, newest first",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "name": "include_closed",
+            "in": "query",
+            "required": false,
+            "description": "Include soft-deleted accounts in the listing.",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of accounts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "accounts"
+        ],
+        "operationId": "createAccount",
+        "summary": "Open an account",
+        "description": "The account is created in status 'pending' and cannot transact until it is activated.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAccountRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The new account.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Account"
+                }
+              }
+            },
+            "links": {
+              "activate": {
+                "operationId": "activateAccount",
+                "parameters": {
+                  "accountId": "$response.body#/id"
+                },
+                "description": "Activate the account that was just created."
+              },
+              "get": {
+                "operationId": "getAccount",
+                "parameters": {
+                  "accountId": "$response.body#/id"
+                },
+                "description": "Read the new account back."
+              },
+              "close": {
+                "operationId": "closeAccount",
+                "parameters": {
+                  "accountId": "$response.body#/id"
+                },
+                "description": "Close the new account."
+              },
+              "entries": {
+                "operationId": "listLedgerEntries",
+                "parameters": {
+                  "accountId": "$response.body#/id"
+                },
+                "description": "Enumerate the new account's ledger entries."
+              },
+              "fund": {
+                "operationId": "createDeposit",
+                "requestBody": {
+                  "account_id": "$response.body#/id",
+                  "currency": "$response.body#/currency",
+                  "amount": 250000
+                },
+                "description": "Fund the new account."
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          }
+        }
+      }
+    },
+    "/accounts/{accountId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/AccountId"
+        }
+      ],
+      "get": {
+        "tags": [
+          "accounts"
+        ],
+        "operationId": "getAccount",
+        "summary": "Read an account",
+        "responses": {
+          "200": {
+            "description": "The account.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Account"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "410": {
+            "$ref": "#/components/responses/Gone"
+          }
+        }
+      }
+    },
+    "/accounts/{accountId}/activate": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/AccountId"
+        }
+      ],
+      "post": {
+        "tags": [
+          "accounts"
+        ],
+        "operationId": "activateAccount",
+        "summary": "Activate a pending account",
+        "responses": {
+          "200": {
+            "description": "The activated account.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Account"
+                }
+              }
+            },
+            "links": {
+              "fund": {
+                "operationId": "createDeposit",
+                "requestBody": {
+                  "account_id": "$response.body#/id",
+                  "currency": "$response.body#/currency",
+                  "amount": 250000
+                },
+                "description": "Fund the now-active account."
+              },
+              "get": {
+                "operationId": "getAccount",
+                "parameters": {
+                  "accountId": "$response.body#/id"
+                },
+                "description": "Read the activated account back."
+              },
+              "entries": {
+                "operationId": "listLedgerEntries",
+                "parameters": {
+                  "accountId": "$response.body#/id"
+                },
+                "description": "Enumerate the activated account's entries."
+              },
+              "close": {
+                "operationId": "closeAccount",
+                "parameters": {
+                  "accountId": "$response.body#/id"
+                },
+                "description": "Close the activated account."
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "410": {
+            "$ref": "#/components/responses/Gone"
+          }
+        }
+      }
+    },
+    "/accounts/{accountId}/close": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/AccountId"
+        }
+      ],
+      "post": {
+        "tags": [
+          "accounts"
+        ],
+        "operationId": "closeAccount",
+        "summary": "Close an account (soft delete)",
+        "description": "Refused with 409 while the account has pending transfers. After closure the account keeps its ledger history but can no longer transact, and reads of the account itself answer 410.",
+        "responses": {
+          "200": {
+            "description": "The closed account.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Account"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "410": {
+            "$ref": "#/components/responses/Gone"
+          }
+        }
+      }
+    },
+    "/accounts/{accountId}/entries": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/AccountId"
+        }
+      ],
+      "get": {
+        "tags": [
+          "accounts"
+        ],
+        "operationId": "listLedgerEntries",
+        "summary": "Enumerate an account's ledger entries, newest first",
+        "description": "Append-only double-entry rows. Debits are negative, credits are positive; the account's balance is the sum of its entry amounts. Closed accounts keep serving their history.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of ledger entries.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LedgerEntryPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/deposits": {
+      "post": {
+        "tags": [
+          "deposits"
+        ],
+        "operationId": "createDeposit",
+        "summary": "Fund an account from outside the system",
+        "description": "Settles immediately and writes a single 'deposit' ledger entry. Deposits are the declared exception to conservation: they have no counter-entry.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDepositRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The settled deposit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Deposit"
+                }
+              }
+            },
+            "links": {
+              "get": {
+                "operationId": "getDeposit",
+                "parameters": {
+                  "depositId": "$response.body#/id"
+                },
+                "description": "Read the deposit back."
+              },
+              "entries": {
+                "operationId": "listLedgerEntries",
+                "parameters": {
+                  "accountId": "$response.body#/account_id"
+                },
+                "description": "Enumerate the funded account's entries."
+              },
+              "source": {
+                "operationId": "getAccount",
+                "parameters": {
+                  "accountId": "$response.body#/account_id"
+                },
+                "description": "Read the funded account back."
+              },
+              "send": {
+                "operationId": "createTransfer",
+                "requestBody": {
+                  "source_account_id": "$response.body#/account_id",
+                  "amount": 1000
+                },
+                "description": "Send from the account that was just funded."
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "410": {
+            "$ref": "#/components/responses/Gone"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          }
+        }
+      }
+    },
+    "/deposits/{depositId}": {
+      "parameters": [
+        {
+          "name": "depositId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "pattern": "^dep_[0-9a-z]+$"
+          }
+        }
+      ],
+      "get": {
+        "tags": [
+          "deposits"
+        ],
+        "operationId": "getDeposit",
+        "summary": "Read a deposit",
+        "responses": {
+          "200": {
+            "description": "The deposit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Deposit"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/transfers": {
+      "get": {
+        "tags": [
+          "transfers"
+        ],
+        "operationId": "listTransfers",
+        "summary": "List transfers, newest first",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "name": "account_id",
+            "in": "query",
+            "required": false,
+            "description": "Restrict to transfers naming this account as source or destination.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of transfers.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransferPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "transfers"
+        ],
+        "operationId": "createTransfer",
+        "summary": "Move money between two active same-currency accounts",
+        "description": "The transfer is created 'pending' and settles at the next admin tick. The source account is charged the amount plus the fee; at creation time the service checks that its balance covers both.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Replay protection, scoped to the authenticated principal. Repeating the key with the same body returns the original transfer with 200 and an Idempotency-Replayed header; repeating it with a different body is 409.",
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTransferRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "An idempotent replay: the transfer created by the first request with this key.",
+            "headers": {
+              "Idempotency-Replayed": {
+                "schema": {
+                  "type": "string",
+                  "const": "true"
+                },
+                "description": "Present on replays."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Transfer"
+                }
+              }
+            },
+            "links": {
+              "get": {
+                "operationId": "getTransfer",
+                "parameters": {
+                  "transferId": "$response.body#/id"
+                },
+                "description": "Read the transfer back."
+              },
+              "cancel": {
+                "operationId": "cancelTransfer",
+                "parameters": {
+                  "transferId": "$response.body#/id"
+                },
+                "description": "Cancel the transfer while it is pending."
+              },
+              "sourceEntries": {
+                "operationId": "listLedgerEntries",
+                "parameters": {
+                  "accountId": "$response.body#/source_account_id"
+                },
+                "description": "Enumerate the source account's entries."
+              },
+              "destinationEntries": {
+                "operationId": "listLedgerEntries",
+                "parameters": {
+                  "accountId": "$response.body#/destination_account_id"
+                },
+                "description": "Enumerate the destination account's entries."
+              }
+            }
+          },
+          "201": {
+            "description": "The new pending transfer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Transfer"
+                }
+              }
+            },
+            "links": {
+              "get": {
+                "operationId": "getTransfer",
+                "parameters": {
+                  "transferId": "$response.body#/id"
+                },
+                "description": "Read the transfer back."
+              },
+              "cancel": {
+                "operationId": "cancelTransfer",
+                "parameters": {
+                  "transferId": "$response.body#/id"
+                },
+                "description": "Cancel the transfer while it is pending."
+              },
+              "sourceEntries": {
+                "operationId": "listLedgerEntries",
+                "parameters": {
+                  "accountId": "$response.body#/source_account_id"
+                },
+                "description": "Enumerate the source account's entries."
+              },
+              "destinationEntries": {
+                "operationId": "listLedgerEntries",
+                "parameters": {
+                  "accountId": "$response.body#/destination_account_id"
+                },
+                "description": "Enumerate the destination account's entries."
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "410": {
+            "$ref": "#/components/responses/Gone"
+          },
+          "422": {
+            "description": "The transfer is well-formed and a business rule refuses it: invalid_amount (an integer amount that is not positive), same_account, currency_mismatch, insufficient_funds, or daily_limit_exceeded. An amount that is not an integer at all, or a missing or wrongly typed field, is 400 invalid_request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/transfers/{transferId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/TransferId"
+        }
+      ],
+      "get": {
+        "tags": [
+          "transfers"
+        ],
+        "operationId": "getTransfer",
+        "summary": "Read a transfer",
+        "responses": {
+          "200": {
+            "description": "The transfer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Transfer"
+                }
+              }
+            },
+            "links": {
+              "cancel": {
+                "operationId": "cancelTransfer",
+                "parameters": {
+                  "transferId": "$response.body#/id"
+                },
+                "description": "Cancel the transfer."
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/transfers/{transferId}/cancel": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/TransferId"
+        }
+      ],
+      "post": {
+        "tags": [
+          "transfers"
+        ],
+        "operationId": "cancelTransfer",
+        "summary": "Cancel a pending transfer",
+        "description": "Only a 'pending' transfer can be canceled, and cancellation writes no ledger entries. A transfer that has already settled, failed, or been canceled answers 409.",
+        "responses": {
+          "200": {
+            "description": "The canceled transfer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Transfer"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/admin/tick": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "adminTick",
+        "summary": "Advance settlement",
+        "description": "Settles pending transfers in creation order. This is the only way time moves in this service.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TickRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "What the tick did.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TickResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/admin/reset": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "adminReset",
+        "summary": "Reset the whole service to a seeded initial state",
+        "description": "Drops every account, deposit, transfer, and ledger entry, re-seeds the identifier generator, and recreates the system fee accounts. Identifiers are a pure function of the seed, so the same request sequence after the same reset yields the same ids.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The service was reset.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResetResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Static fixture tokens, one per principal. The admin token may call /admin/* and reaches every account; a customer token reaches the accounts its principal owns."
+      }
+    },
+    "parameters": {
+      "AccountId": {
+        "name": "accountId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^acc_[0-9a-z_]+$"
+        }
+      },
+      "TransferId": {
+        "name": "transferId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^tr_[0-9a-z]+$"
+        }
+      },
+      "Limit": {
+        "name": "limit",
+        "in": "query",
+        "required": false,
+        "description": "Page size.",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 20
+        }
+      },
+      "Cursor": {
+        "name": "cursor",
+        "in": "query",
+        "required": false,
+        "description": "An opaque cursor previously returned as next_cursor. Anything else is 400.",
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "The request is malformed, unparseable, or wrongly typed: invalid_request (a required field absent, or a field of the wrong type — a non-integer amount, a non-string currency or identifier), invalid_json, invalid_cursor, or invalid_limit. This enumeration is the set of 400 codes, not the set of fields 400 can be about: any field of the wrong type answers 400 invalid_request. A well-formed request that a business rule then refuses is 422, never 400.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Missing or unrecognized bearer token.",
+        "headers": {
+          "WWW-Authenticate": {
+            "schema": {
+              "type": "string"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "The token is valid but this principal may not reach the operation or the resource.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "No such resource.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "The resource is in a state that forbids this operation.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Gone": {
+        "description": "The account is closed. The details carry the tombstone.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "UnprocessableEntity": {
+        "description": "A business rule refuses an otherwise well-formed request — every field is present and of the documented type, and the service declines the value anyway (a non-positive amount, an unsupported currency, insufficient funds). A malformed or wrongly typed request is 400, not 422.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "description": "The single error envelope used by every 4xx and 5xx response.",
+        "required": [
+          "error"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": [
+              "code",
+              "message"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "type": "string",
+                "description": "A stable machine-readable code.",
+                "examples": [
+                  "insufficient_funds",
+                  "account_closed",
+                  "daily_limit_exceeded"
+                ]
+              },
+              "message": {
+                "type": "string",
+                "description": "A human-readable explanation."
+              },
+              "details": {
+                "type": "object",
+                "description": "Optional structured context, e.g. the offending field or the tombstone."
+              }
+            }
+          }
+        }
+      },
+      "Money": {
+        "type": "integer",
+        "description": "An amount in the currency's minor unit (cents). Never a float.",
+        "format": "int64"
+      },
+      "Currency": {
+        "type": "string",
+        "enum": [
+          "USD",
+          "EUR"
+        ]
+      },
+      "Account": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "owner",
+          "owner_principal",
+          "currency",
+          "status",
+          "balance",
+          "created_at"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^acc_[0-9a-z_]+$"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "customer",
+              "system"
+            ],
+            "description": "System accounts hold collected fees."
+          },
+          "owner": {
+            "type": "string"
+          },
+          "owner_principal": {
+            "type": "string",
+            "description": "The principal that owns this account. Only this principal and the administrator may reach it."
+          },
+          "currency": {
+            "$ref": "#/components/schemas/Currency"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "active",
+              "closed"
+            ]
+          },
+          "balance": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "activated_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "closed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "Deposit": {
+        "type": "object",
+        "required": [
+          "id",
+          "account_id",
+          "amount",
+          "currency",
+          "status",
+          "created_at"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^dep_[0-9a-z]+$"
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "amount": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "currency": {
+            "$ref": "#/components/schemas/Currency"
+          },
+          "status": {
+            "type": "string",
+            "const": "settled"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "entry_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "Transfer": {
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "source_account_id",
+          "destination_account_id",
+          "fee_account_id",
+          "amount",
+          "fee",
+          "currency",
+          "created_at"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^tr_[0-9a-z]+$"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "settled",
+              "failed",
+              "canceled"
+            ],
+            "description": "Created 'pending'. A tick moves it to 'settled', or to 'failed' when the source can no longer cover it."
+          },
+          "source_account_id": {
+            "type": "string"
+          },
+          "destination_account_id": {
+            "type": "string"
+          },
+          "fee_account_id": {
+            "type": "string",
+            "description": "The system account credited with the fee."
+          },
+          "amount": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "fee": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "currency": {
+            "$ref": "#/components/schemas/Currency"
+          },
+          "idempotency_key": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "failure_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "settled_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "canceled_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "LedgerEntry": {
+        "type": "object",
+        "description": "One side of a double-entry effect. Debits are negative and credits are positive.",
+        "required": [
+          "id",
+          "account_id",
+          "kind",
+          "amount",
+          "currency",
+          "sequence",
+          "created_at"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^ent_[0-9a-z]+$"
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "deposit",
+              "transfer_debit",
+              "transfer_credit",
+              "fee"
+            ]
+          },
+          "amount": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "currency": {
+            "$ref": "#/components/schemas/Currency"
+          },
+          "transfer_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Set on every entry produced by a transfer settlement."
+          },
+          "deposit_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sequence": {
+            "type": "integer",
+            "description": "Global append order. Cursors are built from it."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AccountPage": {
+        "type": "object",
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Account"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "TransferPage": {
+        "type": "object",
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Transfer"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "LedgerEntryPage": {
+        "type": "object",
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LedgerEntry"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Null on the last page."
+          }
+        }
+      },
+      "CreateAccountRequest": {
+        "type": "object",
+        "required": [
+          "owner",
+          "currency"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "owner": {
+            "type": "string",
+            "minLength": 1
+          },
+          "currency": {
+            "$ref": "#/components/schemas/Currency"
+          },
+          "owner_principal": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Open the account on behalf of another principal. Administrator only; a customer principal supplying it is refused 403. Defaults to the calling principal."
+          }
+        }
+      },
+      "CreateDepositRequest": {
+        "type": "object",
+        "required": [
+          "account_id",
+          "amount"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "type": "string"
+          },
+          "amount": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Money"
+              }
+            ],
+            "minimum": 1
+          }
+        }
+      },
+      "CreateTransferRequest": {
+        "type": "object",
+        "required": [
+          "source_account_id",
+          "destination_account_id",
+          "amount"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "source_account_id": {
+            "type": "string"
+          },
+          "destination_account_id": {
+            "type": "string"
+          },
+          "amount": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Money"
+              }
+            ],
+            "minimum": 1
+          },
+          "currency": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Currency"
+              }
+            ],
+            "description": "Optional assertion that the caller knows the currency; a mismatch with the source account is 422."
+          }
+        }
+      },
+      "TickRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "settle_limit": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Settle at most this many pending transfers. Omit to settle all of them."
+          },
+          "advance_day": {
+            "type": "boolean",
+            "default": false,
+            "description": "Also roll the ledger day over, resetting every account's daily transfer usage."
+          }
+        }
+      },
+      "TickResult": {
+        "type": "object",
+        "required": [
+          "settled",
+          "failed",
+          "pending",
+          "day"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "settled": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "failed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "pending": {
+            "type": "integer",
+            "description": "Transfers still pending after the tick."
+          },
+          "day": {
+            "type": "integer"
+          }
+        }
+      },
+      "ResetRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "seed": {
+            "type": "string",
+            "description": "Omit to reuse the current seed."
+          }
+        }
+      },
+      "ResetResult": {
+        "type": "object",
+        "required": [
+          "ok",
+          "seed",
+          "day"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true
+          },
+          "seed": {
+            "type": "string"
+          },
+          "day": {
+            "type": "integer"
+          }
+        }
+      }
+    }
+  }
+}

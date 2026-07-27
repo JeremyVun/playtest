@@ -1,0 +1,17 @@
+description: Clicking Place order must always produce a visible result — the confirmation page or a clear on-screen reason — never a silent no-op that leaves the shopper unsure.
+story: |
+  You have a plant in your cart and you are ready to pay. Go to checkout. First,
+  clear one required delivery field (say, City) and click the Place order button
+  with your mouse — not the Enter key. You should get a plain, visible message
+  telling you something needs fixing; the page must not simply sit there doing
+  nothing. Now fix the field, fill in valid payment details, and click Place
+  order again with the button. Watch closely: every click of Place order should
+  visibly do something — advance you to the order confirmation, or explain what
+  is wrong. You should never click it and be left staring at an unchanged form
+  with no success and no error.
+persona: [returning-regular]
+report:
+  - When you clicked Place order with a required field empty, did a clear on-screen message appear telling you what to fix, rather than the page appearing to do nothing?
+  - When you clicked the Place order button (not the Enter key) with everything valid, did the shop visibly respond and move you toward completing the order?
+  - Did you ever click Place order and have the page just sit unchanged with no success and no error message at all?
+  - Did the flow eventually reach an order confirmation page for the purchase?

@@ -1,0 +1,14 @@
+description: Survive a declined card without losing work, and finish the purchase.
+story: |
+  Buy yourself one plant you like from this shop. Pay with your usual card,
+  4000 0000 0000 0002 (exp. 09/28, code 442) — it has been temperamental
+  lately. If the payment doesn't go through, you really want the plant:
+  sort it out and finish the purchase with your backup card,
+  4242 4242 4242 4242, same expiry and code.
+persona: [gift-rusher, cautious-first-timer]
+report:
+  - When the payment failed, what exactly did the shop tell the user, and did they understand what had happened and whether they'd been charged?
+  - How much did the user have to re-enter to try again? Name anything the form forgot.
+  - Did the user finish the purchase, and how sure were they that it succeeded exactly once?
+  - Where, if anywhere, did the user hesitate, backtrack, or get confused — and what on the screen caused it?
+  - Was anything broken, misleading, or missing that a real shopper would notice? Be specific.

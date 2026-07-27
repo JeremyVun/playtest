@@ -1,0 +1,12 @@
+{
+  "name": "@jeremyvun/playtest-runner-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Hosted Playtest group executor",
+  "type": "module",
+  "engines": { "node": ">=24.18.0" },
+  "bin": { "runner-agent": "./src/exec-group.ts" },
+  "scripts": {
+    "test": "node --import ../../../tests/support/hermetic.ts --test tests/unit/*.test.ts"
+  }
+}

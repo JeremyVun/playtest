@@ -1,0 +1,12 @@
+description: Adding an item to the cart gives an immediate, visible confirmation and the cart count updates without leaving the page.
+story: |
+  You want to buy exactly one houseplant as a quick gift. Open a plant you
+  like, add a single one to your cart, and satisfy yourself that it worked
+  before moving on. You are in a hurry and will click again if nothing seems
+  to happen. When you reach the cart, check that you have exactly one — not two.
+persona: [gift-rusher]
+report:
+  - "After clicking Add to cart, did anything on the page visibly confirm the item was added (a message, and the cart count going up)?"
+  - "Did you feel the need to click Add to cart a second time because nothing changed?"
+  - "When you opened the cart, how many of the plant were in it — exactly the one you intended, or an accidental duplicate?"
+  - "If you tried to add more than are in stock, did the shop refuse clearly and tell you the exact number that fits?"

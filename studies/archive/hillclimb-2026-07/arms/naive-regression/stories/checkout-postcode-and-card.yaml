@@ -1,0 +1,13 @@
+description: Checkout validation must accept the shop's own address format and not block a legitimate order on an invented postcode or card-spacing rule.
+story: |
+  You are moving and your delivery postcode is a 4-digit value like 6220. Add any
+  in-stock plant to the cart and go to checkout. The delivery details are
+  prefilled from your account (whose postcode is also only 4 digits). Fill in the
+  payment fields with a plain 16-digit card number typed without spaces, a valid
+  future expiry, and a 3-digit code, then place the order. Watch whether the
+  postcode or card-number fields reject your entirely reasonable input.
+persona: [cautious-first-timer]
+report:
+  - Did checkout accept the 4-digit postcode, or did it demand a 5-digit value the account address cannot satisfy?
+  - Did checkout accept a 16-digit card number typed without spaces instead of insisting on a specific spaced format?
+  - Were you able to place the order and reach a confirmation page without being blocked by a validation rule that contradicts the app's own data?

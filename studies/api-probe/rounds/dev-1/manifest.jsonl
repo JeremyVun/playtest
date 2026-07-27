@@ -1,0 +1,15 @@
+{"build":"f-error-200","story":"error-shape","runDir":"runs/2026-07-25T1003-844a","exit":null,"recovered":true,"at":"2026-07-25T10:03:08.463Z"}
+{"build":"f-undocumented-500","story":"error-shape","runDir":"runs/2026-07-25T1009-9aba","exit":null,"recovered":true,"at":"2026-07-25T10:09:00.671Z"}
+{"build":"f-fee-rounding-drift","story":"conservation","runDir":"runs/2026-07-25T1016-c1cc","exit":null,"recovered":true,"at":"2026-07-25T10:16:26.926Z"}
+{"build":"f-idempotency-replay-double","story":"idempotency","runDir":"runs/2026-07-25T1023-c1d2","exit":null,"recovered":true,"at":"2026-07-25T10:23:34.959Z"}
+{"build":"f-settle-cancel-race","story":"lifecycle-legality","runDir":"runs/2026-07-25T1028-6c8b","exit":null,"recovered":true,"at":"2026-07-25T10:28:02.761Z"}
+{"build":"f-close-ghost","story":"lifecycle-legality","runDir":"runs/2026-07-25T1038-61ff","exit":null,"recovered":true,"at":"2026-07-25T10:38:29.673Z"}
+{"build":"f-pagination-dup","story":"pagination-identity","runDir":"runs/2026-07-25T1045-de1b","exit":null,"recovered":true,"at":"2026-07-25T10:45:17.612Z"}
+{"build":"f-balance-cache-stale","story":"balance-agreement","runDir":"runs/2026-07-25T1049-9e55","exit":null,"recovered":true,"at":"2026-07-25T10:49:48.827Z"}
+{"build":"clean","story":"idempotency","runDir":"runs/2026-07-25T1058-7421","exit":null,"recovered":true,"at":"2026-07-25T10:58:37.314Z"}
+{"build":"clean","story":"lifecycle-legality","runDir":"runs/2026-07-25T1114-40bf","exit":0,"wallMs":576622,"at":"2026-07-25T11:23:41.956Z"}
+{"build":"clean","story":"pagination-identity","runDir":"runs/2026-07-25T1123-92f0","exit":0,"wallMs":935253,"at":"2026-07-25T11:39:17.210Z"}
+{"build":"clean","story":"error-shape","runDir":"runs/2026-07-25T1139-c06a","exit":2,"wallMs":947276,"at":"2026-07-25T11:55:04.487Z"}
+{"build":"clean","story":"balance-agreement","runDir":"runs/2026-07-25T1155-ebeb","exit":0,"wallMs":682678,"at":"2026-07-25T12:06:27.166Z"}
+{"build":"clean","story":"error-shape","runDir":"runs/2026-07-25T1208-0aab","exit":1,"wallMs":974824,"at":"2026-07-25T12:25:06.579Z"}
+ERROR-SHAPE RERUN DONE 2026-07-25T12:25:06Z

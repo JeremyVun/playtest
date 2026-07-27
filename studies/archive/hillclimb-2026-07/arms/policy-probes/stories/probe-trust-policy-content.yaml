@@ -1,0 +1,16 @@
+description: Probe — does the absence of shipping/returns/payment-security policy content actually block a first-time buyer from trusting the shop enough to purchase?
+story: |
+  This is your first time on this shop and you are deciding, in about a minute,
+  whether it is trustworthy enough to give your card number to. Browse as you
+  normally would — the catalog, a product, maybe the footer — and look for the
+  reassurances you personally need before buying from an unfamiliar store
+  (shipping, returns, security). Then make a call: would you actually go ahead
+  and buy, or would the missing information stop you? Be concrete about what,
+  if anything, was the dealbreaker.
+persona: [cautious-first-timer]
+report:
+  - "What specific reassurances did you look for before trusting the shop, and which did you actually find?"
+  - "Was the missing shipping/returns/security information a genuine dealbreaker, or merely a nice-to-have you would proceed without?"
+  - "If you would still buy despite the gaps, what convinced you the shop was legitimate?"
+  - "Separate the two: was your hesitation about missing policy content, or about the general 'demo shop' framing?"
+actor_model: gpt5_5

@@ -1,0 +1,13 @@
+description: Sorting the catalog by price must actually reorder the products and hold across navigation.
+story: |
+  You are browsing without a fixed goal and want to find the cheapest way into a
+  starter setup. On the shop page, use the Sort control and choose Price: low to
+  high. Look at the product grid and confirm the cheapest item is now first and
+  prices climb as you scan down. Open a product, then come back to the shop and
+  confirm the low-to-high order is still applied rather than silently reverting
+  to Featured.
+persona: [weekend-browser]
+report:
+  - "After choosing Price: low to high, did the grid actually reorder so the cheapest product appears first?"
+  - "Does Price: high to low reverse the order, and does Name A-Z order the products alphabetically?"
+  - After opening a product and returning to the shop, was the chosen sort still in effect rather than reset to Featured?

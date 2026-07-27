@@ -1,0 +1,15 @@
+description: Open the known OOS SKU; compare stock line vs purchase button.
+tags: [risk]
+story: |
+  Open the Fiddle-Leaf Fig product page (/product/fiddle-leaf-fig). Do not
+  try other products first. Read the stock line (or availability copy) and
+  the main purchase button label and enabled/disabled state. Quote both.
+  If the button is disabled, try once anyway if the UI allows. Report any
+  contradiction between "in stock" style claims and a button that refuses
+  purchase, or between "out of stock" and a live buy control.
+persona: [adversarial-tester, cautious-first-timer]
+report:
+  - What did the stock / availability line say, quoted?
+  - What did the purchase button say, and was it enabled or disabled?
+  - Did label and control state agree, or contradict each other?
+  - Was anything broken, misleading, or missing that a real shopper would notice? Be specific.

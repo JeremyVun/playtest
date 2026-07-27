@@ -1,4 +1,40 @@
+.env
 node_modules/
+# Anchored to the repo root: this ignores the top-level run-output dir only.
+# An unanchored "runs/" also matches nested fixtures (studies/viewer-self-test/fixtures/runs/),
+# which are tracked self-test data — git silently dropped them before.
 runs/
+# Local Playtest state: the suite-scoped findings ledger and its plan files
+# (docs/contracts/interfaces.md#local-findings-ledger). Identity only — never portable.
+.playtest/
 *.log
 .DS_Store
+*.mp4
+# Hosted control plane (apps/) — never part of the published @jeremyvun/playtest
+# tarball (root package.json `files` is an allowlist that excludes apps/). These
+# ignore the server's local dev state.
+apps/**/node_modules/
+.playtest-data/
+apps/**/.playtest-data/
+
+# hill-climb report: screenshot assets are regenerable from runs/ via bench/site.mjs (75MB, not committed)
+studies/hillclimb/report/assets/
+studies/hillclimb/report/rounds/
+studies/archive/hillclimb-2026-07/report/assets/
+studies/archive/hillclimb-2026-07/report/rounds/
+
+# UX lab: throwaway control-plane data root and capture output
+tools/ux-lab/.data/
+tools/ux-lab/out/
+tools/ux-lab/out-*/
+# SwiftUI simulator fixture: the assembled .app bundle, rebuilt by its build.sh
+tests/fixtures/todo-app-swiftui/build/
+
+.venv-schemathesis/
+.schemathesis/
+
+# Browser ESM emitted in place from TypeScript sources.
+src/core/shared/*.js
+src/run-viewer/web/**/*.js
+src/platform/web/**/*.js
+!src/platform/web/vendor/**

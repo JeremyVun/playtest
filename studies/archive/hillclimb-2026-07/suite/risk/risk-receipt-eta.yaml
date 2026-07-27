@@ -1,0 +1,15 @@
+description: Open a past shipped/delivered order; quote ETA line vs status.
+tags: [risk]
+story: |
+  Go to Account → order history. Open a past order that is already
+  shipped or delivered (seeded history includes both — e.g. FF-1041
+  delivered or FF-1052 shipped). On that receipt, quote (1) the order
+  status and (2) any delivery estimate / ETA line. Say whether the ETA
+  copy matches a finished or in-transit order, or whether it reads like a
+  brand-new "confirmed · arrives in 3–5 days" promise on an old order.
+persona: [adversarial-tester, cautious-first-timer]
+report:
+  - Which past order did the user open, and what status did the shop show?
+  - What exact delivery estimate / ETA text appeared on the receipt?
+  - Did status and ETA agree for a shipped or delivered order?
+  - Was anything broken, misleading, or missing that a real shopper would notice? Be specific.

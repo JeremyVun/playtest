@@ -1,0 +1,16 @@
+description: Place an order, then click Continue shopping on the receipt.
+tags: [risk]
+story: |
+  Buy one cheap in-stock item (for example Gentle Plant Food or a small
+  pot) with card 4242 4242 4242 4242, expiry 09/28, CVC 442. On the order
+  confirmation / receipt page, click the "Continue shopping" control — not
+  the header Shop link first; use the receipt's own button/link. Report
+  exactly which URL or page you land on (catalog, cart, checkout, or
+  elsewhere) and whether that destination makes sense after a completed
+  purchase with an empty cart.
+persona: [adversarial-tester]
+report:
+  - Did the order complete, and what did the receipt show?
+  - Where did the receipt's "Continue shopping" control take the user?
+  - Was that destination appropriate after a finished order, or a loop / dead end?
+  - Was anything broken, misleading, or missing that a real shopper would notice? Be specific.

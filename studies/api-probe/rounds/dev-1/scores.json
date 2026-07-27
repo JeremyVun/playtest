@@ -1,0 +1,785 @@
+{
+  "traces": [
+    {
+      "id": "error-shape",
+      "source": "playtest-run",
+      "arm": "playtest",
+      "label": "f-error-200",
+      "label_kind": "faulty",
+      "fault": "f-error-200",
+      "fault_tier": "schema-reachable",
+      "requests": 23,
+      "steps": 23,
+      "wall_ms": 350628,
+      "cost_usd": 1.172606,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": false,
+        "idempotency": false,
+        "lifecycle": true,
+        "pagination": false,
+        "balance_agreement": false
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "lifecycle"
+      ],
+      "violations": [
+        {
+          "oracle": "error_shape",
+          "code": "failure_masked_as_2xx",
+          "message": "POST /transfers refused the request but answered 200 with status \"failed\"",
+          "evidence": {
+            "request": {
+              "index": 16,
+              "method": "POST",
+              "path": "/transfers",
+              "status": 200
+            },
+            "supporting": [],
+            "subject": {
+              "transfer_id": "tr_h1ggs61g6z",
+              "failure_reason": "insufficient_funds",
+              "status": 200
+            }
+          },
+          "evidence_resolvable": true,
+          "on_target": true,
+          "expected_for_label": true
+        },
+        {
+          "oracle": "error_shape",
+          "code": "failure_masked_as_2xx",
+          "message": "POST /transfers refused the request but answered 200 with status \"failed\"",
+          "evidence": {
+            "request": {
+              "index": 22,
+              "method": "POST",
+              "path": "/transfers",
+              "status": 200
+            },
+            "supporting": [],
+            "subject": {
+              "transfer_id": "tr_h1ggs61g6z",
+              "failure_reason": "insufficient_funds",
+              "status": 200
+            }
+          },
+          "evidence_resolvable": true,
+          "on_target": true,
+          "expected_for_label": true
+        }
+      ],
+      "detected": true,
+      "evidence_correct": true,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "runs/2026-07-25T1003-844a/error-shape"
+    },
+    {
+      "id": "error-shape",
+      "source": "playtest-run",
+      "arm": "playtest",
+      "label": "f-undocumented-500",
+      "label_kind": "faulty",
+      "fault": "f-undocumented-500",
+      "fault_tier": "schema-reachable",
+      "requests": 27,
+      "steps": 27,
+      "wall_ms": 444755,
+      "cost_usd": 1.589404,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": false,
+        "idempotency": false,
+        "lifecycle": true,
+        "pagination": false,
+        "balance_agreement": false
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "lifecycle"
+      ],
+      "violations": [
+        {
+          "oracle": "protocol",
+          "code": "unexpected_server_error",
+          "message": "POST /transfers answered 500",
+          "evidence": {
+            "request": {
+              "index": 26,
+              "method": "POST",
+              "path": "/transfers",
+              "status": 500
+            },
+            "supporting": [],
+            "subject": {
+              "status": 500,
+              "body": "{\"error\":{\"code\":\"internal_error\",\"message\":\"the request could not be completed\"}}\n"
+            }
+          },
+          "evidence_resolvable": true,
+          "on_target": true,
+          "expected_for_label": true
+        }
+      ],
+      "detected": true,
+      "evidence_correct": true,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "runs/2026-07-25T1009-9aba/error-shape"
+    },
+    {
+      "id": "conservation",
+      "source": "playtest-run",
+      "arm": "playtest",
+      "label": "f-fee-rounding-drift",
+      "label_kind": "faulty",
+      "fault": "f-fee-rounding-drift",
+      "fault_tier": "semantic",
+      "requests": 32,
+      "steps": 32,
+      "wall_ms": 426622,
+      "cost_usd": 1.683273,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": true,
+        "idempotency": true,
+        "lifecycle": true,
+        "pagination": true,
+        "balance_agreement": false
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "conservation",
+        "idempotency",
+        "lifecycle",
+        "pagination"
+      ],
+      "violations": [
+        {
+          "oracle": "conservation",
+          "code": "transfer_entries_nonzero",
+          "message": "the ledger entries for transfer tr_m2hjkt7x68 sum to -1, not 0",
+          "evidence": {
+            "request": {
+              "index": 29,
+              "method": "GET",
+              "path": "/accounts/acc_8n36k615kk/entries",
+              "status": 200,
+              "note": "entry observed in this response"
+            },
+            "supporting": [
+              {
+                "index": 29,
+                "note": "ent_zc946y142d transfer_debit -3363 on acc_8n36k615kk"
+              },
+              {
+                "index": 30,
+                "note": "ent_tg934qpv0t transfer_credit 3333 on acc_rkf1pgvt6k"
+              },
+              {
+                "index": 31,
+                "note": "ent_tw7b09hmx3 fee 29 on acc_fee_usd"
+              }
+            ],
+            "subject": {
+              "transfer_id": "tr_m2hjkt7x68",
+              "sum": -1,
+              "entry_ids": [
+                "ent_zc946y142d",
+                "ent_tg934qpv0t",
+                "ent_tw7b09hmx3"
+              ]
+            }
+          },
+          "evidence_resolvable": true,
+          "on_target": true,
+          "expected_for_label": true
+        }
+      ],
+      "detected": true,
+      "evidence_correct": true,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "runs/2026-07-25T1016-c1cc/conservation"
+    },
+    {
+      "id": "idempotency",
+      "source": "playtest-run",
+      "arm": "playtest",
+      "label": "f-idempotency-replay-double",
+      "label_kind": "faulty",
+      "fault": "f-idempotency-replay-double",
+      "fault_tier": "semantic",
+      "requests": 18,
+      "steps": 18,
+      "wall_ms": 266287,
+      "cost_usd": 0.946507,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": true,
+        "idempotency": true,
+        "lifecycle": true,
+        "pagination": true,
+        "balance_agreement": false
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "conservation",
+        "idempotency",
+        "lifecycle",
+        "pagination"
+      ],
+      "violations": [
+        {
+          "oracle": "idempotency",
+          "code": "phantom_ledger_effect",
+          "message": "ledger entry ent_73jcjqkppr belongs to transfer tr_zc946y142d, which this trace never created",
+          "evidence": {
+            "request": {
+              "index": 15,
+              "method": "GET",
+              "path": "/accounts/acc_8n36k615kk/entries",
+              "status": 200,
+              "note": "entry observed in this response"
+            },
+            "supporting": [
+              {
+                "index": 0,
+                "note": "state reset here"
+              }
+            ],
+            "subject": {
+              "transfer_id": "tr_zc946y142d",
+              "entry_id": "ent_73jcjqkppr",
+              "account_id": "acc_8n36k615kk",
+              "amount": -1027
+            }
+          },
+          "evidence_resolvable": true,
+          "on_target": true,
+          "expected_for_label": true
+        }
+      ],
+      "detected": true,
+      "evidence_correct": true,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "runs/2026-07-25T1023-c1d2/idempotency"
+    },
+    {
+      "id": "lifecycle-legality",
+      "source": "playtest-run",
+      "arm": "playtest",
+      "label": "f-settle-cancel-race",
+      "label_kind": "faulty",
+      "fault": "f-settle-cancel-race",
+      "fault_tier": "semantic",
+      "requests": 45,
+      "steps": 45,
+      "wall_ms": 625456,
+      "cost_usd": 2.488409,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": false,
+        "idempotency": false,
+        "lifecycle": true,
+        "pagination": false,
+        "balance_agreement": false
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "lifecycle"
+      ],
+      "violations": [
+        {
+          "oracle": "lifecycle",
+          "code": "cancel_after_settlement",
+          "message": "transfer tr_tg934qpv0t was canceled after it had already settled",
+          "evidence": {
+            "request": {
+              "index": 30,
+              "method": "POST",
+              "path": "/transfers/tr_tg934qpv0t/cancel",
+              "status": 200
+            },
+            "supporting": [
+              {
+                "index": 29,
+                "note": "observed settled here"
+              }
+            ],
+            "subject": {
+              "transfer_id": "tr_tg934qpv0t",
+              "prior_status": "settled"
+            }
+          },
+          "evidence_resolvable": true,
+          "on_target": true,
+          "expected_for_label": true
+        },
+        {
+          "oracle": "lifecycle",
+          "code": "cancel_after_settlement",
+          "message": "transfer tr_m2hjkt7x68 was canceled after it had already settled",
+          "evidence": {
+            "request": {
+              "index": 44,
+              "method": "POST",
+              "path": "/transfers/tr_m2hjkt7x68/cancel",
+              "status": 200
+            },
+            "supporting": [
+              {
+                "index": 43,
+                "note": "observed settled here"
+              }
+            ],
+            "subject": {
+              "transfer_id": "tr_m2hjkt7x68",
+              "prior_status": "settled"
+            }
+          },
+          "evidence_resolvable": true,
+          "on_target": true,
+          "expected_for_label": true
+        }
+      ],
+      "detected": true,
+      "evidence_correct": true,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "runs/2026-07-25T1028-6c8b/lifecycle-legality"
+    },
+    {
+      "id": "lifecycle-legality",
+      "source": "playtest-run",
+      "arm": "playtest",
+      "label": "f-close-ghost",
+      "label_kind": "faulty",
+      "fault": "f-close-ghost",
+      "fault_tier": "semantic",
+      "requests": 28,
+      "steps": 28,
+      "wall_ms": 406511,
+      "cost_usd": 1.448396,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": false,
+        "idempotency": false,
+        "lifecycle": true,
+        "pagination": false,
+        "balance_agreement": false
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "lifecycle"
+      ],
+      "violations": [
+        {
+          "oracle": "lifecycle",
+          "code": "transfer_on_closed_account",
+          "message": "transfer accepted against closed account acc_8n36k615kk",
+          "evidence": {
+            "request": {
+              "index": 16,
+              "method": "POST",
+              "path": "/transfers",
+              "status": 201
+            },
+            "supporting": [
+              {
+                "index": 15,
+                "note": "account acc_8n36k615kk observed closed here"
+              }
+            ],
+            "subject": {
+              "account_id": "acc_8n36k615kk",
+              "role": "destination_account_id",
+              "transfer_id": "tr_m2hjkt7x68"
+            }
+          },
+          "evidence_resolvable": true,
+          "on_target": true,
+          "expected_for_label": true
+        },
+        {
+          "oracle": "lifecycle",
+          "code": "transfer_on_closed_account",
+          "message": "transfer accepted against closed account acc_8n36k615kk",
+          "evidence": {
+            "request": {
+              "index": 27,
+              "method": "POST",
+              "path": "/transfers",
+              "status": 201
+            },
+            "supporting": [
+              {
+                "index": 22,
+                "note": "account acc_8n36k615kk observed closed here"
+              }
+            ],
+            "subject": {
+              "account_id": "acc_8n36k615kk",
+              "role": "destination_account_id",
+              "transfer_id": "tr_m2hjkt7x68"
+            }
+          },
+          "evidence_resolvable": true,
+          "on_target": true,
+          "expected_for_label": true
+        }
+      ],
+      "detected": true,
+      "evidence_correct": true,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "runs/2026-07-25T1038-61ff/lifecycle-legality"
+    },
+    {
+      "id": "pagination-identity",
+      "source": "playtest-run",
+      "arm": "playtest",
+      "label": "f-pagination-dup",
+      "label_kind": "faulty",
+      "fault": "f-pagination-dup",
+      "fault_tier": "semantic",
+      "requests": 19,
+      "steps": 19,
+      "wall_ms": 269769,
+      "cost_usd": 0.93624,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": false,
+        "idempotency": false,
+        "lifecycle": false,
+        "pagination": true,
+        "balance_agreement": false
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "pagination"
+      ],
+      "violations": [
+        {
+          "oracle": "pagination",
+          "code": "duplicate_entry_in_enumeration",
+          "message": "entry ent_tg934qpv0t was returned twice while enumerating acc_8n36k615kk",
+          "evidence": {
+            "request": {
+              "index": 9,
+              "method": "GET",
+              "path": "/accounts/acc_8n36k615kk/entries",
+              "status": 200
+            },
+            "supporting": [
+              {
+                "index": 7,
+                "note": "first returned on this page"
+              },
+              {
+                "index": 7,
+                "note": "enumeration started here"
+              }
+            ],
+            "subject": {
+              "account_id": "acc_8n36k615kk",
+              "entry_id": "ent_tg934qpv0t"
+            }
+          },
+          "evidence_resolvable": true,
+          "on_target": true,
+          "expected_for_label": true
+        },
+        {
+          "oracle": "pagination",
+          "code": "duplicate_entry_in_enumeration",
+          "message": "entry ent_m2hjkt7x68 was returned twice while enumerating acc_8n36k615kk",
+          "evidence": {
+            "request": {
+              "index": 18,
+              "method": "GET",
+              "path": "/accounts/acc_8n36k615kk/entries",
+              "status": 200
+            },
+            "supporting": [
+              {
+                "index": 16,
+                "note": "first returned on this page"
+              },
+              {
+                "index": 16,
+                "note": "enumeration started here"
+              }
+            ],
+            "subject": {
+              "account_id": "acc_8n36k615kk",
+              "entry_id": "ent_m2hjkt7x68"
+            }
+          },
+          "evidence_resolvable": true,
+          "on_target": true,
+          "expected_for_label": true
+        }
+      ],
+      "detected": true,
+      "evidence_correct": true,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "runs/2026-07-25T1045-de1b/pagination-identity"
+    },
+    {
+      "id": "balance-agreement",
+      "source": "playtest-run",
+      "arm": "playtest",
+      "label": "f-balance-cache-stale",
+      "label_kind": "faulty",
+      "fault": "f-balance-cache-stale",
+      "fault_tier": "semantic",
+      "requests": 36,
+      "steps": 36,
+      "wall_ms": 527085,
+      "cost_usd": 1.955263,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": false,
+        "idempotency": true,
+        "lifecycle": true,
+        "pagination": true,
+        "balance_agreement": true
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "idempotency",
+        "lifecycle",
+        "pagination",
+        "balance_agreement"
+      ],
+      "violations": [
+        {
+          "oracle": "balance_agreement",
+          "code": "stored_balance_diverged",
+          "message": "account acc_rkf1pgvt6k reports balance 7700 but its 3 entries sum to 7174",
+          "evidence": {
+            "request": {
+              "index": 19,
+              "method": "GET",
+              "path": "/accounts/acc_rkf1pgvt6k",
+              "status": 200,
+              "note": "balance read here"
+            },
+            "supporting": [
+              {
+                "index": 20,
+                "note": "entry enumeration started here"
+              },
+              {
+                "index": 20,
+                "note": "entry enumeration completed here"
+              }
+            ],
+            "subject": {
+              "account_id": "acc_rkf1pgvt6k",
+              "stored": 7700,
+              "derived": 7174,
+              "entry_ids": [
+                "ent_s06zk51yhs",
+                "ent_zcshq4p7ds",
+                "ent_tg934qpv0t"
+              ]
+            }
+          },
+          "evidence_resolvable": true,
+          "on_target": true,
+          "expected_for_label": true
+        },
+        {
+          "oracle": "balance_agreement",
+          "code": "stored_balance_diverged",
+          "message": "account acc_rkf1pgvt6k reports balance 7700 but its 3 entries sum to 7174",
+          "evidence": {
+            "request": {
+              "index": 34,
+              "method": "GET",
+              "path": "/accounts/acc_rkf1pgvt6k",
+              "status": 200,
+              "note": "balance read here"
+            },
+            "supporting": [
+              {
+                "index": 35,
+                "note": "entry enumeration started here"
+              },
+              {
+                "index": 35,
+                "note": "entry enumeration completed here"
+              }
+            ],
+            "subject": {
+              "account_id": "acc_rkf1pgvt6k",
+              "stored": 7700,
+              "derived": 7174,
+              "entry_ids": [
+                "ent_zcshq4p7ds",
+                "ent_s2xnsgk7j4",
+                "ent_tg934qpv0t"
+              ]
+            }
+          },
+          "evidence_resolvable": true,
+          "on_target": true,
+          "expected_for_label": true
+        }
+      ],
+      "detected": true,
+      "evidence_correct": true,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "runs/2026-07-25T1049-9e55/balance-agreement"
+    }
+  ],
+  "summary": {
+    "trace_count": 8,
+    "clean_traces": 0,
+    "faulty_traces": 8,
+    "unlabeled_traces": 0,
+    "faults_seen": 8,
+    "faults_detected": 8,
+    "faults_evidence_correct": 8,
+    "detections": {
+      "f-error-200": {
+        "fault": "f-error-200",
+        "tier": "schema-reachable",
+        "traces": 1,
+        "detected": 1,
+        "evidence_correct": 1,
+        "arms": {
+          "playtest": {
+            "traces": 1,
+            "detected": 1
+          }
+        }
+      },
+      "f-undocumented-500": {
+        "fault": "f-undocumented-500",
+        "tier": "schema-reachable",
+        "traces": 1,
+        "detected": 1,
+        "evidence_correct": 1,
+        "arms": {
+          "playtest": {
+            "traces": 1,
+            "detected": 1
+          }
+        }
+      },
+      "f-fee-rounding-drift": {
+        "fault": "f-fee-rounding-drift",
+        "tier": "semantic",
+        "traces": 1,
+        "detected": 1,
+        "evidence_correct": 1,
+        "arms": {
+          "playtest": {
+            "traces": 1,
+            "detected": 1
+          }
+        }
+      },
+      "f-idempotency-replay-double": {
+        "fault": "f-idempotency-replay-double",
+        "tier": "semantic",
+        "traces": 1,
+        "detected": 1,
+        "evidence_correct": 1,
+        "arms": {
+          "playtest": {
+            "traces": 1,
+            "detected": 1
+          }
+        }
+      },
+      "f-settle-cancel-race": {
+        "fault": "f-settle-cancel-race",
+        "tier": "semantic",
+        "traces": 1,
+        "detected": 1,
+        "evidence_correct": 1,
+        "arms": {
+          "playtest": {
+            "traces": 1,
+            "detected": 1
+          }
+        }
+      },
+      "f-close-ghost": {
+        "fault": "f-close-ghost",
+        "tier": "semantic",
+        "traces": 1,
+        "detected": 1,
+        "evidence_correct": 1,
+        "arms": {
+          "playtest": {
+            "traces": 1,
+            "detected": 1
+          }
+        }
+      },
+      "f-pagination-dup": {
+        "fault": "f-pagination-dup",
+        "tier": "semantic",
+        "traces": 1,
+        "detected": 1,
+        "evidence_correct": 1,
+        "arms": {
+          "playtest": {
+            "traces": 1,
+            "detected": 1
+          }
+        }
+      },
+      "f-balance-cache-stale": {
+        "fault": "f-balance-cache-stale",
+        "tier": "semantic",
+        "traces": 1,
+        "detected": 1,
+        "evidence_correct": 1,
+        "arms": {
+          "playtest": {
+            "traces": 1,
+            "detected": 1
+          }
+        }
+      }
+    },
+    "false_positives": {
+      "total": 0,
+      "clean_traces_with_findings": 0,
+      "by_oracle": {}
+    },
+    "totals": {
+      "requests": 228,
+      "steps": 228,
+      "wall_ms": 3317113,
+      "cost_usd": 12.220098
+    }
+  }
+}

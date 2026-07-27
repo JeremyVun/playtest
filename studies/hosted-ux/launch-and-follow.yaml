@@ -1,0 +1,13 @@
+description: Launch the suite's checks and follow them to a verdict.
+story: |
+  It is release afternoon and you want fresh evidence before sign-off.
+  Kick off the team's existing todo checks against the staging
+  environment and stay with them until you can say, in plain words,
+  whether the release is safe — and what it would cost you to run these
+  regularly.
+persona: [pm-storyteller, triaging-dev]
+report:
+  - How did they get from "I want to run these" to a launched run — how many detours, and did the launcher's environment/mode/estimate copy make sense to them?
+  - While waiting, did the dashboard keep them oriented (plain-word progress, elapsed time), or did it feel like a frozen spinner? Note any moment they doubted it was working.
+  - Could they articulate the verdict afterwards in the app's own vocabulary (pass/fail/changed), and did they find cost where they expected?
+  - If the launch never completed or errored, what did the app tell them and what did they do next?

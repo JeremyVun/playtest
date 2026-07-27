@@ -1,0 +1,12 @@
+description: Shakedown — first visit orientation, account upkeep, and an old order check.
+story: |
+  You bought from this shop a few weeks ago and you've just moved house.
+  Look around to remind yourself what they sell, check what your last order
+  was and whether it arrived, and bring your account details up to date so
+  your next delivery goes to the right place.
+persona: [exploratory]
+report:
+  - Could the user find their past orders and tell what state each was in? What did they conclude?
+  - Did updating account details visibly succeed, and would the user trust the change took effect?
+  - Where, if anywhere, did the user hesitate, backtrack, or get confused — and what on the screen caused it?
+  - Was anything broken, misleading, or missing that a real shopper would notice? Be specific.

@@ -1,0 +1,13 @@
+description: Prices on catalog cards and inline field-error messages must be legible (meet contrast), not washed-out near-invisible text.
+story: |
+  You are scanning the shop to compare prices and later filling out checkout. On
+  the shop grid, read the price under each product card and check it is clearly
+  legible against the white card, not a pale wash you have to strain to see. Then
+  go to checkout, leave the postcode blank, and submit; when the inline error
+  message appears under the field, check that the error text itself is dark and
+  readable rather than a faint pink you can barely make out.
+persona: [weekend-browser]
+report:
+  - Are the prices on catalog product cards clearly legible against the card background?
+  - When a field validation error appears at checkout, is the error message text dark enough to read comfortably?
+  - Did any important text (price or error) read as washed-out or near-invisible?

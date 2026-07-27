@@ -1,0 +1,28 @@
+# A committed WEB suite that gates on the API underneath the UI.
+#
+# The worked example for passive cross-layer assertions
+# (docs/contracts/engine.md#invariant-policies). Everything here is an ordinary
+# web journey — a browser, clicks, an element check — with one addition: the
+# Tier-1 invariant policies evaluate over `har.json`, the trace of every request
+# the PAGE made. So the suite answers a question a web gate could not ask
+# before: the UI looked fine, but did the API underneath behave?
+#
+# Nothing in this suite drives HTTP directly. There is no composite driver: the
+# journey is the same web journey, and `app.openapi` is read by the gate only —
+# it never reaches the actor's prompt, because a web story is written in clicks.
+#
+# Passive only. A web run has no observation phase: `invariant.observe` is an
+# api-driver capability, because the page's requests carry session state a
+# synthetic request from the harness would not reproduce. Anything a policy
+# needs to see must be something the story actually caused the page to do —
+# which is exactly why the lifecycle policy below sits under `observe:`.
+#
+# The target is the test-owned todo app at ../todo-app/server.ts. Run it against
+# a fresh instance with --base-url; the fixture binds an ephemeral port.
+app:
+  driver: web
+  # Overridden per run with --base-url.
+  base_url: http://127.0.0.1:4173
+  # Gate-only on the web driver: the oracle the Tier-1 policies judge the page's
+  # own requests against.
+  openapi: ./openapi.yaml

@@ -1,0 +1,36 @@
+description: Falsify balance agreement — an account's stored balance must equal the sum of its ledger entries.
+tags: [invariant]
+story: |
+  Try to falsify this rule:
+
+  An account's stored balance equals the sum of the amounts of all its ledger
+  entries. Entry amounts are signed — debits negative, credits positive — and
+  every money field is an integer in minor units, so the two sides should agree
+  exactly, with no rounding.
+
+  It applies to every account, including the system fee accounts (acc_fee_usd,
+  acc_fee_eur). The one declared condition is on how you read it: the comparison
+  is only meaningful between a balance read and a *complete* entry enumeration
+  with no write in between. A number that moved because you moved it is not a
+  counterexample.
+
+  So the attack is to make the stored balance and the entry history disagree,
+  and the interesting states are the ones where several things change at once.
+  Fund an account several times. Send it money from more than one other account
+  and settle them all in a single tick. Have it pay and be paid in the same
+  tick. Settle transfers that fail at settlement alongside ones that succeed.
+  Watch the fee account, which every transfer touches. Then go back and check
+  the balance of every account you disturbed, not just the last one.
+
+  Read it the way the rule requires or the run proves nothing: fetch
+  GET /accounts/{accountId} for the balance, and enumerate
+  GET /accounts/{accountId}/entries from a first page with no cursor, following
+  next_cursor until it comes back empty — and make no write of any kind between
+  the balance read and the end of that enumeration. Do the pair for each account
+  you care about, one account at a time.
+
+  If a stored balance and its own entries disagree, that is it. Reproduce it
+  with the fewest accounts and transfers you can, then stop.
+
+success:
+  - ledger_balance_agreement: "a consistent balance read and complete entry enumeration"

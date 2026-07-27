@@ -1,0 +1,12 @@
+description: From cold, find a past order, its status, and what it cost.
+story: |
+  You ordered some plant food from this shop a little while ago and it
+  hasn't turned up yet. Find out where that order stands — what exactly you
+  ordered, what you paid, and whether it has shipped — as if you were about
+  to write a polite "where is it?" email and wanted your facts straight.
+persona: [returning-regular]
+report:
+  - Could the user find the order at all, and how many wrong turns did it take?
+  - What did the user conclude about the order's contents, cost, and status — and does the shop back each conclusion with something on screen?
+  - Where, if anywhere, did the user hesitate, backtrack, or get confused — and what on the screen caused it?
+  - Was anything broken, misleading, or missing that a real shopper would notice? Be specific.

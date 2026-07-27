@@ -1,0 +1,13 @@
+description: Judge a changed journey — accept or reject the new recording.
+story: |
+  While you were away, one of the todo journeys changed: the old
+  recording stopped working and the tool found a new way through the
+  app. It is waiting on someone's sign-off. Decide whether the change
+  was the app evolving on purpose or a break, and act on your decision —
+  you never approve anything you haven't seen with your own eyes.
+persona: [reviewer]
+report:
+  - How did they reach the pending review (top-bar badge, home tile, run row), and how many clicks from landing to seeing the divergence?
+  - Did they find a side-by-side of old vs new path, and could they name the concrete difference? Was the evidence one click from the diff summary?
+  - Did they accept or reject, and did the two buttons + confirm flow match their expectations? Anything on the way (dashboards, copy) that annoyed them?
+  - After acting, was the outcome visible (row dimmed, badge decremented, who/when recorded), or did they doubt it took effect?

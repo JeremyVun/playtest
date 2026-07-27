@@ -1,0 +1,13 @@
+description: Update saved details, then order and confirm the change carried through.
+story: |
+  You've just moved to 7 Alder Court, Kingsbridge, 6220, and your email is
+  changing to riley.chen@fastmail.example. Bring your account up to date,
+  then order something small as a housewarming treat — and make sure it is
+  going to the new address, not the old one.
+persona: [returning-regular, cautious-first-timer]
+report:
+  - Did saving the new details visibly succeed, and did the user believe it? What convinced them?
+  - When the user reached checkout, did their updated details carry through, or did they have to re-enter anything?
+  - Could the user confirm the finished order was headed to the new address? How?
+  - Where, if anywhere, did the user hesitate, backtrack, or get confused — and what on the screen caused it?
+  - Was anything broken, misleading, or missing that a real shopper would notice? Be specific.

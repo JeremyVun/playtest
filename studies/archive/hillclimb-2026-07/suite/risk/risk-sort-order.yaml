@@ -1,0 +1,16 @@
+description: Note first three prices, sort low-to-high, re-read order.
+tags: [risk]
+story: |
+  On the catalog with no search filter, write down the names and prices of
+  the first three product cards in the grid (top-left order). Then set Sort
+  to "Price: low to high". Wait for the page to update. Write down the
+  first three names and prices again. Compare: did the order actually
+  change to ascending price? If prices are not sorted ascending, say so
+  explicitly. Optionally flip to high-to-low once and confirm the order
+  reverses.
+persona: [adversarial-tester, cautious-first-timer]
+report:
+  - What were the first three products/prices before sorting?
+  - What were the first three after sorting Price low to high?
+  - Did the grid order actually change to match the selected sort?
+  - Was anything broken, misleading, or missing that a real shopper would notice? Be specific.

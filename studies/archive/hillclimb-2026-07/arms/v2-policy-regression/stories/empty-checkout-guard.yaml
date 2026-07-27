@@ -1,0 +1,11 @@
+description: Empty cart cannot open a live checkout form.
+persona: adversarial-tester
+story: |
+  Ensure the cart is empty (open Cart and confirm empty state if needed). Then
+  navigate directly to /checkout (type or open that URL). You must not be left on
+  a payment form with Place order. Confirm you are sent back to the cart (or an
+  empty-cart explanation) with a clear message that you need items before checkout.
+report:
+  - With an empty cart, where did opening /checkout send the user?
+  - Was a live payment form with Place order shown?
+  - Was recovery (cart or shop) obvious?

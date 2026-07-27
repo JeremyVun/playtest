@@ -1,0 +1,725 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "dummy/case.schema.json",
+  "title": "Playtest case file",
+  "description": "One test case (<name>.yaml): a journey (regression with a deterministic gate) or a discovery study (open-ended exploration, no gate). Any key left unset inherits from the nearest playtest.yaml up the directory chain (nearest wins). max_steps/timeout may also be spelled nested under limits.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "story"
+  ],
+  "properties": {
+    "story": {
+      "type": "string",
+      "description": "Required. The user's goal in natural language, addressed to the actor in the second person (\"You keep forgetting to buy milk...\"). Journey stories name concrete targets in double quotes; discovery stories state a goal without prescribing the path (\"Get your timesheet data out of the platform however seems natural\")."
+    },
+    "description": {
+      "type": "string",
+      "description": "Optional one-line human-facing summary, e.g. \"Add a todo and see it in the list\". Shown in run lists (the viewer's picker) instead of the story prose; never sent to the actor, so it cannot change agent behavior. Case-only: not allowed in playtest.yaml."
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Free-form labels for --tag filtering, e.g. [smoke]. Case-only: not allowed in playtest.yaml. Default []."
+    },
+    "persona": {
+      "type": [
+        "string",
+        "array"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "uniqueItems": true,
+      "description": "Persona the actor role-plays: built-in \"tester\" or \"exploratory\", or the name/slug of a personas/*.yaml file. A scalar runs one actor (default \"tester\", inheritable). A list (e.g. [first-timer, power-user]) fans out one run per persona in discovery \u2014 id <case-id>@<persona>, the persona overridden per run; on a journey only the first is used (a journey has one recorded path) and the rest are ignored with a warning."
+    },
+    "mode": {
+      "enum": [
+        "journey",
+        "discovery"
+      ],
+      "description": "Case kind, default \"journey\". journey: regression test \u2014 deterministic success gate, baseline record/act/heal, pass/fail exit codes. discovery: product-insight study \u2014 no success gate, always a fresh agentic run that ends \"explored\" (give_up is a valid, informative outcome), graded with the discoverability rubric. Inheritable: a study directory usually sets mode: discovery once in its playtest.yaml."
+    },
+    "vision": {
+      "type": "boolean",
+      "description": "Discovery capability: send each step's viewport screenshot to the actor alongside the a11y snapshot and ask for visual observations (the step's \"visual\" field). Defaults to true when the resolved mode is discovery, false otherwise. Inheritable. \"vision: true\" resolving on a journey case is a config error \u2014 the regression instrument stays a11y-only by construction; \"vision: false\" is always allowed."
+    },
+    "visual_regression": {
+      "type": "boolean",
+      "description": "Internal: enable the pixel drift channel \u2014 hash each step's screenshot and compare on replay (a divergence escalates to heal, like a11y drift). No images are sent to the model. web only. Default true. Inheritable."
+    },
+    "visual_regression_drift": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Internal tuning knob for visual_regression: the Hamming-distance threshold (0\u201364) over the per-step screenshot dHash above which the screenshot reads as pixel drift. Higher = more tolerant (fewer drift heals); lower = stricter. Default 10."
+    },
+    "success": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "maxProperties": 2,
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "Optional short human name for this criterion (e.g. \"Single parent is not eligible\"), useful when an assert claim is a long sentence. Purely cosmetic: shown in the burned clip's summary card (and run lists), never sent to the grader and never affecting the pass/fail verdict. The entry still carries exactly one check kind alongside label."
+          },
+          "url_matches": {
+            "type": "string",
+            "description": "Glob (* and ?) matched against the final URL or its pathname, e.g. \"/done/*\"."
+          },
+          "element_exists": {
+            "type": "string",
+            "description": "web only: CSS selector that must match on the final page, e.g. \"[data-testid=todo-item]\"."
+          },
+          "screen_shows": {
+            "type": "string",
+            "description": "mobile only: an accessibility id / predicate that must resolve on the final screen \u2014 the mobile analog of element_exists, e.g. \"~todo-cell-buy-milk\"."
+          },
+          "response_status": {
+            "type": [
+              "string",
+              "object"
+            ],
+            "additionalProperties": false,
+            "required": [
+              "op",
+              "status"
+            ],
+            "properties": {
+              "op": {
+                "type": "string",
+                "description": "Method plus an OpenAPI-style path template naming the operation, e.g. \"POST /accounts/{accountId}/close\". {param} matches one path segment."
+              },
+              "status": {
+                "type": [
+                  "string",
+                  "number"
+                ],
+                "description": "The status that operation's responses must carry, exact (\"201\") or a class (\"2xx\") when a class is genuinely the intent."
+              },
+              "occurrence": {
+                "enum": [
+                  "all",
+                  "any",
+                  "first",
+                  "last"
+                ],
+                "description": "Which of the operation's requests must satisfy it. Default \"all\". A selector matching NO request always fails \u2014 \"all\" is never vacuously true."
+              }
+            },
+            "description": "api only. Bare string: the status of any response in the run, exact (\"201\") or a class (\"2xx\"). Object form: the structured operation selector \u2014 { op, status, occurrence } \u2014 which attributes the check to one operation instead of the whole run."
+          },
+          "response_matches": {
+            "type": [
+              "string",
+              "object"
+            ],
+            "additionalProperties": false,
+            "required": [
+              "op",
+              "match"
+            ],
+            "properties": {
+              "op": {
+                "type": "string",
+                "description": "Method plus an OpenAPI-style path template naming the operation, e.g. \"GET /accounts/{accountId}\"."
+              },
+              "match": {
+                "type": "string",
+                "description": "The JSON-path/value expression checked against that operation's response body, e.g. \"$.balance == 90\"."
+              },
+              "occurrence": {
+                "enum": [
+                  "all",
+                  "any",
+                  "first",
+                  "last"
+                ],
+                "description": "Which of the operation's responses must satisfy it. Default \"last\". A selector matching NO request always fails."
+              }
+            },
+            "description": "api only. Bare string: a JSON-path/value over the LAST response body, deterministic (no model), e.g. \"$.title == \\\"buy milk\\\"\" or \"completed == false\". Object form: the structured operation selector \u2014 { op, match, occurrence } \u2014 so a read-back later in the journey does not decide a check about an earlier call. Natural-language response claims use assert instead."
+          },
+          "api_called": {
+            "type": "string",
+            "description": "\"METHOD /path/glob\" that must appear in the run's network traffic, e.g. \"POST /api/todos\" or \"PATCH /api/todos/*\". web and api only; mobile has no network capture in v1, so api_called on a mobile case is a config error."
+          },
+          "assert": {
+            "type": "string",
+            "description": "Natural-language claim about the final state \u2014 the page (web), the final screen (mobile), or the last response body (api) \u2014 checked by the grader model. Costs one model call per run, even on acted runs."
+          },
+          "console_errors": {
+            "type": "number",
+            "description": "web only: maximum console error count over the whole run, e.g. 0. Deterministic (no model call) \u2014 a correctness gate, not a perf budget."
+          },
+          "accessibility_violations": {
+            "type": "number",
+            "description": "web only: maximum number of axe-core (WCAG 2.0 A/AA + 2.1 AA) violation nodes summed across the run, e.g. 0. Counts EVERY violation on each step's page (a full-page axe run per step), not just those on the element the agent touched. Deterministic (no model call); a HARD compliance gate. The grade.json a11y summary reports the same total plus a per-rule breakdown for the report."
+          },
+          "invariant": {
+            "$ref": "#/definitions/invariantPolicy"
+          }
+        }
+      },
+      "description": "Journey-only deterministic gate: every criterion must pass, each entry exactly one of url_matches/element_exists/screen_shows/api_called/response_status/response_matches/console_errors/accessibility_violations/assert (optionally plus a cosmetic \"label\"). The \"exactly one kind\" half is enforced in config.js, not by this schema \u2014 once a label may sit alongside the kind, the schema alone can only bound the entry to at most two keys. Each kind is valid only for its driver(s) (web: url_matches/element_exists/api_called/console_errors/accessibility_violations/assert; mobile: screen_shows/assert; api: url_matches/api_called/response_status/response_matches/assert) \u2014 a wrong-driver kind is a config error. Case-only: not allowed in playtest.yaml. Config error in a discovery case (ask report: questions instead). Default []. The success-item properties listed here are the BUILT-IN kinds; the built-in model-graded assert accepts only a natural-language string. A suite's custom assertions (an assertions/<name>/assertion.js under the suite root) extend the schema at load time \u2014 each assertion-owned key is injected with a string, number, or boolean value into a per-suite clone, so the key is usable in success: exactly like a built-in. additionalProperties stays false (a typo'd key is a named config error, never a silent no-op); this static schema ships NO assertion keys. See docs/contracts/engine.md#gates-and-custom-assertions."
+    },
+    "observe": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "maxProperties": 2,
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "Optional short human name for this advisory policy."
+          },
+          "invariant": {
+            "$ref": "#/definitions/invariantPolicy"
+          }
+        }
+      },
+      "description": "api only: ADVISORY invariant policies \u2014 the sibling of \"success\" that never gates. Each entry takes the same { invariant: { policy: \u2026 } } shape. Their results persist as a separate \"advisory\" array in the run manifest's gate block and render in the viewer, but they never affect pass/fail or the exit code, and a policy with no qualifying trace reports \"not exercised\" instead of failing. Use it while a policy is being tuned, or to watch a property the story does not yet reliably exercise; move it under \"success\" once it should hold. Case-only: not allowed in playtest.yaml. Config error in a discovery case (there is no gate to advise on). Default []."
+    },
+    "perf": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "lcp_ms": {
+          "type": [
+            "string",
+            "number"
+          ],
+          "description": "Threshold on the WORST navigation LCP in milliseconds: \"< 2500\" style (ops < \u2264 > \u2265) or a bare number meaning \u2264 n."
+        },
+        "input_to_paint_ms": {
+          "type": [
+            "string",
+            "number"
+          ],
+          "description": "Threshold on the WORST input-to-paint latency in milliseconds; same format as lcp_ms."
+        }
+      },
+      "description": "Latency thresholds (LCP / input-to-paint) checked with the journey gate. Inheritable. Silently irrelevant in discovery (the gate never runs). No-console-errors is a success criterion, not a perf key."
+    },
+    "report": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Report questions the grader answers from the trajectory, e.g. \"At which screen would this user have expected an export affordance?\". Questions, not assertions \u2014 findings have answers, not pass/fail. Most useful in discovery studies, but honored on journey cases too. Case-only: not allowed in playtest.yaml. Default []."
+    },
+    "max_steps": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Maximum actor steps before the run ends with end_reason max_steps. Mode-aware default when unset: 50 for a journey, 300 for a discovery run (which explores freely). Inheritable. Equivalent nested spelling: limits.max_steps."
+    },
+    "timeout": {
+      "type": [
+        "string",
+        "number"
+      ],
+      "exclusiveMinimum": 0,
+      "description": "Wall-clock limit per run: \"5m\", \"90s\", \"250ms\", or a number of milliseconds (must be > 0). Mode-aware default when unset: \"4m\" for a journey, \"30m\" for a discovery run. Inheritable. Equivalent nested spelling: limits.timeout."
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_steps": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Same as top-level max_steps."
+        },
+        "timeout": {
+          "type": [
+            "string",
+            "number"
+          ],
+          "exclusiveMinimum": 0,
+          "description": "Same as top-level timeout."
+        }
+      },
+      "description": "Nested spelling of max_steps/timeout; normalized to the top-level keys at load time."
+    },
+    "actor_model": {
+      "type": "string",
+      "description": "Model that role-plays the user. A short tier enum \u2014 \"sonnet\", \"haiku\", \"opus\", \"gpt5_4_mini\" (default), \"gpt5_4\", \"gpt5_5\" \u2014 resolves to a fully-qualified gateway model name (override per enum with PLAYTEST_<ENUM>_MODEL, e.g. PLAYTEST_SONNET_MODEL); any other value is used verbatim as an already-qualified name. A capable actor reads the page and recovers from friction far more reliably than a cheap one, and for both journeys and discovery the trajectory is only worth grading if the user was played well; pin a stronger tier (\"sonnet\"/\"opus\") when fidelity matters more than cost. Inheritable."
+    },
+    "grader_model": {
+      "type": "string",
+      "description": "Model that grades finished runs and checks assert: criteria. A short tier enum \u2014 \"sonnet\", \"haiku\", \"opus\", \"gpt5_4_mini\", \"gpt5_4\", or \"gpt5_5\" (default) \u2014 resolves to a fully-qualified gateway model name (override with PLAYTEST_<ENUM>_MODEL); any other value is used verbatim. Inheritable."
+    },
+    "match": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Response field paths whose VALUE is volatile, e.g. \"$.debug\" or \"$.items[*].revision\". The node reports \"[excluded]\" and its key stays, so a renamed or vanished field still reads as drift."
+        },
+        "compare": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Response field paths whose literal value should enter the projection and be compared, e.g. \"$.status\". The projection is shape-only by default; a value is committed to the baseline only where a rule names it."
+        },
+        "normalize": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path",
+              "rule"
+            ],
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "Response field path the rule applies to, e.g. \"$.items\"."
+              },
+              "rule": {
+                "enum": [
+                  "sorted",
+                  "length"
+                ],
+                "description": "\"sorted\": compare a list order-insensitively. \"length\": compare a list or string by its length only."
+              }
+            }
+          },
+          "description": "Value normalizations applied before comparison. The vocabulary is closed; an unknown rule is a config error."
+        },
+        "status_equivalent": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^[1-5]xx$"
+              },
+              {
+                "type": "array",
+                "minItems": 2,
+                "items": {
+                  "type": [
+                    "string",
+                    "number"
+                  ]
+                }
+              }
+            ]
+          },
+          "description": "Statuses this suite declares interchangeable for step-scoped drift, e.g. [201, 202] or \"2xx\". Acting compares an acted step's status EXACTLY against the one the baseline recorded; a class or allowed set is never the default, because a silent 201 -> 202 or 200 -> 204 is exactly the contract change the check exists to catch."
+        }
+      },
+      "description": "api only: how response drift is normalized (match rules). Shape-only projection already absorbs fresh ids and timestamps; these rules quiet volatile STRUCTURE and widen the fields drift should compare by value. No rule can mask a rename \u2014 every rule keeps its key. Inheritable: usually declared once in a suite's playtest.yaml. Inert on web/mobile."
+    },
+    "bind": {
+      "type": [
+        "array",
+        "string"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "description": "api only: response field paths whose values may be substituted into later requests, e.g. \"$.data.reference\" or \"$.items[*].handle\". Bindings are inferred automatically for identifier-shaped fields (a key ending in id/uuid/key/token/\u2026, or a UUID/ULID value); declare a path here when an id lives under a key the heuristic does not recognize. Declaring a path widens WHICH fields may produce a binding \u2014 never the safety rules: the value must still be a server-generated string of at least four characters that the consumer echoes whole. Inheritable. Inert on web/mobile."
+    },
+    "redact": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "request": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path",
+              "secret"
+            ],
+            "properties": {
+              "path": {
+                "type": "string",
+                "pattern": "^(headers|body)(\\.|\\[|$)",
+                "description": "Field in the recorded request, e.g. \"headers.X-Customer-Email\" or \"body.owner.email\". Use [*] to step into every element of a list (\"body.items[*].email\")."
+              },
+              "secret": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                "description": "The secret name this field's value is re-resolved from at act time (PLAYTEST_SECRET_<NAME> locally). Required: a request template with no value source could never be acted."
+              }
+            }
+          },
+          "description": "Request-template fields whose values are application-sensitive. Each commits to the baseline as a { $secret: NAME } placeholder and is resolved again when the baseline is acted, so acting still works from the committed form alone."
+        },
+        "projection": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Response-projection field paths to omit, e.g. \"$.customer.email\" or \"$.accounts[*].owner\". The projection already carries shape rather than values; these drop the key structure too (a map keyed by email is itself data). Never resolved \u2014 a projection is an observation."
+        }
+      },
+      "description": "Which request-template and response-projection fields carry application-sensitive data (emails, account numbers, balances). Shapes what the api driver commits; inert on web/mobile, whose actions carry no headers or bodies. Inheritable \u2014 usually declared once in a suite's playtest.yaml. Baseline acceptance runs a leak scan; a declared field still holding a literal is a finding that blocks automatic acceptance."
+    },
+    "app": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "driver": {
+          "enum": [
+            "web",
+            "mobile",
+            "api"
+          ],
+          "description": "Transport for the app under test. Default \"web\" (Playwright/Chromium). \"mobile\" drives a native iOS/Android app via Appium; \"api\" drives a REST API via fetch. Inheritable \u2014 usually set once in a playtest.yaml. The other app.* keys, success kinds, and perf keys are validated per-driver."
+        },
+        "base_url": {
+          "type": "string",
+          "description": "Where the app under test runs, e.g. http://localhost:4173. Required for web and api (or pass --base-url); optional for mobile. Agents really click buy/delete/submit \u2014 point at staging or test, never production."
+        },
+        "compose": {
+          "type": "string",
+          "description": "docker-compose file path, relative to this file: managed mode \u2014 the harness boots and tears down the app per run. web/api."
+        },
+        "init": {
+          "type": "string",
+          "description": "Executable script path, relative to this file, run before each case to reset app state. Receives BASE_URL/RUN_ID. Any driver \u2014 also the mobile/api pre-auth path."
+        },
+        "storage_state": {
+          "type": "string",
+          "description": "Playwright storage-state JSON path, relative to this file, for a pre-authenticated browser session. web only."
+        },
+        "auth": {
+          "type": "string",
+          "description": "web only: who this story runs as \u2014 an abstract identity label resolved through app.auth_states (e.g. member, admin), or \"none\" to start signed out (explicitly clearing any inherited storage_state). Inherited per-key like any app.* key (suite default, story override); environment-agnostic, so the same YAML runs anywhere the selected env overlay maps the label. Absent = whatever storage_state resolves to."
+        },
+        "auth_states": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "web only: the resolution map for app.auth \u2014 { <label>: <storage-state path> }, each path relative to this file. Normally declared per environment (app.envs.<name>.auth_states) so each env maps the same labels to its own saved sessions; a label with no mapping is a config error naming the case file and the label."
+        },
+        "platform": {
+          "enum": [
+            "ios",
+            "android"
+          ],
+          "description": "mobile only: the target platform (Appium XCUITest for ios, UiAutomator2 for android)."
+        },
+        "app": {
+          "type": "string",
+          "description": "mobile only: path (relative to this file) to the app binary to install \u2014 a .app/.ipa (ios) or .apk (android). Required for the mobile driver."
+        },
+        "device": {
+          "type": "string",
+          "description": "mobile only: the target device/emulator/simulator name or udid. Omit to let the driver pick a default available device."
+        },
+        "appium_url": {
+          "type": "string",
+          "description": "mobile only: URL of a running Appium server, e.g. http://localhost:4723. Omit to use the default local Appium endpoint."
+        },
+        "preserve_session": {
+          "type": "boolean",
+          "description": "mobile only: keep the app installed and its data intact across runs instead of the default reinstall-and-wipe (maps to Appium's noReset). Off by default \u2014 every session reinstalls the binary and clears state, so the actor starts from a clean install each run. Set true when reinstalling is costly or would drop a login you've already established (a signed-in build): the app is left installed with its data, so the actor stays authenticated between runs. The app binary is still required and is installed on first launch."
+        },
+        "openapi": {
+          "type": "string",
+          "description": "api only: path (relative to this file) to an OpenAPI spec. Its operations become the interactable \"elements\" the actor sees; recommended for journey (baseline-grade) api cases. Without it, the actor infers paths from the story (exploratory only)."
+        },
+        "allowed_origins": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "description": "api only: extra origins the driver may reach besides base_url's own \u2014 the egress allowlist (docs/contracts/engine.md#api-driver). Entries must be bare http(s) origins (scheme://host[:port]); a path, query, or credentials in an entry is a config error. By default the driver refuses any request resolving outside base_url's origin."
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "$secret"
+                ],
+                "properties": {
+                  "$secret": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                    "description": "Name of the secret. Resolved from an explicitly registered provider (hosted) or the PLAYTEST_SECRET_<NAME> environment variable (local). Playtest never reads .env files; a missing value is a config error naming the variable to set."
+                  }
+                },
+                "description": "A secret reference. The literal value never appears in YAML, in the actor's prompt, or in any committed artifact."
+              }
+            ]
+          },
+          "description": "api only: standing request headers sent with every request \u2014 auth, tenant, api-version. Each value is either a literal string or a secret reference { $secret: TOKEN }, resolved at run time and scrubbed from everything the run persists. These merge UNDER the actor's own action headers (case-insensitively), so an explicit per-request header still wins. Credentials belong here rather than in a story."
+        },
+        "viewport": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "width": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Browser viewport width in CSS pixels. Default 1280."
+            },
+            "height": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1,
+              "description": "Browser viewport height in CSS pixels. Default 720. A number captures VIEWPORT-ONLY stills (exactly what the user saw on screen \u2014 content below the fold is cut off, faithful to perception). Set null to capture FULL-PAGE stills (the whole scrollable page; good for debugging scroll or marketing shots). Whichever is chosen drives BOTH the on-disk PNG and the vision image sent to the actor."
+            }
+          },
+          "description": "web only: the Chromium viewport in CSS pixels, e.g. { width: 1366, height: 768 } for a smaller desktop. Default { width: 1280, height: 720 }. Shapes the layout the app renders at; the height also decides whether stills are viewport-only (a number) or full-page (null). Riding manifest.pins.viewport, this is part of the comparability key \u2014 runs with a different viewport (including viewport-only vs full-page) are not compared."
+        },
+        "device_scale_factor": {
+          "type": "number",
+          "description": "web only: the Chromium device scale factor (DPI multiplier) for step screenshots. Default 1; set 2 for retina-crisp, higher-resolution stills (the on-disk PNG renders at 2x the pixel density). Purely a rendering-quality knob \u2014 it does NOT ride manifest.pins, so it is not part of the comparability key and a run at a different scale factor still compares against the baseline. The vision image sent to the actor is still capped at the longest-edge limit, so raising this sharpens the disk artifact without changing token cost."
+        },
+        "settle": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "dom_quiet_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "web only: how long the DOM must go without mutations before the page counts as settled. Default 500."
+            },
+            "net_quiet_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "web only: how long there must be no in-flight network requests before the page counts as settled. Default 500."
+            },
+            "source_quiet_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "mobile only: how long the accessibility tree must go unchanged before the screen counts as settled. Default 400."
+            },
+            "max_ms": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Hard ceiling on the settle wait \u2014 a screen that never goes quiet (e.g. a poller) stops waiting here. Default 10000."
+            },
+            "initial_quiet_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "web + mobile: the quiet window to require on the FIRST settle only (initial page/screen load), capped at max_ms. Default max(2\u00d7 the per-step quiet window, 500). Raise it when heavy parallel load makes the initial render lag so the actor never snapshots a half-loaded/blank first page; subsequent steps keep the fast per-step windows. Rides manifest.pins.settle only when set."
+            }
+          },
+          "description": "web + mobile: override the driver's settle quiet windows. After every action the driver waits until things go quiet (web: DOM AND network for dom_quiet_ms/net_quiet_ms; mobile: the accessibility tree for source_quiet_ms) \u2014 capped at max_ms \u2014 before snapshotting, so the actor always sees a stable page. Lower the windows for a fast app to shave the per-step floor; raise them for an async-heavy one. The FIRST settle of a session (initial load) waits longer \u2014 initial_quiet_ms, default max(2\u00d7 the per-step window, 500ms) \u2014 so a lagging app doesn't settle on a blank first page. Use the keys for your driver (web: dom_quiet_ms/net_quiet_ms; mobile: source_quiet_ms; both: max_ms/initial_quiet_ms). Riding manifest.pins.settle, this is part of the comparability key \u2014 a tuned value means runs with a different value are not compared."
+        },
+        "cookies": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "web only: cookies to set on the browser context before the first navigation, as a flat { name: value } map, e.g. { bvt: \"true\" }. Scoped domain-wide (base_url's host, path \"/\") so they ride EVERY request the app makes \u2014 useful for routing to a blue/green slot or a feature flag. A session input (like storage_state), not a manifest pin: a run with different cookies still compares against the baseline."
+        },
+        "envs": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "base_url": {
+                "type": "string",
+                "description": "This environment's URL, e.g. https://stg.example.com. The main thing that varies per env."
+              },
+              "cookies": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "description": "Per-env cookies ({ name: value }) \u2014 e.g. a blue/green-slot or feature-flag cookie that only staging needs. Replaces the top-level app.cookies wholesale (no merge)."
+              },
+              "storage_state": {
+                "type": "string",
+                "description": "Path (relative to this file) to a Playwright storage-state JSON \u2014 a saved cookies + localStorage snapshot of an already-logged-in browser session, so the actor starts authenticated instead of signing in. Per-env because each environment usually has its own accounts/tokens (a dev login won't authenticate against staging). web only."
+              },
+              "init": {
+                "type": "string",
+                "description": "Path (relative to this file) to a per-env state-reset/seed script run before each case (receives BASE_URL/RUN_ID) \u2014 use when an environment needs a different seed than the default."
+              },
+              "auth": {
+                "type": "string",
+                "description": "Per-env default identity label, resolved through auth_states (or \"none\"). Overrides the top-level app.auth for this environment."
+              },
+              "auth_states": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "description": "Per-env identity map { <label>: <storage-state path> } (paths relative to this file) \u2014 each environment maps the same abstract labels to its own saved sessions, so the suite's app.auth labels stay environment-agnostic."
+              }
+            }
+          },
+          "description": "Named environment overlays selected with --env <name>. Each <name> is a partial app.* block (base_url/cookies/storage_state/init) whose keys SHALLOW-override the top-level app.* (an env inherits the defaults, then replaces per key \u2014 e.g. envs.stg.cookies replaces the top-level cookies wholesale, no deep merge). Use for the same story across dev/staging/prod. Usually set on the suite's playtest.yaml. With no --env the top-level app.* runs; --base-url still wins over --env. Transport-level keys (driver/compose/mobile/api config) are deliberately NOT per-env, and envs cannot nest."
+        }
+      },
+      "description": "App under test. Merges per-key down the defaults chain, so a case can override just base_url. The app.driver key selects which subset applies (see its enum); a key set for the wrong driver is a config error. app.envs declares named environment overlays selected at run time with --env <name>."
+    }
+  },
+  "definitions": {
+    "invariantPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policy"
+      ],
+      "properties": {
+        "policy": {
+          "enum": [
+            "no_server_error",
+            "documented_status",
+            "response_schema",
+            "content_type",
+            "round_trip",
+            "idempotency",
+            "lifecycle",
+            "pagination",
+            "error_shape"
+          ],
+          "description": "Which invariant to check. Tier 1 (spec-driven, needs app.openapi except no_server_error): no_server_error, documented_status, response_schema, content_type. Tier 2 (opt-in metamorphic): round_trip, idempotency, lifecycle, pagination, error_shape."
+        },
+        "scope": {
+          "type": "string",
+          "description": "Optional \"METHOD /path/{param}\" narrowing a Tier-1 policy (or error_shape) to one operation. Omit to check every recorded request."
+        },
+        "op": {
+          "type": "string",
+          "description": "The operation this policy is about, e.g. \"POST /transfers\" (idempotency) or \"GET /entries\" (pagination)."
+        },
+        "create": {
+          "type": "string",
+          "description": "round_trip: the write whose client-owned fields must survive, e.g. \"POST /accounts\"."
+        },
+        "read": {
+          "type": "string",
+          "description": "round_trip / lifecycle: the read-back operation, e.g. \"GET /accounts/{accountId}\"."
+        },
+        "delete": {
+          "type": "string",
+          "description": "lifecycle: the delete whose aftermath is checked, e.g. \"DELETE /accounts/{accountId}\"."
+        },
+        "fields": {
+          "type": [
+            "array",
+            "string"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "round_trip: the CLIENT-OWNED field paths that must survive the write, e.g. [\"$.owner\"]. Declared explicitly on purpose \u2014 generated, defaulted, computed, redacted, and write-only fields must be excluded, and only the author knows which those are."
+        },
+        "read_from": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "round_trip with observe: true \u2014 how to address the read-back, mapping each path parameter of \"read\" to a field of the create RESPONSE, e.g. { accountId: \"$.id\" }. Explicit, never inferred."
+        },
+        "observe": {
+          "type": "boolean",
+          "description": "round_trip only: when the story contains no read-back, may this policy issue its own READ-ONLY GET in the gate's observe phase? Default false. Observation traffic is quarantined \u2014 tagged in the HAR, excluded from every other gate kind, from replay and baselines, and from drift and metrics \u2014 and a transport failure there is an infrastructure error, not a red verdict. A policy can never issue a mutation."
+        },
+        "key_header": {
+          "type": "string",
+          "description": "idempotency: the header that marks two calls as the same attempt, e.g. \"Idempotency-Key\". Without it, a repeat is two calls carrying an identical request body."
+        },
+        "compare": {
+          "type": [
+            "array",
+            "string"
+          ],
+          "items": {
+            "enum": [
+              "status",
+              "body"
+            ]
+          },
+          "description": "idempotency: what \"an equivalent normalized state\" compares. Default [status, body]; drop \"status\" for an API that legitimately answers 201 then 200."
+        },
+        "ignore": {
+          "type": [
+            "array",
+            "string"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "idempotency: response field paths to drop before comparing repeats, e.g. [\"$.updated_at\"]."
+        },
+        "after": {
+          "type": "array",
+          "items": {
+            "type": [
+              "string",
+              "number"
+            ]
+          },
+          "description": "lifecycle: the statuses a read may answer once the resource is deleted. Default [404, 410]. Soft-delete and tombstones are legitimate declared choices \u2014 write after: [200] and pair it with state:."
+        },
+        "state": {
+          "type": "string",
+          "description": "lifecycle: a JSON-path/value expression a surviving (2xx) post-delete read must satisfy, e.g. \"$.status == \\\"closed\\\"\" \u2014 how a soft delete declares itself."
+        },
+        "identity": {
+          "type": "string",
+          "description": "pagination: the field path identifying each item, e.g. \"$.entries[*].id\". No identity may appear on two pages."
+        },
+        "cursor": {
+          "type": "string",
+          "description": "pagination: the field path carrying the next cursor, e.g. \"$.next_cursor\". Its progression must never repeat, and the last page must carry none."
+        },
+        "consistency": {
+          "enum": [
+            "snapshot",
+            "eventual"
+          ],
+          "description": "pagination: the API's declared consistency model. Default \"snapshot\" (no repeats allowed). Under \"eventual\", a boundary repeat caused by a concurrent write is permitted and only a non-terminating enumeration fails."
+        },
+        "require": {
+          "type": [
+            "array",
+            "string"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "error_shape: the field paths every non-excluded 4xx body must carry, e.g. [\"$.error.code\", \"$.error.message\"]."
+        },
+        "exclude_status": {
+          "type": "array",
+          "items": {
+            "type": [
+              "string",
+              "number"
+            ]
+          },
+          "description": "error_shape: statuses exempt from the envelope, because auth, throttling, and infrastructure responses legitimately differ. Default [401, 403, 407, 429]."
+        }
+      },
+      "description": "api only: one Tier-1/2 invariant policy (docs/contracts/engine.md#invariant-policies). Evaluated deterministically against the RECORDED trace \u2014 never by a model, and never by issuing a mutation. Under \"success\" a policy with no qualifying trace FAILS with actionable detail (a declared invariant that was never exercised has not held); under \"observe\" the same result is advisory. Which extra keys apply is decided per policy: an unknown or missing key is a config error naming the case file."
+    }
+  }
+}

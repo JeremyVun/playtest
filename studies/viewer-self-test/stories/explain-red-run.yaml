@@ -1,0 +1,9 @@
+# Failure triage: the fixture set's one red run (0bad) fails two of its four
+# gate criteria; the inspector's run tab is where the verdict lives.
+description: Open the red run and surface its failing gate criteria.
+story: |
+  The latest "todos/add-todo" check is red. Open it and get the failing
+  success criteria on screen, so you can say precisely which checks broke.
+success:
+  - url_matches: "*run=*0bad*"
+  - assert: 'the success criteria are visible with a failing check, including the detail "no element matched"'

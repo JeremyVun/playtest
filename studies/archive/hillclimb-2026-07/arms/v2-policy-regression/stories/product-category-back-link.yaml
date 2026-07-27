@@ -1,0 +1,10 @@
+description: Product page links back to catalog preserving category.
+persona: cautious-first-timer
+story: |
+  From the shop, open the Care & Tools category, then open Gentle Plant Food.
+  Use the product page's back/breadcrumb link toward the catalog (not the browser
+  back button). Confirm you return to Care & Tools (or a catalog filtered to that
+  category), not a dead end.
+report:
+  - Was there a way-back link on the product page?
+  - Did it preserve the Care & Tools category context?

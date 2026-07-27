@@ -1,0 +1,12 @@
+description: Answer "what should we fix next?" by prioritizing findings from evidence.
+story: |
+  Planning is in an hour and you own the todo product. Using this tool,
+  decide what your team should fix or improve next — and be ready to
+  defend the choice with evidence a skeptical engineer would accept,
+  not just a summary sentence.
+persona: [pm-storyteller]
+report:
+  - Where did they go to answer "what should we fix next?" (Findings, Runs, Overview's Needs attention), and does that match where the durable, prioritizable claims actually live?
+  - Could they back each candidate fix with a deep link to a run/step from a finding's evidence, or did some claim dead-end? Which one?
+  - Did score/trend visuals mislead them into a pass/fail reading anywhere (principle 2), or did the deterministic verdicts stay primary?
+  - What did they pick to fix next, and does the finding evidence actually support that choice?

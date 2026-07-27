@@ -1,0 +1,14 @@
+description: The cart must let a shopper change a line quantity in place and remove a line, updating totals and badge immediately.
+story: |
+  You have over-ordered and your budget is $80 all-in. Add two Snake Plants and
+  one Terracotta Pot to the cart, then go to the cart page. Your job is to trim
+  the order from the cart itself: lower the Snake Plant quantity using the
+  quantity control on its row, and remove the Terracotta Pot entirely with its
+  Remove button. After each change, check that the line total, the subtotal, and
+  the header cart badge all update without needing to reload the page.
+persona: [cautious-first-timer]
+report:
+  - Did the cart row expose an editable quantity control (stepper or number field), not just read-only text?
+  - When you clicked Remove, did the line actually disappear and the subtotal and cart badge drop accordingly?
+  - After lowering a quantity, did the line total, subtotal, and badge all update immediately and consistently?
+  - Were you able to reach an under-budget cart entirely from the cart page, without bouncing to product pages for a workaround?

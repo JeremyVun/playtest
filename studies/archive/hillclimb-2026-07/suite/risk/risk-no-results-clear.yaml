@@ -1,0 +1,15 @@
+description: Search a guaranteed nonce, then use Clear the search recovery.
+tags: [risk]
+story: |
+  On the catalog, search for the nonsense term zxqq9-no-such-plant-ever
+  (type it exactly — it will not match anything). Read the empty-results
+  copy aloud in your notes. Then click the control that clears or recovers
+  from the failed search (e.g. "Clear the search"). Confirm whether the
+  catalog returns to a full product list or reloads the same empty state.
+  If clear fails once, try it a second time and stop.
+persona: [adversarial-tester]
+report:
+  - What exact empty-results message did the user see for the nonce search?
+  - Was the message plain-language help or jargon a shopper would not understand?
+  - After clicking clear/recovery, did products reappear, or did the empty state persist?
+  - Was anything broken, misleading, or missing that a real shopper would notice? Be specific.

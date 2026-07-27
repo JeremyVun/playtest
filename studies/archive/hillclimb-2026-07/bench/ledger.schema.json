@@ -1,0 +1,191 @@
+{
+  "type": "object",
+  "required": [
+    "schema_version",
+    "arm",
+    "round",
+    "preregistration_sha",
+    "fingerprint",
+    "instrument",
+    "runs",
+    "findings",
+    "adjudication",
+    "fixes",
+    "verification",
+    "exclusions",
+    "amendments",
+    "clean_round"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "integer", "enum": [1] },
+    "arm": { "type": "string", "enum": ["shakedown", "baseline", "naive", "policy", "v2-baseline", "v2-policy"] },
+    "round": { "type": "integer", "minimum": 1 },
+    "preregistration_sha": { "type": ["string", "null"] },
+    "fingerprint": {
+      "type": "object",
+      "required": ["captured_at", "repo_head", "repo_dirty", "app_dir", "fault_set", "gateway", "models"],
+      "additionalProperties": true,
+      "properties": {
+        "captured_at": { "type": "string" },
+        "repo_head": { "type": ["string", "null"] },
+        "repo_dirty": { "type": "boolean" },
+        "app_dir": { "type": "string" },
+        "fault_set": {
+          "type": ["object", "null"],
+          "required": ["ids", "app_hash"],
+          "additionalProperties": false,
+          "properties": {
+            "ids": { "type": "array", "items": { "type": "string" } },
+            "app_hash": { "type": "string" }
+          }
+        },
+        "gateway": {
+          "type": "object",
+          "required": ["base_url", "healthz_ok", "usage_limit_hits"],
+          "additionalProperties": false,
+          "properties": {
+            "base_url": { "type": ["string", "null"] },
+            "healthz_ok": { "type": "boolean" },
+            "usage_limit_hits": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "models": {
+          "type": "object",
+          "required": ["actor_model", "grader_model"],
+          "additionalProperties": false,
+          "properties": {
+            "actor_model": { "type": ["string", "null"] },
+            "grader_model": { "type": ["string", "null"] }
+          }
+        }
+      }
+    },
+    "instrument": {
+      "type": "object",
+      "required": ["suite", "stories", "personas", "repeats"],
+      "additionalProperties": false,
+      "properties": {
+        "suite": { "type": "string" },
+        "stories": { "type": "array", "items": { "type": "string" } },
+        "personas": { "type": "array", "items": { "type": "string" } },
+        "repeats": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "runs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["run_id", "case_id", "persona", "status", "end_reason", "steps", "tokens", "cost_usd", "grade_score"],
+        "additionalProperties": false,
+        "properties": {
+          "run_id": { "type": "string" },
+          "case_id": { "type": "string" },
+          "persona": { "type": "string" },
+          "status": { "type": "string", "enum": ["pass", "fail", "infra", "explored"] },
+          "end_reason": { "type": ["string", "null"] },
+          "steps": { "type": "integer", "minimum": 0 },
+          "tokens": {
+            "type": "object",
+            "required": ["in", "out", "cache_read"],
+            "additionalProperties": false,
+            "properties": {
+              "in": { "type": "number", "minimum": 0 },
+              "out": { "type": "number", "minimum": 0 },
+              "cache_read": { "type": "number", "minimum": 0 }
+            }
+          },
+          "cost_usd": { "type": "number", "minimum": 0 },
+          "grade_score": { "type": ["number", "null"], "minimum": 0, "maximum": 100 }
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["finding_id", "source"],
+        "additionalProperties": false,
+        "properties": {
+          "finding_id": { "type": "string" },
+          "source": { "type": "string", "enum": ["finding", "report"] },
+          "severity": { "type": "string", "enum": ["info", "minor", "major"] },
+          "note": { "type": "string" },
+          "step": { "type": "integer", "minimum": 1 },
+          "evidence": { "type": "string" },
+          "question": { "type": "string" },
+          "answer": { "type": "string" },
+          "evidence_steps": { "type": "array", "items": { "type": "integer", "minimum": 1 } }
+        }
+      }
+    },
+    "adjudication": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["finding_id", "verdict", "rationale"],
+        "additionalProperties": false,
+        "properties": {
+          "finding_id": { "type": "string" },
+          "verdict": { "type": "string", "enum": ["true-positive", "false-positive", "new-real-issue", "duplicate-of", "emergent"] },
+          "fault_id": { "type": "string" },
+          "duplicate_of": { "type": "string" },
+          "rationale": { "type": "string" }
+        }
+      }
+    },
+    "fixes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["commit", "finding_ids", "fault_id", "description", "regression_story"],
+        "additionalProperties": false,
+        "properties": {
+          "commit": { "type": "string" },
+          "finding_ids": { "type": "array", "items": { "type": "string" } },
+          "fault_id": { "type": ["string", "null"] },
+          "description": { "type": "string" },
+          "regression_story": { "type": "string" }
+        }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "required": ["regression_green", "regression_run_ids"],
+      "additionalProperties": false,
+      "properties": {
+        "regression_green": { "type": "boolean" },
+        "regression_run_ids": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "exclusions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["run_id", "criterion", "note"],
+        "additionalProperties": false,
+        "properties": {
+          "run_id": { "type": "string" },
+          "criterion": {
+            "type": "string",
+            "enum": ["non-reseeded state", "wrong fault hash", "quota exhaustion", "gateway error", "harness infra"]
+          },
+          "note": { "type": "string" }
+        }
+      }
+    },
+    "amendments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["at", "note"],
+        "additionalProperties": false,
+        "properties": {
+          "at": { "type": "string" },
+          "note": { "type": "string" }
+        }
+      }
+    },
+    "clean_round": { "type": "boolean" }
+  }
+}

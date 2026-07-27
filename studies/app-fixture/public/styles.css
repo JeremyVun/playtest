@@ -1,0 +1,474 @@
+/* Home loan applicant capture fixture — deliberate defects included. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* LOAN-006: removes all focus rings */
+*:focus {
+  outline: none !important;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: #2b2926;
+  background: linear-gradient(180deg, #f7f4ee 0%, #ebe6dc 100%);
+  line-height: 1.5;
+}
+
+/* LOAN-003: skip link forever off-screen */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: auto;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+.site-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 24px;
+  background: #fff;
+  border-bottom: 1px solid #ddd6c8;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-mark {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #3d6b4f;
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 1.1rem;
+}
+
+.brand-name {
+  margin: 0;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.brand-tag {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #6b665e;
+}
+
+.site-nav {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.site-nav a {
+  color: #3d3a35;
+  text-decoration: none;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+
+.site-nav a:hover {
+  background: #f0ebe3;
+}
+
+.shell {
+  width: min(720px, calc(100% - 32px));
+  margin: 28px auto 48px;
+}
+
+.progress {
+  list-style: none;
+  margin: 0 0 18px;
+  padding: 0;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.progress li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: #8a8479;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.progress .dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #d8d2c8;
+  color: #4a453e;
+  font-weight: 600;
+  font-size: 0.72rem;
+}
+
+/* Active progress styling (app.js also mis-highlights — LOAN-012) */
+.progress li.is-active {
+  color: #2b2926;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(43, 41, 38, 0.08);
+}
+
+.progress li.is-active .dot {
+  background: #3d6b4f;
+  color: #fff;
+}
+
+.progress li.is-done .dot {
+  background: #8fb79a;
+  color: #fff;
+}
+
+.card {
+  background: #fff;
+  border-radius: 14px;
+  padding: 24px 26px 22px;
+  box-shadow: 0 2px 14px rgba(43, 41, 38, 0.07);
+}
+
+.card h1,
+.card h2 {
+  margin: 0 0 10px;
+  letter-spacing: -0.02em;
+}
+
+.lede {
+  margin: 0 0 12px;
+  color: #5c574f;
+}
+
+.eta {
+  margin: 0 0 8px;
+  color: #4a453e;
+}
+
+.hint {
+  margin: 0 0 18px;
+  color: #6b665e;
+  font-size: 0.92rem;
+}
+
+.req {
+  color: #b0564a;
+  font-weight: 700;
+}
+
+.hidden,
+[hidden] {
+  display: none !important;
+}
+
+.field {
+  margin-bottom: 14px;
+}
+
+.field label,
+.pseudo-label {
+  display: block;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #4a453e;
+  margin-bottom: 5px;
+}
+
+.field input,
+.field select {
+  width: 100%;
+  font: inherit;
+  padding: 9px 11px;
+  border: 1px solid #d0c9bc;
+  border-radius: 8px;
+  background: #fff;
+  color: #2b2926;
+}
+
+.field input::placeholder {
+  color: #9a948a;
+}
+
+.help {
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+  color: #7a746a;
+}
+
+.error {
+  margin: 5px 0 0;
+  font-size: 0.82rem;
+  color: #b0564a;
+  min-height: 1.1em;
+}
+
+.field input.is-invalid,
+.field select.is-invalid {
+  border-color: #b0564a;
+  background: #fdf6f5;
+}
+
+.row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.row .field {
+  flex: 1 1 140px;
+}
+
+.row .grow {
+  flex: 2 1 200px;
+}
+
+/* LOAN-018: fixed width 140px + overflow hidden clips long names */
+.name-row .name-field {
+  flex: 0 0 140px;
+  max-width: 140px;
+  overflow: hidden;
+}
+
+.name-row .name-field input {
+  width: 140px;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: clip;
+}
+
+.ssn-wrap {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.ssn-wrap input {
+  flex: 1;
+}
+
+.money-wrap,
+.income-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+}
+
+.money-wrap .prefix,
+.income-input-wrap .prefix {
+  color: #6b665e;
+  font-weight: 600;
+}
+
+.money-wrap input,
+.income-input-wrap input {
+  flex: 1;
+}
+
+/* LOAN-023: parent overflow clips tooltip */
+.income-field {
+  overflow: hidden;
+}
+
+.income-input-wrap {
+  overflow: hidden;
+}
+
+.help-tip {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid #c9c2b6;
+  background: #f7f4ee;
+  color: #4a453e;
+  font-weight: 700;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.tooltip {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 6px);
+  z-index: 5;
+  width: 260px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #2b2926;
+  color: #f7f4ee;
+  font-size: 0.8rem;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  display: none;
+}
+
+.help-tip:hover + .tooltip,
+.help-tip:focus + .tooltip,
+.tooltip.is-open {
+  display: block;
+}
+
+.consent-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid #e4ddd2;
+  border-radius: 10px;
+  background: #fbfaf7;
+}
+
+.consent-field input[type="checkbox"] {
+  width: auto;
+  margin-top: 3px;
+}
+
+.consent-text {
+  flex: 1;
+  font-size: 0.9rem;
+  color: #4a453e;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+  align-items: center;
+}
+
+.btn {
+  font: inherit;
+  cursor: pointer;
+  border-radius: 8px;
+  padding: 10px 16px;
+  border: 1px solid transparent;
+  font-weight: 600;
+}
+
+.btn-primary {
+  background: #3d6b4f;
+  color: #fff;
+  border-color: #3d6b4f;
+}
+
+.btn-primary:hover {
+  background: #335a43;
+}
+
+.btn-secondary {
+  background: #fff;
+  color: #3d3a35;
+  border-color: #c9c2b6;
+}
+
+.btn-secondary:hover {
+  background: #f5f1ea;
+}
+
+/* Muted/secondary-looking — used for real Submit (LOAN-004) */
+.btn-muted {
+  background: #e8e2d8;
+  color: #6b665e;
+  border-color: #d5cfc4;
+  font-weight: 500;
+}
+
+.btn-muted:hover {
+  background: #ddd6c8;
+}
+
+.btn-quiet {
+  background: transparent;
+  color: #6b665e;
+  border-color: transparent;
+  text-decoration: underline;
+  font-weight: 500;
+  padding: 8px 10px;
+}
+
+.btn-quiet:hover {
+  color: #2b2926;
+}
+
+/* LOAN-016: real Next on contact is visually quiet */
+.contact-actions .real-next {
+  order: 3;
+  opacity: 0.72;
+  font-size: 0.9rem;
+}
+
+.review-list {
+  margin: 0 0 8px;
+  padding: 12px 14px;
+  border: 1px solid #ebe4d8;
+  border-radius: 10px;
+  background: #fbfaf7;
+}
+
+.review-list dt {
+  margin: 10px 0 0;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #8a8479;
+  font-weight: 600;
+}
+
+.review-list dt:first-child {
+  margin-top: 0;
+}
+
+.review-list dd {
+  margin: 2px 0 0;
+  color: #2b2926;
+}
+
+/* LOAN-003: footer very low contrast (#d5d0c6 on #ebe6dc) */
+.site-footer {
+  text-align: center;
+  padding: 18px 16px 28px;
+  background: #ebe6dc;
+  color: #d5d0c6;
+  font-size: 0.85rem;
+}
+
+.site-footer p {
+  margin: 0;
+  color: #d5d0c6;
+}
+
+@media (max-width: 560px) {
+  .site-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .name-row .name-field,
+  .name-row .name-field input {
+    flex-basis: 140px;
+  }
+}

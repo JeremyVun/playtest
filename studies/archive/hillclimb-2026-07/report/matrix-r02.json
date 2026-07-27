@@ -1,0 +1,4798 @@
+{
+  "schema_version": 1,
+  "faults": [
+    "f-account-error-swallowed",
+    "f-account-form-resets",
+    "f-add-cart-silent",
+    "f-cant-buy-last-unit",
+    "f-card-spaces-validation",
+    "f-cart-continue-removed",
+    "f-checkout-empty-guard-gone",
+    "f-clear-search-self-link",
+    "f-continue-shopping-loop",
+    "f-decline-swallowed",
+    "f-empty-cart-jargon",
+    "f-error-text-contrast",
+    "f-free-shipping-label",
+    "f-no-results-jargon",
+    "f-oos-says-in-stock",
+    "f-order-history-removed",
+    "f-place-order-no-feedback",
+    "f-postcode-validation",
+    "f-price-contrast",
+    "f-product-crumb-removed",
+    "f-qty-edit-removed",
+    "f-receipt-eta-wrong",
+    "f-save-profile-dead",
+    "f-search-removed",
+    "f-sort-inert",
+    "f-validation-wipes-payment"
+  ],
+  "personas": [
+    "adversarial-tester",
+    "cautious-first-timer",
+    "gift-rusher",
+    "returning-regular",
+    "weekend-browser"
+  ],
+  "detection_matrix": {
+    "f-account-error-swallowed": {
+      "adversarial-tester": 2,
+      "cautious-first-timer": 0,
+      "gift-rusher": 0,
+      "returning-regular": 0,
+      "weekend-browser": 0
+    },
+    "f-account-form-resets": {
+      "adversarial-tester": 0,
+      "cautious-first-timer": 0,
+      "gift-rusher": 0,
+      "returning-regular": 0,
+      "weekend-browser": 0
+    },
+    "f-add-cart-silent": {
+      "adversarial-tester": 0,
+      "cautious-first-timer": 11,
+      "gift-rusher": 4,
+      "returning-regular": 5,
+      "weekend-browser": 8
+    },
+    "f-cant-buy-last-unit": {
+      "adversarial-tester": 2,
+      "cautious-first-timer": 0,
+      "gift-rusher": 0,
+      "returning-regular": 0,
+      "weekend-browser": 0
+    },
+    "f-card-spaces-validation": {
+      "adversarial-tester": 2,
+      "cautious-first-timer": 0,
+      "gift-rusher": 0,
+      "returning-regular": 0,
+      "weekend-browser": 0
+    },
+    "f-cart-continue-removed": {
+      "adversarial-tester": 2,
+      "cautious-first-timer": 0,
+      "gift-rusher": 0,
+      "returning-regular": 0,
+      "weekend-browser": 0
+    },
+    "f-checkout-empty-guard-gone": {
+      "adversarial-tester": 2,
+      "cautious-first-timer": 0,
+      "gift-rusher": 0,
+      "returning-regular": 0,
+      "weekend-browser": 0
+    },
+    "f-clear-search-self-link": {
+      "adversarial-tester": 2,
+      "cautious-first-timer": 0,
+      "gift-rusher": 0,
+      "returning-regular": 0,
+      "weekend-browser": 0
+    },
+    "f-continue-shopping-loop": {
+      "adversarial-tester": 2,
+      "cautious-first-timer": 0,
+      "gift-rusher": 0,
+      "returning-regular": 0,
+      "weekend-browser": 0
+    },
+    "f-decline-swallowed": {
+      "adversarial-tester": 0,
+      "cautious-first-timer": 2,
+      "gift-rusher": 3,
+      "returning-regular": 0,
+      "weekend-browser": 0
+    },
+    "f-empty-cart-jargon": {
+      "adversarial-tester": 0,
+      "cautious-first-timer": 0,
+      "gift-rusher": 0,
+      "returning-regular": 1,
+      "weekend-browser": 1
+    },
+    "f-error-text-contrast": {
+      "adversarial-tester": 0,
+      "cautious-first-timer": 1,
+      "gift-rusher": 1,
+      "returning-regular": 1,
+      "weekend-browser": 0
+    },
+    "f-free-shipping-label": {
+      "adversarial-tester": 0,
+      "cautious-first-timer": 2,
+      "gift-rusher": 1,
+      "returning-regular": 0,
+      "weekend-browser": 1
+    },
+    "f-no-results-jargon": {
+      "adversarial-tester": 2,
+      "cautious-first-timer": 0,
+      "gift-rusher": 0,
+      "returning-regular": 0,
+      "weekend-browser": 0
+    },
+    "f-oos-says-in-stock": {
+      "adversarial-tester": 2,
+      "cautious-first-timer": 0,
+      "gift-rusher": 0,
+      "returning-regular": 0,
+      "weekend-browser": 0
+    },
+    "f-order-history-removed": {
+      "adversarial-tester": 0,
+      "cautious-first-timer": 0,
+      "gift-rusher": 0,
+      "returning-regular": 6,
+      "weekend-browser": 0
+    },
+    "f-place-order-no-feedback": {
+      "adversarial-tester": 0,
+      "cautious-first-timer": 2,
+      "gift-rusher": 1,
+      "returning-regular": 0,
+      "weekend-browser": 3
+    },
+    "f-postcode-validation": {
+      "adversarial-tester": 1,
+      "cautious-first-timer": 6,
+      "gift-rusher": 3,
+      "returning-regular": 6,
+      "weekend-browser": 4
+    },
+    "f-price-contrast": {
+      "adversarial-tester": 0,
+      "cautious-first-timer": 10,
+      "gift-rusher": 3,
+      "returning-regular": 6,
+      "weekend-browser": 8
+    },
+    "f-product-crumb-removed": {
+      "adversarial-tester": 0,
+      "cautious-first-timer": 0,
+      "gift-rusher": 0,
+      "returning-regular": 0,
+      "weekend-browser": 1
+    },
+    "f-qty-edit-removed": {
+      "adversarial-tester": 0,
+      "cautious-first-timer": 6,
+      "gift-rusher": 1,
+      "returning-regular": 3,
+      "weekend-browser": 7
+    },
+    "f-receipt-eta-wrong": {
+      "adversarial-tester": 0,
+      "cautious-first-timer": 0,
+      "gift-rusher": 0,
+      "returning-regular": 0,
+      "weekend-browser": 0
+    },
+    "f-save-profile-dead": {
+      "adversarial-tester": 0,
+      "cautious-first-timer": 5,
+      "gift-rusher": 0,
+      "returning-regular": 3,
+      "weekend-browser": 0
+    },
+    "f-search-removed": {
+      "adversarial-tester": 2,
+      "cautious-first-timer": 0,
+      "gift-rusher": 3,
+      "returning-regular": 1,
+      "weekend-browser": 1
+    },
+    "f-sort-inert": {
+      "adversarial-tester": 2,
+      "cautious-first-timer": 0,
+      "gift-rusher": 0,
+      "returning-regular": 0,
+      "weekend-browser": 0
+    },
+    "f-validation-wipes-payment": {
+      "adversarial-tester": 0,
+      "cautious-first-timer": 7,
+      "gift-rusher": 5,
+      "returning-regular": 6,
+      "weekend-browser": 3
+    }
+  },
+  "by_arm": {
+    "baseline": {
+      "rounds": [
+        {
+          "round": 1,
+          "clean_round": false,
+          "clean_definition": "v1",
+          "precision": {
+            "true_positives": 66,
+            "adjudicated_non_duplicates": 139,
+            "rate": 0.4748201438848921
+          },
+          "label_counts": {
+            "seeded-tp": 66,
+            "emergent": 0,
+            "subject-quirk": 0,
+            "spec-gap": 0,
+            "soft-ux": 0,
+            "harness-artifact": 0,
+            "false": 73
+          },
+          "recall_by_level": {
+            "L1": {
+              "reachable_found": 3,
+              "reachable_total": 5,
+              "reachable_rate": 0.6,
+              "total_found": 3,
+              "total": 7,
+              "total_rate": 0.42857142857142855
+            },
+            "L2": {
+              "reachable_found": 5,
+              "reachable_total": 8,
+              "reachable_rate": 0.625,
+              "total_found": 5,
+              "total": 8,
+              "total_rate": 0.625
+            },
+            "L3": {
+              "reachable_found": 1,
+              "reachable_total": 5,
+              "reachable_rate": 0.2,
+              "total_found": 1,
+              "total": 6,
+              "total_rate": 0.16666666666666666
+            },
+            "L4": {
+              "reachable_found": 4,
+              "reachable_total": 5,
+              "reachable_rate": 0.8,
+              "total_found": 4,
+              "total": 5,
+              "total_rate": 0.8
+            }
+          },
+          "recall_by_class": {
+            "swallowed-error": {
+              "reachable_found": 1,
+              "reachable_total": 2,
+              "reachable_rate": 0.5,
+              "total_found": 1,
+              "total": 2,
+              "total_rate": 0.5
+            },
+            "lost-input": {
+              "reachable_found": 1,
+              "reachable_total": 2,
+              "reachable_rate": 0.5,
+              "total_found": 1,
+              "total": 2,
+              "total_rate": 0.5
+            },
+            "action-without-receipt": {
+              "reachable_found": 2,
+              "reachable_total": 2,
+              "reachable_rate": 1,
+              "total_found": 2,
+              "total": 2,
+              "total_rate": 1
+            },
+            "edge-case-break": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "broken-validation": {
+              "reachable_found": 1,
+              "reachable_total": 2,
+              "reachable_rate": 0.5,
+              "total_found": 1,
+              "total": 2,
+              "total_rate": 0.5
+            },
+            "navigation-removed": {
+              "reachable_found": 1,
+              "reachable_total": 2,
+              "reachable_rate": 0.5,
+              "total_found": 1,
+              "total": 2,
+              "total_rate": 0.5
+            },
+            "misrouted-link": {
+              "reachable_found": 0,
+              "reachable_total": 1,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "confusing-empty-state": {
+              "reachable_found": 0,
+              "reachable_total": 1,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "low-contrast": {
+              "reachable_found": 2,
+              "reachable_total": 2,
+              "reachable_rate": 1,
+              "total_found": 2,
+              "total": 2,
+              "total_rate": 1
+            },
+            "misleading-copy": {
+              "reachable_found": 1,
+              "reachable_total": 2,
+              "reachable_rate": 0.5,
+              "total_found": 1,
+              "total": 3,
+              "total_rate": 0.3333333333333333
+            },
+            "capability-removed": {
+              "reachable_found": 3,
+              "reachable_total": 3,
+              "reachable_rate": 1,
+              "total_found": 3,
+              "total": 3,
+              "total_rate": 1
+            },
+            "dead-control": {
+              "reachable_found": 1,
+              "reachable_total": 2,
+              "reachable_rate": 0.5,
+              "total_found": 1,
+              "total": 2,
+              "total_rate": 0.5
+            }
+          },
+          "cost_usd": 7.6692487499999995,
+          "distinct_faults_found": 13,
+          "deltas": {
+            "new_faults_found": 13,
+            "cost_usd": 7.6692487499999995
+          }
+        },
+        {
+          "round": 2,
+          "clean_round": false,
+          "clean_definition": "v1",
+          "precision": {
+            "true_positives": 68,
+            "adjudicated_non_duplicates": 133,
+            "rate": 0.5112781954887218
+          },
+          "label_counts": {
+            "seeded-tp": 68,
+            "emergent": 0,
+            "subject-quirk": 0,
+            "spec-gap": 0,
+            "soft-ux": 0,
+            "harness-artifact": 0,
+            "false": 65
+          },
+          "recall_by_level": {
+            "L1": {
+              "reachable_found": 3,
+              "reachable_total": 5,
+              "reachable_rate": 0.6,
+              "total_found": 3,
+              "total": 7,
+              "total_rate": 0.42857142857142855
+            },
+            "L2": {
+              "reachable_found": 5,
+              "reachable_total": 8,
+              "reachable_rate": 0.625,
+              "total_found": 5,
+              "total": 8,
+              "total_rate": 0.625
+            },
+            "L3": {
+              "reachable_found": 1,
+              "reachable_total": 5,
+              "reachable_rate": 0.2,
+              "total_found": 1,
+              "total": 6,
+              "total_rate": 0.16666666666666666
+            },
+            "L4": {
+              "reachable_found": 4,
+              "reachable_total": 5,
+              "reachable_rate": 0.8,
+              "total_found": 4,
+              "total": 5,
+              "total_rate": 0.8
+            }
+          },
+          "recall_by_class": {
+            "swallowed-error": {
+              "reachable_found": 1,
+              "reachable_total": 2,
+              "reachable_rate": 0.5,
+              "total_found": 1,
+              "total": 2,
+              "total_rate": 0.5
+            },
+            "lost-input": {
+              "reachable_found": 1,
+              "reachable_total": 2,
+              "reachable_rate": 0.5,
+              "total_found": 1,
+              "total": 2,
+              "total_rate": 0.5
+            },
+            "action-without-receipt": {
+              "reachable_found": 2,
+              "reachable_total": 2,
+              "reachable_rate": 1,
+              "total_found": 2,
+              "total": 2,
+              "total_rate": 1
+            },
+            "edge-case-break": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "broken-validation": {
+              "reachable_found": 1,
+              "reachable_total": 2,
+              "reachable_rate": 0.5,
+              "total_found": 1,
+              "total": 2,
+              "total_rate": 0.5
+            },
+            "navigation-removed": {
+              "reachable_found": 1,
+              "reachable_total": 2,
+              "reachable_rate": 0.5,
+              "total_found": 1,
+              "total": 2,
+              "total_rate": 0.5
+            },
+            "misrouted-link": {
+              "reachable_found": 0,
+              "reachable_total": 1,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "confusing-empty-state": {
+              "reachable_found": 0,
+              "reachable_total": 1,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "low-contrast": {
+              "reachable_found": 2,
+              "reachable_total": 2,
+              "reachable_rate": 1,
+              "total_found": 2,
+              "total": 2,
+              "total_rate": 1
+            },
+            "misleading-copy": {
+              "reachable_found": 1,
+              "reachable_total": 2,
+              "reachable_rate": 0.5,
+              "total_found": 1,
+              "total": 3,
+              "total_rate": 0.3333333333333333
+            },
+            "capability-removed": {
+              "reachable_found": 3,
+              "reachable_total": 3,
+              "reachable_rate": 1,
+              "total_found": 3,
+              "total": 3,
+              "total_rate": 1
+            },
+            "dead-control": {
+              "reachable_found": 1,
+              "reachable_total": 2,
+              "reachable_rate": 0.5,
+              "total_found": 1,
+              "total": 2,
+              "total_rate": 0.5
+            }
+          },
+          "cost_usd": 7.490414949999999,
+          "distinct_faults_found": 13,
+          "deltas": {
+            "new_faults_found": 0,
+            "cost_usd": 7.490414949999999
+          }
+        }
+      ],
+      "clean_definition": "v1",
+      "cost_per_detected_fault": 1.1661279769230768,
+      "rounds_to_clean": null,
+      "accounting_summary": {
+        "detected": 13,
+        "found_and_fixed": 0,
+        "found_and_accepted": 0,
+        "fixed_without_detection": 0,
+        "residual": 26,
+        "emergent": 0,
+        "label_counts": {
+          "seeded-tp": 134,
+          "emergent": 0,
+          "subject-quirk": 0,
+          "spec-gap": 0,
+          "soft-ux": 0,
+          "harness-artifact": 0,
+          "false": 138
+        }
+      }
+    },
+    "naive": {
+      "rounds": [
+        {
+          "round": 1,
+          "clean_round": true,
+          "clean_definition": "v1",
+          "precision": {
+            "true_positives": 0,
+            "adjudicated_non_duplicates": 169,
+            "rate": 0
+          },
+          "label_counts": {
+            "seeded-tp": 0,
+            "emergent": 11,
+            "subject-quirk": 0,
+            "spec-gap": 0,
+            "soft-ux": 0,
+            "harness-artifact": 0,
+            "false": 158
+          },
+          "recall_by_level": {
+            "L1": {
+              "reachable_found": 0,
+              "reachable_total": 5,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 7,
+              "total_rate": 0
+            },
+            "L2": {
+              "reachable_found": 0,
+              "reachable_total": 8,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 8,
+              "total_rate": 0
+            },
+            "L3": {
+              "reachable_found": 0,
+              "reachable_total": 5,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 6,
+              "total_rate": 0
+            },
+            "L4": {
+              "reachable_found": 0,
+              "reachable_total": 5,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 5,
+              "total_rate": 0
+            }
+          },
+          "recall_by_class": {
+            "swallowed-error": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "lost-input": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "action-without-receipt": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "edge-case-break": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "broken-validation": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "navigation-removed": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "misrouted-link": {
+              "reachable_found": 0,
+              "reachable_total": 1,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "confusing-empty-state": {
+              "reachable_found": 0,
+              "reachable_total": 1,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "low-contrast": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "misleading-copy": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 3,
+              "total_rate": 0
+            },
+            "capability-removed": {
+              "reachable_found": 0,
+              "reachable_total": 3,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 3,
+              "total_rate": 0
+            },
+            "dead-control": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            }
+          },
+          "cost_usd": 3.99609155,
+          "distinct_faults_found": 0,
+          "deltas": {
+            "new_faults_found": 0,
+            "cost_usd": 3.99609155
+          }
+        },
+        {
+          "round": 2,
+          "clean_round": true,
+          "clean_definition": "v1",
+          "precision": {
+            "true_positives": 0,
+            "adjudicated_non_duplicates": 187,
+            "rate": 0
+          },
+          "label_counts": {
+            "seeded-tp": 0,
+            "emergent": 0,
+            "subject-quirk": 0,
+            "spec-gap": 0,
+            "soft-ux": 0,
+            "harness-artifact": 0,
+            "false": 187
+          },
+          "recall_by_level": {
+            "L1": {
+              "reachable_found": 0,
+              "reachable_total": 7,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 7,
+              "total_rate": 0
+            },
+            "L2": {
+              "reachable_found": 0,
+              "reachable_total": 8,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 8,
+              "total_rate": 0
+            },
+            "L3": {
+              "reachable_found": 0,
+              "reachable_total": 6,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 6,
+              "total_rate": 0
+            },
+            "L4": {
+              "reachable_found": 0,
+              "reachable_total": 5,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 5,
+              "total_rate": 0
+            }
+          },
+          "recall_by_class": {
+            "swallowed-error": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "lost-input": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "action-without-receipt": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "edge-case-break": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "broken-validation": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "navigation-removed": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "misrouted-link": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "confusing-empty-state": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "low-contrast": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "misleading-copy": {
+              "reachable_found": 0,
+              "reachable_total": 3,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 3,
+              "total_rate": 0
+            },
+            "capability-removed": {
+              "reachable_found": 0,
+              "reachable_total": 3,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 3,
+              "total_rate": 0
+            },
+            "dead-control": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            }
+          },
+          "cost_usd": 4.350131999999999,
+          "distinct_faults_found": 0,
+          "deltas": {
+            "new_faults_found": 0,
+            "cost_usd": 4.350131999999999
+          }
+        },
+        {
+          "round": 3,
+          "clean_round": true,
+          "clean_definition": "v1",
+          "precision": {
+            "true_positives": 0,
+            "adjudicated_non_duplicates": 193,
+            "rate": 0
+          },
+          "label_counts": {
+            "seeded-tp": 0,
+            "emergent": 0,
+            "subject-quirk": 0,
+            "spec-gap": 0,
+            "soft-ux": 0,
+            "harness-artifact": 0,
+            "false": 193
+          },
+          "recall_by_level": {
+            "L1": {
+              "reachable_found": 0,
+              "reachable_total": 7,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 7,
+              "total_rate": 0
+            },
+            "L2": {
+              "reachable_found": 0,
+              "reachable_total": 8,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 8,
+              "total_rate": 0
+            },
+            "L3": {
+              "reachable_found": 0,
+              "reachable_total": 6,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 6,
+              "total_rate": 0
+            },
+            "L4": {
+              "reachable_found": 0,
+              "reachable_total": 5,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 5,
+              "total_rate": 0
+            }
+          },
+          "recall_by_class": {
+            "swallowed-error": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "lost-input": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "action-without-receipt": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "edge-case-break": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "broken-validation": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "navigation-removed": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "misrouted-link": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "confusing-empty-state": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "low-contrast": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "misleading-copy": {
+              "reachable_found": 0,
+              "reachable_total": 3,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 3,
+              "total_rate": 0
+            },
+            "capability-removed": {
+              "reachable_found": 0,
+              "reachable_total": 3,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 3,
+              "total_rate": 0
+            },
+            "dead-control": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            }
+          },
+          "cost_usd": 3.8979169500000004,
+          "distinct_faults_found": 0,
+          "deltas": {
+            "new_faults_found": 0,
+            "cost_usd": 3.8979169500000004
+          }
+        }
+      ],
+      "clean_definition": "v1",
+      "cost_per_detected_fault": null,
+      "rounds_to_clean": 2,
+      "accounting_summary": {
+        "detected": 0,
+        "found_and_fixed": 0,
+        "found_and_accepted": 0,
+        "fixed_without_detection": 16,
+        "residual": 10,
+        "emergent": 11,
+        "label_counts": {
+          "seeded-tp": 0,
+          "emergent": 11,
+          "subject-quirk": 0,
+          "spec-gap": 0,
+          "soft-ux": 0,
+          "harness-artifact": 0,
+          "false": 538
+        }
+      }
+    },
+    "policy": {
+      "rounds": [
+        {
+          "round": 1,
+          "clean_round": false,
+          "clean_definition": "v1",
+          "precision": {
+            "true_positives": 1,
+            "adjudicated_non_duplicates": 183,
+            "rate": 0.00546448087431694
+          },
+          "label_counts": {
+            "seeded-tp": 1,
+            "emergent": 0,
+            "subject-quirk": 0,
+            "spec-gap": 0,
+            "soft-ux": 0,
+            "harness-artifact": 0,
+            "false": 182
+          },
+          "recall_by_level": {
+            "L1": {
+              "reachable_found": 1,
+              "reachable_total": 5,
+              "reachable_rate": 0.2,
+              "total_found": 1,
+              "total": 7,
+              "total_rate": 0.14285714285714285
+            },
+            "L2": {
+              "reachable_found": 0,
+              "reachable_total": 8,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 8,
+              "total_rate": 0
+            },
+            "L3": {
+              "reachable_found": 0,
+              "reachable_total": 5,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 6,
+              "total_rate": 0
+            },
+            "L4": {
+              "reachable_found": 0,
+              "reachable_total": 5,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 5,
+              "total_rate": 0
+            }
+          },
+          "recall_by_class": {
+            "swallowed-error": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "lost-input": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "action-without-receipt": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "edge-case-break": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "broken-validation": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "navigation-removed": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "misrouted-link": {
+              "reachable_found": 0,
+              "reachable_total": 1,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "confusing-empty-state": {
+              "reachable_found": 1,
+              "reachable_total": 1,
+              "reachable_rate": 1,
+              "total_found": 1,
+              "total": 2,
+              "total_rate": 0.5
+            },
+            "low-contrast": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "misleading-copy": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 3,
+              "total_rate": 0
+            },
+            "capability-removed": {
+              "reachable_found": 0,
+              "reachable_total": 3,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 3,
+              "total_rate": 0
+            },
+            "dead-control": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            }
+          },
+          "cost_usd": 4.767760850000001,
+          "distinct_faults_found": 1,
+          "deltas": {
+            "new_faults_found": 1,
+            "cost_usd": 4.767760850000001
+          }
+        },
+        {
+          "round": 2,
+          "clean_round": true,
+          "clean_definition": "v1",
+          "precision": {
+            "true_positives": 0,
+            "adjudicated_non_duplicates": 192,
+            "rate": 0
+          },
+          "label_counts": {
+            "seeded-tp": 0,
+            "emergent": 0,
+            "subject-quirk": 0,
+            "spec-gap": 0,
+            "soft-ux": 0,
+            "harness-artifact": 0,
+            "false": 192
+          },
+          "recall_by_level": {
+            "L1": {
+              "reachable_found": 1,
+              "reachable_total": 7,
+              "reachable_rate": 0.14285714285714285,
+              "total_found": 1,
+              "total": 7,
+              "total_rate": 0.14285714285714285
+            },
+            "L2": {
+              "reachable_found": 0,
+              "reachable_total": 8,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 8,
+              "total_rate": 0
+            },
+            "L3": {
+              "reachable_found": 0,
+              "reachable_total": 6,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 6,
+              "total_rate": 0
+            },
+            "L4": {
+              "reachable_found": 0,
+              "reachable_total": 5,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 5,
+              "total_rate": 0
+            }
+          },
+          "recall_by_class": {
+            "swallowed-error": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "lost-input": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "action-without-receipt": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "edge-case-break": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "broken-validation": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "navigation-removed": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "misrouted-link": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "confusing-empty-state": {
+              "reachable_found": 1,
+              "reachable_total": 2,
+              "reachable_rate": 0.5,
+              "total_found": 1,
+              "total": 2,
+              "total_rate": 0.5
+            },
+            "low-contrast": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "misleading-copy": {
+              "reachable_found": 0,
+              "reachable_total": 3,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 3,
+              "total_rate": 0
+            },
+            "capability-removed": {
+              "reachable_found": 0,
+              "reachable_total": 3,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 3,
+              "total_rate": 0
+            },
+            "dead-control": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            }
+          },
+          "cost_usd": 3.9980860500000004,
+          "distinct_faults_found": 1,
+          "deltas": {
+            "new_faults_found": 0,
+            "cost_usd": 3.9980860500000004
+          }
+        },
+        {
+          "round": 3,
+          "clean_round": true,
+          "clean_definition": "v1",
+          "precision": {
+            "true_positives": 0,
+            "adjudicated_non_duplicates": 197,
+            "rate": 0
+          },
+          "label_counts": {
+            "seeded-tp": 0,
+            "emergent": 0,
+            "subject-quirk": 0,
+            "spec-gap": 0,
+            "soft-ux": 0,
+            "harness-artifact": 0,
+            "false": 197
+          },
+          "recall_by_level": {
+            "L1": {
+              "reachable_found": 1,
+              "reachable_total": 7,
+              "reachable_rate": 0.14285714285714285,
+              "total_found": 1,
+              "total": 7,
+              "total_rate": 0.14285714285714285
+            },
+            "L2": {
+              "reachable_found": 0,
+              "reachable_total": 8,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 8,
+              "total_rate": 0
+            },
+            "L3": {
+              "reachable_found": 0,
+              "reachable_total": 6,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 6,
+              "total_rate": 0
+            },
+            "L4": {
+              "reachable_found": 0,
+              "reachable_total": 5,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 5,
+              "total_rate": 0
+            }
+          },
+          "recall_by_class": {
+            "swallowed-error": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "lost-input": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "action-without-receipt": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "edge-case-break": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "broken-validation": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "navigation-removed": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "misrouted-link": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "confusing-empty-state": {
+              "reachable_found": 1,
+              "reachable_total": 2,
+              "reachable_rate": 0.5,
+              "total_found": 1,
+              "total": 2,
+              "total_rate": 0.5
+            },
+            "low-contrast": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "misleading-copy": {
+              "reachable_found": 0,
+              "reachable_total": 3,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 3,
+              "total_rate": 0
+            },
+            "capability-removed": {
+              "reachable_found": 0,
+              "reachable_total": 3,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 3,
+              "total_rate": 0
+            },
+            "dead-control": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            }
+          },
+          "cost_usd": 3.99749035,
+          "distinct_faults_found": 1,
+          "deltas": {
+            "new_faults_found": 0,
+            "cost_usd": 3.99749035
+          }
+        }
+      ],
+      "clean_definition": "v1",
+      "cost_per_detected_fault": 12.763337250000001,
+      "rounds_to_clean": 3,
+      "accounting_summary": {
+        "detected": 1,
+        "found_and_fixed": 1,
+        "found_and_accepted": 0,
+        "fixed_without_detection": 19,
+        "residual": 6,
+        "emergent": 0,
+        "label_counts": {
+          "seeded-tp": 1,
+          "emergent": 0,
+          "subject-quirk": 0,
+          "spec-gap": 0,
+          "soft-ux": 0,
+          "harness-artifact": 0,
+          "false": 571
+        }
+      }
+    },
+    "shakedown": {
+      "rounds": [
+        {
+          "round": 1,
+          "clean_round": false,
+          "clean_definition": "v1",
+          "precision": {
+            "true_positives": 0,
+            "adjudicated_non_duplicates": 9,
+            "rate": 0
+          },
+          "label_counts": {
+            "seeded-tp": 0,
+            "emergent": 1,
+            "subject-quirk": 0,
+            "spec-gap": 0,
+            "soft-ux": 0,
+            "harness-artifact": 0,
+            "false": 8
+          },
+          "recall_by_level": {
+            "L1": {
+              "reachable_found": 0,
+              "reachable_total": 5,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 7,
+              "total_rate": 0
+            },
+            "L2": {
+              "reachable_found": 0,
+              "reachable_total": 8,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 8,
+              "total_rate": 0
+            },
+            "L3": {
+              "reachable_found": 0,
+              "reachable_total": 5,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 6,
+              "total_rate": 0
+            },
+            "L4": {
+              "reachable_found": 0,
+              "reachable_total": 5,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 5,
+              "total_rate": 0
+            }
+          },
+          "recall_by_class": {
+            "swallowed-error": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "lost-input": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "action-without-receipt": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "edge-case-break": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "broken-validation": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "navigation-removed": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "misrouted-link": {
+              "reachable_found": 0,
+              "reachable_total": 1,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "confusing-empty-state": {
+              "reachable_found": 0,
+              "reachable_total": 1,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "low-contrast": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "misleading-copy": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 3,
+              "total_rate": 0
+            },
+            "capability-removed": {
+              "reachable_found": 0,
+              "reachable_total": 3,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 3,
+              "total_rate": 0
+            },
+            "dead-control": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            }
+          },
+          "cost_usd": 0.38575634999999997,
+          "distinct_faults_found": 0,
+          "deltas": {
+            "new_faults_found": 0,
+            "cost_usd": 0.38575634999999997
+          }
+        },
+        {
+          "round": 2,
+          "clean_round": true,
+          "clean_definition": "v1",
+          "precision": {
+            "true_positives": 0,
+            "adjudicated_non_duplicates": 16,
+            "rate": 0
+          },
+          "label_counts": {
+            "seeded-tp": 0,
+            "emergent": 0,
+            "subject-quirk": 0,
+            "spec-gap": 0,
+            "soft-ux": 0,
+            "harness-artifact": 0,
+            "false": 16
+          },
+          "recall_by_level": {
+            "L1": {
+              "reachable_found": 0,
+              "reachable_total": 5,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 7,
+              "total_rate": 0
+            },
+            "L2": {
+              "reachable_found": 0,
+              "reachable_total": 8,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 8,
+              "total_rate": 0
+            },
+            "L3": {
+              "reachable_found": 0,
+              "reachable_total": 5,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 6,
+              "total_rate": 0
+            },
+            "L4": {
+              "reachable_found": 0,
+              "reachable_total": 5,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 5,
+              "total_rate": 0
+            }
+          },
+          "recall_by_class": {
+            "swallowed-error": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "lost-input": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "action-without-receipt": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "edge-case-break": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "broken-validation": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "navigation-removed": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "misrouted-link": {
+              "reachable_found": 0,
+              "reachable_total": 1,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "confusing-empty-state": {
+              "reachable_found": 0,
+              "reachable_total": 1,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "low-contrast": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            },
+            "misleading-copy": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 3,
+              "total_rate": 0
+            },
+            "capability-removed": {
+              "reachable_found": 0,
+              "reachable_total": 3,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 3,
+              "total_rate": 0
+            },
+            "dead-control": {
+              "reachable_found": 0,
+              "reachable_total": 2,
+              "reachable_rate": 0,
+              "total_found": 0,
+              "total": 2,
+              "total_rate": 0
+            }
+          },
+          "cost_usd": 0.43521794999999996,
+          "distinct_faults_found": 0,
+          "deltas": {
+            "new_faults_found": 0,
+            "cost_usd": 0.43521794999999996
+          }
+        }
+      ],
+      "clean_definition": "v1",
+      "cost_per_detected_fault": null,
+      "rounds_to_clean": null,
+      "accounting_summary": {
+        "detected": 0,
+        "found_and_fixed": 0,
+        "found_and_accepted": 0,
+        "fixed_without_detection": 0,
+        "residual": 26,
+        "emergent": 1,
+        "label_counts": {
+          "seeded-tp": 0,
+          "emergent": 1,
+          "subject-quirk": 0,
+          "spec-gap": 0,
+          "soft-ux": 0,
+          "harness-artifact": 0,
+          "false": 24
+        }
+      }
+    },
+    "v2-baseline": {
+      "rounds": [
+        {
+          "round": 1,
+          "clean_round": false,
+          "clean_definition": "v2",
+          "precision": {
+            "true_positives": 19,
+            "adjudicated_non_duplicates": 248,
+            "rate": 0.07661290322580645
+          },
+          "label_counts": {
+            "seeded-tp": 19,
+            "emergent": 0,
+            "subject-quirk": 0,
+            "spec-gap": 0,
+            "soft-ux": 16,
+            "harness-artifact": 1,
+            "false": 212
+          },
+          "recall_by_level": {
+            "L1": {
+              "reachable_found": 3,
+              "reachable_total": 5,
+              "reachable_rate": 0.6,
+              "total_found": 4,
+              "total": 7,
+              "total_rate": 0.5714285714285714
+            },
+            "L2": {
+              "reachable_found": 6,
+              "reachable_total": 8,
+              "reachable_rate": 0.75,
+              "total_found": 6,
+              "total": 8,
+              "total_rate": 0.75
+            },
+            "L3": {
+              "reachable_found": 4,
+              "reachable_total": 5,
+              "reachable_rate": 0.8,
+              "total_found": 5,
+              "total": 6,
+              "total_rate": 0.8333333333333334
+            },
+            "L4": {
+              "reachable_found": 4,
+              "reachable_total": 5,
+              "reachable_rate": 0.8,
+              "total_found": 4,
+              "total": 5,
+              "total_rate": 0.8
+            }
+          },
+          "recall_by_class": {
+            "swallowed-error": {
+              "reachable_found": 1,
+              "reachable_total": 2,
+              "reachable_rate": 0.5,
+              "total_found": 1,
+              "total": 2,
+              "total_rate": 0.5
+            },
+            "lost-input": {
+              "reachable_found": 1,
+              "reachable_total": 2,
+              "reachable_rate": 0.5,
+              "total_found": 1,
+              "total": 2,
+              "total_rate": 0.5
+            },
+            "action-without-receipt": {
+              "reachable_found": 1,
+              "reachable_total": 2,
+              "reachable_rate": 0.5,
+              "total_found": 1,
+              "total": 2,
+              "total_rate": 0.5
+            },
+            "edge-case-break": {
+              "reachable_found": 2,
+              "reachable_total": 2,
+              "reachable_rate": 1,
+              "total_found": 2,
+              "total": 2,
+              "total_rate": 1
+            },
+            "broken-validation": {
+              "reachable_found": 2,
+              "reachable_total": 2,
+              "reachable_rate": 1,
+              "total_found": 2,
+              "total": 2,
+              "total_rate": 1
+            },
+            "navigation-removed": {
+              "reachable_found": 1,
+              "reachable_total": 2,
+              "reachable_rate": 0.5,
+              "total_found": 1,
+              "total": 2,
+              "total_rate": 0.5
+            },
+            "misrouted-link": {
+              "reachable_found": 1,
+              "reachable_total": 1,
+              "reachable_rate": 1,
+              "total_found": 2,
+              "total": 2,
+              "total_rate": 1
+            },
+            "confusing-empty-state": {
+              "reachable_found": 0,
+              "reachable_total": 1,
+              "reachable_rate": 0,
+              "total_found": 1,
+              "total": 2,
+              "total_rate": 0.5
+            },
+            "low-contrast": {
+              "reachable_found": 1,
+              "reachable_total": 2,
+              "reachable_rate": 0.5,
+              "total_found": 1,
+              "total": 2,
+              "total_rate": 0.5
+            },
+            "misleading-copy": {
+              "reachable_found": 2,
+              "reachable_total": 2,
+              "reachable_rate": 1,
+              "total_found": 2,
+              "total": 3,
+              "total_rate": 0.6666666666666666
+            },
+            "capability-removed": {
+              "reachable_found": 3,
+              "reachable_total": 3,
+              "reachable_rate": 1,
+              "total_found": 3,
+              "total": 3,
+              "total_rate": 1
+            },
+            "dead-control": {
+              "reachable_found": 2,
+              "reachable_total": 2,
+              "reachable_rate": 1,
+              "total_found": 2,
+              "total": 2,
+              "total_rate": 1
+            }
+          },
+          "cost_usd": 3.1686210000000004,
+          "distinct_faults_found": 19,
+          "deltas": {
+            "new_faults_found": 19,
+            "cost_usd": 3.1686210000000004
+          }
+        },
+        {
+          "round": 2,
+          "clean_round": false,
+          "clean_definition": "v2",
+          "precision": {
+            "true_positives": 21,
+            "adjudicated_non_duplicates": 176,
+            "rate": 0.11931818181818182
+          },
+          "label_counts": {
+            "seeded-tp": 21,
+            "emergent": 0,
+            "subject-quirk": 0,
+            "spec-gap": 0,
+            "soft-ux": 9,
+            "harness-artifact": 0,
+            "false": 146
+          },
+          "recall_by_level": {
+            "L1": {
+              "reachable_found": 4,
+              "reachable_total": 5,
+              "reachable_rate": 0.8,
+              "total_found": 5,
+              "total": 7,
+              "total_rate": 0.7142857142857143
+            },
+            "L2": {
+              "reachable_found": 7,
+              "reachable_total": 8,
+              "reachable_rate": 0.875,
+              "total_found": 7,
+              "total": 8,
+              "total_rate": 0.875
+            },
+            "L3": {
+              "reachable_found": 4,
+              "reachable_total": 5,
+              "reachable_rate": 0.8,
+              "total_found": 5,
+              "total": 6,
+              "total_rate": 0.8333333333333334
+            },
+            "L4": {
+              "reachable_found": 4,
+              "reachable_total": 5,
+              "reachable_rate": 0.8,
+              "total_found": 4,
+              "total": 5,
+              "total_rate": 0.8
+            }
+          },
+          "recall_by_class": {
+            "swallowed-error": {
+              "reachable_found": 2,
+              "reachable_total": 2,
+              "reachable_rate": 1,
+              "total_found": 2,
+              "total": 2,
+              "total_rate": 1
+            },
+            "lost-input": {
+              "reachable_found": 1,
+              "reachable_total": 2,
+              "reachable_rate": 0.5,
+              "total_found": 1,
+              "total": 2,
+              "total_rate": 0.5
+            },
+            "action-without-receipt": {
+              "reachable_found": 1,
+              "reachable_total": 2,
+              "reachable_rate": 0.5,
+              "total_found": 1,
+              "total": 2,
+              "total_rate": 0.5
+            },
+            "edge-case-break": {
+              "reachable_found": 2,
+              "reachable_total": 2,
+              "reachable_rate": 1,
+              "total_found": 2,
+              "total": 2,
+              "total_rate": 1
+            },
+            "broken-validation": {
+              "reachable_found": 2,
+              "reachable_total": 2,
+              "reachable_rate": 1,
+              "total_found": 2,
+              "total": 2,
+              "total_rate": 1
+            },
+            "navigation-removed": {
+              "reachable_found": 1,
+              "reachable_total": 2,
+              "reachable_rate": 0.5,
+              "total_found": 1,
+              "total": 2,
+              "total_rate": 0.5
+            },
+            "misrouted-link": {
+              "reachable_found": 1,
+              "reachable_total": 1,
+              "reachable_rate": 1,
+              "total_found": 2,
+              "total": 2,
+              "total_rate": 1
+            },
+            "confusing-empty-state": {
+              "reachable_found": 1,
+              "reachable_total": 1,
+              "reachable_rate": 1,
+              "total_found": 2,
+              "total": 2,
+              "total_rate": 1
+            },
+            "low-contrast": {
+              "reachable_found": 1,
+              "reachable_total": 2,
+              "reachable_rate": 0.5,
+              "total_found": 1,
+              "total": 2,
+              "total_rate": 0.5
+            },
+            "misleading-copy": {
+              "reachable_found": 2,
+              "reachable_total": 2,
+              "reachable_rate": 1,
+              "total_found": 2,
+              "total": 3,
+              "total_rate": 0.6666666666666666
+            },
+            "capability-removed": {
+              "reachable_found": 3,
+              "reachable_total": 3,
+              "reachable_rate": 1,
+              "total_found": 3,
+              "total": 3,
+              "total_rate": 1
+            },
+            "dead-control": {
+              "reachable_found": 2,
+              "reachable_total": 2,
+              "reachable_rate": 1,
+              "total_found": 2,
+              "total": 2,
+              "total_rate": 1
+            }
+          },
+          "cost_usd": 2.8316879999999998,
+          "distinct_faults_found": 21,
+          "deltas": {
+            "new_faults_found": 2,
+            "cost_usd": 2.8316879999999998
+          }
+        }
+      ],
+      "clean_definition": "v2",
+      "cost_per_detected_fault": 0.285729,
+      "rounds_to_clean": null,
+      "accounting_summary": {
+        "detected": 21,
+        "found_and_fixed": 0,
+        "found_and_accepted": 0,
+        "fixed_without_detection": 0,
+        "residual": 26,
+        "emergent": 0,
+        "label_counts": {
+          "seeded-tp": 40,
+          "emergent": 0,
+          "subject-quirk": 0,
+          "spec-gap": 0,
+          "soft-ux": 25,
+          "harness-artifact": 1,
+          "false": 358
+        }
+      }
+    }
+  },
+  "convergence": {
+    "f-account-error-swallowed": {
+      "personas": [
+        "adversarial-tester"
+      ],
+      "runs": [
+        "2026-07-13T0856-2a58",
+        "2026-07-14T1120-021e"
+      ],
+      "persona_count": 1,
+      "run_count": 2
+    },
+    "f-account-form-resets": {
+      "personas": [],
+      "runs": [],
+      "persona_count": 0,
+      "run_count": 0
+    },
+    "f-add-cart-silent": {
+      "personas": [
+        "cautious-first-timer",
+        "gift-rusher",
+        "returning-regular",
+        "weekend-browser"
+      ],
+      "runs": [
+        "2026-07-10T0751-8e76",
+        "2026-07-10T1134-4567",
+        "2026-07-10T1352-58b1",
+        "2026-07-10T1415-934f",
+        "2026-07-10T1417-1750",
+        "2026-07-10T1417-24be",
+        "2026-07-10T1502-0c56",
+        "2026-07-10T1515-b74f",
+        "2026-07-10T1526-3e67",
+        "2026-07-10T1543-83e9",
+        "2026-07-10T1729-b6ff",
+        "2026-07-10T1741-630d",
+        "2026-07-10T1755-bd65",
+        "2026-07-10T1811-842a",
+        "2026-07-10T1830-308a",
+        "2026-07-10T1830-56e5",
+        "2026-07-10T1837-9e63",
+        "2026-07-10T1855-85f1",
+        "2026-07-10T1900-dc26",
+        "2026-07-10T1913-9b89",
+        "2026-07-11T0633-8cb1",
+        "2026-07-11T0633-be14",
+        "2026-07-13T0812-23cf",
+        "2026-07-14T1120-cc5f"
+      ],
+      "persona_count": 4,
+      "run_count": 24
+    },
+    "f-cant-buy-last-unit": {
+      "personas": [
+        "adversarial-tester"
+      ],
+      "runs": [
+        "2026-07-13T0856-2a58",
+        "2026-07-14T1120-021e"
+      ],
+      "persona_count": 1,
+      "run_count": 2
+    },
+    "f-card-spaces-validation": {
+      "personas": [
+        "adversarial-tester"
+      ],
+      "runs": [
+        "2026-07-13T0856-2a58",
+        "2026-07-14T1120-021e"
+      ],
+      "persona_count": 1,
+      "run_count": 2
+    },
+    "f-cart-continue-removed": {
+      "personas": [
+        "adversarial-tester"
+      ],
+      "runs": [
+        "2026-07-13T0825-64e7",
+        "2026-07-14T1120-3425"
+      ],
+      "persona_count": 1,
+      "run_count": 2
+    },
+    "f-checkout-empty-guard-gone": {
+      "personas": [
+        "adversarial-tester"
+      ],
+      "runs": [
+        "2026-07-13T0856-2a58",
+        "2026-07-14T1120-021e"
+      ],
+      "persona_count": 1,
+      "run_count": 2
+    },
+    "f-clear-search-self-link": {
+      "personas": [
+        "adversarial-tester"
+      ],
+      "runs": [
+        "2026-07-13T0825-51dc",
+        "2026-07-14T1120-021e"
+      ],
+      "persona_count": 1,
+      "run_count": 2
+    },
+    "f-continue-shopping-loop": {
+      "personas": [
+        "adversarial-tester"
+      ],
+      "runs": [
+        "2026-07-13T0825-51dc",
+        "2026-07-14T1120-cc5f"
+      ],
+      "persona_count": 1,
+      "run_count": 2
+    },
+    "f-decline-swallowed": {
+      "personas": [
+        "cautious-first-timer",
+        "gift-rusher"
+      ],
+      "runs": [
+        "2026-07-10T1415-934f",
+        "2026-07-10T1515-b74f",
+        "2026-07-10T1755-bd65",
+        "2026-07-10T1811-842a",
+        "2026-07-14T1120-3425"
+      ],
+      "persona_count": 2,
+      "run_count": 5
+    },
+    "f-empty-cart-jargon": {
+      "personas": [
+        "returning-regular",
+        "weekend-browser"
+      ],
+      "runs": [
+        "2026-07-11T1308-df78",
+        "2026-07-14T1120-cc5f"
+      ],
+      "persona_count": 2,
+      "run_count": 2
+    },
+    "f-error-text-contrast": {
+      "personas": [
+        "cautious-first-timer",
+        "gift-rusher",
+        "returning-regular"
+      ],
+      "runs": [
+        "2026-07-10T1352-58b1",
+        "2026-07-10T1502-0c56",
+        "2026-07-10T1729-b6ff"
+      ],
+      "persona_count": 3,
+      "run_count": 3
+    },
+    "f-free-shipping-label": {
+      "personas": [
+        "cautious-first-timer",
+        "gift-rusher",
+        "weekend-browser"
+      ],
+      "runs": [
+        "2026-07-10T1515-b74f",
+        "2026-07-10T1830-56e5",
+        "2026-07-13T0812-a709",
+        "2026-07-14T1120-021e"
+      ],
+      "persona_count": 3,
+      "run_count": 4
+    },
+    "f-no-results-jargon": {
+      "personas": [
+        "adversarial-tester"
+      ],
+      "runs": [
+        "2026-07-13T0825-51dc",
+        "2026-07-14T1120-021e"
+      ],
+      "persona_count": 1,
+      "run_count": 2
+    },
+    "f-oos-says-in-stock": {
+      "personas": [
+        "adversarial-tester"
+      ],
+      "runs": [
+        "2026-07-13T0825-51dc",
+        "2026-07-14T1120-cc5f"
+      ],
+      "persona_count": 1,
+      "run_count": 2
+    },
+    "f-order-history-removed": {
+      "personas": [
+        "returning-regular"
+      ],
+      "runs": [
+        "2026-07-10T1134-4567",
+        "2026-07-10T1850-80c7",
+        "2026-07-10T1855-85f1",
+        "2026-07-13T0825-51dc",
+        "2026-07-14T1120-cc5f"
+      ],
+      "persona_count": 1,
+      "run_count": 5
+    },
+    "f-place-order-no-feedback": {
+      "personas": [
+        "cautious-first-timer",
+        "gift-rusher",
+        "weekend-browser"
+      ],
+      "runs": [
+        "2026-07-10T0751-8e76",
+        "2026-07-10T1134-4567",
+        "2026-07-10T1415-934f",
+        "2026-07-10T1755-bd65",
+        "2026-07-10T1811-842a",
+        "2026-07-10T1837-9e63"
+      ],
+      "persona_count": 3,
+      "run_count": 6
+    },
+    "f-postcode-validation": {
+      "personas": [
+        "adversarial-tester",
+        "cautious-first-timer",
+        "gift-rusher",
+        "returning-regular",
+        "weekend-browser"
+      ],
+      "runs": [
+        "2026-07-10T0751-8e76",
+        "2026-07-10T1134-4567",
+        "2026-07-10T1352-58b1",
+        "2026-07-10T1502-0c56",
+        "2026-07-10T1515-b74f",
+        "2026-07-10T1729-b6ff",
+        "2026-07-10T1741-630d",
+        "2026-07-10T1755-bd65",
+        "2026-07-10T1811-842a",
+        "2026-07-10T1830-308a",
+        "2026-07-10T1832-2062",
+        "2026-07-10T1837-9e63",
+        "2026-07-10T1855-85f1",
+        "2026-07-10T1900-dc26",
+        "2026-07-10T1913-9b89",
+        "2026-07-11T0633-be14",
+        "2026-07-13T0812-a709",
+        "2026-07-14T1120-021e"
+      ],
+      "persona_count": 5,
+      "run_count": 18
+    },
+    "f-price-contrast": {
+      "personas": [
+        "cautious-first-timer",
+        "gift-rusher",
+        "returning-regular",
+        "weekend-browser"
+      ],
+      "runs": [
+        "2026-07-10T0751-8e76",
+        "2026-07-10T1134-4567",
+        "2026-07-10T1352-58b1",
+        "2026-07-10T1415-934f",
+        "2026-07-10T1417-1750",
+        "2026-07-10T1515-b74f",
+        "2026-07-10T1526-3e67",
+        "2026-07-10T1729-b6ff",
+        "2026-07-10T1741-630d",
+        "2026-07-10T1755-bd65",
+        "2026-07-10T1811-842a",
+        "2026-07-10T1830-308a",
+        "2026-07-10T1830-56e5",
+        "2026-07-10T1832-2062",
+        "2026-07-10T1837-9e63",
+        "2026-07-10T1855-85f1",
+        "2026-07-10T1900-dc26",
+        "2026-07-10T1913-9b89",
+        "2026-07-11T0633-8cb1",
+        "2026-07-11T0633-be14",
+        "2026-07-13T0812-a709",
+        "2026-07-14T1120-021e"
+      ],
+      "persona_count": 4,
+      "run_count": 22
+    },
+    "f-product-crumb-removed": {
+      "personas": [
+        "weekend-browser"
+      ],
+      "runs": [
+        "2026-07-10T1134-4567"
+      ],
+      "persona_count": 1,
+      "run_count": 1
+    },
+    "f-qty-edit-removed": {
+      "personas": [
+        "cautious-first-timer",
+        "gift-rusher",
+        "returning-regular",
+        "weekend-browser"
+      ],
+      "runs": [
+        "2026-07-10T1417-1750",
+        "2026-07-10T1417-24be",
+        "2026-07-10T1502-0c56",
+        "2026-07-10T1543-83e9",
+        "2026-07-10T1855-85f1",
+        "2026-07-10T1913-9b89",
+        "2026-07-11T0633-8cb1",
+        "2026-07-13T0812-ade1",
+        "2026-07-14T1120-021e"
+      ],
+      "persona_count": 4,
+      "run_count": 9
+    },
+    "f-receipt-eta-wrong": {
+      "personas": [],
+      "runs": [],
+      "persona_count": 0,
+      "run_count": 0
+    },
+    "f-save-profile-dead": {
+      "personas": [
+        "cautious-first-timer",
+        "returning-regular"
+      ],
+      "runs": [
+        "2026-07-10T0751-8e76",
+        "2026-07-10T1134-4567",
+        "2026-07-10T1832-2062",
+        "2026-07-10T1900-dc26",
+        "2026-07-13T0812-a709",
+        "2026-07-14T1120-021e"
+      ],
+      "persona_count": 2,
+      "run_count": 6
+    },
+    "f-search-removed": {
+      "personas": [
+        "adversarial-tester",
+        "gift-rusher",
+        "returning-regular",
+        "weekend-browser"
+      ],
+      "runs": [
+        "2026-07-10T1134-4567",
+        "2026-07-10T1352-58b1",
+        "2026-07-10T1515-b74f",
+        "2026-07-10T1741-630d",
+        "2026-07-13T0825-51dc",
+        "2026-07-14T1120-021e"
+      ],
+      "persona_count": 4,
+      "run_count": 6
+    },
+    "f-sort-inert": {
+      "personas": [
+        "adversarial-tester"
+      ],
+      "runs": [
+        "2026-07-13T0825-64e7",
+        "2026-07-14T1120-cc5f"
+      ],
+      "persona_count": 1,
+      "run_count": 2
+    },
+    "f-validation-wipes-payment": {
+      "personas": [
+        "cautious-first-timer",
+        "gift-rusher",
+        "returning-regular",
+        "weekend-browser"
+      ],
+      "runs": [
+        "2026-07-10T0751-8e76",
+        "2026-07-10T1134-4567",
+        "2026-07-10T1352-58b1",
+        "2026-07-10T1415-934f",
+        "2026-07-10T1502-0c56",
+        "2026-07-10T1515-b74f",
+        "2026-07-10T1526-3e67",
+        "2026-07-10T1729-b6ff",
+        "2026-07-10T1741-630d",
+        "2026-07-10T1755-bd65",
+        "2026-07-10T1811-842a",
+        "2026-07-10T1830-308a",
+        "2026-07-10T1832-2062",
+        "2026-07-10T1855-85f1",
+        "2026-07-10T1900-dc26",
+        "2026-07-10T1913-9b89",
+        "2026-07-11T0633-be14",
+        "2026-07-13T0812-a709",
+        "2026-07-14T1120-3425"
+      ],
+      "persona_count": 4,
+      "run_count": 19
+    }
+  },
+  "cost_per_detected_fault": {
+    "baseline": 1.1661279769230768,
+    "naive": null,
+    "policy": 12.763337250000001,
+    "shakedown": null,
+    "v2-baseline": 0.285729
+  },
+  "rounds_to_clean": {
+    "baseline": null,
+    "naive": 2,
+    "policy": 3,
+    "shakedown": null,
+    "v2-baseline": null
+  },
+  "accounting": {
+    "baseline": [
+      {
+        "fault_id": "f-account-error-swallowed",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-account-form-resets",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-add-cart-silent",
+        "status": "detected",
+        "findings": [
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T0751-8e76/first-impressions@weekend-browser#f3"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T0751-8e76/moving-house@cautious-first-timer#f6"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1134-4567/moving-house@returning-regular#f4"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1134-4567/outfit-a-shelf@returning-regular#f3"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1134-4567/outfit-a-shelf@weekend-browser#f4"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1352-58b1/buy-a-specific-gift@cautious-first-timer#f1"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1352-58b1/buy-a-specific-gift@gift-rusher#f1"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1415-934f/checkout-hiccup@cautious-first-timer#f1"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1417-1750/change-your-mind@weekend-browser#f6"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1417-24be/change-your-mind@cautious-first-timer#f4"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1502-0c56/club-order@returning-regular#f3"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1515-b74f/checkout-hiccup@gift-rusher#f0"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1526-3e67/club-order@weekend-browser#f2"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1543-83e9/change-your-mind@cautious-first-timer#f1"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1729-b6ff/buy-a-specific-gift@cautious-first-timer#f1"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1741-630d/buy-a-specific-gift@gift-rusher#f0"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1755-bd65/checkout-hiccup@cautious-first-timer#f1"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1811-842a/checkout-hiccup@gift-rusher#f1"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1830-308a/outfit-a-shelf@weekend-browser#f0"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1830-56e5/first-impressions@cautious-first-timer#f3"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1837-9e63/first-impressions@weekend-browser#f3"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1855-85f1/club-order@returning-regular#f2"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1900-dc26/moving-house@cautious-first-timer#f4"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1913-9b89/club-order@weekend-browser#f2"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-11T0633-8cb1/change-your-mind@weekend-browser#q1"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-11T0633-be14/outfit-a-shelf@returning-regular#f2"
+          }
+        ],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-cant-buy-last-unit",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-card-spaces-validation",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-cart-continue-removed",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-checkout-empty-guard-gone",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-clear-search-self-link",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-continue-shopping-loop",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-decline-swallowed",
+        "status": "detected",
+        "findings": [
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1415-934f/checkout-hiccup@cautious-first-timer#f4"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1515-b74f/checkout-hiccup@gift-rusher#f1"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1755-bd65/checkout-hiccup@cautious-first-timer#f3"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1811-842a/checkout-hiccup@gift-rusher#f4"
+          }
+        ],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-empty-cart-jargon",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-error-text-contrast",
+        "status": "detected",
+        "findings": [
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1352-58b1/buy-a-specific-gift@gift-rusher#f7"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1502-0c56/club-order@returning-regular#f8"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1729-b6ff/buy-a-specific-gift@cautious-first-timer#q4"
+          }
+        ],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-free-shipping-label",
+        "status": "detected",
+        "findings": [
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1515-b74f/checkout-hiccup@gift-rusher#f3"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1830-56e5/first-impressions@cautious-first-timer#f5"
+          }
+        ],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-no-results-jargon",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-oos-says-in-stock",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-order-history-removed",
+        "status": "detected",
+        "findings": [
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1134-4567/wheres-my-order@returning-regular#f0"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1134-4567/wheres-my-order@returning-regular#f1"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1850-80c7/wheres-my-order@returning-regular#f0"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1855-85f1/club-order@returning-regular#f6"
+          }
+        ],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-place-order-no-feedback",
+        "status": "detected",
+        "findings": [
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T0751-8e76/first-impressions@weekend-browser#f5"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1134-4567/outfit-a-shelf@weekend-browser#f6"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1415-934f/checkout-hiccup@cautious-first-timer#f5"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1755-bd65/checkout-hiccup@cautious-first-timer#q4"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1811-842a/checkout-hiccup@gift-rusher#q0"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1837-9e63/first-impressions@weekend-browser#f7"
+          }
+        ],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-postcode-validation",
+        "status": "detected",
+        "findings": [
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T0751-8e76/first-impressions@weekend-browser#f6"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T0751-8e76/moving-house@cautious-first-timer#f0"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1134-4567/moving-house@returning-regular#f5"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1134-4567/outfit-a-shelf@returning-regular#f5"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1352-58b1/buy-a-specific-gift@cautious-first-timer#f5"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1502-0c56/club-order@returning-regular#f6"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1515-b74f/checkout-hiccup@gift-rusher#f2"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1729-b6ff/buy-a-specific-gift@cautious-first-timer#f4"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1741-630d/buy-a-specific-gift@gift-rusher#q1"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1755-bd65/checkout-hiccup@cautious-first-timer#f5"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1811-842a/checkout-hiccup@gift-rusher#f3"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1830-308a/outfit-a-shelf@weekend-browser#q3"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1832-2062/moving-house@returning-regular#f5"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1837-9e63/first-impressions@weekend-browser#f6"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1855-85f1/club-order@returning-regular#f5"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1900-dc26/moving-house@cautious-first-timer#f6"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1913-9b89/club-order@weekend-browser#f6"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-11T0633-be14/outfit-a-shelf@returning-regular#f5"
+          }
+        ],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-price-contrast",
+        "status": "detected",
+        "findings": [
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T0751-8e76/first-impressions@cautious-first-timer#f6"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T0751-8e76/first-impressions@weekend-browser#f7"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T0751-8e76/moving-house@cautious-first-timer#f9"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1134-4567/moving-house@returning-regular#f7"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1134-4567/outfit-a-shelf@returning-regular#f6"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1134-4567/outfit-a-shelf@weekend-browser#f7"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1134-4567/wheres-my-order@returning-regular#f5"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1352-58b1/buy-a-specific-gift@cautious-first-timer#f7"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1415-934f/checkout-hiccup@cautious-first-timer#f7"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1417-1750/change-your-mind@weekend-browser#f7"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1515-b74f/checkout-hiccup@gift-rusher#f6"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1526-3e67/club-order@weekend-browser#f8"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1729-b6ff/buy-a-specific-gift@cautious-first-timer#f6"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1741-630d/buy-a-specific-gift@gift-rusher#f5"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1755-bd65/checkout-hiccup@cautious-first-timer#f7"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1811-842a/checkout-hiccup@gift-rusher#f6"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1830-308a/outfit-a-shelf@weekend-browser#f6"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1830-56e5/first-impressions@cautious-first-timer#f7"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1832-2062/moving-house@returning-regular#f7"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1837-9e63/first-impressions@weekend-browser#f8"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1855-85f1/club-order@returning-regular#f7"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1900-dc26/moving-house@cautious-first-timer#f9"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1913-9b89/club-order@weekend-browser#f7"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-11T0633-8cb1/change-your-mind@weekend-browser#f7"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-11T0633-be14/outfit-a-shelf@returning-regular#f7"
+          }
+        ],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-product-crumb-removed",
+        "status": "detected",
+        "findings": [
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1134-4567/outfit-a-shelf@weekend-browser#f3"
+          }
+        ],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-qty-edit-removed",
+        "status": "detected",
+        "findings": [
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1417-1750/change-your-mind@weekend-browser#f1"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1417-1750/change-your-mind@weekend-browser#f2"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1417-1750/change-your-mind@weekend-browser#f3"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1417-24be/change-your-mind@cautious-first-timer#f1"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1417-24be/change-your-mind@cautious-first-timer#f2"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1417-24be/change-your-mind@cautious-first-timer#f3"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1502-0c56/club-order@returning-regular#f5"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1543-83e9/change-your-mind@cautious-first-timer#f2"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1543-83e9/change-your-mind@cautious-first-timer#f3"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1543-83e9/change-your-mind@cautious-first-timer#f5"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1855-85f1/club-order@returning-regular#f3"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1913-9b89/club-order@weekend-browser#f3"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1913-9b89/club-order@weekend-browser#f4"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-11T0633-8cb1/change-your-mind@weekend-browser#f0"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-11T0633-8cb1/change-your-mind@weekend-browser#f1"
+          }
+        ],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-receipt-eta-wrong",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-save-profile-dead",
+        "status": "detected",
+        "findings": [
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T0751-8e76/moving-house@cautious-first-timer#f2"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T0751-8e76/moving-house@cautious-first-timer#f7"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1134-4567/moving-house@returning-regular#f1"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1832-2062/moving-house@returning-regular#f2"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1832-2062/moving-house@returning-regular#f4"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1900-dc26/moving-house@cautious-first-timer#f3"
+          }
+        ],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-search-removed",
+        "status": "detected",
+        "findings": [
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1134-4567/outfit-a-shelf@returning-regular#q0"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1134-4567/outfit-a-shelf@weekend-browser#q0"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1352-58b1/buy-a-specific-gift@gift-rusher#q0"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1515-b74f/checkout-hiccup@gift-rusher#f4"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1741-630d/buy-a-specific-gift@gift-rusher#q0"
+          }
+        ],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-sort-inert",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-validation-wipes-payment",
+        "status": "detected",
+        "findings": [
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T0751-8e76/moving-house@cautious-first-timer#f1"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1134-4567/moving-house@returning-regular#f6"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1134-4567/outfit-a-shelf@returning-regular#q4"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1352-58b1/buy-a-specific-gift@cautious-first-timer#f4"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1352-58b1/buy-a-specific-gift@gift-rusher#f4"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1415-934f/checkout-hiccup@cautious-first-timer#f3"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1502-0c56/club-order@returning-regular#q2"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1515-b74f/checkout-hiccup@gift-rusher#q1"
+          },
+          {
+            "round": 1,
+            "finding_id": "2026-07-10T1526-3e67/club-order@weekend-browser#f5"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1729-b6ff/buy-a-specific-gift@cautious-first-timer#q2"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1741-630d/buy-a-specific-gift@gift-rusher#f3"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1755-bd65/checkout-hiccup@cautious-first-timer#f4"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1811-842a/checkout-hiccup@gift-rusher#q1"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1830-308a/outfit-a-shelf@weekend-browser#f5"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1832-2062/moving-house@returning-regular#q4"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1855-85f1/club-order@returning-regular#q2"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1900-dc26/moving-house@cautious-first-timer#f7"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-10T1913-9b89/club-order@weekend-browser#q2"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-11T0633-be14/outfit-a-shelf@returning-regular#q3"
+          }
+        ],
+        "fixes": []
+      }
+    ],
+    "naive": [
+      {
+        "fault_id": "f-account-error-swallowed",
+        "status": "fixed-without-detection",
+        "findings": [],
+        "fixes": [
+          {
+            "round": 1,
+            "commit": "22ce8b9",
+            "finding_ids": [
+              "2026-07-10T0751-8e76/moving-house@cautious-first-timer#f2",
+              "2026-07-10T0751-8e76/moving-house@cautious-first-timer#f7",
+              "2026-07-10T1134-4567/moving-house@returning-regular#f1",
+              "2026-07-10T1832-2062/moving-house@returning-regular#f2",
+              "2026-07-10T1832-2062/moving-house@returning-regular#f4",
+              "2026-07-10T1900-dc26/moving-house@cautious-first-timer#f3",
+              "2026-07-10T1900-dc26/moving-house@cautious-first-timer#f5"
+            ],
+            "accepted": false
+          }
+        ]
+      },
+      {
+        "fault_id": "f-account-form-resets",
+        "status": "fixed-without-detection",
+        "findings": [],
+        "fixes": [
+          {
+            "round": 1,
+            "commit": "22ce8b9",
+            "finding_ids": [
+              "2026-07-10T0751-8e76/moving-house@cautious-first-timer#f2",
+              "2026-07-10T0751-8e76/moving-house@cautious-first-timer#f7",
+              "2026-07-10T1134-4567/moving-house@returning-regular#f1",
+              "2026-07-10T1832-2062/moving-house@returning-regular#f2",
+              "2026-07-10T1832-2062/moving-house@returning-regular#f4",
+              "2026-07-10T1900-dc26/moving-house@cautious-first-timer#f3",
+              "2026-07-10T1900-dc26/moving-house@cautious-first-timer#f5"
+            ],
+            "accepted": false
+          }
+        ]
+      },
+      {
+        "fault_id": "f-add-cart-silent",
+        "status": "fixed-without-detection",
+        "findings": [],
+        "fixes": [
+          {
+            "round": 1,
+            "commit": "22ce8b9",
+            "finding_ids": [
+              "2026-07-10T0751-8e76/first-impressions@cautious-first-timer#f5",
+              "2026-07-10T0751-8e76/first-impressions@weekend-browser#f3",
+              "2026-07-10T0751-8e76/moving-house@cautious-first-timer#f6",
+              "2026-07-10T1134-4567/moving-house@returning-regular#f4",
+              "2026-07-10T1134-4567/outfit-a-shelf@returning-regular#f3",
+              "2026-07-10T1134-4567/outfit-a-shelf@weekend-browser#f4",
+              "2026-07-10T1134-4567/outfit-a-shelf@weekend-browser#f5",
+              "2026-07-10T1352-58b1/buy-a-specific-gift@cautious-first-timer#f1",
+              "2026-07-10T1352-58b1/buy-a-specific-gift@gift-rusher#f1",
+              "2026-07-10T1415-934f/checkout-hiccup@cautious-first-timer#f1",
+              "2026-07-10T1515-b74f/checkout-hiccup@gift-rusher#f0",
+              "2026-07-10T1502-0c56/club-order@returning-regular#f3",
+              "2026-07-10T1526-3e67/club-order@weekend-browser#f2",
+              "2026-07-10T1543-83e9/change-your-mind@cautious-first-timer#f1",
+              "2026-07-10T1729-b6ff/buy-a-specific-gift@cautious-first-timer#f1",
+              "2026-07-10T1741-630d/buy-a-specific-gift@gift-rusher#f0",
+              "2026-07-10T1755-bd65/checkout-hiccup@cautious-first-timer#f1",
+              "2026-07-10T1811-842a/checkout-hiccup@gift-rusher#f1",
+              "2026-07-10T1830-308a/outfit-a-shelf@weekend-browser#f0",
+              "2026-07-10T1830-56e5/first-impressions@cautious-first-timer#f3",
+              "2026-07-10T1837-9e63/first-impressions@weekend-browser#f3",
+              "2026-07-10T1855-85f1/club-order@returning-regular#f2",
+              "2026-07-10T1900-dc26/moving-house@cautious-first-timer#f4",
+              "2026-07-10T1913-9b89/club-order@weekend-browser#f2",
+              "2026-07-11T0633-be14/outfit-a-shelf@returning-regular#f2",
+              "2026-07-11T0633-be14/outfit-a-shelf@returning-regular#f3"
+            ],
+            "accepted": false
+          }
+        ]
+      },
+      {
+        "fault_id": "f-cant-buy-last-unit",
+        "status": "missed",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-card-spaces-validation",
+        "status": "fixed-without-detection",
+        "findings": [],
+        "fixes": [
+          {
+            "round": 1,
+            "commit": "22ce8b9",
+            "finding_ids": [
+              "2026-07-10T0751-8e76/first-impressions@weekend-browser#f6",
+              "2026-07-10T0751-8e76/moving-house@cautious-first-timer#f0",
+              "2026-07-10T1134-4567/moving-house@returning-regular#f5",
+              "2026-07-10T1134-4567/outfit-a-shelf@returning-regular#f5",
+              "2026-07-10T1352-58b1/buy-a-specific-gift@gift-rusher#f4",
+              "2026-07-10T1515-b74f/checkout-hiccup@gift-rusher#f2",
+              "2026-07-10T1755-bd65/checkout-hiccup@cautious-first-timer#f5",
+              "2026-07-10T1832-2062/moving-house@returning-regular#f5",
+              "2026-07-10T1837-9e63/first-impressions@weekend-browser#f6",
+              "2026-07-10T1900-dc26/moving-house@cautious-first-timer#f6",
+              "2026-07-11T0633-be14/outfit-a-shelf@returning-regular#f5"
+            ],
+            "accepted": false
+          }
+        ]
+      },
+      {
+        "fault_id": "f-cart-continue-removed",
+        "status": "missed",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-checkout-empty-guard-gone",
+        "status": "missed",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-clear-search-self-link",
+        "status": "missed",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-continue-shopping-loop",
+        "status": "missed",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-decline-swallowed",
+        "status": "fixed-without-detection",
+        "findings": [],
+        "fixes": [
+          {
+            "round": 1,
+            "commit": "22ce8b9",
+            "finding_ids": [
+              "2026-07-10T0751-8e76/first-impressions@weekend-browser#f5",
+              "2026-07-10T0751-8e76/moving-house@cautious-first-timer#f1",
+              "2026-07-10T1134-4567/moving-house@returning-regular#f6",
+              "2026-07-10T1134-4567/outfit-a-shelf@weekend-browser#f6",
+              "2026-07-10T1352-58b1/buy-a-specific-gift@cautious-first-timer#f4",
+              "2026-07-10T1415-934f/checkout-hiccup@cautious-first-timer#f3",
+              "2026-07-10T1415-934f/checkout-hiccup@cautious-first-timer#f4",
+              "2026-07-10T1415-934f/checkout-hiccup@cautious-first-timer#f5",
+              "2026-07-10T1515-b74f/checkout-hiccup@gift-rusher#f1",
+              "2026-07-10T1502-0c56/club-order@returning-regular#f6",
+              "2026-07-10T1526-3e67/club-order@weekend-browser#f5",
+              "2026-07-10T1729-b6ff/buy-a-specific-gift@cautious-first-timer#f4",
+              "2026-07-10T1741-630d/buy-a-specific-gift@gift-rusher#f3",
+              "2026-07-10T1755-bd65/checkout-hiccup@cautious-first-timer#f3",
+              "2026-07-10T1755-bd65/checkout-hiccup@cautious-first-timer#f4",
+              "2026-07-10T1811-842a/checkout-hiccup@gift-rusher#f3",
+              "2026-07-10T1811-842a/checkout-hiccup@gift-rusher#f4",
+              "2026-07-10T1830-308a/outfit-a-shelf@weekend-browser#f5",
+              "2026-07-10T1837-9e63/first-impressions@weekend-browser#f7",
+              "2026-07-10T1855-85f1/club-order@returning-regular#f5",
+              "2026-07-10T1900-dc26/moving-house@cautious-first-timer#f7",
+              "2026-07-10T1913-9b89/club-order@weekend-browser#f6"
+            ],
+            "accepted": false
+          }
+        ]
+      },
+      {
+        "fault_id": "f-empty-cart-jargon",
+        "status": "missed",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-error-text-contrast",
+        "status": "fixed-without-detection",
+        "findings": [],
+        "fixes": [
+          {
+            "round": 1,
+            "commit": "22ce8b9",
+            "finding_ids": [
+              "2026-07-10T0751-8e76/first-impressions@cautious-first-timer#f6",
+              "2026-07-10T0751-8e76/first-impressions@weekend-browser#f7",
+              "2026-07-10T0751-8e76/moving-house@cautious-first-timer#f9",
+              "2026-07-10T1134-4567/moving-house@returning-regular#f7",
+              "2026-07-10T1134-4567/outfit-a-shelf@returning-regular#f6",
+              "2026-07-10T1134-4567/outfit-a-shelf@weekend-browser#f7",
+              "2026-07-10T1134-4567/wheres-my-order@returning-regular#f5",
+              "2026-07-10T1352-58b1/buy-a-specific-gift@cautious-first-timer#f7",
+              "2026-07-10T1352-58b1/buy-a-specific-gift@gift-rusher#f7",
+              "2026-07-10T1415-934f/checkout-hiccup@cautious-first-timer#f7",
+              "2026-07-10T1417-1750/change-your-mind@weekend-browser#f7",
+              "2026-07-10T1502-0c56/club-order@returning-regular#f8",
+              "2026-07-10T1515-b74f/checkout-hiccup@gift-rusher#f6",
+              "2026-07-10T1526-3e67/club-order@weekend-browser#f8",
+              "2026-07-10T1729-b6ff/buy-a-specific-gift@cautious-first-timer#f6",
+              "2026-07-10T1741-630d/buy-a-specific-gift@gift-rusher#f5",
+              "2026-07-10T1755-bd65/checkout-hiccup@cautious-first-timer#f7",
+              "2026-07-10T1811-842a/checkout-hiccup@gift-rusher#f6",
+              "2026-07-10T1830-308a/outfit-a-shelf@weekend-browser#f6",
+              "2026-07-10T1830-56e5/first-impressions@cautious-first-timer#f7",
+              "2026-07-10T1837-9e63/first-impressions@weekend-browser#f8",
+              "2026-07-10T1900-dc26/moving-house@cautious-first-timer#f9",
+              "2026-07-10T1913-9b89/club-order@weekend-browser#f7",
+              "2026-07-11T0633-8cb1/change-your-mind@weekend-browser#f7",
+              "2026-07-11T0633-be14/outfit-a-shelf@returning-regular#f7"
+            ],
+            "accepted": false
+          }
+        ]
+      },
+      {
+        "fault_id": "f-free-shipping-label",
+        "status": "fixed-without-detection",
+        "findings": [],
+        "fixes": [
+          {
+            "round": 1,
+            "commit": "22ce8b9",
+            "finding_ids": [
+              "2026-07-10T1515-b74f/checkout-hiccup@gift-rusher#f3",
+              "2026-07-10T1830-56e5/first-impressions@cautious-first-timer#f5"
+            ],
+            "accepted": false
+          }
+        ]
+      },
+      {
+        "fault_id": "f-no-results-jargon",
+        "status": "missed",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-oos-says-in-stock",
+        "status": "missed",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-order-history-removed",
+        "status": "fixed-without-detection",
+        "findings": [],
+        "fixes": [
+          {
+            "round": 1,
+            "commit": "22ce8b9",
+            "finding_ids": [
+              "2026-07-10T1134-4567/wheres-my-order@returning-regular#f0",
+              "2026-07-10T1134-4567/wheres-my-order@returning-regular#f1",
+              "2026-07-10T1134-4567/wheres-my-order@returning-regular#f2",
+              "2026-07-10T1134-4567/wheres-my-order@returning-regular#f3",
+              "2026-07-10T1850-80c7/wheres-my-order@returning-regular#f0",
+              "2026-07-10T1850-80c7/wheres-my-order@returning-regular#f1",
+              "2026-07-10T1850-80c7/wheres-my-order@returning-regular#f2",
+              "2026-07-10T1855-85f1/club-order@returning-regular#f6"
+            ],
+            "accepted": false
+          }
+        ]
+      },
+      {
+        "fault_id": "f-place-order-no-feedback",
+        "status": "fixed-without-detection",
+        "findings": [],
+        "fixes": [
+          {
+            "round": 1,
+            "commit": "22ce8b9",
+            "finding_ids": [
+              "2026-07-10T0751-8e76/first-impressions@weekend-browser#f5",
+              "2026-07-10T0751-8e76/moving-house@cautious-first-timer#f1",
+              "2026-07-10T1134-4567/moving-house@returning-regular#f6",
+              "2026-07-10T1134-4567/outfit-a-shelf@weekend-browser#f6",
+              "2026-07-10T1352-58b1/buy-a-specific-gift@cautious-first-timer#f4",
+              "2026-07-10T1415-934f/checkout-hiccup@cautious-first-timer#f3",
+              "2026-07-10T1415-934f/checkout-hiccup@cautious-first-timer#f4",
+              "2026-07-10T1415-934f/checkout-hiccup@cautious-first-timer#f5",
+              "2026-07-10T1515-b74f/checkout-hiccup@gift-rusher#f1",
+              "2026-07-10T1502-0c56/club-order@returning-regular#f6",
+              "2026-07-10T1526-3e67/club-order@weekend-browser#f5",
+              "2026-07-10T1729-b6ff/buy-a-specific-gift@cautious-first-timer#f4",
+              "2026-07-10T1741-630d/buy-a-specific-gift@gift-rusher#f3",
+              "2026-07-10T1755-bd65/checkout-hiccup@cautious-first-timer#f3",
+              "2026-07-10T1755-bd65/checkout-hiccup@cautious-first-timer#f4",
+              "2026-07-10T1811-842a/checkout-hiccup@gift-rusher#f3",
+              "2026-07-10T1811-842a/checkout-hiccup@gift-rusher#f4",
+              "2026-07-10T1830-308a/outfit-a-shelf@weekend-browser#f5",
+              "2026-07-10T1837-9e63/first-impressions@weekend-browser#f7",
+              "2026-07-10T1855-85f1/club-order@returning-regular#f5",
+              "2026-07-10T1900-dc26/moving-house@cautious-first-timer#f7",
+              "2026-07-10T1913-9b89/club-order@weekend-browser#f6"
+            ],
+            "accepted": false
+          }
+        ]
+      },
+      {
+        "fault_id": "f-postcode-validation",
+        "status": "fixed-without-detection",
+        "findings": [],
+        "fixes": [
+          {
+            "round": 1,
+            "commit": "22ce8b9",
+            "finding_ids": [
+              "2026-07-10T0751-8e76/first-impressions@weekend-browser#f6",
+              "2026-07-10T0751-8e76/moving-house@cautious-first-timer#f0",
+              "2026-07-10T1134-4567/moving-house@returning-regular#f5",
+              "2026-07-10T1134-4567/outfit-a-shelf@returning-regular#f5",
+              "2026-07-10T1352-58b1/buy-a-specific-gift@gift-rusher#f4",
+              "2026-07-10T1515-b74f/checkout-hiccup@gift-rusher#f2",
+              "2026-07-10T1755-bd65/checkout-hiccup@cautious-first-timer#f5",
+              "2026-07-10T1832-2062/moving-house@returning-regular#f5",
+              "2026-07-10T1837-9e63/first-impressions@weekend-browser#f6",
+              "2026-07-10T1900-dc26/moving-house@cautious-first-timer#f6",
+              "2026-07-11T0633-be14/outfit-a-shelf@returning-regular#f5"
+            ],
+            "accepted": false
+          }
+        ]
+      },
+      {
+        "fault_id": "f-price-contrast",
+        "status": "fixed-without-detection",
+        "findings": [],
+        "fixes": [
+          {
+            "round": 1,
+            "commit": "22ce8b9",
+            "finding_ids": [
+              "2026-07-10T0751-8e76/first-impressions@cautious-first-timer#f6",
+              "2026-07-10T0751-8e76/first-impressions@weekend-browser#f7",
+              "2026-07-10T0751-8e76/moving-house@cautious-first-timer#f9",
+              "2026-07-10T1134-4567/moving-house@returning-regular#f7",
+              "2026-07-10T1134-4567/outfit-a-shelf@returning-regular#f6",
+              "2026-07-10T1134-4567/outfit-a-shelf@weekend-browser#f7",
+              "2026-07-10T1134-4567/wheres-my-order@returning-regular#f5",
+              "2026-07-10T1352-58b1/buy-a-specific-gift@cautious-first-timer#f7",
+              "2026-07-10T1352-58b1/buy-a-specific-gift@gift-rusher#f7",
+              "2026-07-10T1415-934f/checkout-hiccup@cautious-first-timer#f7",
+              "2026-07-10T1417-1750/change-your-mind@weekend-browser#f7",
+              "2026-07-10T1502-0c56/club-order@returning-regular#f8",
+              "2026-07-10T1515-b74f/checkout-hiccup@gift-rusher#f6",
+              "2026-07-10T1526-3e67/club-order@weekend-browser#f8",
+              "2026-07-10T1729-b6ff/buy-a-specific-gift@cautious-first-timer#f6",
+              "2026-07-10T1741-630d/buy-a-specific-gift@gift-rusher#f5",
+              "2026-07-10T1755-bd65/checkout-hiccup@cautious-first-timer#f7",
+              "2026-07-10T1811-842a/checkout-hiccup@gift-rusher#f6",
+              "2026-07-10T1830-308a/outfit-a-shelf@weekend-browser#f6",
+              "2026-07-10T1830-56e5/first-impressions@cautious-first-timer#f7",
+              "2026-07-10T1837-9e63/first-impressions@weekend-browser#f8",
+              "2026-07-10T1900-dc26/moving-house@cautious-first-timer#f9",
+              "2026-07-10T1913-9b89/club-order@weekend-browser#f7",
+              "2026-07-11T0633-8cb1/change-your-mind@weekend-browser#f7",
+              "2026-07-11T0633-be14/outfit-a-shelf@returning-regular#f7"
+            ],
+            "accepted": false
+          }
+        ]
+      },
+      {
+        "fault_id": "f-product-crumb-removed",
+        "status": "missed",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-qty-edit-removed",
+        "status": "fixed-without-detection",
+        "findings": [],
+        "fixes": [
+          {
+            "round": 1,
+            "commit": "22ce8b9",
+            "finding_ids": [
+              "2026-07-10T1417-1750/change-your-mind@weekend-browser#f1",
+              "2026-07-10T1417-1750/change-your-mind@weekend-browser#f2",
+              "2026-07-10T1417-1750/change-your-mind@weekend-browser#f3",
+              "2026-07-10T1417-24be/change-your-mind@cautious-first-timer#f1",
+              "2026-07-10T1417-24be/change-your-mind@cautious-first-timer#f2",
+              "2026-07-10T1417-24be/change-your-mind@cautious-first-timer#f3",
+              "2026-07-10T1502-0c56/club-order@returning-regular#f5",
+              "2026-07-10T1543-83e9/change-your-mind@cautious-first-timer#f2",
+              "2026-07-10T1543-83e9/change-your-mind@cautious-first-timer#f3",
+              "2026-07-10T1543-83e9/change-your-mind@cautious-first-timer#f5",
+              "2026-07-10T1855-85f1/club-order@returning-regular#f3",
+              "2026-07-10T1913-9b89/club-order@weekend-browser#f3",
+              "2026-07-10T1913-9b89/club-order@weekend-browser#f4",
+              "2026-07-11T0633-8cb1/change-your-mind@weekend-browser#f0",
+              "2026-07-11T0633-8cb1/change-your-mind@weekend-browser#f1",
+              "2026-07-11T0633-8cb1/change-your-mind@weekend-browser#f2"
+            ],
+            "accepted": false
+          }
+        ]
+      },
+      {
+        "fault_id": "f-receipt-eta-wrong",
+        "status": "missed",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-save-profile-dead",
+        "status": "fixed-without-detection",
+        "findings": [],
+        "fixes": [
+          {
+            "round": 1,
+            "commit": "22ce8b9",
+            "finding_ids": [
+              "2026-07-10T0751-8e76/moving-house@cautious-first-timer#f2",
+              "2026-07-10T0751-8e76/moving-house@cautious-first-timer#f7",
+              "2026-07-10T1134-4567/moving-house@returning-regular#f1",
+              "2026-07-10T1832-2062/moving-house@returning-regular#f2",
+              "2026-07-10T1832-2062/moving-house@returning-regular#f4",
+              "2026-07-10T1900-dc26/moving-house@cautious-first-timer#f3",
+              "2026-07-10T1900-dc26/moving-house@cautious-first-timer#f5"
+            ],
+            "accepted": false
+          }
+        ]
+      },
+      {
+        "fault_id": "f-search-removed",
+        "status": "fixed-without-detection",
+        "findings": [],
+        "fixes": [
+          {
+            "round": 1,
+            "commit": "22ce8b9",
+            "finding_ids": [
+              "2026-07-10T1515-b74f/checkout-hiccup@gift-rusher#f4",
+              "2026-07-10T1352-58b1/buy-a-specific-gift@gift-rusher#f0",
+              "2026-07-10T1741-630d/buy-a-specific-gift@gift-rusher#f1",
+              "2026-07-10T1741-630d/buy-a-specific-gift@gift-rusher#q0"
+            ],
+            "accepted": false
+          }
+        ]
+      },
+      {
+        "fault_id": "f-sort-inert",
+        "status": "fixed-without-detection",
+        "findings": [],
+        "fixes": [
+          {
+            "round": 1,
+            "commit": "22ce8b9",
+            "finding_ids": [
+              "2026-07-10T1830-308a/outfit-a-shelf@weekend-browser#f1"
+            ],
+            "accepted": false
+          }
+        ]
+      },
+      {
+        "fault_id": "f-validation-wipes-payment",
+        "status": "fixed-without-detection",
+        "findings": [],
+        "fixes": [
+          {
+            "round": 1,
+            "commit": "22ce8b9",
+            "finding_ids": [
+              "2026-07-10T0751-8e76/first-impressions@weekend-browser#f5",
+              "2026-07-10T0751-8e76/moving-house@cautious-first-timer#f1",
+              "2026-07-10T1134-4567/moving-house@returning-regular#f6",
+              "2026-07-10T1134-4567/outfit-a-shelf@weekend-browser#f6",
+              "2026-07-10T1352-58b1/buy-a-specific-gift@cautious-first-timer#f4",
+              "2026-07-10T1415-934f/checkout-hiccup@cautious-first-timer#f3",
+              "2026-07-10T1415-934f/checkout-hiccup@cautious-first-timer#f4",
+              "2026-07-10T1415-934f/checkout-hiccup@cautious-first-timer#f5",
+              "2026-07-10T1515-b74f/checkout-hiccup@gift-rusher#f1",
+              "2026-07-10T1502-0c56/club-order@returning-regular#f6",
+              "2026-07-10T1526-3e67/club-order@weekend-browser#f5",
+              "2026-07-10T1729-b6ff/buy-a-specific-gift@cautious-first-timer#f4",
+              "2026-07-10T1741-630d/buy-a-specific-gift@gift-rusher#f3",
+              "2026-07-10T1755-bd65/checkout-hiccup@cautious-first-timer#f3",
+              "2026-07-10T1755-bd65/checkout-hiccup@cautious-first-timer#f4",
+              "2026-07-10T1811-842a/checkout-hiccup@gift-rusher#f3",
+              "2026-07-10T1811-842a/checkout-hiccup@gift-rusher#f4",
+              "2026-07-10T1830-308a/outfit-a-shelf@weekend-browser#f5",
+              "2026-07-10T1837-9e63/first-impressions@weekend-browser#f7",
+              "2026-07-10T1855-85f1/club-order@returning-regular#f5",
+              "2026-07-10T1900-dc26/moving-house@cautious-first-timer#f7",
+              "2026-07-10T1913-9b89/club-order@weekend-browser#f6"
+            ],
+            "accepted": false
+          }
+        ]
+      }
+    ],
+    "policy": [
+      {
+        "fault_id": "f-account-error-swallowed",
+        "status": "missed",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-account-form-resets",
+        "status": "missed",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-add-cart-silent",
+        "status": "fixed-without-detection",
+        "findings": [],
+        "fixes": [
+          {
+            "round": 1,
+            "commit": "6e75923",
+            "finding_ids": [
+              "2026-07-10T0751-8e76/first-impressions@weekend-browser#f3",
+              "2026-07-10T1134-4567/moving-house@returning-regular#f4",
+              "2026-07-10T1134-4567/outfit-a-shelf@weekend-browser#f4",
+              "2026-07-10T1352-58b1/buy-a-specific-gift@gift-rusher#f1",
+              "2026-07-10T1502-0c56/club-order@returning-regular#f3",
+              "2026-07-10T1741-630d/buy-a-specific-gift@gift-rusher#f0",
+              "2026-07-10T1855-85f1/club-order@returning-regular#f2",
+              "2026-07-10T1830-308a/outfit-a-shelf@weekend-browser#f0",
+              "2026-07-10T1900-dc26/moving-house@cautious-first-timer#f4"
+            ],
+            "accepted": false
+          }
+        ]
+      },
+      {
+        "fault_id": "f-cant-buy-last-unit",
+        "status": "fixed-without-detection",
+        "findings": [],
+        "fixes": [
+          {
+            "round": 1,
+            "commit": "6e75923",
+            "finding_ids": [],
+            "accepted": false
+          }
+        ]
+      },
+      {
+        "fault_id": "f-card-spaces-validation",
+        "status": "fixed-without-detection",
+        "findings": [],
+        "fixes": [
+          {
+            "round": 1,
+            "commit": "6e75923",
+            "finding_ids": [],
+            "accepted": false
+          }
+        ]
+      },
+      {
+        "fault_id": "f-cart-continue-removed",
+        "status": "missed",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-checkout-empty-guard-gone",
+        "status": "fixed-without-detection",
+        "findings": [],
+        "fixes": [
+          {
+            "round": 1,
+            "commit": "6e75923",
+            "finding_ids": [],
+            "accepted": false
+          }
+        ]
+      },
+      {
+        "fault_id": "f-clear-search-self-link",
+        "status": "fixed-without-detection",
+        "findings": [],
+        "fixes": [
+          {
+            "round": 2,
+            "commit": "c3fd1d1",
+            "finding_ids": [
+              "empty-cart-and-back-link@weekend-browser#f4"
+            ],
+            "accepted": false
+          }
+        ]
+      },
+      {
+        "fault_id": "f-continue-shopping-loop",
+        "status": "missed",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-decline-swallowed",
+        "status": "fixed-without-detection",
+        "findings": [],
+        "fixes": [
+          {
+            "round": 1,
+            "commit": "6e75923",
+            "finding_ids": [
+              "2026-07-10T0751-8e76/first-impressions@weekend-browser#f5",
+              "2026-07-10T1415-934f/checkout-hiccup@cautious-first-timer#f4",
+              "2026-07-10T1755-bd65/checkout-hiccup@cautious-first-timer#f3",
+              "2026-07-10T1811-842a/checkout-hiccup@gift-rusher#f4",
+              "2026-07-10T1837-9e63/first-impressions@weekend-browser#f7"
+            ],
+            "accepted": false
+          }
+        ]
+      },
+      {
+        "fault_id": "f-empty-cart-jargon",
+        "status": "found-and-fixed",
+        "findings": [
+          {
+            "round": 1,
+            "finding_id": "2026-07-11T1308-df78/empty-cart-and-back-link@weekend-browser#f4"
+          }
+        ],
+        "fixes": [
+          {
+            "round": 2,
+            "commit": "c3fd1d1",
+            "finding_ids": [
+              "empty-cart-and-back-link@weekend-browser#f4"
+            ],
+            "accepted": false
+          }
+        ]
+      },
+      {
+        "fault_id": "f-error-text-contrast",
+        "status": "fixed-without-detection",
+        "findings": [],
+        "fixes": [
+          {
+            "round": 1,
+            "commit": "6e75923",
+            "finding_ids": [
+              "2026-07-10T0751-8e76/first-impressions@cautious-first-timer#f6",
+              "2026-07-10T1417-1750/change-your-mind@weekend-browser#f7",
+              "2026-07-10T1830-56e5/first-impressions@cautious-first-timer#f7"
+            ],
+            "accepted": false
+          }
+        ]
+      },
+      {
+        "fault_id": "f-free-shipping-label",
+        "status": "fixed-without-detection",
+        "findings": [],
+        "fixes": [
+          {
+            "round": 1,
+            "commit": "6e75923",
+            "finding_ids": [
+              "2026-07-10T1515-b74f/checkout-hiccup@gift-rusher#f3",
+              "2026-07-10T1830-56e5/first-impressions@cautious-first-timer#f5"
+            ],
+            "accepted": false
+          }
+        ]
+      },
+      {
+        "fault_id": "f-no-results-jargon",
+        "status": "fixed-without-detection",
+        "findings": [],
+        "fixes": [
+          {
+            "round": 2,
+            "commit": "c3fd1d1",
+            "finding_ids": [
+              "empty-cart-and-back-link@weekend-browser#f4"
+            ],
+            "accepted": false
+          }
+        ]
+      },
+      {
+        "fault_id": "f-oos-says-in-stock",
+        "status": "missed",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-order-history-removed",
+        "status": "fixed-without-detection",
+        "findings": [],
+        "fixes": [
+          {
+            "round": 1,
+            "commit": "6e75923",
+            "finding_ids": [
+              "2026-07-10T1134-4567/wheres-my-order@returning-regular#f0",
+              "2026-07-10T1134-4567/wheres-my-order@returning-regular#f1",
+              "2026-07-10T1850-80c7/wheres-my-order@returning-regular#f0",
+              "2026-07-10T1855-85f1/club-order@returning-regular#f6"
+            ],
+            "accepted": false
+          }
+        ]
+      },
+      {
+        "fault_id": "f-place-order-no-feedback",
+        "status": "fixed-without-detection",
+        "findings": [],
+        "fixes": [
+          {
+            "round": 1,
+            "commit": "6e75923",
+            "finding_ids": [
+              "2026-07-10T0751-8e76/first-impressions@weekend-browser#f5",
+              "2026-07-10T1415-934f/checkout-hiccup@cautious-first-timer#f4",
+              "2026-07-10T1755-bd65/checkout-hiccup@cautious-first-timer#f3",
+              "2026-07-10T1811-842a/checkout-hiccup@gift-rusher#f4",
+              "2026-07-10T1837-9e63/first-impressions@weekend-browser#f7"
+            ],
+            "accepted": false
+          }
+        ]
+      },
+      {
+        "fault_id": "f-postcode-validation",
+        "status": "fixed-without-detection",
+        "findings": [],
+        "fixes": [
+          {
+            "round": 1,
+            "commit": "6e75923",
+            "finding_ids": [
+              "2026-07-10T0751-8e76/moving-house@cautious-first-timer#f0",
+              "2026-07-10T1134-4567/moving-house@returning-regular#f5",
+              "2026-07-10T1515-b74f/checkout-hiccup@gift-rusher#f2",
+              "2026-07-10T1900-dc26/moving-house@cautious-first-timer#f6",
+              "2026-07-10T1832-2062/moving-house@returning-regular#f5"
+            ],
+            "accepted": false
+          }
+        ]
+      },
+      {
+        "fault_id": "f-price-contrast",
+        "status": "fixed-without-detection",
+        "findings": [],
+        "fixes": [
+          {
+            "round": 1,
+            "commit": "6e75923",
+            "finding_ids": [
+              "2026-07-10T0751-8e76/first-impressions@cautious-first-timer#f6",
+              "2026-07-10T1417-1750/change-your-mind@weekend-browser#f7",
+              "2026-07-10T1830-56e5/first-impressions@cautious-first-timer#f7"
+            ],
+            "accepted": false
+          }
+        ]
+      },
+      {
+        "fault_id": "f-product-crumb-removed",
+        "status": "fixed-without-detection",
+        "findings": [],
+        "fixes": [
+          {
+            "round": 1,
+            "commit": "6e75923",
+            "finding_ids": [
+              "2026-07-10T1134-4567/outfit-a-shelf@weekend-browser#f3"
+            ],
+            "accepted": false
+          }
+        ]
+      },
+      {
+        "fault_id": "f-qty-edit-removed",
+        "status": "fixed-without-detection",
+        "findings": [],
+        "fixes": [
+          {
+            "round": 1,
+            "commit": "6e75923",
+            "finding_ids": [
+              "2026-07-10T1417-1750/change-your-mind@weekend-browser#f2",
+              "2026-07-10T1417-24be/change-your-mind@cautious-first-timer#f1",
+              "2026-07-10T1543-83e9/change-your-mind@cautious-first-timer#f2",
+              "2026-07-11T0633-8cb1/change-your-mind@weekend-browser#f0",
+              "2026-07-10T1855-85f1/club-order@returning-regular#f3"
+            ],
+            "accepted": false
+          },
+          {
+            "round": 1,
+            "commit": "6e75923",
+            "finding_ids": [
+              "2026-07-10T1417-1750/change-your-mind@weekend-browser#f1",
+              "2026-07-10T1417-24be/change-your-mind@cautious-first-timer#f2",
+              "2026-07-10T1543-83e9/change-your-mind@cautious-first-timer#f3",
+              "2026-07-10T1913-9b89/club-order@weekend-browser#f3"
+            ],
+            "accepted": false
+          }
+        ]
+      },
+      {
+        "fault_id": "f-receipt-eta-wrong",
+        "status": "missed",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-save-profile-dead",
+        "status": "fixed-without-detection",
+        "findings": [],
+        "fixes": [
+          {
+            "round": 1,
+            "commit": "6e75923",
+            "finding_ids": [
+              "2026-07-10T0751-8e76/moving-house@cautious-first-timer#f2",
+              "2026-07-10T1134-4567/moving-house@returning-regular#f1",
+              "2026-07-10T1832-2062/moving-house@returning-regular#f2",
+              "2026-07-10T1900-dc26/moving-house@cautious-first-timer#f3"
+            ],
+            "accepted": false
+          }
+        ]
+      },
+      {
+        "fault_id": "f-search-removed",
+        "status": "fixed-without-detection",
+        "findings": [],
+        "fixes": [
+          {
+            "round": 1,
+            "commit": "6e75923",
+            "finding_ids": [
+              "2026-07-10T1515-b74f/checkout-hiccup@gift-rusher#f4",
+              "2026-07-10T1741-630d/buy-a-specific-gift@gift-rusher#q4"
+            ],
+            "accepted": false
+          }
+        ]
+      },
+      {
+        "fault_id": "f-sort-inert",
+        "status": "fixed-without-detection",
+        "findings": [],
+        "fixes": [
+          {
+            "round": 1,
+            "commit": "6e75923",
+            "finding_ids": [
+              "2026-07-10T1830-308a/outfit-a-shelf@weekend-browser#f1"
+            ],
+            "accepted": false
+          }
+        ]
+      },
+      {
+        "fault_id": "f-validation-wipes-payment",
+        "status": "fixed-without-detection",
+        "findings": [],
+        "fixes": [
+          {
+            "round": 1,
+            "commit": "6e75923",
+            "finding_ids": [
+              "2026-07-10T0751-8e76/moving-house@cautious-first-timer#f1",
+              "2026-07-10T1352-58b1/buy-a-specific-gift@cautious-first-timer#f4",
+              "2026-07-10T1415-934f/checkout-hiccup@cautious-first-timer#f3",
+              "2026-07-10T1526-3e67/club-order@weekend-browser#f5",
+              "2026-07-10T1755-bd65/checkout-hiccup@cautious-first-timer#f4",
+              "2026-07-10T1830-308a/outfit-a-shelf@weekend-browser#f5"
+            ],
+            "accepted": false
+          }
+        ]
+      }
+    ],
+    "shakedown": [
+      {
+        "fault_id": "f-account-error-swallowed",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-account-form-resets",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-add-cart-silent",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-cant-buy-last-unit",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-card-spaces-validation",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-cart-continue-removed",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-checkout-empty-guard-gone",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-clear-search-self-link",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-continue-shopping-loop",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-decline-swallowed",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-empty-cart-jargon",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-error-text-contrast",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-free-shipping-label",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-no-results-jargon",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-oos-says-in-stock",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-order-history-removed",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-place-order-no-feedback",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-postcode-validation",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-price-contrast",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-product-crumb-removed",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-qty-edit-removed",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-receipt-eta-wrong",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-save-profile-dead",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-search-removed",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-sort-inert",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-validation-wipes-payment",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      }
+    ],
+    "v2-baseline": [
+      {
+        "fault_id": "f-account-error-swallowed",
+        "status": "detected",
+        "findings": [
+          {
+            "round": 1,
+            "finding_id": "2026-07-13T0856-2a58/risk/risk-invalid-email@adversarial-tester#f1"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-14T1120-021e/risk/risk-invalid-email@adversarial-tester#f1"
+          }
+        ],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-account-form-resets",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-add-cart-silent",
+        "status": "detected",
+        "findings": [
+          {
+            "round": 1,
+            "finding_id": "2026-07-13T0812-23cf/buy-a-specific-gift@cautious-first-timer#q1"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-14T1120-cc5f/buy-a-specific-gift@cautious-first-timer#f2"
+          }
+        ],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-cant-buy-last-unit",
+        "status": "detected",
+        "findings": [
+          {
+            "round": 1,
+            "finding_id": "2026-07-13T0856-2a58/risk/risk-last-unit@adversarial-tester#f2"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-14T1120-021e/risk/risk-last-unit@adversarial-tester#f1"
+          }
+        ],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-card-spaces-validation",
+        "status": "detected",
+        "findings": [
+          {
+            "round": 1,
+            "finding_id": "2026-07-13T0856-2a58/risk/risk-card-unspaced@adversarial-tester#f4"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-14T1120-021e/risk/risk-card-unspaced@adversarial-tester#q0"
+          }
+        ],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-cart-continue-removed",
+        "status": "detected",
+        "findings": [
+          {
+            "round": 1,
+            "finding_id": "2026-07-13T0825-64e7/risk/risk-cart-local-continue@adversarial-tester#f0"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-14T1120-3425/risk/risk-cart-local-continue@adversarial-tester#q0"
+          }
+        ],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-checkout-empty-guard-gone",
+        "status": "detected",
+        "findings": [
+          {
+            "round": 1,
+            "finding_id": "2026-07-13T0856-2a58/risk/risk-empty-checkout@adversarial-tester#f1"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-14T1120-021e/risk/risk-empty-checkout@adversarial-tester#f2"
+          }
+        ],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-clear-search-self-link",
+        "status": "detected",
+        "findings": [
+          {
+            "round": 1,
+            "finding_id": "2026-07-13T0825-51dc/risk/risk-no-results-clear@adversarial-tester#f4"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-14T1120-021e/risk/risk-no-results-clear@adversarial-tester#f3"
+          }
+        ],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-continue-shopping-loop",
+        "status": "detected",
+        "findings": [
+          {
+            "round": 1,
+            "finding_id": "2026-07-13T0825-51dc/risk/risk-receipt-continue@adversarial-tester#f0"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-14T1120-cc5f/risk/risk-receipt-continue@adversarial-tester#f8"
+          }
+        ],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-decline-swallowed",
+        "status": "detected",
+        "findings": [
+          {
+            "round": 2,
+            "finding_id": "2026-07-14T1120-3425/checkout-hiccup@gift-rusher#f7"
+          }
+        ],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-empty-cart-jargon",
+        "status": "detected",
+        "findings": [
+          {
+            "round": 2,
+            "finding_id": "2026-07-14T1120-cc5f/wheres-my-order@returning-regular#f4"
+          }
+        ],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-error-text-contrast",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-free-shipping-label",
+        "status": "detected",
+        "findings": [
+          {
+            "round": 1,
+            "finding_id": "2026-07-13T0812-a709/first-impressions@weekend-browser#f4"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-14T1120-021e/first-impressions@cautious-first-timer#f6"
+          }
+        ],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-no-results-jargon",
+        "status": "detected",
+        "findings": [
+          {
+            "round": 1,
+            "finding_id": "2026-07-13T0825-51dc/risk/risk-no-results-clear@adversarial-tester#f5"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-14T1120-021e/risk/risk-no-results-clear@adversarial-tester#f4"
+          }
+        ],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-oos-says-in-stock",
+        "status": "detected",
+        "findings": [
+          {
+            "round": 1,
+            "finding_id": "2026-07-13T0825-51dc/risk/risk-oos-copy@adversarial-tester#f2"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-14T1120-cc5f/risk/risk-oos-copy@adversarial-tester#f0"
+          }
+        ],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-order-history-removed",
+        "status": "detected",
+        "findings": [
+          {
+            "round": 1,
+            "finding_id": "2026-07-13T0825-51dc/wheres-my-order@returning-regular#f1"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-14T1120-cc5f/wheres-my-order@returning-regular#f0"
+          }
+        ],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-place-order-no-feedback",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-postcode-validation",
+        "status": "detected",
+        "findings": [
+          {
+            "round": 1,
+            "finding_id": "2026-07-13T0812-a709/moving-house@cautious-first-timer#f2"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-14T1120-021e/risk/risk-card-unspaced@adversarial-tester#f3"
+          }
+        ],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-price-contrast",
+        "status": "detected",
+        "findings": [
+          {
+            "round": 1,
+            "finding_id": "2026-07-13T0812-a709/first-impressions@cautious-first-timer#f7"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-14T1120-021e/first-impressions@cautious-first-timer#f8"
+          }
+        ],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-product-crumb-removed",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-qty-edit-removed",
+        "status": "detected",
+        "findings": [
+          {
+            "round": 1,
+            "finding_id": "2026-07-13T0812-ade1/checkout-hiccup@gift-rusher#q4"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-14T1120-021e/outfit-a-shelf@returning-regular#f4"
+          }
+        ],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-receipt-eta-wrong",
+        "status": "not-yet",
+        "findings": [],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-save-profile-dead",
+        "status": "detected",
+        "findings": [
+          {
+            "round": 1,
+            "finding_id": "2026-07-13T0812-a709/moving-house@cautious-first-timer#f0"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-14T1120-021e/moving-house@cautious-first-timer#f2"
+          }
+        ],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-search-removed",
+        "status": "detected",
+        "findings": [
+          {
+            "round": 1,
+            "finding_id": "2026-07-13T0825-51dc/risk/risk-no-results-clear@adversarial-tester#f0"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-14T1120-021e/risk/risk-no-results-clear@adversarial-tester#f0"
+          }
+        ],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-sort-inert",
+        "status": "detected",
+        "findings": [
+          {
+            "round": 1,
+            "finding_id": "2026-07-13T0825-64e7/risk/risk-sort-order@adversarial-tester#f1"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-14T1120-cc5f/risk/risk-sort-order@adversarial-tester#f2"
+          }
+        ],
+        "fixes": []
+      },
+      {
+        "fault_id": "f-validation-wipes-payment",
+        "status": "detected",
+        "findings": [
+          {
+            "round": 1,
+            "finding_id": "2026-07-13T0812-a709/moving-house@cautious-first-timer#f3"
+          },
+          {
+            "round": 2,
+            "finding_id": "2026-07-14T1120-3425/checkout-hiccup@gift-rusher#f5"
+          }
+        ],
+        "fixes": []
+      }
+    ]
+  },
+  "persona_class_signal": {
+    "adversarial-tester": {
+      "broken-validation": 3,
+      "capability-removed": 2,
+      "confusing-empty-state": 2,
+      "dead-control": 2,
+      "edge-case-break": 4,
+      "misleading-copy": 2,
+      "misrouted-link": 4,
+      "navigation-removed": 2,
+      "swallowed-error": 2
+    },
+    "cautious-first-timer": {
+      "action-without-receipt": 13,
+      "broken-validation": 6,
+      "capability-removed": 6,
+      "dead-control": 5,
+      "lost-input": 7,
+      "low-contrast": 11,
+      "misleading-copy": 2,
+      "swallowed-error": 2
+    },
+    "gift-rusher": {
+      "action-without-receipt": 5,
+      "broken-validation": 3,
+      "capability-removed": 4,
+      "lost-input": 5,
+      "low-contrast": 4,
+      "misleading-copy": 1,
+      "swallowed-error": 3
+    },
+    "returning-regular": {
+      "action-without-receipt": 5,
+      "broken-validation": 6,
+      "capability-removed": 10,
+      "confusing-empty-state": 1,
+      "dead-control": 3,
+      "lost-input": 6,
+      "low-contrast": 7
+    },
+    "weekend-browser": {
+      "action-without-receipt": 11,
+      "broken-validation": 4,
+      "capability-removed": 8,
+      "confusing-empty-state": 1,
+      "lost-input": 3,
+      "low-contrast": 8,
+      "misleading-copy": 1,
+      "navigation-removed": 1
+    }
+  }
+}

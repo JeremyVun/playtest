@@ -1,0 +1,18 @@
+# Discovery study over the hosted Playtest web app (ROADMAP.md M1).
+#
+# No compose: the control plane runs on the host. Bring it up first
+# (src/platform/control-plane/README.md): `docker compose -f infra/dev-compose.yml up`,
+# then src/platform/control-plane with PLAYTEST_AUTH=dev → http://127.0.0.1:4177, and seed
+# a THROWAWAY project from the study-owned todo fixture — discovery actors mutate
+# state, so never point this study at real data.
+#
+# Story files live beside this file (one per core journey — see ROADMAP.md
+# M1 step 2 for the list); personas are already authored in personas/.
+mode: discovery
+# GPT tiers, not Claude names: behind the codex gateway only GPT tiers route
+# for real (tools/codex-gateway/README.md "Model routing"); a Claude pin would
+# silently run on the gateway default while the manifest claims otherwise.
+actor_model: gpt5_4_mini
+grader_model: gpt5_5
+app:
+  base_url: http://127.0.0.1:4177

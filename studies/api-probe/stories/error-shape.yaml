@@ -1,0 +1,42 @@
+description: Falsify error-shape consistency — every refusal must be a 4xx carrying the declared envelope, and nothing may 5xx.
+tags: [invariant]
+story: |
+  Try to falsify these two rules:
+
+  Every 4xx and 5xx response body is {"error":{"code","message","details"?}},
+  with code and message both strings, and a request the service refuses is
+  always reported with a 4xx status — never a 2xx carrying a failure inside it.
+
+  And, the plainer one: no operation answers 5xx at all.
+
+  They apply to every operation. The only declared exception is that 401
+  responses additionally carry a WWW-Authenticate header, which is fine.
+
+  This is the one rule you can attack from the very first request, so be
+  systematic about the ways a request can be wrong. Wrong or missing bearer
+  token; the customer token on an admin operation. Paths that do not exist, and
+  ids that do not exist, and ids that are the wrong shape entirely. Bodies that
+  are not JSON, bodies that are JSON but not an object, missing required fields,
+  fields of the wrong type, absurd values, empty strings, nulls. Query
+  parameters that are out of range, negative, non-numeric, or a cursor you
+  invented.
+
+  Then do the harder half, which needs real state: get the service to refuse a
+  *well-formed* request for a business reason. Move money an account does not
+  have. Move money between currencies that do not match. Move money to the same
+  account it came from. Push a source account's total for the ledger day right
+  up to the daily limit and then past it — the boundary is documented, so try
+  the value exactly on it, one below, and one above. Refuse the same request
+  twice.
+
+  Two shapes of failure count here. A response that says 4xx or 5xx but whose
+  body is not the envelope — different keys, extra keys, a non-string code, a
+  plain-text or empty body. And a refusal wearing a success status: a POST
+  /transfers that answers 2xx while telling you inside the body that it did not
+  happen. Read every response body, not just the status.
+
+  When you find either, reproduce it in as few requests as you can and stop.
+
+success:
+  - ledger_error_shape: "every refused request, of any kind"
+  - ledger_no_server_error: "every request that completed"

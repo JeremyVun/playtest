@@ -1,0 +1,15 @@
+description: Buy exactly all remaining stock of one SKU, then try one more.
+tags: [risk]
+story: |
+  Open the Calathea Orbifolia product page. Note how many are in stock
+  (seed stock is 5). Set quantity to exactly that full stock count and add
+  them all to the cart in one action. Quote any confirmation or refusal.
+  If all units land in the cart, open the product again and try to add one
+  more. If the shop refuses the full-stock add, try quantity stock-minus-one
+  then one more, and report what the messages claim you can still add.
+persona: [adversarial-tester]
+report:
+  - Could the user add exactly the full remaining stock in one add? What did the shop say?
+  - Did any error message's "you can add N more" arithmetic match the stock line and cart?
+  - After maxing the cart, what happened when they tried one more unit?
+  - Was anything broken, misleading, or missing that a real shopper would notice? Be specific.

@@ -1,0 +1,5167 @@
+{
+  "builds": [
+    {
+      "id": "proposal.clean-1",
+      "arm": "proposal",
+      "label": "clean",
+      "wall_ms": 583,
+      "requests": 229,
+      "har_sha256": "d4150f295e1ca50a1bf14a2bc7997085f043f2e9a265ea72b8d2e680734ac791",
+      "har_bytes": 473841,
+      "script_report_sha256": "8d03768d36b1c16bcc8fa1d40a112a72b09fa21bb5131c47986fd8f08bf2eeda",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 97,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 49,
+        "gate_pass": true,
+        "sound": false,
+        "obligations": {
+          "total": 33,
+          "covered": 24,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 9
+        },
+        "budget": {
+          "limit": 360,
+          "used": 229,
+          "remaining": 131
+        }
+      }
+    },
+    {
+      "id": "proposal.clean-2",
+      "arm": "proposal",
+      "label": "clean",
+      "wall_ms": 600,
+      "requests": 229,
+      "har_sha256": "74d915caa3d779c12e5bae2d23644d4ec6d8714a10d7784e3c4b0225bc9bfd00",
+      "har_bytes": 473841,
+      "script_report_sha256": "40b9dc9989dd78a3b7c649306ae15f406cbcccf4ee4bde8f57e3d432a0c682c6",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 97,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 49,
+        "gate_pass": true,
+        "sound": false,
+        "obligations": {
+          "total": 33,
+          "covered": 24,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 9
+        },
+        "budget": {
+          "limit": 360,
+          "used": 229,
+          "remaining": 131
+        }
+      }
+    },
+    {
+      "id": "proposal.clean-3",
+      "arm": "proposal",
+      "label": "clean",
+      "wall_ms": 613,
+      "requests": 229,
+      "har_sha256": "9823d89832d66391b8ca30bbc417a7d64dadba15c77dc1785570dd612bd0ae44",
+      "har_bytes": 473841,
+      "script_report_sha256": "be375ce67cce01c5d3239fa35edef659da0ddb015192d72912215dcedbdf53bf",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 97,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 49,
+        "gate_pass": true,
+        "sound": false,
+        "obligations": {
+          "total": 33,
+          "covered": 24,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 9
+        },
+        "budget": {
+          "limit": 360,
+          "used": 229,
+          "remaining": 131
+        }
+      }
+    },
+    {
+      "id": "proposal.clean.all-variants",
+      "arm": "proposal",
+      "label": "clean.all-variants",
+      "wall_ms": 591,
+      "requests": 232,
+      "har_sha256": "f79f80fc4f9b14596b130e09f8c07dcc9185e3fadba70c0cf5d7e2ffa435f1e1",
+      "har_bytes": 482558,
+      "script_report_sha256": "af4d2dc8f63612b51668adc5c3200f8ed886b2036a7a7b83372c308f61d1f164",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "terse-optionals, trailing-page, wide-ids",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 97,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 49,
+        "gate_pass": true,
+        "sound": false,
+        "obligations": {
+          "total": 33,
+          "covered": 24,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 9
+        },
+        "budget": {
+          "limit": 360,
+          "used": 232,
+          "remaining": 128
+        }
+      }
+    },
+    {
+      "id": "proposal.clean.jitter-1",
+      "arm": "proposal",
+      "label": "clean.jitter",
+      "wall_ms": 29771,
+      "requests": 229,
+      "har_sha256": "6884975b61deac9e8b0e7680158344cde2acdec3ae1b028fae47748239190749",
+      "har_bytes": 474561,
+      "script_report_sha256": "49284992c2b8aadfeeb86041857bc4524521a1e1a6616c175a7e96ec4745ae01",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "up to 250ms per response",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 97,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 49,
+        "gate_pass": true,
+        "sound": false,
+        "obligations": {
+          "total": 33,
+          "covered": 24,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 9
+        },
+        "budget": {
+          "limit": 360,
+          "used": 229,
+          "remaining": 131
+        }
+      }
+    },
+    {
+      "id": "proposal.clean.jitter-10",
+      "arm": "proposal",
+      "label": "clean.jitter",
+      "wall_ms": 29596,
+      "requests": 229,
+      "har_sha256": "6ac48976b7183483c5b6e33fdd766da35e8f1371b4d2357c0bf5bb0a9c9b1f7b",
+      "har_bytes": 474561,
+      "script_report_sha256": "c4acce012422a7854357a8cbd6cb8501d422e9d1bb8087281d8ef9a11b33ad39",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "up to 250ms per response",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 97,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 49,
+        "gate_pass": true,
+        "sound": false,
+        "obligations": {
+          "total": 33,
+          "covered": 24,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 9
+        },
+        "budget": {
+          "limit": 360,
+          "used": 229,
+          "remaining": 131
+        }
+      }
+    },
+    {
+      "id": "proposal.clean.jitter-2",
+      "arm": "proposal",
+      "label": "clean.jitter",
+      "wall_ms": 29641,
+      "requests": 229,
+      "har_sha256": "d55553d01c66af59eb2dbcf6595e822e2664c325faa3929b709c600b6f3c9668",
+      "har_bytes": 474559,
+      "script_report_sha256": "d1e567332eac8927bc5206d6011ee923ef21ce6a2652c97e3ee1d3060b7896ec",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "up to 250ms per response",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 97,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 49,
+        "gate_pass": true,
+        "sound": false,
+        "obligations": {
+          "total": 33,
+          "covered": 24,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 9
+        },
+        "budget": {
+          "limit": 360,
+          "used": 229,
+          "remaining": 131
+        }
+      }
+    },
+    {
+      "id": "proposal.clean.jitter-3",
+      "arm": "proposal",
+      "label": "clean.jitter",
+      "wall_ms": 29707,
+      "requests": 229,
+      "har_sha256": "e09d466a18c3f0b086d760342f7350c281f82afe22456364199b3e4cefec9da2",
+      "har_bytes": 474559,
+      "script_report_sha256": "fefecf28a6b433f14459503c8054a899f22a72da78a074fb7b3af971ca055345",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "up to 250ms per response",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 97,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 49,
+        "gate_pass": true,
+        "sound": false,
+        "obligations": {
+          "total": 33,
+          "covered": 24,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 9
+        },
+        "budget": {
+          "limit": 360,
+          "used": 229,
+          "remaining": 131
+        }
+      }
+    },
+    {
+      "id": "proposal.clean.jitter-4",
+      "arm": "proposal",
+      "label": "clean.jitter",
+      "wall_ms": 29671,
+      "requests": 229,
+      "har_sha256": "3de80dcd2d06a5deb958c76c5a75930f4b46b7c12d478d179fe94cc944724aa5",
+      "har_bytes": 474561,
+      "script_report_sha256": "3d5e765ba04fbaeac6382b8bab0bc1c508eeea570945b92f119aec9da804a359",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "up to 250ms per response",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 97,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 49,
+        "gate_pass": true,
+        "sound": false,
+        "obligations": {
+          "total": 33,
+          "covered": 24,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 9
+        },
+        "budget": {
+          "limit": 360,
+          "used": 229,
+          "remaining": 131
+        }
+      }
+    },
+    {
+      "id": "proposal.clean.jitter-5",
+      "arm": "proposal",
+      "label": "clean.jitter",
+      "wall_ms": 29596,
+      "requests": 229,
+      "har_sha256": "7538e56747cf14a61590541e6a950e59c5a526c35565632ad97f9d471ebfc374",
+      "har_bytes": 474561,
+      "script_report_sha256": "467ed2d3ad6790096cf30a0b7b05df90c9199bf59c5a1cdaaec036e361665bcc",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "up to 250ms per response",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 97,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 49,
+        "gate_pass": true,
+        "sound": false,
+        "obligations": {
+          "total": 33,
+          "covered": 24,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 9
+        },
+        "budget": {
+          "limit": 360,
+          "used": 229,
+          "remaining": 131
+        }
+      }
+    },
+    {
+      "id": "proposal.clean.jitter-6",
+      "arm": "proposal",
+      "label": "clean.jitter",
+      "wall_ms": 29750,
+      "requests": 229,
+      "har_sha256": "0d48edb94c89fa4415bba15eb6e5f49d3ee71e1af02ab52c1c3198dd53d3e916",
+      "har_bytes": 474563,
+      "script_report_sha256": "ad44ac727435c2365774801ae4a93f66cac7f899ad480a718b2e493e4f5a2513",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "up to 250ms per response",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 97,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 49,
+        "gate_pass": true,
+        "sound": false,
+        "obligations": {
+          "total": 33,
+          "covered": 24,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 9
+        },
+        "budget": {
+          "limit": 360,
+          "used": 229,
+          "remaining": 131
+        }
+      }
+    },
+    {
+      "id": "proposal.clean.jitter-7",
+      "arm": "proposal",
+      "label": "clean.jitter",
+      "wall_ms": 29773,
+      "requests": 229,
+      "har_sha256": "98c538d021d363dc2fbdf2bccc5ae7ff39b709c7cb45905f35a1090e96fa5b33",
+      "har_bytes": 474561,
+      "script_report_sha256": "5ce113fb5c03b1eee91fdebf341b9a8b2853b57f0f8f19296cdc66b3dbbba985",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "up to 250ms per response",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 97,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 49,
+        "gate_pass": true,
+        "sound": false,
+        "obligations": {
+          "total": 33,
+          "covered": 24,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 9
+        },
+        "budget": {
+          "limit": 360,
+          "used": 229,
+          "remaining": 131
+        }
+      }
+    },
+    {
+      "id": "proposal.clean.jitter-8",
+      "arm": "proposal",
+      "label": "clean.jitter",
+      "wall_ms": 29696,
+      "requests": 229,
+      "har_sha256": "e447beb6e3fc0c7e6ff6c5b0db80580c4152026e82f84df199266490d7a4ee17",
+      "har_bytes": 474561,
+      "script_report_sha256": "08361d5a2f29d4bf6898aecc87dfc3dde2416dd637f514e6de6ad2ba5f8a52d8",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "up to 250ms per response",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 97,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 49,
+        "gate_pass": true,
+        "sound": false,
+        "obligations": {
+          "total": 33,
+          "covered": 24,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 9
+        },
+        "budget": {
+          "limit": 360,
+          "used": 229,
+          "remaining": 131
+        }
+      }
+    },
+    {
+      "id": "proposal.clean.jitter-9",
+      "arm": "proposal",
+      "label": "clean.jitter",
+      "wall_ms": 29724,
+      "requests": 229,
+      "har_sha256": "b2420b75bff5d3151d49103cdfecd5deb2c892a906091d62b580bc89fb8bea0b",
+      "har_bytes": 474561,
+      "script_report_sha256": "ab07ac266fad01e8e585b03fb6e428928c3d32ad04bc15c0d3e7e8fb0ca92650",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "up to 250ms per response",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 97,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 49,
+        "gate_pass": true,
+        "sound": false,
+        "obligations": {
+          "total": 33,
+          "covered": 24,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 9
+        },
+        "budget": {
+          "limit": 360,
+          "used": 229,
+          "remaining": 131
+        }
+      }
+    },
+    {
+      "id": "proposal.clean.terse-optionals",
+      "arm": "proposal",
+      "label": "clean.terse-optionals",
+      "wall_ms": 593,
+      "requests": 229,
+      "har_sha256": "4f305b2453334a354f95191d449cff7ba5561ab72756df6685c7b5252ed9d266",
+      "har_bytes": 457908,
+      "script_report_sha256": "2ec834262b51e87fa0cdee3d521e216e893e88b11ab3988d0ba354e405f96770",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "terse-optionals",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 97,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 49,
+        "gate_pass": true,
+        "sound": false,
+        "obligations": {
+          "total": 33,
+          "covered": 24,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 9
+        },
+        "budget": {
+          "limit": 360,
+          "used": 229,
+          "remaining": 131
+        }
+      }
+    },
+    {
+      "id": "proposal.clean.trailing-page",
+      "arm": "proposal",
+      "label": "clean.trailing-page",
+      "wall_ms": 573,
+      "requests": 232,
+      "har_sha256": "62a3023e4cd8f9984b459c84b651d3f6691ed9971a334cbd3e46adc20c795c73",
+      "har_bytes": 477962,
+      "script_report_sha256": "550153ae0ad257a2da71531b8e6652db1e363819612398665ac9452e8e595b1f",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "trailing-page",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 97,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 49,
+        "gate_pass": true,
+        "sound": false,
+        "obligations": {
+          "total": 33,
+          "covered": 24,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 9
+        },
+        "budget": {
+          "limit": 360,
+          "used": 232,
+          "remaining": 128
+        }
+      }
+    },
+    {
+      "id": "proposal.clean.wide-ids",
+      "arm": "proposal",
+      "label": "clean.wide-ids",
+      "wall_ms": 607,
+      "requests": 229,
+      "har_sha256": "6ee16751ecafffe07c65a19f5fe6b0522772b8aedcd288d614421ab9429a389e",
+      "har_bytes": 494274,
+      "script_report_sha256": "bd6d5d0e6ce5ae8829ec7e6b836dfbfc44252239442b34034c9a4f238ae4ba5c",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "wide-ids",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 97,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 49,
+        "gate_pass": true,
+        "sound": false,
+        "obligations": {
+          "total": 33,
+          "covered": 24,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 9
+        },
+        "budget": {
+          "limit": 360,
+          "used": 229,
+          "remaining": 131
+        }
+      }
+    },
+    {
+      "id": "proposal.f-activate-after-close",
+      "arm": "proposal",
+      "label": "f-activate-after-close",
+      "wall_ms": 562,
+      "requests": 229,
+      "har_sha256": "bf082759950c3852277fcc3bf044fadbacdc5983ec16def4da9e449e35a7e335",
+      "har_bytes": 473841,
+      "script_report_sha256": "786876e108ab22d7be2495bfe7ddaf6db99c7e3e9b8943a109f38abe579eb15a",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-activate-after-close",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 97,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 49,
+        "gate_pass": true,
+        "sound": false,
+        "obligations": {
+          "total": 33,
+          "covered": 24,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 9
+        },
+        "budget": {
+          "limit": 360,
+          "used": 229,
+          "remaining": 131
+        }
+      }
+    },
+    {
+      "id": "proposal.f-day-usage-carryover",
+      "arm": "proposal",
+      "label": "f-day-usage-carryover",
+      "wall_ms": 574,
+      "requests": 227,
+      "har_sha256": "1052e052f4173816dec3e077ea1898e4d3d0c52b161b7c793394e27a979cd9b2",
+      "har_bytes": 468079,
+      "script_report_sha256": "03a289ee4bda791ea59baf6e6d111288b580328473b98a1b436fcd80ece20752",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-day-usage-carryover",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 97,
+        "failing": 1,
+        "failing_ids": [
+          "daily-allowance-resets-on-a-new-ledger-day"
+        ],
+        "advisories": 0,
+        "defects": 49,
+        "gate_pass": true,
+        "sound": false,
+        "obligations": {
+          "total": 33,
+          "covered": 24,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 9
+        },
+        "budget": {
+          "limit": 360,
+          "used": 227,
+          "remaining": 133
+        }
+      }
+    },
+    {
+      "id": "proposal.f-deposit-entry-mismatch",
+      "arm": "proposal",
+      "label": "f-deposit-entry-mismatch",
+      "wall_ms": 573,
+      "requests": 229,
+      "har_sha256": "4a832b029564364fec30c2b63df892fa3d30bffe8674fdb3a551fbb8014f9659",
+      "har_bytes": 473841,
+      "script_report_sha256": "e9421c796d9bdc9fb573dba1353ea560384c064eff6ca2491f8a40b3d9e65e76",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-deposit-entry-mismatch",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 97,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 49,
+        "gate_pass": true,
+        "sound": false,
+        "obligations": {
+          "total": 33,
+          "covered": 24,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 9
+        },
+        "budget": {
+          "limit": 360,
+          "used": 229,
+          "remaining": 131
+        }
+      }
+    },
+    {
+      "id": "proposal.f-entries-cross-principal",
+      "arm": "proposal",
+      "label": "f-entries-cross-principal",
+      "wall_ms": 562,
+      "requests": 229,
+      "har_sha256": "99cc05ca13a4c97c6424588f31b28480f20b347ae2c8a09facdc49c182e450f4",
+      "har_bytes": 474195,
+      "script_report_sha256": "45cb148ecf5688ebfa3da0170c4556d2c6edd6af05647edf833867be1c3df900",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-entries-cross-principal",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 97,
+        "failing": 1,
+        "failing_ids": [
+          "customer-cannot-act-on-another-principals-account"
+        ],
+        "advisories": 0,
+        "defects": 49,
+        "gate_pass": true,
+        "sound": false,
+        "obligations": {
+          "total": 33,
+          "covered": 24,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 9
+        },
+        "budget": {
+          "limit": 360,
+          "used": 229,
+          "remaining": 131
+        }
+      }
+    },
+    {
+      "id": "proposal.f-eur-fee-flat",
+      "arm": "proposal",
+      "label": "f-eur-fee-flat",
+      "wall_ms": 585,
+      "requests": 229,
+      "har_sha256": "cdc36320ae8655f31ee48e94efa2ec4c194a93acfb553701c047df013022f3c0",
+      "har_bytes": 473841,
+      "script_report_sha256": "dd59c2c96efc7955ce2743d92ab6896dec9945972ab02a9ca796fbb9cd2a8b80",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-eur-fee-flat",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 97,
+        "failing": 3,
+        "failing_ids": [
+          "fee-formula-eur-1000",
+          "fee-formula-eur-20000",
+          "persisted-transfers-all-match-the-fee-formula"
+        ],
+        "advisories": 0,
+        "defects": 49,
+        "gate_pass": true,
+        "sound": false,
+        "obligations": {
+          "total": 33,
+          "covered": 24,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 9
+        },
+        "budget": {
+          "limit": 360,
+          "used": 229,
+          "remaining": 131
+        }
+      }
+    },
+    {
+      "id": "proposal.f-fee-account-balance-untouched",
+      "arm": "proposal",
+      "label": "f-fee-account-balance-untouched",
+      "wall_ms": 589,
+      "requests": 229,
+      "har_sha256": "c9dc028f5189c1b1e8ee4bf23cf3e2769bd4d0e39ae7ebc8a2330bcea88295c1",
+      "har_bytes": 473673,
+      "script_report_sha256": "ea74ec785417d5713e2c962217e553e0372e2af3f6089b735b43a46e8a1eca93",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-fee-account-balance-untouched",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 97,
+        "failing": 2,
+        "failing_ids": [
+          "balance-agrees-with-entries-acc_fee_usd",
+          "balance-agrees-with-entries-acc_fee_eur"
+        ],
+        "advisories": 0,
+        "defects": 49,
+        "gate_pass": true,
+        "sound": false,
+        "obligations": {
+          "total": 33,
+          "covered": 24,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 9
+        },
+        "budget": {
+          "limit": 360,
+          "used": 229,
+          "remaining": 131
+        }
+      }
+    },
+    {
+      "id": "proposal.f-idempotency-conflict-ignored",
+      "arm": "proposal",
+      "label": "f-idempotency-conflict-ignored",
+      "wall_ms": 592,
+      "requests": 229,
+      "har_sha256": "fee6995633c3ab6cfa4505dafccbdb03a278df6e1f9acc4c43f6ecfc19be0f42",
+      "har_bytes": 474101,
+      "script_report_sha256": "445ad840e39c8da39ed25e711e21a5dd0287bb586c1e70debfebfc7c168d1b78",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-idempotency-conflict-ignored",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 97,
+        "failing": 1,
+        "failing_ids": [
+          "idempotency-key-with-a-different-body-is-refused-409"
+        ],
+        "advisories": 0,
+        "defects": 49,
+        "gate_pass": true,
+        "sound": false,
+        "obligations": {
+          "total": 33,
+          "covered": 24,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 9
+        },
+        "budget": {
+          "limit": 360,
+          "used": 229,
+          "remaining": 131
+        }
+      }
+    },
+    {
+      "id": "proposal.f-idempotency-freed-by-cancel",
+      "arm": "proposal",
+      "label": "f-idempotency-freed-by-cancel",
+      "wall_ms": 614,
+      "requests": 229,
+      "har_sha256": "a69c4f401dbea62a47547293a10095daf47d70f26b8012dbd2f45a3724f25d05",
+      "har_bytes": 473841,
+      "script_report_sha256": "abf67e1c432167aa395ef5fcfa147a0b934de61affb2572efc8ece94b72cb500",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-idempotency-freed-by-cancel",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 97,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 49,
+        "gate_pass": true,
+        "sound": false,
+        "obligations": {
+          "total": 33,
+          "covered": 24,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 9
+        },
+        "budget": {
+          "limit": 360,
+          "used": 229,
+          "remaining": 131
+        }
+      }
+    },
+    {
+      "id": "proposal.f-include-closed-ignored",
+      "arm": "proposal",
+      "label": "f-include-closed-ignored",
+      "wall_ms": 588,
+      "requests": 228,
+      "har_sha256": "ce6d6903e07d3c0b1d2dfd33366eee710d5d41a5e6cc8b9e6975a0830203f91c",
+      "har_bytes": 471241,
+      "script_report_sha256": "4e9f4ce4d494c45b82d3e504f080cc94eca0841b969385ecf1fcd57b1f6a0e19",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-include-closed-ignored",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 97,
+        "failing": 1,
+        "failing_ids": [
+          "closed-account-omitted-from-the-default-listing"
+        ],
+        "advisories": 0,
+        "defects": 49,
+        "gate_pass": true,
+        "sound": false,
+        "obligations": {
+          "total": 33,
+          "covered": 24,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 9
+        },
+        "budget": {
+          "limit": 360,
+          "used": 228,
+          "remaining": 132
+        }
+      }
+    },
+    {
+      "id": "proposal.f-same-account-envelope-bare",
+      "arm": "proposal",
+      "label": "f-same-account-envelope-bare",
+      "wall_ms": 582,
+      "requests": 229,
+      "har_sha256": "2a1b4571a2e8cc8a36c58c788266756f53152d72b8f4a3fdbda54d9682e1af1e",
+      "har_bytes": 473841,
+      "script_report_sha256": "000ee00c55b6bb99f11e372b022daeef331916b0764b972710e34ae3c4c9ffbd",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-same-account-envelope-bare",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 97,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 49,
+        "gate_pass": true,
+        "sound": false,
+        "obligations": {
+          "total": 33,
+          "covered": 24,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 9
+        },
+        "budget": {
+          "limit": 360,
+          "used": 229,
+          "remaining": 131
+        }
+      }
+    },
+    {
+      "id": "proposal.f-tick-day-skips-settlement",
+      "arm": "proposal",
+      "label": "f-tick-day-skips-settlement",
+      "wall_ms": 574,
+      "requests": 229,
+      "har_sha256": "7322096111599ecb2fc71631ee9160e372a32dd93b4064808f2ec11ff9db2cc0",
+      "har_bytes": 473841,
+      "script_report_sha256": "a1b7ec5d219c2afc779b8f4720962511d2f9a8219864dc6a12830d9e86ecb8d6",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-tick-day-skips-settlement",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 97,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 49,
+        "gate_pass": true,
+        "sound": false,
+        "obligations": {
+          "total": 33,
+          "covered": 24,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 9
+        },
+        "budget": {
+          "limit": 360,
+          "used": 229,
+          "remaining": 131
+        }
+      }
+    },
+    {
+      "id": "proposal.f-transfer-source-unowned",
+      "arm": "proposal",
+      "label": "f-transfer-source-unowned",
+      "wall_ms": 580,
+      "requests": 230,
+      "har_sha256": "0ad3cabc873ab73b24e908347bab663a59a310866ba158a337b3d1d72f36b824",
+      "har_bytes": 477023,
+      "script_report_sha256": "21e381c0d0b9c7ee46d5a321c45eca8cecf2e62c5951b6b853247b9b8fa8dad9",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-transfer-source-unowned",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 97,
+        "failing": 2,
+        "failing_ids": [
+          "customer-cannot-act-on-another-principals-account",
+          "system-fee-accounts-are-not-actable-by-customers"
+        ],
+        "advisories": 0,
+        "defects": 49,
+        "gate_pass": true,
+        "sound": false,
+        "obligations": {
+          "total": 33,
+          "covered": 24,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 9
+        },
+        "budget": {
+          "limit": 360,
+          "used": 230,
+          "remaining": 130
+        }
+      }
+    },
+    {
+      "id": "proposal.f-transfer-to-pending-destination",
+      "arm": "proposal",
+      "label": "f-transfer-to-pending-destination",
+      "wall_ms": 598,
+      "requests": 231,
+      "har_sha256": "71cbcdf9f7fb2947cc8e00223d4cde153ac93afd58df30db363c05a5b7d10350",
+      "har_bytes": 479703,
+      "script_report_sha256": "5a3bdac0a96ebbd39a4349bafbb60852401f7ed828c5e786a9e8f16a821f63a3",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-transfer-to-pending-destination",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 97,
+        "failing": 1,
+        "failing_ids": [
+          "pending-account-cannot-receive-a-transfer"
+        ],
+        "advisories": 0,
+        "defects": 49,
+        "gate_pass": true,
+        "sound": false,
+        "obligations": {
+          "total": 33,
+          "covered": 24,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 9
+        },
+        "budget": {
+          "limit": 360,
+          "used": 231,
+          "remaining": 129
+        }
+      }
+    },
+    {
+      "id": "proposal.f-transfers-filter-after-page",
+      "arm": "proposal",
+      "label": "f-transfers-filter-after-page",
+      "wall_ms": 635,
+      "requests": 229,
+      "har_sha256": "8f291e76c8f607d1726012a350258b6bb26594666cc6255c556e425607f769b4",
+      "har_bytes": 473841,
+      "script_report_sha256": "4578cca17c8115d2c20cf89f9902a96579e37cbb1321d73ba5ec2d1003301617",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-transfers-filter-after-page",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 97,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 49,
+        "gate_pass": true,
+        "sound": false,
+        "obligations": {
+          "total": 33,
+          "covered": 24,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 9
+        },
+        "budget": {
+          "limit": 360,
+          "used": 229,
+          "remaining": 131
+        }
+      }
+    },
+    {
+      "id": "t1.clean-1",
+      "arm": "t1",
+      "label": "clean",
+      "wall_ms": 569,
+      "requests": 214,
+      "har_sha256": "519138093e48d4be556e9c98b1eed34dae4dba386bdab83e3a28ed37c61336bc",
+      "har_bytes": 464837,
+      "script_report_sha256": "d9815bded30624605fcb36b3427b0a88ac0c33dc3d619e8c878e5c409feef2ea",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 85,
+        "failing": 1,
+        "failing_ids": [
+          "status-400-for-a-wrongly-typed-field"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 214,
+          "remaining": 146
+        }
+      }
+    },
+    {
+      "id": "t1.clean-2",
+      "arm": "t1",
+      "label": "clean",
+      "wall_ms": 569,
+      "requests": 214,
+      "har_sha256": "f07b4cb790aa7ff623745d8e8ae23973d13b88f56b5b549651d318a1df0b37a9",
+      "har_bytes": 464837,
+      "script_report_sha256": "97e98445c6a56b2b3789987bb413ec49d5bfd4f21a13ea832d25143850d82316",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 85,
+        "failing": 1,
+        "failing_ids": [
+          "status-400-for-a-wrongly-typed-field"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 214,
+          "remaining": 146
+        }
+      }
+    },
+    {
+      "id": "t1.clean-3",
+      "arm": "t1",
+      "label": "clean",
+      "wall_ms": 621,
+      "requests": 214,
+      "har_sha256": "f72732f1d149f2607456fe30b2da22217f2ce67a4674ff791219fcb92164ae14",
+      "har_bytes": 464837,
+      "script_report_sha256": "3d9b3600a894612c2bbee513e7d2dea8b97b4eb17d8f69afd4c11694a2e38d5e",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 85,
+        "failing": 1,
+        "failing_ids": [
+          "status-400-for-a-wrongly-typed-field"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 214,
+          "remaining": 146
+        }
+      }
+    },
+    {
+      "id": "t1.clean.all-variants",
+      "arm": "t1",
+      "label": "clean.all-variants",
+      "wall_ms": 585,
+      "requests": 217,
+      "har_sha256": "aeb0322f8b40ed867982abedf27b5c377b9192e52ef71dd89ca41f1bf2d486a9",
+      "har_bytes": 471248,
+      "script_report_sha256": "c174d93fbf1664f75a1b1740050a1bf2fde0daad8692ccdd5dcee4cc14309f5d",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "terse-optionals, trailing-page, wide-ids",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 85,
+        "failing": 1,
+        "failing_ids": [
+          "status-400-for-a-wrongly-typed-field"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 217,
+          "remaining": 143
+        }
+      }
+    },
+    {
+      "id": "t1.clean.jitter-1",
+      "arm": "t1",
+      "label": "clean.jitter",
+      "wall_ms": 28049,
+      "requests": 214,
+      "har_sha256": "9f08f4e99085cabcabb962ab7c7126d263be4bc455c27acd37770cc82179b825",
+      "har_bytes": 465515,
+      "script_report_sha256": "467c3bfd1059d6f810a7d01ed178a9ed82d50e41932ac2420f7ed5f2119385b8",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "up to 250ms per response",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 85,
+        "failing": 1,
+        "failing_ids": [
+          "status-400-for-a-wrongly-typed-field"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 214,
+          "remaining": 146
+        }
+      }
+    },
+    {
+      "id": "t1.clean.jitter-10",
+      "arm": "t1",
+      "label": "clean.jitter",
+      "wall_ms": 28088,
+      "requests": 214,
+      "har_sha256": "bb12775162565fb9bd659d3a7a9f08f12e1d9401e9f57ca397518bd5c9fe4f46",
+      "har_bytes": 465517,
+      "script_report_sha256": "600e85f837a71a3beecc88308d942373d998ec5a8353d0bee4fb8151fda501d3",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "up to 250ms per response",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 85,
+        "failing": 1,
+        "failing_ids": [
+          "status-400-for-a-wrongly-typed-field"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 214,
+          "remaining": 146
+        }
+      }
+    },
+    {
+      "id": "t1.clean.jitter-2",
+      "arm": "t1",
+      "label": "clean.jitter",
+      "wall_ms": 27978,
+      "requests": 214,
+      "har_sha256": "6b52ce686dcb62af83c6fd95753fc231c17896b45d3eebd19b42ffb24ed731c9",
+      "har_bytes": 465511,
+      "script_report_sha256": "3d3bed05931fcd63708c58e7fe79c13ab65bc8f7159202bcbde3d980b100f718",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "up to 250ms per response",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 85,
+        "failing": 1,
+        "failing_ids": [
+          "status-400-for-a-wrongly-typed-field"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 214,
+          "remaining": 146
+        }
+      }
+    },
+    {
+      "id": "t1.clean.jitter-3",
+      "arm": "t1",
+      "label": "clean.jitter",
+      "wall_ms": 28113,
+      "requests": 214,
+      "har_sha256": "25e5b14ba8dd6332bf1b2297af08ee0982ab90f6af5fec8f8e078b60e34da001",
+      "har_bytes": 465515,
+      "script_report_sha256": "f235ebf783a1e52e0794093274e3aabf6c085d1b4f1a5772ffaa554536f1ef9b",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "up to 250ms per response",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 85,
+        "failing": 1,
+        "failing_ids": [
+          "status-400-for-a-wrongly-typed-field"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 214,
+          "remaining": 146
+        }
+      }
+    },
+    {
+      "id": "t1.clean.jitter-4",
+      "arm": "t1",
+      "label": "clean.jitter",
+      "wall_ms": 27953,
+      "requests": 214,
+      "har_sha256": "d00b600c4b08051f33bbf25c009baeae051059b1d9f813ff3260bf9ca40be4eb",
+      "har_bytes": 465515,
+      "script_report_sha256": "4df93b6f4f5057ef039e45981e97ff098c59423744792f2d93d99a61a411f6cd",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "up to 250ms per response",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 85,
+        "failing": 1,
+        "failing_ids": [
+          "status-400-for-a-wrongly-typed-field"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 214,
+          "remaining": 146
+        }
+      }
+    },
+    {
+      "id": "t1.clean.jitter-5",
+      "arm": "t1",
+      "label": "clean.jitter",
+      "wall_ms": 28262,
+      "requests": 214,
+      "har_sha256": "d10f2f87963b98b0303f5a26b53777c84916804f1f0fe879af86ada7ceb32c38",
+      "har_bytes": 465515,
+      "script_report_sha256": "d756c8d8e7dea61db3edc3d794a523475bf41cb872a0ac6a2acd6f0426f9603c",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "up to 250ms per response",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 85,
+        "failing": 1,
+        "failing_ids": [
+          "status-400-for-a-wrongly-typed-field"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 214,
+          "remaining": 146
+        }
+      }
+    },
+    {
+      "id": "t1.clean.jitter-6",
+      "arm": "t1",
+      "label": "clean.jitter",
+      "wall_ms": 28146,
+      "requests": 214,
+      "har_sha256": "c147fe91e8b8295a3b8415e3fe6b7d67a5626d9788dadf9b87abf3d1fe237908",
+      "har_bytes": 465517,
+      "script_report_sha256": "d6d51c02b6afcb9317bbb17734e52a61aaa0f2b56ebcd2c00b0b6ef008c85e2e",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "up to 250ms per response",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 85,
+        "failing": 1,
+        "failing_ids": [
+          "status-400-for-a-wrongly-typed-field"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 214,
+          "remaining": 146
+        }
+      }
+    },
+    {
+      "id": "t1.clean.jitter-7",
+      "arm": "t1",
+      "label": "clean.jitter",
+      "wall_ms": 27910,
+      "requests": 214,
+      "har_sha256": "a16b020d656d6358ee01a8dafbe1e498e5577419dbb3d19e37664b912e2408e2",
+      "har_bytes": 465515,
+      "script_report_sha256": "ad25176e2e773a7b32e753a7a652f10100d3b27dc55d2bcc62c388a18e26ad23",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "up to 250ms per response",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 85,
+        "failing": 1,
+        "failing_ids": [
+          "status-400-for-a-wrongly-typed-field"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 214,
+          "remaining": 146
+        }
+      }
+    },
+    {
+      "id": "t1.clean.jitter-8",
+      "arm": "t1",
+      "label": "clean.jitter",
+      "wall_ms": 28083,
+      "requests": 214,
+      "har_sha256": "901592e2b22a66e6aa0a8f9c8c5bee8c2ed2b1fa2f8be05c4683e1a1a9aa7903",
+      "har_bytes": 465511,
+      "script_report_sha256": "f7609a280a4a611993002f69ebdad986192e6fb9b5f2e9d5e5bfcf772d2d8f65",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "up to 250ms per response",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 85,
+        "failing": 1,
+        "failing_ids": [
+          "status-400-for-a-wrongly-typed-field"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 214,
+          "remaining": 146
+        }
+      }
+    },
+    {
+      "id": "t1.clean.jitter-9",
+      "arm": "t1",
+      "label": "clean.jitter",
+      "wall_ms": 27914,
+      "requests": 214,
+      "har_sha256": "6b9b16382692e591c2e0c88a40bae2651c43ba978de6b2aaa387f8c5970aca5e",
+      "har_bytes": 465515,
+      "script_report_sha256": "9b96f66a473a1c5b360446d00e8a95808d8cb7a33a7dfe99af0e96e7b7089a17",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "up to 250ms per response",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 85,
+        "failing": 1,
+        "failing_ids": [
+          "status-400-for-a-wrongly-typed-field"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 214,
+          "remaining": 146
+        }
+      }
+    },
+    {
+      "id": "t1.clean.terse-optionals",
+      "arm": "t1",
+      "label": "clean.terse-optionals",
+      "wall_ms": 535,
+      "requests": 214,
+      "har_sha256": "17869ef7f05f98dad28458279da4f0ded73dfaec1bb7b768bf85828a777d0863",
+      "har_bytes": 447703,
+      "script_report_sha256": "426bd2e8002e85ffb2ca1c2e5161ad7601d3ca42376862cf2a6ea8916e26c38e",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "terse-optionals",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 85,
+        "failing": 1,
+        "failing_ids": [
+          "status-400-for-a-wrongly-typed-field"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 214,
+          "remaining": 146
+        }
+      }
+    },
+    {
+      "id": "t1.clean.trailing-page",
+      "arm": "t1",
+      "label": "clean.trailing-page",
+      "wall_ms": 573,
+      "requests": 217,
+      "har_sha256": "1bf7b4ae33cec23a3cbcefe56b7730b409588f545c2c27ce3b98b50f39983b30",
+      "har_bytes": 468958,
+      "script_report_sha256": "16292a58768816642f5f065b1648cea6ced3cf12d79ec1f8bdafa64b82dae8a8",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "trailing-page",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 85,
+        "failing": 1,
+        "failing_ids": [
+          "status-400-for-a-wrongly-typed-field"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 217,
+          "remaining": 143
+        }
+      }
+    },
+    {
+      "id": "t1.clean.wide-ids",
+      "arm": "t1",
+      "label": "clean.wide-ids",
+      "wall_ms": 570,
+      "requests": 214,
+      "har_sha256": "01df574b99bd2c78f9d4c9cd8121caa0e230af439b0c56be8323f77f993b2b4e",
+      "har_bytes": 484165,
+      "script_report_sha256": "1c81f5be56248feb773e743888cd1643a0b387807de39ca4afb05ba040ae5a87",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "wide-ids",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 85,
+        "failing": 1,
+        "failing_ids": [
+          "status-400-for-a-wrongly-typed-field"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 214,
+          "remaining": 146
+        }
+      }
+    },
+    {
+      "id": "t1.f-activate-after-close",
+      "arm": "t1",
+      "label": "f-activate-after-close",
+      "wall_ms": 585,
+      "requests": 214,
+      "har_sha256": "b7ffe1cadc6cb4302a4388dc369b1ad03bbcc9a354ebc40d4ee3ff3077164292",
+      "har_bytes": 465021,
+      "script_report_sha256": "25f611cb12752ac0a44394739d7bb01c279c188aaad2ed84fe55bd74232a818e",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-activate-after-close",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 85,
+        "failing": 2,
+        "failing_ids": [
+          "lifecycle-closure-is-terminal",
+          "status-400-for-a-wrongly-typed-field"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 214,
+          "remaining": 146
+        }
+      }
+    },
+    {
+      "id": "t1.f-day-usage-carryover",
+      "arm": "t1",
+      "label": "f-day-usage-carryover",
+      "wall_ms": 585,
+      "requests": 214,
+      "har_sha256": "7e08988bcae25f092da63f69153cad150545e711c6a59a1841103941372e5af6",
+      "har_bytes": 463448,
+      "script_report_sha256": "7c8f2ed4bf015bbf6d797576bfb1976791f266574e5b9f8230861085ea7a7a96",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-day-usage-carryover",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 85,
+        "failing": 3,
+        "failing_ids": [
+          "status-400-for-a-wrongly-typed-field",
+          "daily-rolling-the-day-starts-the-count-at-zero",
+          "roundtrip-a-created-resource-reads-back-unchanged"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 214,
+          "remaining": 146
+        }
+      }
+    },
+    {
+      "id": "t1.f-deposit-entry-mismatch",
+      "arm": "t1",
+      "label": "f-deposit-entry-mismatch",
+      "wall_ms": 564,
+      "requests": 214,
+      "har_sha256": "25e4df166101fa6d5898af002f4078d08c5e197e6c95ba519419ef7f4eaf57ea",
+      "har_bytes": 464837,
+      "script_report_sha256": "7170e926c83019cea07f7faf9eadc6f8aed1764b1c596907609012e9b38ee1e3",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-deposit-entry-mismatch",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 85,
+        "failing": 1,
+        "failing_ids": [
+          "status-400-for-a-wrongly-typed-field"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 214,
+          "remaining": 146
+        }
+      }
+    },
+    {
+      "id": "t1.f-entries-cross-principal",
+      "arm": "t1",
+      "label": "f-entries-cross-principal",
+      "wall_ms": 571,
+      "requests": 214,
+      "har_sha256": "10ef4264b9a9c8d1c33e1c7882f7ad404814827b77d43859e980b4557b4a4db8",
+      "har_bytes": 464951,
+      "script_report_sha256": "ecf3722fe08de06d6fa439c5aa6cee450224821cf83df65e4b940a1250127962",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-entries-cross-principal",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 85,
+        "failing": 2,
+        "failing_ids": [
+          "ownership-a-customer-cannot-reach-another-customers-account",
+          "status-400-for-a-wrongly-typed-field"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 214,
+          "remaining": 146
+        }
+      }
+    },
+    {
+      "id": "t1.f-eur-fee-flat",
+      "arm": "t1",
+      "label": "f-eur-fee-flat",
+      "wall_ms": 541,
+      "requests": 214,
+      "har_sha256": "2c6d75d3c77579629f0bd9aec00bbb1efe3239aadd85332c3891fa8583803c06",
+      "har_bytes": 464821,
+      "script_report_sha256": "b0e6736bc4b7faa2bb656170054245ca206249ec6f54c80023eac5f590acbe6e",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-eur-fee-flat",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 85,
+        "failing": 3,
+        "failing_ids": [
+          "fee-declared-eur-1000",
+          "fee-declared-eur-66667",
+          "status-400-for-a-wrongly-typed-field"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 214,
+          "remaining": 146
+        }
+      }
+    },
+    {
+      "id": "t1.f-fee-account-balance-untouched",
+      "arm": "t1",
+      "label": "f-fee-account-balance-untouched",
+      "wall_ms": 544,
+      "requests": 214,
+      "har_sha256": "6b301cf9fe292baebc9ef00cb5b9d8e16d05b3cf6c2ee5e80baa091e012928be",
+      "har_bytes": 464809,
+      "script_report_sha256": "cfbf6a8dbcc2021316f11b76f0bfc60a7e8a6ce55df353e1e0a18c3589e24371",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-fee-account-balance-untouched",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 85,
+        "failing": 3,
+        "failing_ids": [
+          "status-400-for-a-wrongly-typed-field",
+          "balance-equals-the-sum-of-the-entries",
+          "balance-fee-accounts-hold-the-fees-they-collected"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 214,
+          "remaining": 146
+        }
+      }
+    },
+    {
+      "id": "t1.f-idempotency-conflict-ignored",
+      "arm": "t1",
+      "label": "f-idempotency-conflict-ignored",
+      "wall_ms": 553,
+      "requests": 214,
+      "har_sha256": "e5a5d7a5cd1784552c86fffa149a89b7c055ab2a1abdf939e30426ba6b0352c0",
+      "har_bytes": 465096,
+      "script_report_sha256": "691d5213224850bb81b97bb3bc7eee5a636892487f2f5c67be2f324f0b4524f1",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-idempotency-conflict-ignored",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 85,
+        "failing": 2,
+        "failing_ids": [
+          "status-400-for-a-wrongly-typed-field",
+          "idem-same-key-different-body-is-a-conflict-that-creates-nothing"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 214,
+          "remaining": 146
+        }
+      }
+    },
+    {
+      "id": "t1.f-idempotency-freed-by-cancel",
+      "arm": "t1",
+      "label": "f-idempotency-freed-by-cancel",
+      "wall_ms": 571,
+      "requests": 216,
+      "har_sha256": "76c19d2c1258faacf1b60c43191a5e0687f62b3fe53c5708230c1f0ac5148798",
+      "har_bytes": 470253,
+      "script_report_sha256": "076e469045d8c3502658d0036683fe9b22f37a277d4052114213a499c88252b9",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-idempotency-freed-by-cancel",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 85,
+        "failing": 3,
+        "failing_ids": [
+          "status-400-for-a-wrongly-typed-field",
+          "idem-key-is-not-released-by-cancelling",
+          "idem-key-survives-settlement-and-the-day-rollover"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 216,
+          "remaining": 144
+        }
+      }
+    },
+    {
+      "id": "t1.f-include-closed-ignored",
+      "arm": "t1",
+      "label": "f-include-closed-ignored",
+      "wall_ms": 606,
+      "requests": 213,
+      "har_sha256": "1230fb0fb57e4938f2122b75f05b0628a460809dc515ca67703fff45f70eb32c",
+      "har_bytes": 462024,
+      "script_report_sha256": "f90ee54fa6f3bd7681c1ba5fbf04e540753887b41e1df4c45ac009ac42d9e5e6",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-include-closed-ignored",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 85,
+        "failing": 3,
+        "failing_ids": [
+          "lifecycle-closure-is-terminal",
+          "status-400-for-a-wrongly-typed-field",
+          "param-include-closed"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 213,
+          "remaining": 147
+        }
+      }
+    },
+    {
+      "id": "t1.f-same-account-envelope-bare",
+      "arm": "t1",
+      "label": "f-same-account-envelope-bare",
+      "wall_ms": 571,
+      "requests": 214,
+      "har_sha256": "228d9c8bde93d11b0f90364922c212bd9486ff095dea493ec629692bb0572486",
+      "har_bytes": 464783,
+      "script_report_sha256": "36433a67762f5cfe4c0e7e4b4b8c21e1dffd782db659c7c59bb0542b9b9e1735",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-same-account-envelope-bare",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 85,
+        "failing": 2,
+        "failing_ids": [
+          "status-400-for-a-wrongly-typed-field",
+          "envelope-every-refusal-uses-the-one-error-envelope"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": false,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 214,
+          "remaining": 146
+        }
+      }
+    },
+    {
+      "id": "t1.f-tick-day-skips-settlement",
+      "arm": "t1",
+      "label": "f-tick-day-skips-settlement",
+      "wall_ms": 554,
+      "requests": 214,
+      "har_sha256": "2f4010285faa86511792d126d769d67837305642aba2c860f1c65677150bd22f",
+      "har_bytes": 461926,
+      "script_report_sha256": "5cea0dbd62005b6f0c21669b6a99ed846dc27477252930f15509d50561601040",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-tick-day-skips-settlement",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 85,
+        "failing": 2,
+        "failing_ids": [
+          "status-400-for-a-wrongly-typed-field",
+          "param-tick-advance-day-and-settle-limit-do-what-they-say"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 214,
+          "remaining": 146
+        }
+      }
+    },
+    {
+      "id": "t1.f-transfer-source-unowned",
+      "arm": "t1",
+      "label": "f-transfer-source-unowned",
+      "wall_ms": 544,
+      "requests": 216,
+      "har_sha256": "e78252037db0e5d74e6c88cc83ac6e0909f22f04b06dc3cfe60b3ab1e36fdb4d",
+      "har_bytes": 473030,
+      "script_report_sha256": "c759c2e3372225bdd0b6a35f2d4b0bef8bde44750bef134d65aeb87160204f92",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-transfer-source-unowned",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 85,
+        "failing": 2,
+        "failing_ids": [
+          "ownership-a-customer-cannot-reach-another-customers-account",
+          "status-400-for-a-wrongly-typed-field"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 216,
+          "remaining": 144
+        }
+      }
+    },
+    {
+      "id": "t1.f-transfer-to-pending-destination",
+      "arm": "t1",
+      "label": "f-transfer-to-pending-destination",
+      "wall_ms": 553,
+      "requests": 216,
+      "har_sha256": "7a47b9f85c6e800a7a8b77fd4b9b65821ec7c32d80ca28d1bed6342c0114bf52",
+      "har_bytes": 472812,
+      "script_report_sha256": "65bdc88fa2e8fb5dadce4398557a6111317725ce2fe261aea7363eca849d2eea",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-transfer-to-pending-destination",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 85,
+        "failing": 3,
+        "failing_ids": [
+          "lifecycle-transfer-refused-on-a-never-activated-account",
+          "status-400-for-a-wrongly-typed-field",
+          "conservation-usd"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 216,
+          "remaining": 144
+        }
+      }
+    },
+    {
+      "id": "t1.f-transfers-filter-after-page",
+      "arm": "t1",
+      "label": "f-transfers-filter-after-page",
+      "wall_ms": 555,
+      "requests": 214,
+      "har_sha256": "91d6c3d556f2822f0cdea88dee42e8d657d1cc28d4d44f9c695880e2b924c484",
+      "har_bytes": 464837,
+      "script_report_sha256": "6a3b03cdfa17fa3b6eaf9fd2c737cea1589f8cd78524fcf671573db0859920d7",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-transfers-filter-after-page",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 85,
+        "failing": 1,
+        "failing_ids": [
+          "status-400-for-a-wrongly-typed-field"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 214,
+          "remaining": 146
+        }
+      }
+    },
+    {
+      "id": "t2.clean-1",
+      "arm": "t2",
+      "label": "clean",
+      "wall_ms": 654,
+      "requests": 246,
+      "har_sha256": "e2183a3763feb812861e2a573941ae61b16f473ac2f84f7314995b3b11fee865",
+      "har_bytes": 512178,
+      "script_report_sha256": "f28872a07cef5ee1c34c1b6fc431a1c5dd470c35d5bb28274f20cad24c107881",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 188,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 246,
+          "remaining": 114
+        }
+      }
+    },
+    {
+      "id": "t2.clean-2",
+      "arm": "t2",
+      "label": "clean",
+      "wall_ms": 686,
+      "requests": 246,
+      "har_sha256": "ea0f7f76c0cb9f817cbb6e1cccd72f97b05809a01aca54f1f1a3065ed8d5deef",
+      "har_bytes": 512178,
+      "script_report_sha256": "da3c1c2e60c0ba8496d4c2df81b892fd0ed45dd1a016f380f9ff49d0a72228a0",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 188,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 246,
+          "remaining": 114
+        }
+      }
+    },
+    {
+      "id": "t2.clean-3",
+      "arm": "t2",
+      "label": "clean",
+      "wall_ms": 747,
+      "requests": 246,
+      "har_sha256": "72ac504e16a2f4bbd5a5794f159e22c1e1116b6eeaf864af3b4db7ce433d33d3",
+      "har_bytes": 512178,
+      "script_report_sha256": "c39f0a1c9a8e36962f6c515c396f133b186fe1d2728c3e30911002c382282308",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 188,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 246,
+          "remaining": 114
+        }
+      }
+    },
+    {
+      "id": "t2.clean.all-variants",
+      "arm": "t2",
+      "label": "clean.all-variants",
+      "wall_ms": 655,
+      "requests": 246,
+      "har_sha256": "7669851846638a1710a5a781fa5a726dc4299a62221a8040ac9dac954b8258ab",
+      "har_bytes": 518594,
+      "script_report_sha256": "953f6cf8d85ce0dadf14de3931cf8ee122dca729cf5820cb02014b897a575b7f",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "terse-optionals, trailing-page, wide-ids",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 188,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 246,
+          "remaining": 114
+        }
+      }
+    },
+    {
+      "id": "t2.clean.jitter-1",
+      "arm": "t2",
+      "label": "clean.jitter",
+      "wall_ms": 31910,
+      "requests": 246,
+      "har_sha256": "04b4542db59cf6b1cfc3af810ae3425b1f28f0e0e099ae3b755ef4fce49c57cf",
+      "har_bytes": 512952,
+      "script_report_sha256": "3fd787615ee0f5a78c8c187b902011c6236fa6d5e23c5634997d4c946145353c",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "up to 250ms per response",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 188,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 246,
+          "remaining": 114
+        }
+      }
+    },
+    {
+      "id": "t2.clean.jitter-10",
+      "arm": "t2",
+      "label": "clean.jitter",
+      "wall_ms": 31862,
+      "requests": 246,
+      "har_sha256": "2d09586d4a1e39c55e0ed9c0499fdd188a09278d57ab52656dec5796d2780a66",
+      "har_bytes": 512950,
+      "script_report_sha256": "00b5e493b96211cd4b50c29b5731dac59331af3c954aade41f0a089688a1f74d",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "up to 250ms per response",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 188,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 246,
+          "remaining": 114
+        }
+      }
+    },
+    {
+      "id": "t2.clean.jitter-2",
+      "arm": "t2",
+      "label": "clean.jitter",
+      "wall_ms": 31872,
+      "requests": 246,
+      "har_sha256": "d5b4e9fc8eed21318fc57bf768079088fdb40c512e899ccd0991560da76d3e09",
+      "har_bytes": 512950,
+      "script_report_sha256": "ccf2ca4bc9739d086ff2a95742ae9faa003c47a48038de934f5ff7a138c50b44",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "up to 250ms per response",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 188,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 246,
+          "remaining": 114
+        }
+      }
+    },
+    {
+      "id": "t2.clean.jitter-3",
+      "arm": "t2",
+      "label": "clean.jitter",
+      "wall_ms": 31937,
+      "requests": 246,
+      "har_sha256": "15c83e6bb0b03c2ff133eebf70fc728c33df9dbbb8e284c29e6ac64923210263",
+      "har_bytes": 512950,
+      "script_report_sha256": "666fdee3a3854ffaa21c704c0262f107c3434feacff37a0fce35bbca7f2b5b9a",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "up to 250ms per response",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 188,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 246,
+          "remaining": 114
+        }
+      }
+    },
+    {
+      "id": "t2.clean.jitter-4",
+      "arm": "t2",
+      "label": "clean.jitter",
+      "wall_ms": 31875,
+      "requests": 246,
+      "har_sha256": "9e516795d62e132a44a036676e64c926d9e952effb7595fa96656c2f20059f58",
+      "har_bytes": 512950,
+      "script_report_sha256": "7964af07d6d12f9873093c65ce2e38b5a9ab10e44c65dbbf28c6d4d03d46f3ac",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "up to 250ms per response",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 188,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 246,
+          "remaining": 114
+        }
+      }
+    },
+    {
+      "id": "t2.clean.jitter-5",
+      "arm": "t2",
+      "label": "clean.jitter",
+      "wall_ms": 31941,
+      "requests": 246,
+      "har_sha256": "c0d931e45cf58932501ef458b66c5cc0eaa4be886d4f541c84f63b49b43a0469",
+      "har_bytes": 512950,
+      "script_report_sha256": "f54da11f42fef778aad4ce16944419e1d8f385dabc5e2a74094e1b4a46cf518c",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "up to 250ms per response",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 188,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 246,
+          "remaining": 114
+        }
+      }
+    },
+    {
+      "id": "t2.clean.jitter-6",
+      "arm": "t2",
+      "label": "clean.jitter",
+      "wall_ms": 32034,
+      "requests": 246,
+      "har_sha256": "7fd5830ef4253abe052ade182e3d354d49067ae6f4717ca6a32aadb8c30aaf9c",
+      "har_bytes": 512950,
+      "script_report_sha256": "8841404c26c9732ee3bcdc436c6246d2a508c2ca6ab1411cb895d4857ea07a98",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "up to 250ms per response",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 188,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 246,
+          "remaining": 114
+        }
+      }
+    },
+    {
+      "id": "t2.clean.jitter-7",
+      "arm": "t2",
+      "label": "clean.jitter",
+      "wall_ms": 31941,
+      "requests": 246,
+      "har_sha256": "a56ef18030fe329142568ab45afd61e774d59762bc25eada6a75a27ed1dbd5f1",
+      "har_bytes": 512950,
+      "script_report_sha256": "97a4304188675127d60fc4722feef4308ebcd8ae598e034a1b0c12cc1a0737f1",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "up to 250ms per response",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 188,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 246,
+          "remaining": 114
+        }
+      }
+    },
+    {
+      "id": "t2.clean.jitter-8",
+      "arm": "t2",
+      "label": "clean.jitter",
+      "wall_ms": 31882,
+      "requests": 246,
+      "har_sha256": "228ede2d61d1fc9a0cb7d17ad63737562130f8a77e3b9e6536e95478a114f484",
+      "har_bytes": 512950,
+      "script_report_sha256": "53cd33a71483a65d62a3a38f6fc10bedfebb3e68a2137b730f854cada68bb5c9",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "up to 250ms per response",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 188,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 246,
+          "remaining": 114
+        }
+      }
+    },
+    {
+      "id": "t2.clean.jitter-9",
+      "arm": "t2",
+      "label": "clean.jitter",
+      "wall_ms": 32037,
+      "requests": 246,
+      "har_sha256": "a2fa86b9ff50acf52ad10a1a42d2e106c10590917b596342fb0c87ef2269f935",
+      "har_bytes": 512948,
+      "script_report_sha256": "41b4806a76da522c2ce16e9d2e89806437fe3316a00499e1b9f6e412e6cff72b",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "up to 250ms per response",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 188,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 246,
+          "remaining": 114
+        }
+      }
+    },
+    {
+      "id": "t2.clean.terse-optionals",
+      "arm": "t2",
+      "label": "clean.terse-optionals",
+      "wall_ms": 630,
+      "requests": 246,
+      "har_sha256": "bc98e9baae8b6146f5f713fdd047a9314ee6626ef6786de66d0c216026139a15",
+      "har_bytes": 496943,
+      "script_report_sha256": "b9adc42a0d02468ec5e4f200cdd2cfc461d9d02c162a2628125b6dd89778bdb7",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "terse-optionals",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 188,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 246,
+          "remaining": 114
+        }
+      }
+    },
+    {
+      "id": "t2.clean.trailing-page",
+      "arm": "t2",
+      "label": "clean.trailing-page",
+      "wall_ms": 649,
+      "requests": 246,
+      "har_sha256": "b449da5ed515f089e108470b7466b590ec729c7939117f438709e0a2340b5332",
+      "har_bytes": 512178,
+      "script_report_sha256": "addcd7b474efed5e19bb6b1aeb6c85875fcbcbbda82829894a8ae292374043b0",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "trailing-page",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 188,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 246,
+          "remaining": 114
+        }
+      }
+    },
+    {
+      "id": "t2.clean.wide-ids",
+      "arm": "t2",
+      "label": "clean.wide-ids",
+      "wall_ms": 642,
+      "requests": 246,
+      "har_sha256": "c88de8636195b0ad8d10ff513d89370630cfc6211d9d852896dfadb30f4343b4",
+      "har_bytes": 533850,
+      "script_report_sha256": "aa03d25431bcd3ad8d596c83a523dfe2550c6543d6eb3ce05627af6311757120",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "wide-ids",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 188,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 246,
+          "remaining": 114
+        }
+      }
+    },
+    {
+      "id": "t2.f-activate-after-close",
+      "arm": "t2",
+      "label": "f-activate-after-close",
+      "wall_ms": 720,
+      "requests": 246,
+      "har_sha256": "357073f62ac3c93ec45dd1a5dfa064dec97a357e821b3ca1cad91cc343e61da6",
+      "har_bytes": 512364,
+      "script_report_sha256": "852b415cc1dd39f0296768ef267e593c3243061581c13dfc1c04de7356ea22cb",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-activate-after-close",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 188,
+        "failing": 6,
+        "failing_ids": [
+          "life-activate-closed",
+          "split-state-activate-closed",
+          "life-close-closed",
+          "split-state-close-closed",
+          "err-refusals-are-4xx",
+          "err-status-split"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 246,
+          "remaining": 114
+        }
+      }
+    },
+    {
+      "id": "t2.f-day-usage-carryover",
+      "arm": "t2",
+      "label": "f-day-usage-carryover",
+      "wall_ms": 612,
+      "requests": 246,
+      "har_sha256": "62b7b4b742d5b58f5356361a620ed233873933174c4ee9d511e384150e5d819f",
+      "har_bytes": 510367,
+      "script_report_sha256": "05c0ec82bf1bebe7748787936eb3094bd72955645180aadd19d67057211172b2",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-day-usage-carryover",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 188,
+        "failing": 1,
+        "failing_ids": [
+          "daily-rollover-resets-usage"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 246,
+          "remaining": 114
+        }
+      }
+    },
+    {
+      "id": "t2.f-deposit-entry-mismatch",
+      "arm": "t2",
+      "label": "f-deposit-entry-mismatch",
+      "wall_ms": 615,
+      "requests": 246,
+      "har_sha256": "471fe5968e683465a83650d54370152cd863333beda0df1edb7551497a5100b2",
+      "har_bytes": 512178,
+      "script_report_sha256": "f9167dd369cb218443a32f25cbbbf10509f8a82cc760a6b24e81288275e85a99",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-deposit-entry-mismatch",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 188,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 246,
+          "remaining": 114
+        }
+      }
+    },
+    {
+      "id": "t2.f-entries-cross-principal",
+      "arm": "t2",
+      "label": "f-entries-cross-principal",
+      "wall_ms": 625,
+      "requests": 246,
+      "har_sha256": "f9e478dd891ff0b41d76d2d0f4f9e0680368c13029f97498573cf71345c70e39",
+      "har_bytes": 512292,
+      "script_report_sha256": "c1ca40d816803ef12f3127a446c0de0b744663b016aa0f0a7bb2268ea2340684",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-entries-cross-principal",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 188,
+        "failing": 5,
+        "failing_ids": [
+          "own-read-other-entries",
+          "split-forbidden-read-other-entries",
+          "own-refusal-discloses-nothing",
+          "err-refusals-are-4xx",
+          "err-status-split"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 246,
+          "remaining": 114
+        }
+      }
+    },
+    {
+      "id": "t2.f-eur-fee-flat",
+      "arm": "t2",
+      "label": "f-eur-fee-flat",
+      "wall_ms": 613,
+      "requests": 246,
+      "har_sha256": "52dd0a7ec3e821db57e4c9ae632fe745c0d66de04cb49d15160ff686a8462d8c",
+      "har_bytes": 512178,
+      "script_report_sha256": "e2b31c91163f208546973eb02d073a694639fc79de0aceda728f1179b43ba390",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-eur-fee-flat",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 188,
+        "failing": 4,
+        "failing_ids": [
+          "fee-schedule-at-creation",
+          "fee-one-schedule-both-currencies",
+          "fee-settles-at-declared-value-eur",
+          "fee-every-probe-settles-at-schedule"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 246,
+          "remaining": 114
+        }
+      }
+    },
+    {
+      "id": "t2.f-fee-account-balance-untouched",
+      "arm": "t2",
+      "label": "f-fee-account-balance-untouched",
+      "wall_ms": 624,
+      "requests": 246,
+      "har_sha256": "a92afc817984b95ebaa5e53083f2c6409211e1de01bf5f55aef5abf8442e74b3",
+      "har_bytes": 512169,
+      "script_report_sha256": "1e0938f21fe71bcbb0977db4467891723b97c9d22de30d920192116fd5489d2d",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-fee-account-balance-untouched",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 188,
+        "failing": 2,
+        "failing_ids": [
+          "balance-agrees-with-entries",
+          "balance-fee-accounts"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 246,
+          "remaining": 114
+        }
+      }
+    },
+    {
+      "id": "t2.f-idempotency-conflict-ignored",
+      "arm": "t2",
+      "label": "f-idempotency-conflict-ignored",
+      "wall_ms": 671,
+      "requests": 246,
+      "har_sha256": "b098c2097eff3e6979a1048418e4a4ba63e7a69acb4b9e7e795d33935225c7e8",
+      "har_bytes": 512438,
+      "script_report_sha256": "b9feb4cd8c1315e59feccc800a10f066c85d1c90a5be27395b278b9387d0b13d",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-idempotency-conflict-ignored",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 188,
+        "failing": 4,
+        "failing_ids": [
+          "split-state-idempotency-conflict",
+          "idem-conflict-is-refused",
+          "err-refusals-are-4xx",
+          "err-status-split"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 246,
+          "remaining": 114
+        }
+      }
+    },
+    {
+      "id": "t2.f-idempotency-freed-by-cancel",
+      "arm": "t2",
+      "label": "f-idempotency-freed-by-cancel",
+      "wall_ms": 639,
+      "requests": 246,
+      "har_sha256": "a43072a09440eb14e1628ca00b84644a418c3d41dc85bc104377a1300b43aaa2",
+      "har_bytes": 515565,
+      "script_report_sha256": "dc960c5220dc7dda3be0549d31cda284a357cd3fc3b4ccb8543423cc9fef790a",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-idempotency-freed-by-cancel",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 188,
+        "failing": 2,
+        "failing_ids": [
+          "idem-key-survives-cancellation",
+          "idem-one-transfer-per-key"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 246,
+          "remaining": 114
+        }
+      }
+    },
+    {
+      "id": "t2.f-include-closed-ignored",
+      "arm": "t2",
+      "label": "f-include-closed-ignored",
+      "wall_ms": 591,
+      "requests": 245,
+      "har_sha256": "f1e53e84feb71ac3e01725b0b3460221b8fd9835968dd6186adf5d76b37fa13f",
+      "har_bytes": 510026,
+      "script_report_sha256": "1d9aa1578e79a308b812894023b0fee5db21118c2c2d4d4f73100b1ccfa77c71",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-include-closed-ignored",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 188,
+        "failing": 1,
+        "failing_ids": [
+          "param-include-closed"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 245,
+          "remaining": 115
+        }
+      }
+    },
+    {
+      "id": "t2.f-same-account-envelope-bare",
+      "arm": "t2",
+      "label": "f-same-account-envelope-bare",
+      "wall_ms": 661,
+      "requests": 246,
+      "har_sha256": "d9165d12b58e45c8f6f138a8802bbb6fa70600cc445ea0bb37fa75df7d9be295",
+      "har_bytes": 512124,
+      "script_report_sha256": "128917245237b0d023d3a59f246bce5b1b4cb2d6662473493d257550116e506f",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-same-account-envelope-bare",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 188,
+        "failing": 1,
+        "failing_ids": [
+          "err-envelope-everywhere"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": false,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 246,
+          "remaining": 114
+        }
+      }
+    },
+    {
+      "id": "t2.f-tick-day-skips-settlement",
+      "arm": "t2",
+      "label": "f-tick-day-skips-settlement",
+      "wall_ms": 656,
+      "requests": 246,
+      "har_sha256": "87b1b6559d7ca9b51b0abf5332df31dc10313546079d004ee4cdc76550db7e07",
+      "har_bytes": 512179,
+      "script_report_sha256": "cc9b9f4c6bb9a3444149ca5e06eeb2da4830a0999e094cd6ab8eab7006ff991a",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-tick-day-skips-settlement",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 188,
+        "failing": 1,
+        "failing_ids": [
+          "settle-day-rolling-tick-still-settles"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 246,
+          "remaining": 114
+        }
+      }
+    },
+    {
+      "id": "t2.f-transfer-source-unowned",
+      "arm": "t2",
+      "label": "f-transfer-source-unowned",
+      "wall_ms": 627,
+      "requests": 246,
+      "har_sha256": "1787cf8da9bff368f8de559f89e742809710dd4e832daa4641d14bf5671ee003",
+      "har_bytes": 516132,
+      "script_report_sha256": "611e3c38337f13f215b1b4f16bd42498b37da1bd362aacb0c383e481d8f1779f",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-transfer-source-unowned",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 188,
+        "failing": 6,
+        "failing_ids": [
+          "own-spend-from-other-account",
+          "split-forbidden-spend-from-other-account",
+          "own-refusal-discloses-nothing",
+          "settle-creation-order",
+          "err-refusals-are-4xx",
+          "err-status-split"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 246,
+          "remaining": 114
+        }
+      }
+    },
+    {
+      "id": "t2.f-transfer-to-pending-destination",
+      "arm": "t2",
+      "label": "f-transfer-to-pending-destination",
+      "wall_ms": 626,
+      "requests": 246,
+      "har_sha256": "6add20bc843e9f90a080a531133593966fba90df77f57235fff9e61de4951174",
+      "har_bytes": 515600,
+      "script_report_sha256": "4fc4c87ce097d67d85cc7e4ccfe37b411b951c8da51dc179dac43a398d13d7c1",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-transfer-to-pending-destination",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 188,
+        "failing": 6,
+        "failing_ids": [
+          "life-transfer-to-pending",
+          "split-state-transfer-to-pending",
+          "life-refusals-create-nothing",
+          "settle-creation-order",
+          "err-refusals-are-4xx",
+          "err-status-split"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 246,
+          "remaining": 114
+        }
+      }
+    },
+    {
+      "id": "t2.f-transfers-filter-after-page",
+      "arm": "t2",
+      "label": "f-transfers-filter-after-page",
+      "wall_ms": 650,
+      "requests": 254,
+      "har_sha256": "70f6564f266a54e9c82d8d0ced02a1712b538989401a1fa040b913eaa328bf1e",
+      "har_bytes": 523314,
+      "script_report_sha256": "22237a1a0289c8f480b3f8906363c5ea716c63bd75aa46866709d7cb462c107e",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-transfers-filter-after-page",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 188,
+        "failing": 1,
+        "failing_ids": [
+          "page-transfers-filtered-short-page-is-last"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 254,
+          "remaining": 106
+        }
+      }
+    },
+    {
+      "id": "t3.clean-1",
+      "arm": "t3",
+      "label": "clean",
+      "wall_ms": 556,
+      "requests": 217,
+      "har_sha256": "f7a3e13c36a77d9e0d793f6448d6d90e0bf156c346078fae18b9409c6784b405",
+      "har_bytes": 442422,
+      "script_report_sha256": "534f911c4df5f83e3ffc316d8e3dbe1a2055b311574455dacf3cd7d20ce58f29",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 126,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 217,
+          "remaining": 143
+        }
+      }
+    },
+    {
+      "id": "t3.clean-2",
+      "arm": "t3",
+      "label": "clean",
+      "wall_ms": 544,
+      "requests": 217,
+      "har_sha256": "475519d80aa94a0a9fe0ffd7c5c153cb4afde8c04133f9649b9c3da452badfa8",
+      "har_bytes": 442422,
+      "script_report_sha256": "32d97594a6f3ce2ee58c529db25bc9b6c164985a10e6197c4996f54be40e7405",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 126,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 217,
+          "remaining": 143
+        }
+      }
+    },
+    {
+      "id": "t3.clean-3",
+      "arm": "t3",
+      "label": "clean",
+      "wall_ms": 590,
+      "requests": 217,
+      "har_sha256": "70631711aad7b2a79b219d43c7f02dfb01f5bdeeede5044aa418e82a8218ea98",
+      "har_bytes": 442422,
+      "script_report_sha256": "9fdc139032ae030a1e3cc44122246e3a6d0c00d77000de373ce8054b76194e5e",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 126,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 217,
+          "remaining": 143
+        }
+      }
+    },
+    {
+      "id": "t3.clean.all-variants",
+      "arm": "t3",
+      "label": "clean.all-variants",
+      "wall_ms": 535,
+      "requests": 218,
+      "har_sha256": "773a97f62716869d7434285d56b2056fcec0090487252c4ed72459279eb88a4b",
+      "har_bytes": 448398,
+      "script_report_sha256": "3ac956778c80273b42f1a5d3c3054a4914c4a318f1af7fb9fdfd8420109ca018",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "terse-optionals, trailing-page, wide-ids",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 126,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 218,
+          "remaining": 142
+        }
+      }
+    },
+    {
+      "id": "t3.clean.jitter-1",
+      "arm": "t3",
+      "label": "clean.jitter",
+      "wall_ms": 28220,
+      "requests": 217,
+      "har_sha256": "8107544344405cff685f7c069a824a8885e1b7acca8d307a3b1a58e91400457f",
+      "har_bytes": 443108,
+      "script_report_sha256": "8357acda31c5a603f4c54f39bed37987f734291498a9bbc5ed0b2cb8bb014c0e",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "up to 250ms per response",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 126,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 217,
+          "remaining": 143
+        }
+      }
+    },
+    {
+      "id": "t3.clean.jitter-10",
+      "arm": "t3",
+      "label": "clean.jitter",
+      "wall_ms": 28217,
+      "requests": 217,
+      "har_sha256": "80aa8d1feed8adf9a9b312fc1cbb8780347a4297d724d358eaebda9eebf287d8",
+      "har_bytes": 443104,
+      "script_report_sha256": "00fe172a35d72695b32b82b45707c794109ab93385de9f18df5678670a8caf85",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "up to 250ms per response",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 126,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 217,
+          "remaining": 143
+        }
+      }
+    },
+    {
+      "id": "t3.clean.jitter-2",
+      "arm": "t3",
+      "label": "clean.jitter",
+      "wall_ms": 28303,
+      "requests": 217,
+      "har_sha256": "eb28c2436ffa928d73b81b430e0e8d792239b8a432a581dcaad4b76b7ddbd8e1",
+      "har_bytes": 443106,
+      "script_report_sha256": "928c8453394798dd5d9868506047dedbeb0176619f09866c74aa249cec3a9193",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "up to 250ms per response",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 126,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 217,
+          "remaining": 143
+        }
+      }
+    },
+    {
+      "id": "t3.clean.jitter-3",
+      "arm": "t3",
+      "label": "clean.jitter",
+      "wall_ms": 28218,
+      "requests": 217,
+      "har_sha256": "ae746817b1a984905837aae90c8221957472c6cc4829eb77920b5c05a2e9b969",
+      "har_bytes": 443104,
+      "script_report_sha256": "43374e2162c210a7fbd53b486b4c73d5227b8131a82b0a7d1e49a7ce1623d77f",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "up to 250ms per response",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 126,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 217,
+          "remaining": 143
+        }
+      }
+    },
+    {
+      "id": "t3.clean.jitter-4",
+      "arm": "t3",
+      "label": "clean.jitter",
+      "wall_ms": 28362,
+      "requests": 217,
+      "har_sha256": "62806ce5853dc7bfc5d470225f15bb20810ca1493d663570cab2ec9844561793",
+      "har_bytes": 443104,
+      "script_report_sha256": "9692e9329cac8bb6cb9df865ee69f4a466ebcad30b0f312044d6f0a07f6be329",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "up to 250ms per response",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 126,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 217,
+          "remaining": 143
+        }
+      }
+    },
+    {
+      "id": "t3.clean.jitter-5",
+      "arm": "t3",
+      "label": "clean.jitter",
+      "wall_ms": 28354,
+      "requests": 217,
+      "har_sha256": "d9178322da8c62df69b5ec27d7b026236bb4e6ef8d4439c8b29aacf8055f22a6",
+      "har_bytes": 443108,
+      "script_report_sha256": "0d2c3c9e93e966ed08dd06f21c56c609a3aa725c216b63f4508c7d21fb2c9eb3",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "up to 250ms per response",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 126,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 217,
+          "remaining": 143
+        }
+      }
+    },
+    {
+      "id": "t3.clean.jitter-6",
+      "arm": "t3",
+      "label": "clean.jitter",
+      "wall_ms": 28353,
+      "requests": 217,
+      "har_sha256": "c052e4df2a8b48b5d15282cf15fd6e607269932b8b3bf42debc77dd04034d5f9",
+      "har_bytes": 443106,
+      "script_report_sha256": "b535499b9159433ace5dcef94a616c2a4bb69ebee01cee686be5d547632babc5",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "up to 250ms per response",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 126,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 217,
+          "remaining": 143
+        }
+      }
+    },
+    {
+      "id": "t3.clean.jitter-7",
+      "arm": "t3",
+      "label": "clean.jitter",
+      "wall_ms": 28342,
+      "requests": 217,
+      "har_sha256": "e31064131155e84a15ddff9519d96ff55395e9d60dc6e37a554ea5b91e3a46f6",
+      "har_bytes": 443106,
+      "script_report_sha256": "1c192155dfd06ae17bb9c9886fa1c2dbac04b66edfa0176ef784957566ca39cf",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "up to 250ms per response",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 126,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 217,
+          "remaining": 143
+        }
+      }
+    },
+    {
+      "id": "t3.clean.jitter-8",
+      "arm": "t3",
+      "label": "clean.jitter",
+      "wall_ms": 28287,
+      "requests": 217,
+      "har_sha256": "11dc9b82c3447522893810f76f132b2e3ea4254ba2e1d6328f7c3c791503ced7",
+      "har_bytes": 443106,
+      "script_report_sha256": "92bc18f19b9b0ad7aed6e36f66afa4406c886d82a2850e0869cbeffa50d248e9",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "up to 250ms per response",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 126,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 217,
+          "remaining": 143
+        }
+      }
+    },
+    {
+      "id": "t3.clean.jitter-9",
+      "arm": "t3",
+      "label": "clean.jitter",
+      "wall_ms": 28331,
+      "requests": 217,
+      "har_sha256": "1f3f45aef9498b4cce72b0738746c3d311507744450dd95801a06bd10853e1c5",
+      "har_bytes": 443106,
+      "script_report_sha256": "96d3b7ccf074f34b3d6f9ac5a2fe0fbe6e6721f2612e4f82b0975dd66bae35d4",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "(none — canonical build)",
+        "jitter": "up to 250ms per response",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 126,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 217,
+          "remaining": 143
+        }
+      }
+    },
+    {
+      "id": "t3.clean.terse-optionals",
+      "arm": "t3",
+      "label": "clean.terse-optionals",
+      "wall_ms": 535,
+      "requests": 217,
+      "har_sha256": "ddf5cd78acf8f092554b4a53bf65917668e7893421ae014926f78c20cead7fa1",
+      "har_bytes": 431083,
+      "script_report_sha256": "d0cb21ec6178cadcf815255a5f765f87c8c0ba188b576cdb0758e1cd09b9dcc7",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "terse-optionals",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 126,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 217,
+          "remaining": 143
+        }
+      }
+    },
+    {
+      "id": "t3.clean.trailing-page",
+      "arm": "t3",
+      "label": "clean.trailing-page",
+      "wall_ms": 540,
+      "requests": 218,
+      "har_sha256": "eff0bb1f3f7e25c6e1a9d5cd90df19c8f9ee9eb82aa360576faa5214dbc21b5e",
+      "har_bytes": 443810,
+      "script_report_sha256": "aebc365655cf13934f27774331eaad0ef7e3960b2118c6d99bc44cfdf7c72b0c",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "trailing-page",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 126,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 218,
+          "remaining": 142
+        }
+      }
+    },
+    {
+      "id": "t3.clean.wide-ids",
+      "arm": "t3",
+      "label": "clean.wide-ids",
+      "wall_ms": 531,
+      "requests": 217,
+      "har_sha256": "d416c96dcf165b2db654ed781e6d88f0fed783c31a155fc9310a396c85740541",
+      "har_bytes": 458288,
+      "script_report_sha256": "297e6701debb9d2dbfc268cd8dd6f2c8a27cd8c67b7eef5cce702b9b8bee35f1",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "(none — clean build)",
+        "variants": "wide-ids",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 126,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 217,
+          "remaining": 143
+        }
+      }
+    },
+    {
+      "id": "t3.f-activate-after-close",
+      "arm": "t3",
+      "label": "f-activate-after-close",
+      "wall_ms": 587,
+      "requests": 217,
+      "har_sha256": "b96427dd0d23e870424cf1c77a6527883a02524d55ae5ea963e7240a99672a9a",
+      "har_bytes": 442612,
+      "script_report_sha256": "81b2945a395cf7c437f41431c26137eacfd078d0d879f84de19d23eda00cd965",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-activate-after-close",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 126,
+        "failing": 2,
+        "failing_ids": [
+          "closure-is-terminal",
+          "closing-a-closed-account-is-410"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 217,
+          "remaining": 143
+        }
+      }
+    },
+    {
+      "id": "t3.f-day-usage-carryover",
+      "arm": "t3",
+      "label": "f-day-usage-carryover",
+      "wall_ms": 656,
+      "requests": 216,
+      "har_sha256": "5813b63dc1093abee0f11a44f4c6df85fd5f712299f63bec0a9c96647215f97c",
+      "har_bytes": 438961,
+      "script_report_sha256": "cf2e559e4de4952cfc421a24551971da779741ba550d01a75ab66e78887d27f2",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-day-usage-carryover",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 126,
+        "failing": 4,
+        "failing_ids": [
+          "rolling-the-day-resets-the-usage-to-zero",
+          "the-world-comes-to-rest",
+          "transfers-enumeration-is-disciplined-and-complete",
+          "every-transfer-charges-the-scheduled-fee"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 216,
+          "remaining": 144
+        }
+      }
+    },
+    {
+      "id": "t3.f-deposit-entry-mismatch",
+      "arm": "t3",
+      "label": "f-deposit-entry-mismatch",
+      "wall_ms": 666,
+      "requests": 217,
+      "har_sha256": "29dc886ba29a23e06264c02a0cef7efcd970edc9366023f6ee3c9d14aedfe54b",
+      "har_bytes": 442422,
+      "script_report_sha256": "3c75d3536764912abe726da2dd70541ea29fab4ee3dd633fc819d81fb4393268",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-deposit-entry-mismatch",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 126,
+        "failing": 1,
+        "failing_ids": [
+          "identifiers-resolve-and-the-two-resources-agree"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 217,
+          "remaining": 143
+        }
+      }
+    },
+    {
+      "id": "t3.f-entries-cross-principal",
+      "arm": "t3",
+      "label": "f-entries-cross-principal",
+      "wall_ms": 675,
+      "requests": 217,
+      "har_sha256": "62a85abbc7d11a56ddb18b9dfa56e668fe34cc5123e4b35dce9b9c8906cdb530",
+      "har_bytes": 442536,
+      "script_report_sha256": "080dac782f3dacac8a7e845e3c24f6c3951d68bb0dcaead9ffc9f4c4ca6c1954",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-entries-cross-principal",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 126,
+        "failing": 1,
+        "failing_ids": [
+          "cross-principal-entries-read-is-403"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 217,
+          "remaining": 143
+        }
+      }
+    },
+    {
+      "id": "t3.f-eur-fee-flat",
+      "arm": "t3",
+      "label": "f-eur-fee-flat",
+      "wall_ms": 542,
+      "requests": 217,
+      "har_sha256": "35b83e8265e37b4ee0c8d7a69a3c2fbe42e89336fa9247843104f88e62a0550d",
+      "har_bytes": 442422,
+      "script_report_sha256": "c183221129493b9df46cdead6bd0a8af33235628fcf003b44ac5a08f533be645",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-eur-fee-flat",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 126,
+        "failing": 2,
+        "failing_ids": [
+          "fee-schedule-is-one-schedule-across-currencies",
+          "every-transfer-charges-the-scheduled-fee"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 217,
+          "remaining": 143
+        }
+      }
+    },
+    {
+      "id": "t3.f-fee-account-balance-untouched",
+      "arm": "t3",
+      "label": "f-fee-account-balance-untouched",
+      "wall_ms": 522,
+      "requests": 217,
+      "har_sha256": "2d6eac9982b3c1b41f26b2ea7bfb77de828493dee01a3d23b9a455622d27d500",
+      "har_bytes": 442398,
+      "script_report_sha256": "7fb8d7a834fb57dfbb836f688ff7eb606aac86357f69d83e0a8dc8b7f45fe8be",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-fee-account-balance-untouched",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 126,
+        "failing": 2,
+        "failing_ids": [
+          "balance-equals-the-sum-of-its-entries",
+          "fee-accounts-hold-exactly-the-fees-collected"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 217,
+          "remaining": 143
+        }
+      }
+    },
+    {
+      "id": "t3.f-idempotency-conflict-ignored",
+      "arm": "t3",
+      "label": "f-idempotency-conflict-ignored",
+      "wall_ms": 583,
+      "requests": 217,
+      "har_sha256": "e064d4fdeba77952fdd531e85f605b3b255db367b9f925ab18517dbb0bfd40c7",
+      "har_bytes": 442681,
+      "script_report_sha256": "010debc89f77b390ec57282eb0d13acdccaaa3b524f3d0114b72ca1b2bc72709",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-idempotency-conflict-ignored",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 126,
+        "failing": 1,
+        "failing_ids": [
+          "same-key-different-body-is-409-and-creates-nothing"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 217,
+          "remaining": 143
+        }
+      }
+    },
+    {
+      "id": "t3.f-idempotency-freed-by-cancel",
+      "arm": "t3",
+      "label": "f-idempotency-freed-by-cancel",
+      "wall_ms": 574,
+      "requests": 218,
+      "har_sha256": "98b61d25108a45f74ebacccb8f75be78136aec71e57a48f31acb621461f0b274",
+      "har_bytes": 447037,
+      "script_report_sha256": "c580b283307e3481230006da1cf804be3d926d9f9b65d53445ae48f3f8b6a63b",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-idempotency-freed-by-cancel",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 126,
+        "failing": 6,
+        "failing_ids": [
+          "cancelling-does-not-release-the-idempotency-key",
+          "a-tick-leaves-nothing-pending",
+          "settlement-runs-in-creation-order",
+          "the-idempotency-key-survives-the-day-roll",
+          "transfers-enumeration-is-disciplined-and-complete",
+          "every-transfer-charges-the-scheduled-fee"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 218,
+          "remaining": 142
+        }
+      }
+    },
+    {
+      "id": "t3.f-include-closed-ignored",
+      "arm": "t3",
+      "label": "f-include-closed-ignored",
+      "wall_ms": 651,
+      "requests": 214,
+      "har_sha256": "84cce067001826e6b8b9744819136d53be96f2f68b7c95dfa4fe4bd0779d34bc",
+      "har_bytes": 434894,
+      "script_report_sha256": "75c0d68a4d43150eff78667f8fca2013e91f3ab1100a95535bd0c4222c9edb82",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-include-closed-ignored",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 126,
+        "failing": 4,
+        "failing_ids": [
+          "include-closed-filters-both-ways",
+          "accounts-enumeration-is-complete",
+          "balance-equals-the-sum-of-its-entries",
+          "identifiers-resolve-and-the-two-resources-agree"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 214,
+          "remaining": 146
+        }
+      }
+    },
+    {
+      "id": "t3.f-same-account-envelope-bare",
+      "arm": "t3",
+      "label": "f-same-account-envelope-bare",
+      "wall_ms": 531,
+      "requests": 217,
+      "har_sha256": "2c19fcb230d8b3ae22331f35964434d28b9fff20cdb302f6d9bf05bc927b2f22",
+      "har_bytes": 442368,
+      "script_report_sha256": "9aab2ddcf57e1b43f364896ba8a3dcb8d54e83f8ceb17991a484361cf3883400",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-same-account-envelope-bare",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 126,
+        "failing": 2,
+        "failing_ids": [
+          "self-transfer-is-422",
+          "error-envelope-shape"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": false,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 217,
+          "remaining": 143
+        }
+      }
+    },
+    {
+      "id": "t3.f-tick-day-skips-settlement",
+      "arm": "t3",
+      "label": "f-tick-day-skips-settlement",
+      "wall_ms": 542,
+      "requests": 217,
+      "har_sha256": "0dbc1ef25bb83a58cb8c4a1fce1dc11048e10b3f38dd262beca84f842d449c40",
+      "har_bytes": 442423,
+      "script_report_sha256": "5c6d40cfe3e3b2e84f719f3d40c56dea1948d23aeaddf2c1a3bfeee3c96b368b",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-tick-day-skips-settlement",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 126,
+        "failing": 2,
+        "failing_ids": [
+          "a-day-rolling-tick-is-still-a-tick",
+          "the-world-comes-to-rest"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 217,
+          "remaining": 143
+        }
+      }
+    },
+    {
+      "id": "t3.f-transfer-source-unowned",
+      "arm": "t3",
+      "label": "f-transfer-source-unowned",
+      "wall_ms": 578,
+      "requests": 218,
+      "har_sha256": "a2bd754ec811a13d49f0a442f7b90c86bee5bed273b27ba92865d1e4bd2efa34",
+      "har_bytes": 447293,
+      "script_report_sha256": "ec42d4ea056389b5e886f43234e49fffc5b6c0fdee1b63bbe0fe2cbb4b88204b",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-transfer-source-unowned",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 126,
+        "failing": 5,
+        "failing_ids": [
+          "spending-from-another-principals-account-is-403",
+          "a-tick-leaves-nothing-pending",
+          "settlement-runs-in-creation-order",
+          "transfers-enumeration-is-disciplined-and-complete",
+          "every-transfer-charges-the-scheduled-fee"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 218,
+          "remaining": 142
+        }
+      }
+    },
+    {
+      "id": "t3.f-transfer-to-pending-destination",
+      "arm": "t3",
+      "label": "f-transfer-to-pending-destination",
+      "wall_ms": 544,
+      "requests": 218,
+      "har_sha256": "3d4ab49145a3520d503cb5cfc983802d10dcd66e08f3013d4317c2ead9cc0c6f",
+      "har_bytes": 446816,
+      "script_report_sha256": "b199f1b30f9bb7e91efa06ea3549e3cb2f475a56b84daf7c6c20a5d87f3eaaac",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-transfer-to-pending-destination",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 126,
+        "failing": 5,
+        "failing_ids": [
+          "transfer-to-never-activated-account-is-409",
+          "a-tick-leaves-nothing-pending",
+          "settlement-runs-in-creation-order",
+          "transfers-enumeration-is-disciplined-and-complete",
+          "every-transfer-charges-the-scheduled-fee"
+        ],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 218,
+          "remaining": 142
+        }
+      }
+    },
+    {
+      "id": "t3.f-transfers-filter-after-page",
+      "arm": "t3",
+      "label": "f-transfers-filter-after-page",
+      "wall_ms": 560,
+      "requests": 217,
+      "har_sha256": "3231da58db7d7626be18ab1091bccf320331eaf2c928812a3227d6887eebe598",
+      "har_bytes": 442422,
+      "script_report_sha256": "5c6b4188c76f012a850bccda3c181c41bc93ac180d82e8ce7e5003830eded1f4",
+      "fixture_boot": {
+        "listening": "http://127.0.0.1:4184",
+        "seed": "ledger-dev-seed",
+        "faults": "f-transfers-filter-after-page",
+        "variants": "(none — canonical build)",
+        "jitter": "(none)",
+        "address_in_use": false
+      },
+      "verdict": {
+        "script_report_version": 1,
+        "checks": 126,
+        "failing": 0,
+        "failing_ids": [],
+        "advisories": 0,
+        "defects": 0,
+        "gate_pass": true,
+        "sound": true,
+        "obligations": {
+          "total": 33,
+          "covered": 33,
+          "skipped": 0,
+          "unsupported": 0,
+          "unaccounted": 0
+        },
+        "budget": {
+          "limit": 360,
+          "used": 217,
+          "remaining": 143
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+description: Adding an item to the cart must give an immediate visible receipt so shoppers do not click again and buy duplicates.
+story: |
+  You want exactly one Monstera Deliciosa. Open it from the shop grid and click
+  Add to cart once. Watch the header cart badge and the area around the button
+  for any acknowledgment that the item was added. Do NOT click Add to cart a
+  second time unless the screen genuinely gave you no sign at all that the first
+  click worked. When you are satisfied, open the cart and check the quantity.
+persona: [gift-rusher]
+report:
+  - After a single Add to cart click, did the header cart badge visibly change from 0 to 1?
+  - Did a confirmation message naming the item (and a link to the cart) appear without leaving the product page?
+  - Does the final cart contain exactly one Monstera, or did weak feedback cause an accidental duplicate?

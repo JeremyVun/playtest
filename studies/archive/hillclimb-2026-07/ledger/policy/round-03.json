@@ -1,0 +1,3298 @@
+{
+  "schema_version": 1,
+  "arm": "policy",
+  "round": 3,
+  "preregistration_sha": "1989ad9fbea7a55c7e37ac9417d37a5e9a1aac26",
+  "fingerprint": {
+    "captured_at": "2026-07-11T14:38:22.663Z",
+    "repo_head": "5e73e60bc9b363f4e01d7f7065c87951efee0a5d",
+    "repo_dirty": false,
+    "app_dir": "studies/hillclimb/arms/policy",
+    "fault_set": {
+      "ids": [
+        "f-account-error-swallowed",
+        "f-account-form-resets",
+        "f-add-cart-silent",
+        "f-cant-buy-last-unit",
+        "f-card-spaces-validation",
+        "f-cart-continue-removed",
+        "f-checkout-empty-guard-gone",
+        "f-clear-search-self-link",
+        "f-continue-shopping-loop",
+        "f-decline-swallowed",
+        "f-empty-cart-jargon",
+        "f-error-text-contrast",
+        "f-free-shipping-label",
+        "f-no-results-jargon",
+        "f-oos-says-in-stock",
+        "f-order-history-removed",
+        "f-place-order-no-feedback",
+        "f-postcode-validation",
+        "f-price-contrast",
+        "f-product-crumb-removed",
+        "f-qty-edit-removed",
+        "f-receipt-eta-wrong",
+        "f-save-profile-dead",
+        "f-search-removed",
+        "f-sort-inert",
+        "f-validation-wipes-payment"
+      ],
+      "app_hash": "3061d6de76f64e98a6ff681def875e3b822b92cf8c055c0f3a22a969cc4aad02"
+    },
+    "gateway": {
+      "base_url": "http://127.0.0.1:8899",
+      "healthz_ok": true,
+      "usage_limit_hits": 19
+    },
+    "models": {
+      "actor_model": "gpt5_4_mini",
+      "grader_model": "gpt5_5"
+    },
+    "checks": [
+      {
+        "name": "app-dir",
+        "ok": true,
+        "message": ""
+      },
+      {
+        "name": "base-url",
+        "ok": true,
+        "message": "expected HTTP 200, got 200"
+      },
+      {
+        "name": "reset",
+        "ok": true,
+        "message": "expected HTTP 2xx, got 200"
+      },
+      {
+        "name": "fault-set",
+        "ok": true,
+        "message": ""
+      },
+      {
+        "name": "gateway-healthz",
+        "ok": true,
+        "message": "expected {\"ok\":true}, got status 200"
+      },
+      {
+        "name": "gateway-log",
+        "ok": true,
+        "message": "19 usage limit hits"
+      },
+      {
+        "name": "exclusive-run",
+        "ok": true,
+        "message": ""
+      },
+      {
+        "name": "git",
+        "ok": true,
+        "message": ""
+      }
+    ]
+  },
+  "instrument": {
+    "suite": "studies/hillclimb/suite (8 discovery journeys, PLAN-r1 persona allocation) + studies/hillclimb/arms/policy-regression (12 pinned stories)",
+    "stories": [
+      "buy-a-specific-gift",
+      "change-your-mind",
+      "checkout-hiccup",
+      "club-order",
+      "first-impressions",
+      "moving-house",
+      "outfit-a-shelf",
+      "wheres-my-order",
+      "regression:add-to-cart-feedback",
+      "regression:cart-edit-and-remove",
+      "regression:checkout-recovery",
+      "regression:checkout-summary-shipping",
+      "regression:account-profile-save",
+      "regression:account-order-history",
+      "regression:catalog-sort",
+      "regression:catalog-search",
+      "regression:accessibility-contrast",
+      "regression:empty-cart-and-back-link",
+      "regression:sort-persists-round-trip",
+      "regression:empty-states-are-warm"
+    ],
+    "personas": [
+      "cautious-first-timer",
+      "gift-rusher",
+      "returning-regular",
+      "weekend-browser"
+    ],
+    "repeats": 1
+  },
+  "runs": [
+    {
+      "run_id": "2026-07-11T1438-6c02",
+      "case_id": "change-your-mind@weekend-browser",
+      "persona": "weekend-browser",
+      "status": "explored",
+      "end_reason": "done",
+      "steps": 15,
+      "tokens": {
+        "in": 265312,
+        "out": 25447,
+        "cache_read": 186368
+      },
+      "cost_usd": 0.27881625,
+      "grade_score": 82
+    },
+    {
+      "run_id": "2026-07-11T1438-6f6d",
+      "case_id": "buy-a-specific-gift@gift-rusher",
+      "persona": "gift-rusher",
+      "status": "explored",
+      "end_reason": "done",
+      "steps": 10,
+      "tokens": {
+        "in": 134257,
+        "out": 8083,
+        "cache_read": 76800
+      },
+      "cost_usd": 0.1817735,
+      "grade_score": 92
+    },
+    {
+      "run_id": "2026-07-11T1438-d156",
+      "case_id": "moving-house@returning-regular",
+      "persona": "returning-regular",
+      "status": "explored",
+      "end_reason": "done",
+      "steps": 20,
+      "tokens": {
+        "in": 330394,
+        "out": 23421,
+        "cache_read": 216576
+      },
+      "cost_usd": 0.2726246,
+      "grade_score": 92
+    },
+    {
+      "run_id": "2026-07-11T1443-4768",
+      "case_id": "checkout-hiccup@cautious-first-timer",
+      "persona": "cautious-first-timer",
+      "status": "explored",
+      "end_reason": "done",
+      "steps": 13,
+      "tokens": {
+        "in": 201179,
+        "out": 15441,
+        "cache_read": 121344
+      },
+      "cost_usd": 0.3174622,
+      "grade_score": 92
+    },
+    {
+      "run_id": "2026-07-11T1448-d57f",
+      "case_id": "club-order@returning-regular",
+      "persona": "returning-regular",
+      "status": "explored",
+      "end_reason": "done",
+      "steps": 15,
+      "tokens": {
+        "in": 212750,
+        "out": 21865,
+        "cache_read": 136704
+      },
+      "cost_usd": 0.22866820000000002,
+      "grade_score": 92
+    },
+    {
+      "run_id": "2026-07-11T1449-d0a7",
+      "case_id": "wheres-my-order@returning-regular",
+      "persona": "returning-regular",
+      "status": "explored",
+      "end_reason": "done",
+      "steps": 4,
+      "tokens": {
+        "in": 59962,
+        "out": 5712,
+        "cache_read": 30720
+      },
+      "cost_usd": 0.16987875000000002,
+      "grade_score": 92
+    },
+    {
+      "run_id": "2026-07-11T1456-9d4f",
+      "case_id": "first-impressions@cautious-first-timer",
+      "persona": "cautious-first-timer",
+      "status": "explored",
+      "end_reason": "done",
+      "steps": 13,
+      "tokens": {
+        "in": 187854,
+        "out": 22586,
+        "cache_read": 106496
+      },
+      "cost_usd": 0.23451510000000003,
+      "grade_score": 84
+    },
+    {
+      "run_id": "2026-07-11T1457-b9db",
+      "case_id": "catalog-sort@weekend-browser",
+      "persona": "weekend-browser",
+      "status": "explored",
+      "end_reason": "done",
+      "steps": 6,
+      "tokens": {
+        "in": 111003,
+        "out": 10885,
+        "cache_read": 79872
+      },
+      "cost_usd": 0.12830455000000002,
+      "grade_score": 94
+    },
+    {
+      "run_id": "2026-07-11T1501-38ff",
+      "case_id": "outfit-a-shelf@weekend-browser",
+      "persona": "weekend-browser",
+      "status": "explored",
+      "end_reason": "done",
+      "steps": 20,
+      "tokens": {
+        "in": 323090,
+        "out": 23067,
+        "cache_read": 202752
+      },
+      "cost_usd": 0.31896665,
+      "grade_score": 91
+    },
+    {
+      "run_id": "2026-07-11T1502-0c91",
+      "case_id": "catalog-search@cautious-first-timer",
+      "persona": "cautious-first-timer",
+      "status": "explored",
+      "end_reason": "done",
+      "steps": 2,
+      "tokens": {
+        "in": 36050,
+        "out": 2640,
+        "cache_read": 7680
+      },
+      "cost_usd": 0.11645125,
+      "grade_score": 96
+    },
+    {
+      "run_id": "2026-07-11T1504-ab63",
+      "case_id": "accessibility-contrast@cautious-first-timer",
+      "persona": "cautious-first-timer",
+      "status": "explored",
+      "end_reason": "done",
+      "steps": 9,
+      "tokens": {
+        "in": 135730,
+        "out": 9662,
+        "cache_read": 91648
+      },
+      "cost_usd": 0.13570525,
+      "grade_score": 88
+    },
+    {
+      "run_id": "2026-07-11T1507-7380",
+      "case_id": "add-to-cart-feedback@gift-rusher",
+      "persona": "gift-rusher",
+      "status": "explored",
+      "end_reason": "done",
+      "steps": 6,
+      "tokens": {
+        "in": 96852,
+        "out": 6568,
+        "cache_read": 67584
+      },
+      "cost_usd": 0.10724344999999999,
+      "grade_score": 88
+    },
+    {
+      "run_id": "2026-07-11T1509-f4b2",
+      "case_id": "sort-persists-round-trip@weekend-browser",
+      "persona": "weekend-browser",
+      "status": "explored",
+      "end_reason": "done",
+      "steps": 7,
+      "tokens": {
+        "in": 98043,
+        "out": 6073,
+        "cache_read": 53760
+      },
+      "cost_usd": 0.1540225,
+      "grade_score": 94
+    },
+    {
+      "run_id": "2026-07-11T1510-2a62",
+      "case_id": "cart-edit-and-remove@weekend-browser",
+      "persona": "weekend-browser",
+      "status": "explored",
+      "end_reason": "done",
+      "steps": 14,
+      "tokens": {
+        "in": 251790,
+        "out": 23118,
+        "cache_read": 160768
+      },
+      "cost_usd": 0.29474885,
+      "grade_score": 86
+    },
+    {
+      "run_id": "2026-07-11T1512-c163",
+      "case_id": "checkout-summary-shipping@cautious-first-timer",
+      "persona": "cautious-first-timer",
+      "status": "explored",
+      "end_reason": "done",
+      "steps": 5,
+      "tokens": {
+        "in": 72667,
+        "out": 5822,
+        "cache_read": 48128
+      },
+      "cost_usd": 0.11081450000000001,
+      "grade_score": 96
+    },
+    {
+      "run_id": "2026-07-11T1514-ce8f",
+      "case_id": "account-profile-save@returning-regular",
+      "persona": "returning-regular",
+      "status": "explored",
+      "end_reason": "done",
+      "steps": 9,
+      "tokens": {
+        "in": 159258,
+        "out": 11173,
+        "cache_read": 114176
+      },
+      "cost_usd": 0.14337185000000002,
+      "grade_score": 94
+    },
+    {
+      "run_id": "2026-07-11T1518-7e1f",
+      "case_id": "checkout-recovery@cautious-first-timer",
+      "persona": "cautious-first-timer",
+      "status": "explored",
+      "end_reason": "done",
+      "steps": 11,
+      "tokens": {
+        "in": 186259,
+        "out": 16062,
+        "cache_read": 121344
+      },
+      "cost_usd": 0.2222613,
+      "grade_score": 94
+    },
+    {
+      "run_id": "2026-07-11T1518-da44",
+      "case_id": "account-order-history@returning-regular",
+      "persona": "returning-regular",
+      "status": "explored",
+      "end_reason": "done",
+      "steps": 4,
+      "tokens": {
+        "in": 59672,
+        "out": 3742,
+        "cache_read": 40448
+      },
+      "cost_usd": 0.08187275,
+      "grade_score": 92
+    },
+    {
+      "run_id": "2026-07-11T1519-7d60",
+      "case_id": "empty-cart-and-back-link@weekend-browser",
+      "persona": "weekend-browser",
+      "status": "explored",
+      "end_reason": "done",
+      "steps": 5,
+      "tokens": {
+        "in": 85045,
+        "out": 7103,
+        "cache_read": 60416
+      },
+      "cost_usd": 0.10313934999999999,
+      "grade_score": 92
+    },
+    {
+      "run_id": "2026-07-11T1522-99a4",
+      "case_id": "empty-states-are-warm@weekend-browser",
+      "persona": "weekend-browser",
+      "status": "explored",
+      "end_reason": "done",
+      "steps": 5,
+      "tokens": {
+        "in": 122568,
+        "out": 6235,
+        "cache_read": 48128
+      },
+      "cost_usd": 0.39684949999999997,
+      "grade_score": 96
+    }
+  ],
+  "findings": [
+    {
+      "finding_id": "2026-07-11T1438-6c02/change-your-mind@weekend-browser#f0",
+      "source": "finding",
+      "severity": "info",
+      "note": "Product selection and initial over-budget build were discoverable: sorting by price, opening a product, setting quantity, and using Add to cart all matched the user's expectations.",
+      "step": 1,
+      "evidence": "?run=2026-07-11T1438-6c02/change-your-mind@weekend-browser&step=1"
+    },
+    {
+      "finding_id": "2026-07-11T1438-6c02/change-your-mind@weekend-browser#f1",
+      "source": "finding",
+      "severity": "minor",
+      "note": "The cart entry point was present but visually small; after adding items, the user first tried the toast's \"View cart\" path and then fell back to the header cart badge.",
+      "step": 5,
+      "evidence": "?run=2026-07-11T1438-6c02/change-your-mind@weekend-browser&step=5"
+    },
+    {
+      "finding_id": "2026-07-11T1438-6c02/change-your-mind@weekend-browser#f2",
+      "source": "finding",
+      "severity": "major",
+      "note": "Cart quantity editing fought back: typing 5 into the quantity field did not immediately update the subtotal or header badge, leaving the screen showing field value 5 alongside subtotal $96.00 and cart badge 8 until the user used the minus control.",
+      "step": 8,
+      "evidence": "?run=2026-07-11T1438-6c02/change-your-mind@weekend-browser&step=8"
+    },
+    {
+      "finding_id": "2026-07-11T1438-6c02/change-your-mind@weekend-browser#f3",
+      "source": "finding",
+      "severity": "info",
+      "note": "The checkout path was recognizable once in the cart: the subtotal had updated to $48, the Checkout button advanced to shipping/payment, and checkout showed the final $54 total before submission.",
+      "step": 9,
+      "evidence": "?run=2026-07-11T1438-6c02/change-your-mind@weekend-browser&step=9"
+    },
+    {
+      "finding_id": "2026-07-11T1438-6c02/change-your-mind@weekend-browser#f4",
+      "source": "finding",
+      "severity": "minor",
+      "note": "The checkout submit control required scrolling because the payment form was cut off below the fold, but the user correctly inferred the rest of the form and Place order button were lower on the page.",
+      "step": 10,
+      "evidence": "?run=2026-07-11T1438-6c02/change-your-mind@weekend-browser&step=10"
+    },
+    {
+      "finding_id": "2026-07-11T1438-6c02/change-your-mind@weekend-browser#f5",
+      "source": "finding",
+      "severity": "info",
+      "note": "The order confirmation clearly verified success and budget fit, showing 4 items, $48 subtotal, $6 shipping, and $54 total.",
+      "step": 15,
+      "evidence": "?run=2026-07-11T1438-6c02/change-your-mind@weekend-browser&step=15"
+    },
+    {
+      "finding_id": "2026-07-11T1438-6c02/change-your-mind@weekend-browser#f6",
+      "source": "finding",
+      "severity": "info",
+      "note": "No axe-core accessibility violations were reported across the run."
+    },
+    {
+      "finding_id": "2026-07-11T1438-6c02/change-your-mind@weekend-browser#q0",
+      "source": "report",
+      "question": "Could the user change quantities and remove items where they expected to? Describe any edit that fought back.",
+      "answer": "They expected quantity changes in the cart and did find the control there, but direct typing did not commit cleanly; the user had to use the minus button to force the real update. Remove-item behavior was not exercised because the user trimmed by quantity only.",
+      "evidence_steps": [
+        7,
+        8
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1438-6c02/change-your-mind@weekend-browser#q1",
+      "source": "report",
+      "question": "After each cart change, did every number on screen (line totals, subtotal, cart badge, checkout total) stay consistent? Note any lag or mismatch.",
+      "answer": "No. After typing 5, the field changed but the subtotal still showed $96.00 and the header badge still read 8. After using the stepper, the subtotal was $48 and checkout/final confirmation consistently showed $54 including shipping.",
+      "evidence_steps": [
+        7,
+        8,
+        9,
+        15
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1438-6c02/change-your-mind@weekend-browser#q2",
+      "source": "report",
+      "question": "Did the user trust the final total matched their budget arithmetic? Why or why not?",
+      "answer": "Yes by the end: checkout showed the total within budget before submission, and confirmation repeated the same arithmetic as $48 subtotal + $6 shipping = $54 total. The earlier cart mismatch was resolved before ordering.",
+      "evidence_steps": [
+        9,
+        11,
+        14,
+        15
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1438-6c02/change-your-mind@weekend-browser#q3",
+      "source": "report",
+      "question": "Where, if anywhere, did the user hesitate, backtrack, or get confused — and what on the screen caused it?",
+      "answer": "The only real confusion was in the cart after the typed quantity edit: the visible field value conflicted with stale totals and the cart badge, so the user tried another control before proceeding. There was also a small failed attempt to use the toast's View cart link before using the header cart.",
+      "evidence_steps": [
+        5,
+        8
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1438-6c02/change-your-mind@weekend-browser#q4",
+      "source": "report",
+      "question": "Was anything broken, misleading, or missing that a real shopper would notice? Be specific.",
+      "answer": "The misleading piece was cart state synchronization: a shopper could believe they changed quantity while the order totals still reflected the old quantity. The checkout page itself was complete, though the lower payment fields and Place order button started below the fold.",
+      "evidence_steps": [
+        8,
+        10
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1438-6f6d/buy-a-specific-gift@gift-rusher#f0",
+      "source": "finding",
+      "severity": "info",
+      "note": "Search matched the user's first expectation: typing “monstera” kept the Monstera Deliciosa card visible as the clearest grid target, enabling a fast product-page jump.",
+      "step": 1,
+      "evidence": "?run=2026-07-11T1438-6f6d/buy-a-specific-gift@gift-rusher&step=1"
+    },
+    {
+      "finding_id": "2026-07-11T1438-6f6d/buy-a-specific-gift@gift-rusher#f1",
+      "source": "finding",
+      "severity": "info",
+      "note": "The product page supported the expected purchase flow: price, stock, quantity, and Add to cart were visually grouped, and the header cart badge changed to 1 after adding.",
+      "step": 3,
+      "evidence": "?run=2026-07-11T1438-6f6d/buy-a-specific-gift@gift-rusher&step=3"
+    },
+    {
+      "finding_id": "2026-07-11T1438-6f6d/buy-a-specific-gift@gift-rusher#f2",
+      "source": "finding",
+      "severity": "minor",
+      "note": "The add-to-cart toast looked like the fastest next step, but the attempted toast/cart link target was no longer actionable, producing an unknown-ref failure before the user recovered via the header Cart link.",
+      "step": 4,
+      "evidence": "?run=2026-07-11T1438-6f6d/buy-a-specific-gift@gift-rusher&step=4"
+    },
+    {
+      "finding_id": "2026-07-11T1438-6f6d/buy-a-specific-gift@gift-rusher#f3",
+      "source": "finding",
+      "severity": "info",
+      "note": "Cart-to-checkout was discoverable: the cart showed one Monstera line item, subtotal, and a clearly placed Checkout control near the action area.",
+      "step": 6,
+      "evidence": "?run=2026-07-11T1438-6f6d/buy-a-specific-gift@gift-rusher&step=6"
+    },
+    {
+      "finding_id": "2026-07-11T1438-6f6d/buy-a-specific-gift@gift-rusher#f4",
+      "source": "finding",
+      "severity": "minor",
+      "note": "On checkout, the pay/place-order control was initially below the visible payment fields, so the user tried submitting from the card/security-code fields rather than deliberately clicking the button.",
+      "step": 7,
+      "evidence": "?run=2026-07-11T1438-6f6d/buy-a-specific-gift@gift-rusher&step=7"
+    },
+    {
+      "finding_id": "2026-07-11T1438-6f6d/buy-a-specific-gift@gift-rusher#f5",
+      "source": "finding",
+      "severity": "info",
+      "note": "Final confirmation was strong: the order page displayed a confirmed heading, order number FF-1053, delivery window, line item, totals, delivery address, and receipt destination.",
+      "step": 10,
+      "evidence": "?run=2026-07-11T1438-6f6d/buy-a-specific-gift@gift-rusher&step=10"
+    },
+    {
+      "finding_id": "2026-07-11T1438-6f6d/buy-a-specific-gift@gift-rusher#f6",
+      "source": "finding",
+      "severity": "info",
+      "note": "No axe-core accessibility violations or console errors were recorded across the run."
+    },
+    {
+      "finding_id": "2026-07-11T1438-6f6d/buy-a-specific-gift@gift-rusher#q0",
+      "source": "report",
+      "question": "How did the user try to find the monstera, and how directly did the shop take them to it?",
+      "answer": "They used the top search box first, even though the Monstera card was already visible. The shop took them directly to the Monstera Deliciosa card and then the product page with no detour.",
+      "evidence_steps": [
+        1,
+        2
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1438-6f6d/buy-a-specific-gift@gift-rusher#q1",
+      "source": "report",
+      "question": "Where, if anywhere, did the user hesitate, backtrack, or get confused — and what on the screen caused it?",
+      "answer": "The only clear confusion was after adding to cart: the bottom confirmation toast appeared to contain the fastest cart path, but the attempted target was not available, causing a failed click. On checkout there was mild hesitation because the place-order control was lower on the form, so the user submitted from fields instead.",
+      "evidence_steps": [
+        4,
+        7,
+        9
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1438-6f6d/buy-a-specific-gift@gift-rusher#q2",
+      "source": "report",
+      "question": "Did every action produce a visible confirmation it had worked? Name any that did not.",
+      "answer": "Most actions did: add-to-cart showed a confirmation and cart badge 1, cart showed the line item, checkout showed the form, and payment submission reached confirmation. The failed toast click did not advance or confirm anything; entering card details also only manifested as filled fields/validation state until final submit.",
+      "evidence_steps": [
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1438-6f6d/buy-a-specific-gift@gift-rusher#q3",
+      "source": "report",
+      "question": "Could the user prove to themselves the order was placed? How?",
+      "answer": "Yes. The final page explicitly said “order FF-1053 is confirmed,” included the placed date, arrival window, purchased Monstera, total, delivery address, and receipt email.",
+      "evidence_steps": [
+        10
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1438-6f6d/buy-a-specific-gift@gift-rusher#q4",
+      "source": "report",
+      "question": "Was anything broken, misleading, or missing that a real shopper would notice? Be specific.",
+      "answer": "The toast/cart affordance was the only broken-feeling element because it drew attention as the next step but was not clickable when used. The checkout button being below the fold could also feel easy to miss on a hurried purchase, though keyboard submission still completed the order.",
+      "evidence_steps": [
+        4,
+        7,
+        9
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1438-d156/moving-house@returning-regular#f0",
+      "source": "finding",
+      "severity": "info",
+      "note": "Account was the user's first expected location for both email and saved shipping address, and it contained both capabilities in editable forms, enabling a straightforward account-update path.",
+      "step": 1,
+      "evidence": "?run=2026-07-11T1438-d156/moving-house@returning-regular&step=1"
+    },
+    {
+      "finding_id": "2026-07-11T1438-d156/moving-house@returning-regular#f1",
+      "source": "finding",
+      "severity": "minor",
+      "note": "The Account link was visually small relative to the product grid, so the correct entry point existed but was not strongly promoted from the shop page.",
+      "step": 1,
+      "evidence": "?run=2026-07-11T1438-d156/moving-house@returning-regular&step=1"
+    },
+    {
+      "finding_id": "2026-07-11T1438-d156/moving-house@returning-regular#f2",
+      "source": "finding",
+      "severity": "minor",
+      "note": "Profile and shipping details were split vertically; the shipping fields and later the email field required scrolling, making users rely on page continuation cues to complete both updates.",
+      "step": 2,
+      "evidence": "?run=2026-07-11T1438-d156/moving-house@returning-regular&step=2"
+    },
+    {
+      "finding_id": "2026-07-11T1438-d156/moving-house@returning-regular#f3",
+      "source": "finding",
+      "severity": "info",
+      "note": "Saving the address and profile produced visible success feedback: an address saved badge and a “Profile saved.” toast with the updated email still shown in the form.",
+      "step": 10,
+      "evidence": "?run=2026-07-11T1438-d156/moving-house@returning-regular&step=10"
+    },
+    {
+      "finding_id": "2026-07-11T1438-d156/moving-house@returning-regular#f4",
+      "source": "finding",
+      "severity": "minor",
+      "note": "The shop listing did not expose add-to-cart controls, so buying required opening a product detail page even for a small, obvious item.",
+      "step": 11,
+      "evidence": "?run=2026-07-11T1438-d156/moving-house@returning-regular&step=11"
+    },
+    {
+      "finding_id": "2026-07-11T1438-d156/moving-house@returning-regular#f5",
+      "source": "finding",
+      "severity": "info",
+      "note": "Checkout prefilled the updated address and email, giving the user confidence the account changes would apply to the order before payment.",
+      "step": 15,
+      "evidence": "?run=2026-07-11T1438-d156/moving-house@returning-regular&step=15"
+    },
+    {
+      "finding_id": "2026-07-11T1438-d156/moving-house@returning-regular#f6",
+      "source": "finding",
+      "severity": "info",
+      "note": "The order confirmation explicitly stated the destination and receipt email, making final verification easy after purchase.",
+      "step": 20,
+      "evidence": "?run=2026-07-11T1438-d156/moving-house@returning-regular&step=20"
+    },
+    {
+      "finding_id": "2026-07-11T1438-d156/moving-house@returning-regular#f7",
+      "source": "finding",
+      "severity": "minor",
+      "note": "Several primary actions were below the fold or visually modest, including Save buttons, checkout payment controls, and the final submit path; users succeeded, but the flow depended on scrolling at predictable moments.",
+      "step": 16,
+      "evidence": "?run=2026-07-11T1438-d156/moving-house@returning-regular&step=16"
+    },
+    {
+      "finding_id": "2026-07-11T1438-d156/moving-house@returning-regular#q0",
+      "source": "report",
+      "question": "Did saving the new details visibly succeed, and did the user believe it? What convinced them?",
+      "answer": "Yes. The address save showed a saved status badge, and the profile save showed a “Profile saved.” toast while the new email remained in the form; the user explicitly interpreted that as committed before leaving Account.",
+      "evidence_steps": [
+        6,
+        7,
+        9,
+        10
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1438-d156/moving-house@returning-regular#q1",
+      "source": "report",
+      "question": "When the user reached checkout, did their updated details carry through, or did they have to re-enter anything?",
+      "answer": "They carried through. Checkout already showed the new address and email, so the only fields the user entered there were payment details.",
+      "evidence_steps": [
+        15,
+        17,
+        18
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1438-d156/moving-house@returning-regular#q2",
+      "source": "report",
+      "question": "Could the user confirm the finished order was headed to the new address? How?",
+      "answer": "Yes. The final confirmation text stated the delivery recipient, 7 Alder Court, Kingsbridge 6220, and the receipt email, which the user treated as final proof.",
+      "evidence_steps": [
+        20
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1438-d156/moving-house@returning-regular#q3",
+      "source": "report",
+      "question": "Where, if anywhere, did the user hesitate, backtrack, or get confused — and what on the screen caused it?",
+      "answer": "There was no real confusion or backtracking. The only friction came from layout: account sections and checkout controls extended below the fold, and some key actions were visually small, so the user had to scroll and scan rather than being blocked.",
+      "evidence_steps": [
+        2,
+        7,
+        15,
+        16
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1438-d156/moving-house@returning-regular#q4",
+      "source": "report",
+      "question": "Was anything broken, misleading, or missing that a real shopper would notice? Be specific.",
+      "answer": "Nothing appeared broken: there were no console errors or accessibility violations, and the order completed. The notable missing convenience was add-to-cart from the product grid; the user had to open the product page to buy the small item.",
+      "evidence_steps": [
+        11,
+        12,
+        19,
+        20
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1443-4768/checkout-hiccup@cautious-first-timer#f0",
+      "source": "finding",
+      "severity": "info",
+      "note": "The product-to-checkout path matched shopper expectations: product page Add to cart, toast View cart, cart Checkout, then checkout payment all appeared where the user looked for them.",
+      "step": 4,
+      "evidence": "?run=2026-07-11T1443-4768/checkout-hiccup@cautious-first-timer&step=4"
+    },
+    {
+      "finding_id": "2026-07-11T1443-4768/checkout-hiccup@cautious-first-timer#f1",
+      "source": "finding",
+      "severity": "info",
+      "note": "The decline message was explicit and calming: “Your card was declined. No charge was made — try a different card,” which gave both the failure reason and reassurance about charges.",
+      "step": 10,
+      "evidence": "?run=2026-07-11T1443-4768/checkout-hiccup@cautious-first-timer&step=10"
+    },
+    {
+      "finding_id": "2026-07-11T1443-4768/checkout-hiccup@cautious-first-timer#f2",
+      "source": "finding",
+      "severity": "minor",
+      "note": "After the decline, the alert appeared at the top while the card fields and Place order button were below the fold, forcing the user to scroll before acting on “try a different card.”",
+      "step": 10,
+      "evidence": "?run=2026-07-11T1443-4768/checkout-hiccup@cautious-first-timer&step=10"
+    },
+    {
+      "finding_id": "2026-07-11T1443-4768/checkout-hiccup@cautious-first-timer#f3",
+      "source": "finding",
+      "severity": "info",
+      "note": "Retry effort was low: delivery details stayed filled and the user only replaced the card number before resubmitting; expiry and CVC did not need to be re-entered.",
+      "step": 11,
+      "evidence": "?run=2026-07-11T1443-4768/checkout-hiccup@cautious-first-timer&step=11"
+    },
+    {
+      "finding_id": "2026-07-11T1443-4768/checkout-hiccup@cautious-first-timer#f4",
+      "source": "finding",
+      "severity": "minor",
+      "note": "The checkout payment section was initially cut off below the fold, so the user had to scroll to find the remaining card fields and submit control.",
+      "step": 5,
+      "evidence": "?run=2026-07-11T1443-4768/checkout-hiccup@cautious-first-timer&step=5"
+    },
+    {
+      "finding_id": "2026-07-11T1443-4768/checkout-hiccup@cautious-first-timer#f5",
+      "source": "finding",
+      "severity": "info",
+      "note": "The final confirmation gave strong closure with order FF-1053 confirmed, total, delivery address, receipt email, and cart count cleared to 0.",
+      "step": 13,
+      "evidence": "?run=2026-07-11T1443-4768/checkout-hiccup@cautious-first-timer&step=13"
+    },
+    {
+      "finding_id": "2026-07-11T1443-4768/checkout-hiccup@cautious-first-timer#q0",
+      "source": "report",
+      "question": "When the payment failed, what exactly did the shop tell the user, and did they understand what had happened and whether they'd been charged?",
+      "answer": "It told them: “Your card was declined. No charge was made — try a different card.” The user understood this as a failed primary-card attempt with no charge, then moved to the backup card.",
+      "evidence_steps": [
+        10,
+        11
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1443-4768/checkout-hiccup@cautious-first-timer#q1",
+      "source": "report",
+      "question": "How much did the user have to re-enter to try again? Name anything the form forgot.",
+      "answer": "Only the card number was re-entered. Delivery details remained filled, and expiry/CVC did not need to be entered again; nothing material was observed as forgotten.",
+      "evidence_steps": [
+        10,
+        11,
+        12
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1443-4768/checkout-hiccup@cautious-first-timer#q2",
+      "source": "report",
+      "question": "Did the user finish the purchase, and how sure were they that it succeeded exactly once?",
+      "answer": "Yes. Confidence was high: the first attempt stayed on checkout with a no-charge decline, and the second attempt produced one confirmation page for order FF-1053 with cart count 0.",
+      "evidence_steps": [
+        10,
+        12,
+        13
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1443-4768/checkout-hiccup@cautious-first-timer#q3",
+      "source": "report",
+      "question": "Where, if anywhere, did the user hesitate, backtrack, or get confused — and what on the screen caused it?",
+      "answer": "There were no confusion events or backtracking. The only friction was scrolling: first to reveal below-fold payment controls, then again after the decline because the alert was visible at top while the card fields were not.",
+      "evidence_steps": [
+        5,
+        10
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1443-4768/checkout-hiccup@cautious-first-timer#q4",
+      "source": "report",
+      "question": "Was anything broken, misleading, or missing that a real shopper would notice? Be specific.",
+      "answer": "No user-visible break blocked checkout. The noticeable gap was that failed-payment recovery did not keep or move the user near the card fields; a real shopper would also notice the demo copy saying no real charge is made if this were production.",
+      "evidence_steps": [
+        6,
+        10,
+        11
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1448-d57f/club-order@returning-regular#f0",
+      "source": "finding",
+      "severity": "info",
+      "note": "Care-item discovery worked well: the user first looked to the category chips under search, selected Care & Tools, and immediately found a small, cheap bundle-friendly item.",
+      "step": 1,
+      "evidence": "?run=2026-07-11T1448-d57f/club-order@returning-regular&step=1"
+    },
+    {
+      "finding_id": "2026-07-11T1448-d57f/club-order@returning-regular#f1",
+      "source": "finding",
+      "severity": "info",
+      "note": "The product detail page made the purchase limit discoverable before carting: the user saw 18 available and confidently set quantity to 8 without needing to test a stock error.",
+      "step": 3,
+      "evidence": "?run=2026-07-11T1448-d57f/club-order@returning-regular&step=3"
+    },
+    {
+      "finding_id": "2026-07-11T1448-d57f/club-order@returning-regular#f2",
+      "source": "finding",
+      "severity": "minor",
+      "note": "After add-to-cart, the user expected the confirmation toast's small View cart link to be the next step, but the click failed because the referenced target was no longer available; the top-nav cart badge recovered the path.",
+      "step": 5,
+      "evidence": "?run=2026-07-11T1448-d57f/club-order@returning-regular&step=5"
+    },
+    {
+      "finding_id": "2026-07-11T1448-d57f/club-order@returning-regular#f3",
+      "source": "finding",
+      "severity": "minor",
+      "note": "Checkout submit feedback was weak when payment details were incomplete: clicking Place order before expiry/security stayed on checkout, and the user inferred the missing fields rather than being guided by a clearly noted error in the digest.",
+      "step": 10,
+      "evidence": "?run=2026-07-11T1448-d57f/club-order@returning-regular&step=10"
+    },
+    {
+      "finding_id": "2026-07-11T1448-d57f/club-order@returning-regular#f4",
+      "source": "finding",
+      "severity": "info",
+      "note": "State persistence was solid: the cart carried 8 Gentle Plant Food items through cart, checkout, and final confirmation without quantity loss or forced substitution.",
+      "step": 15,
+      "evidence": "?run=2026-07-11T1448-d57f/club-order@returning-regular&step=15"
+    },
+    {
+      "finding_id": "2026-07-11T1448-d57f/club-order@returning-regular#q0",
+      "source": "report",
+      "question": "How did the user discover how many of an item they could actually buy, and was the shop upfront about it or did they find out the hard way?",
+      "answer": "They discovered it on the product detail page before adding to cart: Gentle Plant Food showed 18 available, so the user set quantity to 8 confidently. This was upfront, not learned through an error or cart rejection.",
+      "evidence_steps": [
+        3,
+        4
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1448-d57f/club-order@returning-regular#q1",
+      "source": "report",
+      "question": "When the shop couldn't meet the request, what did it offer the user to work with, and how did they adapt?",
+      "answer": "That situation did not occur in this run. The selected item could satisfy all eight units, so no substitute recommendation, maximum-allowed adjustment, or adaptation path was exercised.",
+      "evidence_steps": [
+        3,
+        7,
+        15
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1448-d57f/club-order@returning-regular#q2",
+      "source": "report",
+      "question": "Did the user lose any work (cart contents, typed input) at any point while adapting? Describe it.",
+      "answer": "No work was lost. The quantity of 8 survived add-to-cart, cart review, checkout, and confirmation; payment details only needed completion after the premature submit.",
+      "evidence_steps": [
+        6,
+        7,
+        8,
+        11,
+        12,
+        15
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1448-d57f/club-order@returning-regular#q3",
+      "source": "report",
+      "question": "Where, if anywhere, did the user hesitate, backtrack, or get confused — and what on the screen caused it?",
+      "answer": "The only recorded confusion was after add-to-cart: the user tried to use the small View cart link in the confirmation toast, but the target was no longer in the latest snapshot. Later, Place order before all payment fields were filled left them on checkout, prompting them to infer that expiry and security code were required.",
+      "evidence_steps": [
+        5,
+        10,
+        11,
+        12
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1448-d57f/club-order@returning-regular#q4",
+      "source": "report",
+      "question": "Was anything broken, misleading, or missing that a real shopper would notice? Be specific.",
+      "answer": "Two issues stood out: the toast-level View cart action was brittle or easy to miss compared with the nav cart badge, and the incomplete-payment submit did not produce clearly captured guidance before the user filled the remaining fields. Stock messaging itself was clear for the chosen item.",
+      "evidence_steps": [
+        3,
+        5,
+        10
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1449-d0a7/wheres-my-order@returning-regular#f0",
+      "source": "finding",
+      "severity": "info",
+      "note": "Account matched the user's first expectation for order lookup; the header link was visible enough on the product-grid homepage to start there without hunting.",
+      "step": 1,
+      "evidence": "?run=2026-07-11T1449-d0a7/wheres-my-order@returning-regular&step=1"
+    },
+    {
+      "finding_id": "2026-07-11T1449-d0a7/wheres-my-order@returning-regular#f1",
+      "source": "finding",
+      "severity": "minor",
+      "note": "Order history sat below profile and shipping details on Account; the user initially saw no orders and had to scroll, making the key lookup area easy to miss.",
+      "step": 2,
+      "evidence": "?run=2026-07-11T1449-d0a7/wheres-my-order@returning-regular&step=2"
+    },
+    {
+      "finding_id": "2026-07-11T1449-d0a7/wheres-my-order@returning-regular#f2",
+      "source": "finding",
+      "severity": "minor",
+      "note": "Once visible, the order history table worked, but the order IDs were small and were the only obvious interactive targets for opening a receipt.",
+      "step": 3,
+      "evidence": "?run=2026-07-11T1449-d0a7/wheres-my-order@returning-regular&step=3"
+    },
+    {
+      "finding_id": "2026-07-11T1449-d0a7/wheres-my-order@returning-regular#f3",
+      "source": "finding",
+      "severity": "info",
+      "note": "The receipt page fully supported the email-prep facts: item and quantity, subtotal, shipping, total, and shipment status were all visible together under a dominant 'on its way' headline.",
+      "step": 4,
+      "evidence": "?run=2026-07-11T1449-d0a7/wheres-my-order@returning-regular&step=4"
+    },
+    {
+      "finding_id": "2026-07-11T1449-d0a7/wheres-my-order@returning-regular#f4",
+      "source": "finding",
+      "severity": "info",
+      "note": "No technical breakage surfaced during the run: no console errors, no axe violations, no confusion events, and no unrelated cart/account state was disturbed."
+    },
+    {
+      "finding_id": "2026-07-11T1449-d0a7/wheres-my-order@returning-regular#q0",
+      "source": "report",
+      "question": "Could the user find the order at all, and how many wrong turns did it take?",
+      "answer": "Yes. They found the order by going straight to Account, scrolling to order history, and opening FF-1052. It took zero wrong turns; the only extra action was a useful scroll because orders were below the initial account details.",
+      "evidence_steps": [
+        1,
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1449-d0a7/wheres-my-order@returning-regular#q1",
+      "source": "report",
+      "question": "What did the user conclude about the order's contents, cost, and status — and does the shop back each conclusion with something on screen?",
+      "answer": "They concluded the order was Gentle Plant Food x2, with a $24.00 subtotal, $6.00 shipping, and $30.00 total. They also concluded it was confirmed and on its way, arriving in 3-5 days. The final receipt snapshot backs each of those facts directly on screen.",
+      "evidence_steps": [
+        4
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1449-d0a7/wheres-my-order@returning-regular#q2",
+      "source": "report",
+      "question": "Where, if anywhere, did the user hesitate, backtrack, or get confused — and what on the screen caused it?",
+      "answer": "There was no backtracking or recorded confusion. The only hesitation point was Account: profile and shipping content filled the first view, so the user had to scroll to verify whether order history existed lower on the page. The small order links added minor friction once the table appeared.",
+      "evidence_steps": [
+        2,
+        3
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1449-d0a7/wheres-my-order@returning-regular#q3",
+      "source": "report",
+      "question": "Was anything broken, misleading, or missing that a real shopper would notice? Be specific.",
+      "answer": "Nothing appeared broken or misleading. A real shopper might notice that order history is not immediately visible on Account and that receipt links are small, but the receipt page itself contains the necessary order, payment, and shipping facts clearly.",
+      "evidence_steps": [
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1456-9d4f/first-impressions@cautious-first-timer#f0",
+      "source": "finding",
+      "severity": "info",
+      "note": "The product grid immediately communicated the core assortment: houseplants were visible first, with category tabs for pots/planters close enough to support browsing once the user looked above the cards.",
+      "step": 1,
+      "evidence": "?run=2026-07-11T1456-9d4f/first-impressions@cautious-first-timer&step=1"
+    },
+    {
+      "finding_id": "2026-07-11T1456-9d4f/first-impressions@cautious-first-timer#f1",
+      "source": "finding",
+      "severity": "minor",
+      "note": "Trust details were not discoverable during browsing: the user repeatedly looked for shipping, returns, payment reassurance, or policy text below the catalog and on product pages, but only found a small contact email until checkout.",
+      "step": 3,
+      "evidence": "?run=2026-07-11T1456-9d4f/first-impressions@cautious-first-timer&step=3"
+    },
+    {
+      "finding_id": "2026-07-11T1456-9d4f/first-impressions@cautious-first-timer#f2",
+      "source": "finding",
+      "severity": "minor",
+      "note": "Opening Fiddle-Leaf Fig led to a dead-end detail page with a disabled “Out of stock” button and no purchase path, which made the first inspected item feel unavailable rather than reassuring.",
+      "step": 4,
+      "evidence": "?run=2026-07-11T1456-9d4f/first-impressions@cautious-first-timer&step=4"
+    },
+    {
+      "finding_id": "2026-07-11T1456-9d4f/first-impressions@cautious-first-timer#f3",
+      "source": "finding",
+      "severity": "info",
+      "note": "Category filtering helped the user estimate starter options: they checked Pots & Planters, returned to Plants, and identified Golden Pothos at $19 as the cheapest visible plant.",
+      "step": 7,
+      "evidence": "?run=2026-07-11T1456-9d4f/first-impressions@cautious-first-timer&step=7"
+    },
+    {
+      "finding_id": "2026-07-11T1456-9d4f/first-impressions@cautious-first-timer#f4",
+      "source": "finding",
+      "severity": "info",
+      "note": "The Golden Pothos detail page provided a clear purchase path with stock count, quantity, and a prominent green “Add to cart” button, validating that the shop can actually start an order.",
+      "step": 8,
+      "evidence": "?run=2026-07-11T1456-9d4f/first-impressions@cautious-first-timer&step=8"
+    },
+    {
+      "finding_id": "2026-07-11T1456-9d4f/first-impressions@cautious-first-timer#f5",
+      "source": "finding",
+      "severity": "minor",
+      "note": "The add-to-cart success path caused one confusion event: the user expected to follow the toast/cart route, but the referenced element was unavailable, so they recovered by using the top-nav Cart link.",
+      "step": 9,
+      "evidence": "?run=2026-07-11T1456-9d4f/first-impressions@cautious-first-timer&step=9"
+    },
+    {
+      "finding_id": "2026-07-11T1456-9d4f/first-impressions@cautious-first-timer#f6",
+      "source": "finding",
+      "severity": "info",
+      "note": "Cart and checkout clearly exposed the final starter cost: $19 subtotal, $6 shipping, $25 total, with a visible “demo shop — no real charge is made” note before card entry.",
+      "step": 13,
+      "evidence": "?run=2026-07-11T1456-9d4f/first-impressions@cautious-first-timer&step=13"
+    },
+    {
+      "finding_id": "2026-07-11T1456-9d4f/first-impressions@cautious-first-timer#q0",
+      "source": "report",
+      "question": "What did the user conclude the shop sells, and how quickly was that clear?",
+      "answer": "They concluded Fern & Fog sells houseplants plus pots and planters. The core plant assortment was clear immediately from the opening catalog grid, while the “things they need” add-on range became clearer after using the Pots & Planters category.",
+      "evidence_steps": [
+        1,
+        5,
+        6,
+        13
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1456-9d4f/first-impressions@cautious-first-timer#q1",
+      "source": "report",
+      "question": "Which pages or details built trust, and which — if any — eroded it? Quote the specifics.",
+      "answer": "Trust was built by the working Golden Pothos purchase path, cart subtotal, checkout total, and the note “This is a demo shop — no real charge is made.” Trust was weaker during browsing because the user found only “hello@fernandfog.example” instead of shipping/returns/payment reassurance, and the first product opened showed “Out of stock.”",
+      "evidence_steps": [
+        3,
+        4,
+        8,
+        10,
+        11,
+        13
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1456-9d4f/first-impressions@cautious-first-timer#q2",
+      "source": "report",
+      "question": "Did the user hit anything that looked unfinished, inconsistent, or broken while just looking around? Be specific.",
+      "answer": "Nothing in the app looked catastrophically broken, and there were no console or accessibility failures. The only broken-feeling moment was the failed attempt to use the post-add-to-cart route from the success state, recorded as unknown ref “e10”; the user recovered via the nav Cart link.",
+      "evidence_steps": [
+        9,
+        10
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1456-9d4f/first-impressions@cautious-first-timer#q3",
+      "source": "report",
+      "question": "Where, if anywhere, did the user hesitate, backtrack, or get confused — and what on the screen caused it?",
+      "answer": "They hesitated around missing trust/cost details, first scrolling for policies, then leaving an unavailable Fiddle-Leaf Fig detail page, then checking cart and checkout for fees. The causes were the tiny footer contact line, no visible policy text on product pages, the disabled “Out of stock” button, and the main checkout action being below the fold until scrolling.",
+      "evidence_steps": [
+        2,
+        3,
+        4,
+        9,
+        12
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1457-b9db/catalog-sort@weekend-browser#f0",
+      "source": "finding",
+      "severity": "info",
+      "note": "The sort control was exactly where the user expected it, in the row above the product grid, and selecting Price: low to high updated the URL to `sort=price-asc` with no hesitation.",
+      "step": 1,
+      "evidence": "?run=2026-07-11T1457-b9db/catalog-sort@weekend-browser&step=1"
+    },
+    {
+      "finding_id": "2026-07-11T1457-b9db/catalog-sort@weekend-browser#f1",
+      "source": "finding",
+      "severity": "info",
+      "note": "Price ascending order was easy to verify visually: the user read the visible cards as a clean cheapest-to-highest run and scrolled only to confirm continuation below the fold.",
+      "step": 2,
+      "evidence": "?run=2026-07-11T1457-b9db/catalog-sort@weekend-browser&step=2"
+    },
+    {
+      "finding_id": "2026-07-11T1457-b9db/catalog-sort@weekend-browser#f2",
+      "source": "finding",
+      "severity": "minor",
+      "note": "The sort control does not remain available while reviewing lower grid rows, so the user had to scroll back up before trying another sort.",
+      "step": 3,
+      "evidence": "?run=2026-07-11T1457-b9db/catalog-sort@weekend-browser&step=3"
+    },
+    {
+      "finding_id": "2026-07-11T1457-b9db/catalog-sort@weekend-browser#f3",
+      "source": "finding",
+      "severity": "info",
+      "note": "The active sort value was visually legible in the dropdown when the user returned to the top; the current price-ascending selection was easy to spot before switching to Name A–Z.",
+      "step": 4,
+      "evidence": "?run=2026-07-11T1457-b9db/catalog-sort@weekend-browser&step=4"
+    },
+    {
+      "finding_id": "2026-07-11T1457-b9db/catalog-sort@weekend-browser#f4",
+      "source": "finding",
+      "severity": "info",
+      "note": "Name A–Z also produced a scan-friendly alphabetical grid, including the lower rows checked after scrolling.",
+      "step": 5,
+      "evidence": "?run=2026-07-11T1457-b9db/catalog-sort@weekend-browser&step=5"
+    },
+    {
+      "finding_id": "2026-07-11T1457-b9db/catalog-sort@weekend-browser#f5",
+      "source": "finding",
+      "severity": "info",
+      "note": "No accessibility violations, console errors, or confusion events occurred during the run, so the sort workflow appears technically stable in this path."
+    },
+    {
+      "finding_id": "2026-07-11T1457-b9db/catalog-sort@weekend-browser#q0",
+      "source": "report",
+      "question": "When you chose Price: low to high, did the products actually reorder so the cheapest came first?",
+      "answer": "Yes. After selecting Price: low to high, the URL changed to `sort=price-asc`, and the user verified the visible cards as a clean ascending price run before moving on.",
+      "evidence_steps": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1457-b9db/catalog-sort@weekend-browser#q1",
+      "source": "report",
+      "question": "Did the high-to-low and name sorts also reorder the grid as asked?",
+      "answer": "Name A–Z did reorder correctly and was confirmed alphabetically. High-to-low was not tried in this run, so there is no evidence for that sort option.",
+      "evidence_steps": [
+        4,
+        5,
+        6
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1457-b9db/catalog-sort@weekend-browser#q2",
+      "source": "report",
+      "question": "Was the currently active sort clearly shown in the control?",
+      "answer": "Yes when the control was visible: the user saw the current price-ascending value in the dropdown before switching to Name A–Z. The control was not visible while scrolled down in the grid.",
+      "evidence_steps": [
+        3,
+        4
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1501-38ff/outfit-a-shelf@weekend-browser#f0",
+      "source": "finding",
+      "severity": "info",
+      "note": "The price sort was exactly where the user expected it, visually prominent beside search, behaved as expected, and persisted through product-detail navigation.",
+      "step": 1,
+      "evidence": "?run=2026-07-11T1501-38ff/outfit-a-shelf@weekend-browser&step=1"
+    },
+    {
+      "finding_id": "2026-07-11T1501-38ff/outfit-a-shelf@weekend-browser#f1",
+      "source": "finding",
+      "severity": "info",
+      "note": "The sorted grid supported price-led comparison well: plant, pot, and care items were all discovered from the same low-to-high product list without needing search.",
+      "step": 2,
+      "evidence": "?run=2026-07-11T1501-38ff/outfit-a-shelf@weekend-browser&step=2"
+    },
+    {
+      "finding_id": "2026-07-11T1501-38ff/outfit-a-shelf@weekend-browser#f2",
+      "source": "finding",
+      "severity": "minor",
+      "note": "Product detail pages made continued comparison feel like repeated backtracking; the small “Back to the shop” link was the main route back and was repeatedly described as easy to miss.",
+      "step": 3,
+      "evidence": "?run=2026-07-11T1501-38ff/outfit-a-shelf@weekend-browser&step=3"
+    },
+    {
+      "finding_id": "2026-07-11T1501-38ff/outfit-a-shelf@weekend-browser#f3",
+      "source": "finding",
+      "severity": "info",
+      "note": "Product cards and detail pages exposed enough decision information for this task: names, images, prices, stock, quantity, and add-to-cart controls were clear enough to choose Snake Plant, Terracotta Pot, and Gentle Plant Food.",
+      "step": 8,
+      "evidence": "?run=2026-07-11T1501-38ff/outfit-a-shelf@weekend-browser&step=8"
+    },
+    {
+      "finding_id": "2026-07-11T1501-38ff/outfit-a-shelf@weekend-browser#f4",
+      "source": "finding",
+      "severity": "minor",
+      "note": "The post-add cart handoff was weaker than the main purchase controls: the user tried the confirmation-bar “View cart” path, hit an unknown-ref failure, then used the small header Cart link instead.",
+      "step": 12,
+      "evidence": "?run=2026-07-11T1501-38ff/outfit-a-shelf@weekend-browser&step=12"
+    },
+    {
+      "finding_id": "2026-07-11T1501-38ff/outfit-a-shelf@weekend-browser#f5",
+      "source": "finding",
+      "severity": "info",
+      "note": "The cart and checkout preserved the chosen items and totals correctly: $26 plant + $14 pot + $12 care item, $52 subtotal, $6 shipping, $58 total.",
+      "step": 14,
+      "evidence": "?run=2026-07-11T1501-38ff/outfit-a-shelf@weekend-browser&step=14"
+    },
+    {
+      "finding_id": "2026-07-11T1501-38ff/outfit-a-shelf@weekend-browser#f6",
+      "source": "finding",
+      "severity": "minor",
+      "note": "Checkout was completable, but payment fields and the submit button started below the fold, requiring a scroll after card entry before expiry, security code, and Place order were visible.",
+      "step": 16,
+      "evidence": "?run=2026-07-11T1501-38ff/outfit-a-shelf@weekend-browser&step=16"
+    },
+    {
+      "finding_id": "2026-07-11T1501-38ff/outfit-a-shelf@weekend-browser#f7",
+      "source": "finding",
+      "severity": "info",
+      "note": "No axe-core accessibility violations or console errors were recorded across the run."
+    },
+    {
+      "finding_id": "2026-07-11T1501-38ff/outfit-a-shelf@weekend-browser#q0",
+      "source": "report",
+      "question": "Which tools for narrowing and comparing (categories, sorting, search) did the user find, and did each behave as they expected?",
+      "answer": "They found and used sorting immediately; “Price: low to high” was where expected, visibly prominent, and persisted across product pages. Category chips and search were noticed as secondary controls but not used, because the sorted grid was sufficient for the task.",
+      "evidence_steps": [
+        1,
+        4,
+        7,
+        10
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1501-38ff/outfit-a-shelf@weekend-browser#q1",
+      "source": "report",
+      "question": "Did the user compare options before choosing? What information did they lean on, and was any of it missing or unclear?",
+      "answer": "Yes. They compared Golden Pothos and Snake Plant before choosing the Snake Plant, then selected the cheapest visible pot and care item. They leaned mainly on price order, product names/images, and product-detail buy/stock information; no critical product information was called out as missing, though true side-by-side comparison was not available.",
+      "evidence_steps": [
+        2,
+        3,
+        4,
+        5,
+        7,
+        10
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1501-38ff/outfit-a-shelf@weekend-browser#q2",
+      "source": "report",
+      "question": "As the cart grew, did its contents and totals always match what the user had chosen? Note any mismatch.",
+      "answer": "Yes. The header/cart count advanced enough to guide the user, the cart showed the chosen plant, pot, and care item, and checkout/confirmation totals matched the arithmetic: $52 subtotal plus $6 shipping for $58. No mismatch was observed.",
+      "evidence_steps": [
+        8,
+        11,
+        14,
+        19,
+        20
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1501-38ff/outfit-a-shelf@weekend-browser#q3",
+      "source": "report",
+      "question": "Where, if anywhere, did the user hesitate, backtrack, or get confused — and what on the screen caused it?",
+      "answer": "Backtracking happened after each product detail because the user expected comparison to continue in the grid and the only clear route was the small “Back to the shop” link. The one actual confusion event occurred when the user tried to use a bottom confirmation-bar “View cart” action that was less prominent/failed by ref, then recovered via the header Cart link.",
+      "evidence_steps": [
+        3,
+        6,
+        9,
+        12,
+        13
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1501-38ff/outfit-a-shelf@weekend-browser#q4",
+      "source": "report",
+      "question": "Was anything broken, misleading, or missing that a real shopper would notice? Be specific.",
+      "answer": "Nothing blocked purchase, totals, or confirmation. The concrete weak spots were the failed/fragile cart handoff from the add-to-cart confirmation, the small product-page return link, and checkout controls beginning below the fold after card entry. Search/category tools existed but did not need to prove themselves in this run.",
+      "evidence_steps": [
+        12,
+        15,
+        16,
+        19,
+        20
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1502-0c91/catalog-search@cautious-first-timer#f0",
+      "source": "finding",
+      "severity": "info",
+      "note": "The product-name search box was exactly where the user expected it: the hero search row visually dominated the page and supported typing \"Monstera\" directly.",
+      "step": 1,
+      "evidence": "?run=2026-07-11T1502-0c91/catalog-search@cautious-first-timer&step=1"
+    },
+    {
+      "finding_id": "2026-07-11T1502-0c91/catalog-search@cautious-first-timer#f1",
+      "source": "finding",
+      "severity": "info",
+      "note": "After submission, the page clearly echoed both the query and the count with \"1 match for “Monstera”\" above the results, satisfying the user's need for confirmation.",
+      "step": 2,
+      "evidence": "?run=2026-07-11T1502-0c91/catalog-search@cautious-first-timer&step=2"
+    },
+    {
+      "finding_id": "2026-07-11T1502-0c91/catalog-search@cautious-first-timer#f2",
+      "source": "finding",
+      "severity": "info",
+      "note": "The matching product appeared as a single Monstera Deliciosa card, so the filtered result was easy to verify without scanning the full grid.",
+      "step": 2,
+      "evidence": "?run=2026-07-11T1502-0c91/catalog-search@cautious-first-timer&step=2"
+    },
+    {
+      "finding_id": "2026-07-11T1502-0c91/catalog-search@cautious-first-timer#f3",
+      "source": "finding",
+      "severity": "minor",
+      "note": "The single result card sat left with substantial empty space; this did not block completion, but the result area may feel sparse for one-item searches.",
+      "step": 2,
+      "evidence": "?run=2026-07-11T1502-0c91/catalog-search@cautious-first-timer&step=2"
+    },
+    {
+      "finding_id": "2026-07-11T1502-0c91/catalog-search@cautious-first-timer#f4",
+      "source": "finding",
+      "severity": "info",
+      "note": "The no-results clear-search fallback was not exercised in this run, so the study cannot confirm whether that recovery path exists."
+    },
+    {
+      "finding_id": "2026-07-11T1502-0c91/catalog-search@cautious-first-timer#q0",
+      "source": "report",
+      "question": "Was there a text box you could type a search term into (not just a button)?",
+      "answer": "Yes. The hero search area included a textbox labeled \"Search products,\" and the user typed \"Monstera\" into it.",
+      "evidence_steps": [
+        1
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1502-0c91/catalog-search@cautious-first-timer#q1",
+      "source": "report",
+      "question": "After searching for 'monstera', did the matching product appear?",
+      "answer": "Yes. The filtered result showed Monstera Deliciosa as the single matching product.",
+      "evidence_steps": [
+        2
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1502-0c91/catalog-search@cautious-first-timer#q2",
+      "source": "report",
+      "question": "Did the page state what was searched and how many products matched?",
+      "answer": "Yes. It displayed \"1 match for “Monstera”,\" covering both the query and the count.",
+      "evidence_steps": [
+        2
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1502-0c91/catalog-search@cautious-first-timer#q3",
+      "source": "report",
+      "question": "If a search had no matches, were you offered a one-click way to clear it rather than a blank grid?",
+      "answer": "Not observed. The run only covered a matching query, so it does not evidence the no-results state or any clear-search control there.",
+      "evidence_steps": []
+    },
+    {
+      "finding_id": "2026-07-11T1504-ab63/accessibility-contrast@cautious-first-timer#f0",
+      "source": "finding",
+      "severity": "info",
+      "note": "Catalog entry and product detail behaved where expected: the user clicked the Monstera card from the grid and immediately reached the detail page, with product title and price readable in both places.",
+      "step": 1,
+      "evidence": "?run=2026-07-11T1504-ab63/accessibility-contrast@cautious-first-timer&step=1"
+    },
+    {
+      "finding_id": "2026-07-11T1504-ab63/accessibility-contrast@cautious-first-timer#f1",
+      "source": "finding",
+      "severity": "info",
+      "note": "Primary purchase actions were visually discoverable: Add to cart, Cart with badge, Checkout, and Place order all matched the user’s expected flow locations.",
+      "step": 5,
+      "evidence": "?run=2026-07-11T1504-ab63/accessibility-contrast@cautious-first-timer&step=5"
+    },
+    {
+      "finding_id": "2026-07-11T1504-ab63/accessibility-contrast@cautious-first-timer#f2",
+      "source": "finding",
+      "severity": "minor",
+      "note": "A toast-level View cart action was visually prominent but the attempted click failed due to an unknown/stale element reference, forcing the user to fall back to the header Cart link.",
+      "step": 3,
+      "evidence": "?run=2026-07-11T1504-ab63/accessibility-contrast@cautious-first-timer&step=3"
+    },
+    {
+      "finding_id": "2026-07-11T1504-ab63/accessibility-contrast@cautious-first-timer#f3",
+      "source": "finding",
+      "severity": "minor",
+      "note": "Checkout required scrolling to reach the payment submit button; the user expected it below the payment fields, but it started off-screen under the fold.",
+      "step": 6,
+      "evidence": "?run=2026-07-11T1504-ab63/accessibility-contrast@cautious-first-timer&step=6"
+    },
+    {
+      "finding_id": "2026-07-11T1504-ab63/accessibility-contrast@cautious-first-timer#f4",
+      "source": "finding",
+      "severity": "minor",
+      "note": "Payment helper/error copy was readable only on close inspection: the red validation text drew attention once triggered, but the user still described the small helper/error copy as easy to miss.",
+      "step": 9,
+      "evidence": "?run=2026-07-11T1504-ab63/accessibility-contrast@cautious-first-timer&step=9"
+    },
+    {
+      "finding_id": "2026-07-11T1504-ab63/accessibility-contrast@cautious-first-timer#f5",
+      "source": "finding",
+      "severity": "info",
+      "note": "Automated axe scan found no WCAG A/AA color-contrast violations across the run, despite the user watching for washed-out text."
+    },
+    {
+      "finding_id": "2026-07-11T1504-ab63/accessibility-contrast@cautious-first-timer#q0",
+      "source": "report",
+      "question": "Were product prices in the catalog dark and easy to read, or faint and washed out?",
+      "answer": "They were readable, not washed out; the user specifically noted catalog card titles and prices were readable, with only smaller descriptions looking lighter.",
+      "evidence_steps": [
+        1
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1504-ab63/accessibility-contrast@cautious-first-timer#q1",
+      "source": "report",
+      "question": "When a checkout field showed an error, was the error text legible?",
+      "answer": "Legible but not especially prominent: the red validation text drew the eye after submit, while the small helper/error copy was still described as easy to miss without close attention.",
+      "evidence_steps": [
+        8,
+        9
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1504-ab63/accessibility-contrast@cautious-first-timer#q2",
+      "source": "report",
+      "question": "Did the automated accessibility scan report any color-contrast violations?",
+      "answer": "No. The run reported zero axe-core WCAG 2.0 A/AA and 2.1 AA violations across all steps.",
+      "evidence_steps": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1507-7380/add-to-cart-feedback@gift-rusher#f0",
+      "source": "finding",
+      "severity": "info",
+      "note": "Search matched the user's expected starting point and narrowed quickly to one Snake Plant result, though the search controls were visually secondary to the headline and cards.",
+      "step": 1,
+      "evidence": "?run=2026-07-11T1507-7380/add-to-cart-feedback@gift-rusher&step=1"
+    },
+    {
+      "finding_id": "2026-07-11T1507-7380/add-to-cart-feedback@gift-rusher#f1",
+      "source": "finding",
+      "severity": "info",
+      "note": "The product card and product page supported the fast path: the user found the product link on the result card and the Add to cart control directly under the quantity field where expected.",
+      "step": 3,
+      "evidence": "?run=2026-07-11T1507-7380/add-to-cart-feedback@gift-rusher&step=3"
+    },
+    {
+      "finding_id": "2026-07-11T1507-7380/add-to-cart-feedback@gift-rusher#f2",
+      "source": "finding",
+      "severity": "info",
+      "note": "After one Add to cart click, the page visibly confirmed success with a dark green toast and a header cart badge showing 1, so the user did not feel compelled to click Add to cart again.",
+      "step": 4,
+      "evidence": "?run=2026-07-11T1507-7380/add-to-cart-feedback@gift-rusher&step=4"
+    },
+    {
+      "finding_id": "2026-07-11T1507-7380/add-to-cart-feedback@gift-rusher#f3",
+      "source": "finding",
+      "severity": "minor",
+      "note": "The success toast appeared to offer the expected View cart path, but the attempted click failed on a stale or unavailable target; the user had to recover via the smaller global cart link.",
+      "step": 4,
+      "evidence": "?run=2026-07-11T1507-7380/add-to-cart-feedback@gift-rusher&step=4"
+    },
+    {
+      "finding_id": "2026-07-11T1507-7380/add-to-cart-feedback@gift-rusher#f4",
+      "source": "finding",
+      "severity": "minor",
+      "note": "The cart count/link worked as a fallback confirmation path, but it was repeatedly described as small and easy to miss compared with the main product content.",
+      "step": 5,
+      "evidence": "?run=2026-07-11T1507-7380/add-to-cart-feedback@gift-rusher&step=5"
+    },
+    {
+      "finding_id": "2026-07-11T1507-7380/add-to-cart-feedback@gift-rusher#f5",
+      "source": "finding",
+      "severity": "info",
+      "note": "The cart page clearly confirmed the intended state: Snake Plant quantity 1, subtotal $26.00, and header cart badge 1.",
+      "step": 6,
+      "evidence": "?run=2026-07-11T1507-7380/add-to-cart-feedback@gift-rusher&step=6"
+    },
+    {
+      "finding_id": "2026-07-11T1507-7380/add-to-cart-feedback@gift-rusher#q0",
+      "source": "report",
+      "question": "After clicking Add to cart, did anything on the page visibly confirm the item was added (a message, and the cart count going up)?",
+      "answer": "Yes. The user saw a dark green success toast and the top-right cart badge showing 1.",
+      "evidence_steps": [
+        3,
+        4
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1507-7380/add-to-cart-feedback@gift-rusher#q1",
+      "source": "report",
+      "question": "Did you feel the need to click Add to cart a second time because nothing changed?",
+      "answer": "No. The visible confirmation was enough; the next attempted action was to view the cart, not to add again.",
+      "evidence_steps": [
+        4,
+        5
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1507-7380/add-to-cart-feedback@gift-rusher#q2",
+      "source": "report",
+      "question": "When you opened the cart, how many of the plant were in it — exactly the one you intended, or an accidental duplicate?",
+      "answer": "Exactly one. The cart showed Snake Plant with quantity 1 and a single-item subtotal of $26.00.",
+      "evidence_steps": [
+        6
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1507-7380/add-to-cart-feedback@gift-rusher#q3",
+      "source": "report",
+      "question": "If you tried to add more than are in stock, did the shop refuse clearly and tell you the exact number that fits?",
+      "answer": "Not evaluated in this run; the user only added one item and did not test an over-stock quantity.",
+      "evidence_steps": []
+    },
+    {
+      "finding_id": "2026-07-11T1509-f4b2/sort-persists-round-trip@weekend-browser#f0",
+      "source": "finding",
+      "severity": "info",
+      "note": "Category filtering and sorting were located where the user expected them: category chips below the hero and the sort combobox in the top filter row, enabling the setup in two steps.",
+      "step": 2,
+      "evidence": "?run=2026-07-11T1509-f4b2/sort-persists-round-trip@weekend-browser&step=2"
+    },
+    {
+      "finding_id": "2026-07-11T1509-f4b2/sort-persists-round-trip@weekend-browser#f1",
+      "source": "finding",
+      "severity": "minor",
+      "note": "The category chips and sort control were visually subordinate to the hero and product grid, so the controls existed in the right place but were easy to overlook during scanning.",
+      "step": 1,
+      "evidence": "?run=2026-07-11T1509-f4b2/sort-persists-round-trip@weekend-browser&step=1"
+    },
+    {
+      "finding_id": "2026-07-11T1509-f4b2/sort-persists-round-trip@weekend-browser#f2",
+      "source": "finding",
+      "severity": "info",
+      "note": "Cheapest-first ordering made the target product obvious: Golden Pothos appeared first and was selected as the cheapest plant without hesitation.",
+      "step": 3,
+      "evidence": "?run=2026-07-11T1509-f4b2/sort-persists-round-trip@weekend-browser&step=3"
+    },
+    {
+      "finding_id": "2026-07-11T1509-f4b2/sort-persists-round-trip@weekend-browser#f3",
+      "source": "finding",
+      "severity": "minor",
+      "note": "The product-owned back link worked but was small and tucked above the product title, making it less prominent than the image, title, price, and add-to-cart area.",
+      "step": 4,
+      "evidence": "?run=2026-07-11T1509-f4b2/sort-persists-round-trip@weekend-browser&step=4"
+    },
+    {
+      "finding_id": "2026-07-11T1509-f4b2/sort-persists-round-trip@weekend-browser#f4",
+      "source": "finding",
+      "severity": "info",
+      "note": "The back link preserved both category and sort state across product detail navigation; after each return the URL stayed on `category=plants&sort=price-asc` and the list remained cheapest-first.",
+      "step": 7,
+      "evidence": "?run=2026-07-11T1509-f4b2/sort-persists-round-trip@weekend-browser&step=7"
+    },
+    {
+      "finding_id": "2026-07-11T1509-f4b2/sort-persists-round-trip@weekend-browser#f5",
+      "source": "finding",
+      "severity": "info",
+      "note": "No accessibility violations, console errors, or confusion events were recorded, so the main UX issue was visual prominence rather than functional failure."
+    },
+    {
+      "finding_id": "2026-07-11T1509-f4b2/sort-persists-round-trip@weekend-browser#q0",
+      "source": "report",
+      "question": "After returning from a product via the page's back link, was the list still sorted cheapest-first?",
+      "answer": "Yes. After both page-owned back-link returns, the list was still cheapest-first, with Golden Pothos first and the remaining plant cards ascending by price.",
+      "evidence_steps": [
+        5,
+        7
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1509-f4b2/sort-persists-round-trip@weekend-browser#q1",
+      "source": "report",
+      "question": "Did the sort control still show 'Price: low to high', or had it reset to Featured?",
+      "answer": "It still showed `Price: low to high`; it did not reset to Featured.",
+      "evidence_steps": [
+        5,
+        7
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1509-f4b2/sort-persists-round-trip@weekend-browser#q2",
+      "source": "report",
+      "question": "Across two product round trips, how many times did you have to reselect the sort?",
+      "answer": "Zero. The sort was selected once at setup and remained applied through both round trips.",
+      "evidence_steps": [
+        2,
+        5,
+        7
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1509-f4b2/sort-persists-round-trip@weekend-browser#q3",
+      "source": "report",
+      "question": "Did the back link also keep you in the Plants category you had filtered to?",
+      "answer": "Yes. Each return landed back on the Plants list, with `category=plants` still present in the URL and the Plants page shown.",
+      "evidence_steps": [
+        4,
+        6,
+        7
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1510-2a62/cart-edit-and-remove@weekend-browser#f0",
+      "source": "finding",
+      "severity": "info",
+      "note": "Product listing cards and category chips supported the stocking flow: the user naturally opened a plant, switched to Pots & Planters, and added a planter without search or navigation friction.",
+      "step": 5,
+      "evidence": "?run=2026-07-11T1510-2a62/cart-edit-and-remove@weekend-browser&step=5"
+    },
+    {
+      "finding_id": "2026-07-11T1510-2a62/cart-edit-and-remove@weekend-browser#f1",
+      "source": "finding",
+      "severity": "minor",
+      "note": "The product detail purchase controls worked where expected, but the quantity field and header cart count were visually secondary to the product image/title, making quantity and count confirmation easy to miss.",
+      "step": 2,
+      "evidence": "?run=2026-07-11T1510-2a62/cart-edit-and-remove@weekend-browser&step=2"
+    },
+    {
+      "finding_id": "2026-07-11T1510-2a62/cart-edit-and-remove@weekend-browser#f2",
+      "source": "finding",
+      "severity": "minor",
+      "note": "After adding the planter, the toast looked like the fastest path to the cart, but the attempted toast target failed; the user recovered via the header Cart link.",
+      "step": 8,
+      "evidence": "?run=2026-07-11T1510-2a62/cart-edit-and-remove@weekend-browser&step=8"
+    },
+    {
+      "finding_id": "2026-07-11T1510-2a62/cart-edit-and-remove@weekend-browser#f3",
+      "source": "finding",
+      "severity": "info",
+      "note": "The cart page exposed direct quantity steppers in each row, matching the user's expectation that quantity could be edited without returning to product pages.",
+      "step": 10,
+      "evidence": "?run=2026-07-11T1510-2a62/cart-edit-and-remove@weekend-browser&step=10"
+    },
+    {
+      "finding_id": "2026-07-11T1510-2a62/cart-edit-and-remove@weekend-browser#f4",
+      "source": "finding",
+      "severity": "minor",
+      "note": "Remove controls existed in-row and worked, but were visually weak at the far right compared with subtotal and checkout, so the user had to scan for them.",
+      "step": 13,
+      "evidence": "?run=2026-07-11T1510-2a62/cart-edit-and-remove@weekend-browser&step=13"
+    },
+    {
+      "finding_id": "2026-07-11T1510-2a62/cart-edit-and-remove@weekend-browser#f5",
+      "source": "finding",
+      "severity": "info",
+      "note": "The final cart state clearly confirmed the result: one Golden Pothos left, subtotal $19.00, cart badge count 1, and a status message naming the removed planter.",
+      "step": 14,
+      "evidence": "?run=2026-07-11T1510-2a62/cart-edit-and-remove@weekend-browser&step=14"
+    },
+    {
+      "finding_id": "2026-07-11T1510-2a62/cart-edit-and-remove@weekend-browser#f6",
+      "source": "finding",
+      "severity": "info",
+      "note": "Accessibility checks reported no axe-core WCAG A/AA violations across the run."
+    },
+    {
+      "finding_id": "2026-07-11T1510-2a62/cart-edit-and-remove@weekend-browser#q0",
+      "source": "report",
+      "question": "Could you change the quantity of an item directly in the cart, and did the line total and subtotal update right away?",
+      "answer": "Yes. The user used the Golden Pothos stepper directly in the cart, reducing it from 2 to 1; the final cart shows the remaining item at $19.00 with a $19.00 subtotal.",
+      "evidence_steps": [
+        10,
+        12,
+        14
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1510-2a62/cart-edit-and-remove@weekend-browser#q1",
+      "source": "report",
+      "question": "Did the Remove control actually remove the item, with a message confirming what was removed?",
+      "answer": "Yes. Removing the Stoneware Planter left only Golden Pothos in the cart, and the status message said, \"Removed Stoneware Planter, Cream from your cart.\"",
+      "evidence_steps": [
+        13,
+        14
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1510-2a62/cart-edit-and-remove@weekend-browser#q2",
+      "source": "report",
+      "question": "After each change, did the cart count and subtotal stay consistent with what you had left?",
+      "answer": "Yes. The final state is internally consistent: one remaining item, cart badge count 1, and subtotal $19.00. The user also watched the badge/subtotal during the quantity edits.",
+      "evidence_steps": [
+        10,
+        12,
+        14
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1510-2a62/cart-edit-and-remove@weekend-browser#q3",
+      "source": "report",
+      "question": "Were you ever forced back to the product page to try to edit the cart from there?",
+      "answer": "No. The only return to product/category pages was for adding items; all quantity reduction and removal happened from the cart page.",
+      "evidence_steps": [
+        9,
+        10,
+        12,
+        13
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1512-c163/checkout-summary-shipping@cautious-first-timer#f0",
+      "source": "finding",
+      "severity": "info",
+      "note": "The product card-to-detail flow matched the buyer's expectation: the in-stock Monstera tile led cleanly to a product page with a prominent Add to cart control.",
+      "step": 2,
+      "evidence": "?run=2026-07-11T1512-c163/checkout-summary-shipping@cautious-first-timer&step=2"
+    },
+    {
+      "finding_id": "2026-07-11T1512-c163/checkout-summary-shipping@cautious-first-timer#f1",
+      "source": "finding",
+      "severity": "info",
+      "note": "The add-to-cart toast carried the user forward with a clear View cart link, reducing reliance on the small header cart badge.",
+      "step": 3,
+      "evidence": "?run=2026-07-11T1512-c163/checkout-summary-shipping@cautious-first-timer&step=3"
+    },
+    {
+      "finding_id": "2026-07-11T1512-c163/checkout-summary-shipping@cautious-first-timer#f2",
+      "source": "finding",
+      "severity": "info",
+      "note": "The cart page made checkout easy to find: subtotal and the green Checkout button sat together under the item row in the expected summary area.",
+      "step": 4,
+      "evidence": "?run=2026-07-11T1512-c163/checkout-summary-shipping@cautious-first-timer&step=4"
+    },
+    {
+      "finding_id": "2026-07-11T1512-c163/checkout-summary-shipping@cautious-first-timer#f3",
+      "source": "finding",
+      "severity": "info",
+      "note": "The checkout order summary was legible and internally consistent: item $38.00, subtotal $38.00, shipping $6.00, total $44.00.",
+      "step": 5,
+      "evidence": "?run=2026-07-11T1512-c163/checkout-summary-shipping@cautious-first-timer&step=5"
+    },
+    {
+      "finding_id": "2026-07-11T1512-c163/checkout-summary-shipping@cautious-first-timer#f4",
+      "source": "finding",
+      "severity": "minor",
+      "note": "The persistent cart badge was repeatedly perceived as small and easy to miss, so recovery from the toast or later navigation could be weaker than the main path suggests.",
+      "step": 3,
+      "evidence": "?run=2026-07-11T1512-c163/checkout-summary-shipping@cautious-first-timer&step=3"
+    },
+    {
+      "finding_id": "2026-07-11T1512-c163/checkout-summary-shipping@cautious-first-timer#f5",
+      "source": "finding",
+      "severity": "minor",
+      "note": "A lower payment field was partly below the fold on checkout, which did not affect the summary audit but could make the overall checkout feel slightly less polished.",
+      "step": 5,
+      "evidence": "?run=2026-07-11T1512-c163/checkout-summary-shipping@cautious-first-timer&step=5"
+    },
+    {
+      "finding_id": "2026-07-11T1512-c163/checkout-summary-shipping@cautious-first-timer#q0",
+      "source": "report",
+      "question": "Does the shipping line label agree with the amount shown next to it (no line calling a $6.00 charge 'free')?",
+      "answer": "Yes. The final summary shows the label \"Shipping\" next to \"$6.00\"; no \"free\" wording appears on that line.",
+      "evidence_steps": [
+        5
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1512-c163/checkout-summary-shipping@cautious-first-timer#q1",
+      "source": "report",
+      "question": "Do the subtotal, shipping, and total add up correctly?",
+      "answer": "Yes. The subtotal is $38.00, shipping is $6.00, and the total is $44.00.",
+      "evidence_steps": [
+        5
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1512-c163/checkout-summary-shipping@cautious-first-timer#q2",
+      "source": "report",
+      "question": "Did anything in the summary make the shop feel sloppy or untrustworthy?",
+      "answer": "No. The summary itself read cleanly: product price, subtotal, shipping, and total were all visible, plainly labeled, and consistent. The only polish concern noted was outside the summary: a partly cut-off payment field.",
+      "evidence_steps": [
+        5
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1514-ce8f/account-profile-save@returning-regular#f0",
+      "source": "finding",
+      "severity": "info",
+      "note": "The Account link in the top-right nav matched the user's expectation for saved profile details and led directly to the editable email field.",
+      "step": 1,
+      "evidence": "?run=2026-07-11T1514-ce8f/account-profile-save@returning-regular&step=1"
+    },
+    {
+      "finding_id": "2026-07-11T1514-ce8f/account-profile-save@returning-regular#f1",
+      "source": "finding",
+      "severity": "info",
+      "note": "The Profile card made the email field and green Save profile button visually prominent, so the user changed the receipt email without hunting through settings or checkout first.",
+      "step": 2,
+      "evidence": "?run=2026-07-11T1514-ce8f/account-profile-save@returning-regular&step=2"
+    },
+    {
+      "finding_id": "2026-07-11T1514-ce8f/account-profile-save@returning-regular#f2",
+      "source": "finding",
+      "severity": "info",
+      "note": "After saving, the app gave visible proof via a \"Profile saved.\" confirmation, satisfying the user's need to know the change persisted before continuing.",
+      "step": 4,
+      "evidence": "?run=2026-07-11T1514-ce8f/account-profile-save@returning-regular&step=4"
+    },
+    {
+      "finding_id": "2026-07-11T1514-ce8f/account-profile-save@returning-regular#f3",
+      "source": "finding",
+      "severity": "minor",
+      "note": "Starting checkout required the user to go through product detail, add-to-cart, cart, then checkout; this was expected for the shop but offered no direct checkout shortcut from the catalog.",
+      "step": 5,
+      "evidence": "?run=2026-07-11T1514-ce8f/account-profile-save@returning-regular&step=5"
+    },
+    {
+      "finding_id": "2026-07-11T1514-ce8f/account-profile-save@returning-regular#f4",
+      "source": "finding",
+      "severity": "info",
+      "note": "Checkout successfully reused the updated account email in the receipt field, so the user did not have to retype or repair the saved address.",
+      "step": 9,
+      "evidence": "?run=2026-07-11T1514-ce8f/account-profile-save@returning-regular&step=9"
+    },
+    {
+      "finding_id": "2026-07-11T1514-ce8f/account-profile-save@returning-regular#f5",
+      "source": "finding",
+      "severity": "info",
+      "note": "No axe-core accessibility violations, console errors, or confusion events were recorded across the run."
+    },
+    {
+      "finding_id": "2026-07-11T1514-ce8f/account-profile-save@returning-regular#q0",
+      "source": "report",
+      "question": "After clicking Save profile, did you get a visible confirmation that the change was saved?",
+      "answer": "Yes. The account page showed a visible \"Profile saved.\" confirmation after the profile save.",
+      "evidence_steps": [
+        3,
+        4
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1514-ce8f/account-profile-save@returning-regular#q1",
+      "source": "report",
+      "question": "When you reached checkout, was the receipt email the updated one, or did you have to correct it again?",
+      "answer": "It was already updated: checkout showed `riley.chen@newmail.com` in the receipt email field, with no retyping needed.",
+      "evidence_steps": [
+        9
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1514-ce8f/account-profile-save@returning-regular#q2",
+      "source": "report",
+      "question": "Did the Save profile button behave any differently from the Save address button, or did both work?",
+      "answer": "Only Save profile was exercised in this run. The Save address button was visible lower on the account page but was not used, so the trajectory does not show whether both behave the same.",
+      "evidence_steps": [
+        2,
+        3
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1518-7e1f/checkout-recovery@cautious-first-timer#f0",
+      "source": "finding",
+      "severity": "info",
+      "note": "The core purchase path was highly discoverable: product selection, Add to cart, View cart, Checkout, and Place order appeared in the expected sequence and led to a confirmed order.",
+      "step": 1,
+      "evidence": "?run=2026-07-11T1518-7e1f/checkout-recovery@cautious-first-timer&step=1"
+    },
+    {
+      "finding_id": "2026-07-11T1518-7e1f/checkout-recovery@cautious-first-timer#f1",
+      "source": "finding",
+      "severity": "info",
+      "note": "The four-digit postcode was accepted as entered; the final confirmation showed delivery to Millbrook 6220 with no forced five-digit padding.",
+      "step": 11,
+      "evidence": "?run=2026-07-11T1518-7e1f/checkout-recovery@cautious-first-timer&step=11"
+    },
+    {
+      "finding_id": "2026-07-11T1518-7e1f/checkout-recovery@cautious-first-timer#f2",
+      "source": "finding",
+      "severity": "minor",
+      "note": "Payment details were split by the fold: after entering the card number, the user had to scroll to find expiry, security code, and Place order, making the remaining required fields easier to miss.",
+      "step": 6,
+      "evidence": "?run=2026-07-11T1518-7e1f/checkout-recovery@cautious-first-timer&step=6"
+    },
+    {
+      "finding_id": "2026-07-11T1518-7e1f/checkout-recovery@cautious-first-timer#f3",
+      "source": "finding",
+      "severity": "minor",
+      "note": "Cart status in the header was visually weak, but the added-to-cart toast compensated with a prominent View cart link that guided the user forward.",
+      "step": 3,
+      "evidence": "?run=2026-07-11T1518-7e1f/checkout-recovery@cautious-first-timer&step=3"
+    },
+    {
+      "finding_id": "2026-07-11T1518-7e1f/checkout-recovery@cautious-first-timer#f4",
+      "source": "finding",
+      "severity": "info",
+      "note": "The run did not exercise validation or card-decline handling because the user entered an accepted card number and submitted successfully on the first attempt.",
+      "step": 10,
+      "evidence": "?run=2026-07-11T1518-7e1f/checkout-recovery@cautious-first-timer&step=10"
+    },
+    {
+      "finding_id": "2026-07-11T1518-7e1f/checkout-recovery@cautious-first-timer#f5",
+      "source": "finding",
+      "severity": "info",
+      "note": "No accessibility violations, console errors, or confusion events were recorded across the successful checkout flow."
+    },
+    {
+      "finding_id": "2026-07-11T1518-7e1f/checkout-recovery@cautious-first-timer#q0",
+      "source": "report",
+      "question": "Did the four-digit postcode 6220 go through, or were you forced to pad it to five digits?",
+      "answer": "It went through as four digits. The order confirmation delivered to Millbrook 6220, with no padding or postcode correction required.",
+      "evidence_steps": [
+        5,
+        10,
+        11
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1518-7e1f/checkout-recovery@cautious-first-timer#q1",
+      "source": "report",
+      "question": "After any validation message, were your card number, expiry, and security code still there, or had they been wiped?",
+      "answer": "Not exercised. No validation message appeared because the entered card details submitted successfully on the first attempt.",
+      "evidence_steps": [
+        6,
+        8,
+        9,
+        10
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1518-7e1f/checkout-recovery@cautious-first-timer#q2",
+      "source": "report",
+      "question": "When the temperamental card (4000 0000 0000 0002) was declined, did the shop show a clear message, including whether you had been charged?",
+      "answer": "Not exercised. The user entered 4242 4242 4242 4242, so there was no declined-card state or charged/not-charged message to evaluate.",
+      "evidence_steps": [
+        6,
+        10,
+        11
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1518-7e1f/checkout-recovery@cautious-first-timer#q3",
+      "source": "report",
+      "question": "While the order was being placed, was there a visible in-progress state, and were you prevented from double-submitting?",
+      "answer": "Not observed. The click on Place order navigated to confirmation after about 532ms; the trajectory did not capture an intermediate loading state or evidence that repeat submission was blocked.",
+      "evidence_steps": [
+        10
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1518-da44/account-order-history@returning-regular#f0",
+      "source": "finding",
+      "severity": "info",
+      "note": "The shopper’s first instinct was correct: they expected past purchases under Account and found order history there, so the information architecture matched the task mental model.",
+      "step": 1,
+      "evidence": "?run=2026-07-11T1518-da44/account-order-history@returning-regular&step=1"
+    },
+    {
+      "finding_id": "2026-07-11T1518-da44/account-order-history@returning-regular#f1",
+      "source": "finding",
+      "severity": "minor",
+      "note": "The Account entry point was visually small and easy to overlook against a busy product grid, making the natural starting point less prominent than the shopping content.",
+      "step": 1,
+      "evidence": "?run=2026-07-11T1518-da44/account-order-history@returning-regular&step=1"
+    },
+    {
+      "finding_id": "2026-07-11T1518-da44/account-order-history@returning-regular#f2",
+      "source": "finding",
+      "severity": "minor",
+      "note": "Order history was reachable but sat below profile and shipping content, requiring a scroll before it became visible; the account page initially looked like it might only contain profile/address details.",
+      "step": 2,
+      "evidence": "?run=2026-07-11T1518-da44/account-order-history@returning-regular&step=2"
+    },
+    {
+      "finding_id": "2026-07-11T1518-da44/account-order-history@returning-regular#f3",
+      "source": "finding",
+      "severity": "minor",
+      "note": "The order table worked, but the actionable order numbers were small underlined links that competed poorly with section headings and status pills.",
+      "step": 3,
+      "evidence": "?run=2026-07-11T1518-da44/account-order-history@returning-regular&step=3"
+    },
+    {
+      "finding_id": "2026-07-11T1518-da44/account-order-history@returning-regular#f4",
+      "source": "finding",
+      "severity": "info",
+      "note": "The order detail page clearly exposed the requested receipt: item, subtotal, shipping, total, and status were visible without additional navigation.",
+      "step": 4,
+      "evidence": "?run=2026-07-11T1518-da44/account-order-history@returning-regular&step=4"
+    },
+    {
+      "finding_id": "2026-07-11T1518-da44/account-order-history@returning-regular#q0",
+      "source": "report",
+      "question": "Could you find a list of your past orders, and roughly how many wrong turns did it take?",
+      "answer": "Yes. The user went straight to Account, scrolled once, and found the order history; roughly zero wrong turns.",
+      "evidence_steps": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1518-da44/account-order-history@returning-regular#q1",
+      "source": "report",
+      "question": "Does each order show its number, date, item count, total, and status?",
+      "answer": "The visible account order history was sufficient to identify and open FF-1052, and the run notes call out an order table with order numbers and status pills. The final receipt confirms the order number, placed date, item quantity, total, and status for the opened order.",
+      "evidence_steps": [
+        3,
+        4
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1518-da44/account-order-history@returning-regular#q2",
+      "source": "report",
+      "question": "Could you open an order to see its full receipt?",
+      "answer": "Yes. Opening FF-1052 led directly to a receipt view with Gentle Plant Food ×2, subtotal $24.00, shipping $6.00, total $30.00, and confirmed/on-its-way status.",
+      "evidence_steps": [
+        3,
+        4
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1518-da44/account-order-history@returning-regular#q3",
+      "source": "report",
+      "question": "Was the order history reachable from the account page without dead-ending on just profile and address forms?",
+      "answer": "Yes. The profile and shipping areas appeared first, but scrolling the same Account page exposed order history rather than forcing a dead end or separate workaround.",
+      "evidence_steps": [
+        2,
+        3
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1519-7d60/empty-cart-and-back-link@weekend-browser#f0",
+      "source": "finding",
+      "severity": "info",
+      "note": "Product detail provided the expected category-specific return path: the user found and used \"Back to Plants\" instead of falling back to the global Shop link.",
+      "step": 2,
+      "evidence": "?run=2026-07-11T1519-7d60/empty-cart-and-back-link@weekend-browser&step=2"
+    },
+    {
+      "finding_id": "2026-07-11T1519-7d60/empty-cart-and-back-link@weekend-browser#f1",
+      "source": "finding",
+      "severity": "minor",
+      "note": "The \"Back to Plants\" affordance worked, but it was visually small above the dominant product image/title, so it could be missed by less deliberate browsers.",
+      "step": 2,
+      "evidence": "?run=2026-07-11T1519-7d60/empty-cart-and-back-link@weekend-browser&step=2"
+    },
+    {
+      "finding_id": "2026-07-11T1519-7d60/empty-cart-and-back-link@weekend-browser#f2",
+      "source": "finding",
+      "severity": "info",
+      "note": "The plants category state persisted after returning from the product page, landing on `/?category=plants` rather than the full catalog.",
+      "step": 2,
+      "evidence": "?run=2026-07-11T1519-7d60/empty-cart-and-back-link@weekend-browser&step=2"
+    },
+    {
+      "finding_id": "2026-07-11T1519-7d60/empty-cart-and-back-link@weekend-browser#f3",
+      "source": "finding",
+      "severity": "info",
+      "note": "The empty cart state avoided offering a checkout button and instead centered the user on a clear empty-cart panel with a single Browse the shop action.",
+      "step": 3,
+      "evidence": "?run=2026-07-11T1519-7d60/empty-cart-and-back-link@weekend-browser&step=3"
+    },
+    {
+      "finding_id": "2026-07-11T1519-7d60/empty-cart-and-back-link@weekend-browser#f4",
+      "source": "finding",
+      "severity": "info",
+      "note": "Direct navigation to `/checkout` with an empty cart was safely guarded: the app redirected back to the cart with an empty-checkout notice rather than rendering a payment form.",
+      "step": 4,
+      "evidence": "?run=2026-07-11T1519-7d60/empty-cart-and-back-link@weekend-browser&step=4"
+    },
+    {
+      "finding_id": "2026-07-11T1519-7d60/empty-cart-and-back-link@weekend-browser#f5",
+      "source": "finding",
+      "severity": "info",
+      "note": "No dead-end behavior appeared: the final empty-cart page explained the state and provided a Browse the shop recovery link.",
+      "step": 5,
+      "evidence": "?run=2026-07-11T1519-7d60/empty-cart-and-back-link@weekend-browser&step=5"
+    },
+    {
+      "finding_id": "2026-07-11T1519-7d60/empty-cart-and-back-link@weekend-browser#q0",
+      "source": "report",
+      "question": "From a product page, was there a clear link back to the catalog that kept you in the same category?",
+      "answer": "Yes. The user identified a direct \"Back to Plants\" link on the product page and it returned them to `/?category=plants`, preserving the category rather than sending them to the full shop.",
+      "evidence_steps": [
+        2
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1519-7d60/empty-cart-and-back-link@weekend-browser#q1",
+      "source": "report",
+      "question": "When you went to checkout with an empty cart, did the shop route you back to the cart and explain, rather than showing an empty form?",
+      "answer": "Yes. Direct checkout access redirected to the cart with an empty-checkout notice, and the final page stated that the cart was empty before checking out.",
+      "evidence_steps": [
+        4,
+        5
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1519-7d60/empty-cart-and-back-link@weekend-browser#q2",
+      "source": "report",
+      "question": "Did you ever hit a dead end with no obvious next step?",
+      "answer": "No. The empty cart did not expose checkout, but it did provide a Browse the shop action and the guarded checkout route returned to an explanatory cart state.",
+      "evidence_steps": [
+        3,
+        4,
+        5
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1522-99a4/empty-states-are-warm@weekend-browser#f0",
+      "source": "finding",
+      "severity": "info",
+      "note": "Empty-cart state used plain, friendly shop copy and made the inline “Browse the shop” link the most prominent action in the otherwise sparse page.",
+      "step": 2,
+      "evidence": "?run=2026-07-11T1522-99a4/empty-states-are-warm@weekend-browser&step=2"
+    },
+    {
+      "finding_id": "2026-07-11T1522-99a4/empty-states-are-warm@weekend-browser#f1",
+      "source": "finding",
+      "severity": "info",
+      "note": "No-results state named the exact query twice (“xyzzy”) and used plain customer-facing language rather than exposing technical/system terms.",
+      "step": 4,
+      "evidence": "?run=2026-07-11T1522-99a4/empty-states-are-warm@weekend-browser&step=4"
+    },
+    {
+      "finding_id": "2026-07-11T1522-99a4/empty-states-are-warm@weekend-browser#f2",
+      "source": "finding",
+      "severity": "info",
+      "note": "Both recovery paths behaved as expected: “Browse the shop” returned to the catalog, and “Clear the search” restored the normal shop with the search field cleared.",
+      "step": 4,
+      "evidence": "?run=2026-07-11T1522-99a4/empty-states-are-warm@weekend-browser&step=4"
+    },
+    {
+      "finding_id": "2026-07-11T1522-99a4/empty-states-are-warm@weekend-browser#f3",
+      "source": "finding",
+      "severity": "minor",
+      "note": "The cart nav label is exposed as “Cart0” rather than visually separating the count from the label, which is understandable but slightly awkward in the accessibility/name layer.",
+      "step": 1,
+      "evidence": "?run=2026-07-11T1522-99a4/empty-states-are-warm@weekend-browser&step=1"
+    },
+    {
+      "finding_id": "2026-07-11T1522-99a4/empty-states-are-warm@weekend-browser#q0",
+      "source": "report",
+      "question": "When the cart was empty, was the message plain and friendly, or did it read like system/database output (for example anything about 'rows' or 'collection returned')?",
+      "answer": "Plain and friendly: “Your cart is empty for now — nothing added yet” and “Browse the shop to find it a plant or two.” No system/database wording appeared.",
+      "evidence_steps": [
+        2
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1522-99a4/empty-states-are-warm@weekend-browser#q1",
+      "source": "report",
+      "question": "When your search matched nothing, did the shop explain in plain words and name what you searched for, rather than developer-speak?",
+      "answer": "Yes. It said “No matches for ‘xyzzy’” and “We couldn’t find anything matching ‘xyzzy’,” naming the query without developer-speak.",
+      "evidence_steps": [
+        4
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1522-99a4/empty-states-are-warm@weekend-browser#q2",
+      "source": "report",
+      "question": "On the no-match page, did the 'Clear the search' link actually take you back to browsing everything, instead of repeating the same empty search?",
+      "answer": "Yes. The user clicked “Clear the search” from the no-results state and returned to the normal catalog with the search box cleared.",
+      "evidence_steps": [
+        4,
+        5
+      ]
+    },
+    {
+      "finding_id": "2026-07-11T1522-99a4/empty-states-are-warm@weekend-browser#q3",
+      "source": "report",
+      "question": "From the empty cart, did the 'Browse the shop' link get you back to the catalog?",
+      "answer": "Yes. The inline “Browse the shop” link on the empty-cart page returned to the shop/catalog page.",
+      "evidence_steps": [
+        2,
+        3
+      ]
+    }
+  ],
+  "adjudication": [
+    {
+      "finding_id": "2026-07-11T1438-6c02/change-your-mind@weekend-browser#f0",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1438-6c02/change-your-mind@weekend-browser#f1",
+      "verdict": "false-positive",
+      "rationale": "Visual-prominence: the affordance exists and worked; the complaint is size/emphasis relative to other content, below the study's defect floor."
+    },
+    {
+      "finding_id": "2026-07-11T1438-6c02/change-your-mind@weekend-browser#f2",
+      "verdict": "false-positive",
+      "rationale": "Latent subject quirk matching clean reference: the cart quantity input commits on the DOM 'change' event (fires on blur), byte-identical to the clean subject's handler (both bind '#cart-rows' change; the clean subject even labels it 'Quantities update as you change them.'). The actor typed a new quantity and read the subtotal BEFORE the field blurred, so it saw a transiently stale total; using the +/- stepper (or blurring) committed it, and the report confirms 'the earlier cart mismatch was resolved before ordering.' Not the seeded f-qty-edit-removed (the stepper is present and the dedicated cart-edit-and-remove run reduced 2->1 with totals updating). Present identically in the clean subject; noted as a latent quirk for the D7 write-up."
+    },
+    {
+      "finding_id": "2026-07-11T1438-6c02/change-your-mind@weekend-browser#f3",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1438-6c02/change-your-mind@weekend-browser#f4",
+      "verdict": "false-positive",
+      "rationale": "Below-fold/layout precision floor: the control exists, is reachable, and worked; the complaint is scroll distance at 1280x720."
+    },
+    {
+      "finding_id": "2026-07-11T1438-6c02/change-your-mind@weekend-browser#f5",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1438-6c02/change-your-mind@weekend-browser#f6",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1438-6c02/change-your-mind@weekend-browser#q0",
+      "verdict": "duplicate-of",
+      "duplicate_of": "2026-07-11T1438-6c02/change-your-mind@weekend-browser#f2",
+      "rationale": "Report answer restating the mapped finding."
+    },
+    {
+      "finding_id": "2026-07-11T1438-6c02/change-your-mind@weekend-browser#q1",
+      "verdict": "duplicate-of",
+      "duplicate_of": "2026-07-11T1438-6c02/change-your-mind@weekend-browser#f2",
+      "rationale": "Report answer restating the mapped finding."
+    },
+    {
+      "finding_id": "2026-07-11T1438-6c02/change-your-mind@weekend-browser#q2",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1438-6c02/change-your-mind@weekend-browser#q3",
+      "verdict": "duplicate-of",
+      "duplicate_of": "2026-07-11T1438-6c02/change-your-mind@weekend-browser#f2",
+      "rationale": "Report answer restating the mapped finding."
+    },
+    {
+      "finding_id": "2026-07-11T1438-6c02/change-your-mind@weekend-browser#q4",
+      "verdict": "duplicate-of",
+      "duplicate_of": "2026-07-11T1438-6c02/change-your-mind@weekend-browser#f2",
+      "rationale": "Report answer restating the mapped finding."
+    },
+    {
+      "finding_id": "2026-07-11T1438-6f6d/buy-a-specific-gift@gift-rusher#f0",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1438-6f6d/buy-a-specific-gift@gift-rusher#f1",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1438-6f6d/buy-a-specific-gift@gift-rusher#f2",
+      "verdict": "false-positive",
+      "rationale": "Harness-latency artifact matching clean reference: the add-to-cart toast and its View cart action use the subject's built-in 20s actionable-toast helper, identical in the clean subject; the actor's click failed because its step latency exceeded the toast lifetime (ref no longer in the latest snapshot), not because the control is broken. The header cart link recovered the flow in every case."
+    },
+    {
+      "finding_id": "2026-07-11T1438-6f6d/buy-a-specific-gift@gift-rusher#f3",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1438-6f6d/buy-a-specific-gift@gift-rusher#f4",
+      "verdict": "false-positive",
+      "rationale": "Below-fold/layout precision floor: the control exists, is reachable, and worked; the complaint is scroll distance at 1280x720."
+    },
+    {
+      "finding_id": "2026-07-11T1438-6f6d/buy-a-specific-gift@gift-rusher#f5",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1438-6f6d/buy-a-specific-gift@gift-rusher#f6",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1438-6f6d/buy-a-specific-gift@gift-rusher#q0",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1438-6f6d/buy-a-specific-gift@gift-rusher#q1",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1438-6f6d/buy-a-specific-gift@gift-rusher#q2",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1438-6f6d/buy-a-specific-gift@gift-rusher#q3",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1438-6f6d/buy-a-specific-gift@gift-rusher#q4",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1438-d156/moving-house@returning-regular#f0",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1438-d156/moving-house@returning-regular#f1",
+      "verdict": "false-positive",
+      "rationale": "Visual-prominence: the affordance exists and worked; the complaint is size/emphasis relative to other content, below the study's defect floor."
+    },
+    {
+      "finding_id": "2026-07-11T1438-d156/moving-house@returning-regular#f2",
+      "verdict": "false-positive",
+      "rationale": "Below-fold/layout precision floor: the control exists, is reachable, and worked; the complaint is scroll distance at 1280x720."
+    },
+    {
+      "finding_id": "2026-07-11T1438-d156/moving-house@returning-regular#f3",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1438-d156/moving-house@returning-regular#f4",
+      "verdict": "false-positive",
+      "rationale": "Out-of-SPEC scope: grid/listing quick-add is not required by SPEC C1.1; product-detail add-to-cart is the specified path, and the user reached it."
+    },
+    {
+      "finding_id": "2026-07-11T1438-d156/moving-house@returning-regular#f5",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1438-d156/moving-house@returning-regular#f6",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1438-d156/moving-house@returning-regular#f7",
+      "verdict": "false-positive",
+      "rationale": "Visual-prominence: the affordance exists and worked; the complaint is size/emphasis relative to other content, below the study's defect floor."
+    },
+    {
+      "finding_id": "2026-07-11T1438-d156/moving-house@returning-regular#q0",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1438-d156/moving-house@returning-regular#q1",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1438-d156/moving-house@returning-regular#q2",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1438-d156/moving-house@returning-regular#q3",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1438-d156/moving-house@returning-regular#q4",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1443-4768/checkout-hiccup@cautious-first-timer#f0",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1443-4768/checkout-hiccup@cautious-first-timer#f1",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1443-4768/checkout-hiccup@cautious-first-timer#f2",
+      "verdict": "false-positive",
+      "rationale": "Below-fold/layout precision floor: the control exists, is reachable, and worked; the complaint is scroll distance at 1280x720."
+    },
+    {
+      "finding_id": "2026-07-11T1443-4768/checkout-hiccup@cautious-first-timer#f3",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1443-4768/checkout-hiccup@cautious-first-timer#f4",
+      "verdict": "false-positive",
+      "rationale": "Below-fold/layout precision floor: the control exists, is reachable, and worked; the complaint is scroll distance at 1280x720."
+    },
+    {
+      "finding_id": "2026-07-11T1443-4768/checkout-hiccup@cautious-first-timer#f5",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1443-4768/checkout-hiccup@cautious-first-timer#q0",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1443-4768/checkout-hiccup@cautious-first-timer#q1",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1443-4768/checkout-hiccup@cautious-first-timer#q2",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1443-4768/checkout-hiccup@cautious-first-timer#q3",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1443-4768/checkout-hiccup@cautious-first-timer#q4",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1448-d57f/club-order@returning-regular#f0",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1448-d57f/club-order@returning-regular#f1",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1448-d57f/club-order@returning-regular#f2",
+      "verdict": "false-positive",
+      "rationale": "Harness-latency artifact matching clean reference: the add-to-cart toast and its View cart action use the subject's built-in 20s actionable-toast helper, identical in the clean subject; the actor's click failed because its step latency exceeded the toast lifetime (ref no longer in the latest snapshot), not because the control is broken. The header cart link recovered the flow in every case."
+    },
+    {
+      "finding_id": "2026-07-11T1448-d57f/club-order@returning-regular#f3",
+      "verdict": "false-positive",
+      "rationale": "Visual-prominence: the affordance exists and worked; the complaint is size/emphasis relative to other content, below the study's defect floor."
+    },
+    {
+      "finding_id": "2026-07-11T1448-d57f/club-order@returning-regular#f4",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1448-d57f/club-order@returning-regular#q0",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1448-d57f/club-order@returning-regular#q1",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1448-d57f/club-order@returning-regular#q2",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1448-d57f/club-order@returning-regular#q3",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1448-d57f/club-order@returning-regular#q4",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1449-d0a7/wheres-my-order@returning-regular#f0",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1449-d0a7/wheres-my-order@returning-regular#f1",
+      "verdict": "false-positive",
+      "rationale": "Below-fold/layout precision floor: the control exists, is reachable, and worked; the complaint is scroll distance at 1280x720."
+    },
+    {
+      "finding_id": "2026-07-11T1449-d0a7/wheres-my-order@returning-regular#f2",
+      "verdict": "false-positive",
+      "rationale": "Visual-prominence: the affordance exists and worked; the complaint is size/emphasis relative to other content, below the study's defect floor."
+    },
+    {
+      "finding_id": "2026-07-11T1449-d0a7/wheres-my-order@returning-regular#f3",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1449-d0a7/wheres-my-order@returning-regular#f4",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1449-d0a7/wheres-my-order@returning-regular#q0",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1449-d0a7/wheres-my-order@returning-regular#q1",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1449-d0a7/wheres-my-order@returning-regular#q2",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1449-d0a7/wheres-my-order@returning-regular#q3",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1456-9d4f/first-impressions@cautious-first-timer#f0",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1456-9d4f/first-impressions@cautious-first-timer#f1",
+      "verdict": "false-positive",
+      "rationale": "Out-of-SPEC scope: shipping/returns/policy pages are not in SPEC.md; the footer contact line is the specified trust affordance. Probe P1 (escalated gpt5_5, round 1) confirmed the harm is real but out-of-contract; operator held the reject and escalated a SPEC gap."
+    },
+    {
+      "finding_id": "2026-07-11T1456-9d4f/first-impressions@cautious-first-timer#f2",
+      "verdict": "false-positive",
+      "rationale": "Near-miss, not a detection: the actor noted the Fiddle-Leaf Fig is out of stock with a disabled 'Out of stock' button and no purchase path — expected out-of-stock behavior identical in the clean subject (disabled button, no buy path for stock=0). It did NOT surface the seeded f-oos-says-in-stock manifestation, which is the CONTRADICTION between the stock line ('In stock — more arriving daily') and the disabled button. The misleading copy went unremarked, so the seeded fault remains undetected (recorded as MISSED in the D7 accounting)."
+    },
+    {
+      "finding_id": "2026-07-11T1456-9d4f/first-impressions@cautious-first-timer#f3",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1456-9d4f/first-impressions@cautious-first-timer#f4",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1456-9d4f/first-impressions@cautious-first-timer#f5",
+      "verdict": "false-positive",
+      "rationale": "Harness-latency artifact matching clean reference: the add-to-cart toast and its View cart action use the subject's built-in 20s actionable-toast helper, identical in the clean subject; the actor's click failed because its step latency exceeded the toast lifetime (ref no longer in the latest snapshot), not because the control is broken. The header cart link recovered the flow in every case."
+    },
+    {
+      "finding_id": "2026-07-11T1456-9d4f/first-impressions@cautious-first-timer#f6",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1456-9d4f/first-impressions@cautious-first-timer#q0",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1456-9d4f/first-impressions@cautious-first-timer#q1",
+      "verdict": "duplicate-of",
+      "duplicate_of": "2026-07-11T1456-9d4f/first-impressions@cautious-first-timer#f1",
+      "rationale": "Report answer restating the mapped finding."
+    },
+    {
+      "finding_id": "2026-07-11T1456-9d4f/first-impressions@cautious-first-timer#q2",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1456-9d4f/first-impressions@cautious-first-timer#q3",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1457-b9db/catalog-sort@weekend-browser#f0",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1457-b9db/catalog-sort@weekend-browser#f1",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1457-b9db/catalog-sort@weekend-browser#f2",
+      "verdict": "false-positive",
+      "rationale": "Visual-prominence: the affordance exists and worked; the complaint is size/emphasis relative to other content, below the study's defect floor."
+    },
+    {
+      "finding_id": "2026-07-11T1457-b9db/catalog-sort@weekend-browser#f3",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1457-b9db/catalog-sort@weekend-browser#f4",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1457-b9db/catalog-sort@weekend-browser#f5",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1457-b9db/catalog-sort@weekend-browser#q0",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1457-b9db/catalog-sort@weekend-browser#q1",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1457-b9db/catalog-sort@weekend-browser#q2",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1501-38ff/outfit-a-shelf@weekend-browser#f0",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1501-38ff/outfit-a-shelf@weekend-browser#f1",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1501-38ff/outfit-a-shelf@weekend-browser#f2",
+      "verdict": "false-positive",
+      "rationale": "Out-of-SPEC scope: side-by-side comparison, related products, bundles and recommendations are explicitly out of scope (SPEC C1.1 catalog contract)."
+    },
+    {
+      "finding_id": "2026-07-11T1501-38ff/outfit-a-shelf@weekend-browser#f3",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1501-38ff/outfit-a-shelf@weekend-browser#f4",
+      "verdict": "false-positive",
+      "rationale": "Harness-latency artifact matching clean reference: the add-to-cart toast and its View cart action use the subject's built-in 20s actionable-toast helper, identical in the clean subject; the actor's click failed because its step latency exceeded the toast lifetime (ref no longer in the latest snapshot), not because the control is broken. The header cart link recovered the flow in every case."
+    },
+    {
+      "finding_id": "2026-07-11T1501-38ff/outfit-a-shelf@weekend-browser#f5",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1501-38ff/outfit-a-shelf@weekend-browser#f6",
+      "verdict": "false-positive",
+      "rationale": "Below-fold/layout precision floor: the control exists, is reachable, and worked; the complaint is scroll distance at 1280x720."
+    },
+    {
+      "finding_id": "2026-07-11T1501-38ff/outfit-a-shelf@weekend-browser#f7",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1501-38ff/outfit-a-shelf@weekend-browser#q0",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1501-38ff/outfit-a-shelf@weekend-browser#q1",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1501-38ff/outfit-a-shelf@weekend-browser#q2",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1501-38ff/outfit-a-shelf@weekend-browser#q3",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1501-38ff/outfit-a-shelf@weekend-browser#q4",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1502-0c91/catalog-search@cautious-first-timer#f0",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1502-0c91/catalog-search@cautious-first-timer#f1",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1502-0c91/catalog-search@cautious-first-timer#f2",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1502-0c91/catalog-search@cautious-first-timer#f3",
+      "verdict": "false-positive",
+      "rationale": "Visual-prominence: the affordance exists and worked; the complaint is size/emphasis relative to other content, below the study's defect floor."
+    },
+    {
+      "finding_id": "2026-07-11T1502-0c91/catalog-search@cautious-first-timer#f4",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1502-0c91/catalog-search@cautious-first-timer#q0",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1502-0c91/catalog-search@cautious-first-timer#q1",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1502-0c91/catalog-search@cautious-first-timer#q2",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1502-0c91/catalog-search@cautious-first-timer#q3",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1504-ab63/accessibility-contrast@cautious-first-timer#f0",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1504-ab63/accessibility-contrast@cautious-first-timer#f1",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1504-ab63/accessibility-contrast@cautious-first-timer#f2",
+      "verdict": "false-positive",
+      "rationale": "Harness-latency artifact matching clean reference: the add-to-cart toast and its View cart action use the subject's built-in 20s actionable-toast helper, identical in the clean subject; the actor's click failed because its step latency exceeded the toast lifetime (ref no longer in the latest snapshot), not because the control is broken. The header cart link recovered the flow in every case."
+    },
+    {
+      "finding_id": "2026-07-11T1504-ab63/accessibility-contrast@cautious-first-timer#f3",
+      "verdict": "false-positive",
+      "rationale": "Below-fold/layout precision floor: the control exists, is reachable, and worked; the complaint is scroll distance at 1280x720."
+    },
+    {
+      "finding_id": "2026-07-11T1504-ab63/accessibility-contrast@cautious-first-timer#f4",
+      "verdict": "false-positive",
+      "rationale": "Visual-prominence: the affordance exists and worked; the complaint is size/emphasis relative to other content, below the study's defect floor."
+    },
+    {
+      "finding_id": "2026-07-11T1504-ab63/accessibility-contrast@cautious-first-timer#f5",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1504-ab63/accessibility-contrast@cautious-first-timer#q0",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1504-ab63/accessibility-contrast@cautious-first-timer#q1",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1504-ab63/accessibility-contrast@cautious-first-timer#q2",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1507-7380/add-to-cart-feedback@gift-rusher#f0",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1507-7380/add-to-cart-feedback@gift-rusher#f1",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1507-7380/add-to-cart-feedback@gift-rusher#f2",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1507-7380/add-to-cart-feedback@gift-rusher#f3",
+      "verdict": "false-positive",
+      "rationale": "Harness-latency artifact matching clean reference: the add-to-cart toast and its View cart action use the subject's built-in 20s actionable-toast helper, identical in the clean subject; the actor's click failed because its step latency exceeded the toast lifetime (ref no longer in the latest snapshot), not because the control is broken. The header cart link recovered the flow in every case."
+    },
+    {
+      "finding_id": "2026-07-11T1507-7380/add-to-cart-feedback@gift-rusher#f4",
+      "verdict": "false-positive",
+      "rationale": "Visual-prominence: the affordance exists and worked; the complaint is size/emphasis relative to other content, below the study's defect floor."
+    },
+    {
+      "finding_id": "2026-07-11T1507-7380/add-to-cart-feedback@gift-rusher#f5",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1507-7380/add-to-cart-feedback@gift-rusher#q0",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1507-7380/add-to-cart-feedback@gift-rusher#q1",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1507-7380/add-to-cart-feedback@gift-rusher#q2",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1507-7380/add-to-cart-feedback@gift-rusher#q3",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1509-f4b2/sort-persists-round-trip@weekend-browser#f0",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1509-f4b2/sort-persists-round-trip@weekend-browser#f1",
+      "verdict": "false-positive",
+      "rationale": "Visual-prominence: the affordance exists and worked; the complaint is size/emphasis relative to other content, below the study's defect floor."
+    },
+    {
+      "finding_id": "2026-07-11T1509-f4b2/sort-persists-round-trip@weekend-browser#f2",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1509-f4b2/sort-persists-round-trip@weekend-browser#f3",
+      "verdict": "false-positive",
+      "rationale": "Visual-prominence: the affordance exists and worked; the complaint is size/emphasis relative to other content, below the study's defect floor."
+    },
+    {
+      "finding_id": "2026-07-11T1509-f4b2/sort-persists-round-trip@weekend-browser#f4",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1509-f4b2/sort-persists-round-trip@weekend-browser#f5",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1509-f4b2/sort-persists-round-trip@weekend-browser#q0",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1509-f4b2/sort-persists-round-trip@weekend-browser#q1",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1509-f4b2/sort-persists-round-trip@weekend-browser#q2",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1509-f4b2/sort-persists-round-trip@weekend-browser#q3",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1510-2a62/cart-edit-and-remove@weekend-browser#f0",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1510-2a62/cart-edit-and-remove@weekend-browser#f1",
+      "verdict": "false-positive",
+      "rationale": "Visual-prominence: the affordance exists and worked; the complaint is size/emphasis relative to other content, below the study's defect floor."
+    },
+    {
+      "finding_id": "2026-07-11T1510-2a62/cart-edit-and-remove@weekend-browser#f2",
+      "verdict": "false-positive",
+      "rationale": "Harness-latency artifact matching clean reference: the add-to-cart toast and its View cart action use the subject's built-in 20s actionable-toast helper, identical in the clean subject; the actor's click failed because its step latency exceeded the toast lifetime (ref no longer in the latest snapshot), not because the control is broken. The header cart link recovered the flow in every case."
+    },
+    {
+      "finding_id": "2026-07-11T1510-2a62/cart-edit-and-remove@weekend-browser#f3",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1510-2a62/cart-edit-and-remove@weekend-browser#f4",
+      "verdict": "false-positive",
+      "rationale": "Visual-prominence: the affordance exists and worked; the complaint is size/emphasis relative to other content, below the study's defect floor."
+    },
+    {
+      "finding_id": "2026-07-11T1510-2a62/cart-edit-and-remove@weekend-browser#f5",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1510-2a62/cart-edit-and-remove@weekend-browser#f6",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1510-2a62/cart-edit-and-remove@weekend-browser#q0",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1510-2a62/cart-edit-and-remove@weekend-browser#q1",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1510-2a62/cart-edit-and-remove@weekend-browser#q2",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1510-2a62/cart-edit-and-remove@weekend-browser#q3",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1512-c163/checkout-summary-shipping@cautious-first-timer#f0",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1512-c163/checkout-summary-shipping@cautious-first-timer#f1",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1512-c163/checkout-summary-shipping@cautious-first-timer#f2",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1512-c163/checkout-summary-shipping@cautious-first-timer#f3",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1512-c163/checkout-summary-shipping@cautious-first-timer#f4",
+      "verdict": "false-positive",
+      "rationale": "Visual-prominence: the affordance exists and worked; the complaint is size/emphasis relative to other content, below the study's defect floor."
+    },
+    {
+      "finding_id": "2026-07-11T1512-c163/checkout-summary-shipping@cautious-first-timer#f5",
+      "verdict": "false-positive",
+      "rationale": "Below-fold/layout precision floor: the control exists, is reachable, and worked; the complaint is scroll distance at 1280x720."
+    },
+    {
+      "finding_id": "2026-07-11T1512-c163/checkout-summary-shipping@cautious-first-timer#q0",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1512-c163/checkout-summary-shipping@cautious-first-timer#q1",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1512-c163/checkout-summary-shipping@cautious-first-timer#q2",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1514-ce8f/account-profile-save@returning-regular#f0",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1514-ce8f/account-profile-save@returning-regular#f1",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1514-ce8f/account-profile-save@returning-regular#f2",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1514-ce8f/account-profile-save@returning-regular#f3",
+      "verdict": "false-positive",
+      "rationale": "Out-of-SPEC scope: an account-page checkout entry point is not in SPEC C5; the header nav is the specified route back to the shop, and the user recovered through it without error."
+    },
+    {
+      "finding_id": "2026-07-11T1514-ce8f/account-profile-save@returning-regular#f4",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1514-ce8f/account-profile-save@returning-regular#f5",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1514-ce8f/account-profile-save@returning-regular#q0",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1514-ce8f/account-profile-save@returning-regular#q1",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1514-ce8f/account-profile-save@returning-regular#q2",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1518-7e1f/checkout-recovery@cautious-first-timer#f0",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1518-7e1f/checkout-recovery@cautious-first-timer#f1",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1518-7e1f/checkout-recovery@cautious-first-timer#f2",
+      "verdict": "false-positive",
+      "rationale": "Below-fold/layout precision floor: the control exists, is reachable, and worked; the complaint is scroll distance at 1280x720."
+    },
+    {
+      "finding_id": "2026-07-11T1518-7e1f/checkout-recovery@cautious-first-timer#f3",
+      "verdict": "false-positive",
+      "rationale": "Visual-prominence: the affordance exists and worked; the complaint is size/emphasis relative to other content, below the study's defect floor."
+    },
+    {
+      "finding_id": "2026-07-11T1518-7e1f/checkout-recovery@cautious-first-timer#f4",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1518-7e1f/checkout-recovery@cautious-first-timer#f5",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1518-7e1f/checkout-recovery@cautious-first-timer#q0",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1518-7e1f/checkout-recovery@cautious-first-timer#q1",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1518-7e1f/checkout-recovery@cautious-first-timer#q2",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1518-7e1f/checkout-recovery@cautious-first-timer#q3",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1518-da44/account-order-history@returning-regular#f0",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1518-da44/account-order-history@returning-regular#f1",
+      "verdict": "false-positive",
+      "rationale": "Visual-prominence: the affordance exists and worked; the complaint is size/emphasis relative to other content, below the study's defect floor."
+    },
+    {
+      "finding_id": "2026-07-11T1518-da44/account-order-history@returning-regular#f2",
+      "verdict": "false-positive",
+      "rationale": "Below-fold/layout precision floor: the control exists, is reachable, and worked; the complaint is scroll distance at 1280x720."
+    },
+    {
+      "finding_id": "2026-07-11T1518-da44/account-order-history@returning-regular#f3",
+      "verdict": "false-positive",
+      "rationale": "Visual-prominence: the affordance exists and worked; the complaint is size/emphasis relative to other content, below the study's defect floor."
+    },
+    {
+      "finding_id": "2026-07-11T1518-da44/account-order-history@returning-regular#f4",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1518-da44/account-order-history@returning-regular#q0",
+      "verdict": "duplicate-of",
+      "duplicate_of": "2026-07-11T1518-da44/account-order-history@returning-regular#f1",
+      "rationale": "Report answer restating the mapped finding."
+    },
+    {
+      "finding_id": "2026-07-11T1518-da44/account-order-history@returning-regular#q1",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1518-da44/account-order-history@returning-regular#q2",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1518-da44/account-order-history@returning-regular#q3",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1519-7d60/empty-cart-and-back-link@weekend-browser#f0",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1519-7d60/empty-cart-and-back-link@weekend-browser#f1",
+      "verdict": "false-positive",
+      "rationale": "Visual-prominence: the affordance exists and worked; the complaint is size/emphasis relative to other content, below the study's defect floor."
+    },
+    {
+      "finding_id": "2026-07-11T1519-7d60/empty-cart-and-back-link@weekend-browser#f2",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1519-7d60/empty-cart-and-back-link@weekend-browser#f3",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1519-7d60/empty-cart-and-back-link@weekend-browser#f4",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1519-7d60/empty-cart-and-back-link@weekend-browser#f5",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1519-7d60/empty-cart-and-back-link@weekend-browser#q0",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1519-7d60/empty-cart-and-back-link@weekend-browser#q1",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1519-7d60/empty-cart-and-back-link@weekend-browser#q2",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1522-99a4/empty-states-are-warm@weekend-browser#f0",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1522-99a4/empty-states-are-warm@weekend-browser#f1",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1522-99a4/empty-states-are-warm@weekend-browser#f2",
+      "verdict": "false-positive",
+      "rationale": "Observation or positive note, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1522-99a4/empty-states-are-warm@weekend-browser#f3",
+      "verdict": "false-positive",
+      "rationale": "Visual-prominence: the affordance exists and worked; the complaint is size/emphasis relative to other content, below the study's defect floor."
+    },
+    {
+      "finding_id": "2026-07-11T1522-99a4/empty-states-are-warm@weekend-browser#q0",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1522-99a4/empty-states-are-warm@weekend-browser#q1",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1522-99a4/empty-states-are-warm@weekend-browser#q2",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    },
+    {
+      "finding_id": "2026-07-11T1522-99a4/empty-states-are-warm@weekend-browser#q3",
+      "verdict": "false-positive",
+      "rationale": "Report answer describing successful behavior or unexercised coverage; observation, not a defect claim."
+    }
+  ],
+  "fixes": [],
+  "verification": {
+    "regression_green": true,
+    "regression_run_ids": [
+      "2026-07-11T1507-7380",
+      "2026-07-11T1510-2a62",
+      "2026-07-11T1518-7e1f",
+      "2026-07-11T1512-c163",
+      "2026-07-11T1514-ce8f",
+      "2026-07-11T1518-da44",
+      "2026-07-11T1457-b9db",
+      "2026-07-11T1502-0c91",
+      "2026-07-11T1504-ab63",
+      "2026-07-11T1519-7d60",
+      "2026-07-11T1509-f4b2",
+      "2026-07-11T1522-99a4"
+    ]
+  },
+  "exclusions": [],
+  "amendments": [
+    {
+      "at": "2026-07-11T15:30:25.076Z",
+      "note": "SECOND CONSECUTIVE CLEAN ROUND — STOP RULE MET, Arm B (policy) climb complete (0 true-positive, 0 emergent of 203 findings; 197 FP, 6 report-duplicates). No fixes between rounds 2 and 3; app_hash 3061d6d identical to round 2. (1) STABLE FP FLOOR ~197, same classes as rounds 1-2 and Arm A: visual-prominence, below-fold, out-of-SPEC scope (trust/policy content reject-held per probe P1; grid quick-add; comparison; account-page checkout), harness-latency toast-click artifact, and this round one actor-coverage/near-miss. (2) NEW LATENT-SUBJECT-QUIRK (third catalogued, for D7): change-your-mind#f2 (the round's single 'major') — the cart quantity input commits on the DOM 'change' event (fires on blur), byte-identical to the clean subject (which labels it 'Quantities update as you change them.'). The actor typed a new qty and read the subtotal before blur, seeing a transiently stale total; the +/- stepper committed it and the report confirms the mismatch 'was resolved before ordering.' Not the seeded f-qty-edit-removed (the stepper works; the dedicated cart-edit-and-remove run reduced 2->1 with totals updating live). Present identically in the clean subject — a latent quirk, not fix-introduced, not a seeded fault. (3) MISSED-FAULT CONFIRMED (for D7 accounting): first-impressions#f2 is a NEAR-MISS of f-oos-says-in-stock — the actor was on the Fiddle-Leaf Fig page (stock line 'In stock — more arriving daily' contradicting a disabled 'Out of stock' button, the seeded manifestation, verified live) but only complained about the out-of-stock dead-end (expected behavior, identical in the clean subject) and never flagged the misleading copy. f-oos-says-in-stock remains undetected in the policy arm, as it was in the naive arm and baseline. (4) NO PROBES, NO EMERGENT. (5) MODEL NOTE: blind opus-4.8 policy operator throughout the climb; phase-3 (B18) ran on Opus 4.8 after the account's Fable 5 quota was exhausted mid-study (unrelated to the arm). Default actor gpt5_4_mini, grader gpt5_5, one justified gpt5_5 actor escalation on round-1 probe P1. ARM B SUMMARY: reached clean x2 in 2 fix cycles (phase 1/2 = 16 fixes + B17 sort-state; phase 3 = B18 empty-state class). Faults touched: 1 detected-and-fixed (f-empty-cart-jargon) as the climb driver, and by the policy's dedup-to-class + probe-before-fix discipline the operator also closed multiple faults it was never shown — including f-no-results-jargon and f-clear-search-self-link (fixed-without-detection). Full per-fault accounting lands in D7."
+    }
+  ],
+  "clean_round": true
+}

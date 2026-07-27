@@ -1,0 +1,12 @@
+description: Shakedown — a full shopping trip through the clean reference, browse to receipt.
+story: |
+  You have been meaning to get a low-maintenance houseplant for your desk,
+  plus whatever you'd need to keep it watered. Shop here for both, adjust
+  your choices if you change your mind along the way, and buy them. Before
+  you leave, make sure the order really went through.
+persona: [exploratory]
+report:
+  - Where, if anywhere, did the user hesitate, backtrack, or get confused — and what on the screen caused it?
+  - Did every action the user took produce a visible confirmation that it worked? Name any that did not.
+  - Was anything broken, misleading, or missing that a real shopper would notice? Be specific.
+  - Could the user verify their order was placed, and how?

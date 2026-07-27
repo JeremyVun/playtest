@@ -1,0 +1,33 @@
+# Suite-local component document for openapi.yaml. Its only job is to be a
+# FILE ref that ingestion has to resolve: internal (#/…) refs alone would never
+# exercise the file boundary, which is where the hermetic rules live.
+schemas:
+  Account:
+    type: object
+    required: [id, owner, status, balance, created_at]
+    properties:
+      id: { type: string }
+      owner: { type: string }
+      status: { type: string, enum: [pending, active] }
+      balance: { type: integer }
+      created_at: { type: string, format: date-time }
+      updated_at: { type: string, format: date-time }
+      notices:
+        type: array
+        items: { $ref: "#/schemas/Notice" }
+  Notice:
+    type: object
+    properties:
+      code: { type: string }
+      level: { type: string }
+      # A self-reference: legal, common, and the reason ingestion resolves refs
+      # with a cycle guard instead of recursing forever.
+      caused_by: { $ref: "#/schemas/Notice" }
+  Entry:
+    type: object
+    required: [id, account_id, amount]
+    properties:
+      id: { type: string }
+      account_id: { type: string }
+      amount: { type: integer }
+      created_at: { type: string, format: date-time }

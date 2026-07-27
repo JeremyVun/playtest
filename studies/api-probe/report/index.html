@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The probe found the cent. It still lost. — Playtest P1 decision report</title>
+<meta name="description" content="A preregistered experiment: can a goal-directed actor, given a natural-language invariant and a deterministic oracle, find violating sequences that schema fuzzing and an agent-authored test suite miss?">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to the report</a>
+
+<header class="masthead">
+  <div class="wrap">
+    <span class="wordmark">Playtest <b>/ Research</b></span>
+    <span class="status-chip" id="doc-status" style="border-color:#a81e22;color:#a81e22">Verdict: no-go</span>
+  </div>
+</header>
+
+<main id="main">
+
+<section>
+  <div class="wrap">
+    <p class="eyebrow">P1 · Agentic invariant probe · Preregistered, frozen at 9059797</p>
+    <h1>The probe found the cent.<br>It still lost.</h1>
+    <p class="lede">Three entries. A debit, a credit, a fee. In double-entry bookkeeping they sum to zero or something is wrong. This transfer sums to &minus;1, and no schema fuzzer can tell you why — because nothing about it is malformed. Every request was legal, well-typed, and individually correct.</p>
+    <p>An agent found it in 32 requests, seven minutes, and $1.68. That is the case for the thesis, and it is real.</p>
+    <p><strong>It was not enough.</strong> Against five faults it had never seen, the same probe found three. A test suite an agent wrote in an afternoon from the same documentation found four, and then ran in a quarter of a second for nothing. The preregistered bar was not met, and the honest answer to “should we build a generative engine on top of this?” is no.</p>
+  </div>
+
+  <div class="slab">
+    <figure class="tape">
+      <div class="tape-head">
+        <span>Run 2026-07-25 · story: conservation · build: f-fee-rounding-drift</span>
+        <span>32 requests · 7.1 min · $1.68</span>
+      </div>
+
+      <p class="tape-rule">The invariant, as the story states it in plain language:<br>
+        <b>“For a settled transfer, the ledger entries carrying its transfer id — the source debit, the destination credit, and the fee credit — sum to exactly zero.”</b></p>
+
+      <div class="ticks" id="ticks" role="img" aria-label="32 requests in wire order; request 29 is the one the oracle flagged."></div>
+
+      <table class="entries">
+        <caption>Entries carrying transfer tr_m2hjkt7x68, read back at request 29</caption>
+        <thead>
+          <tr><th scope="col">Entry</th><th scope="col">Account</th><th scope="col">Kind</th><th scope="col" class="num">Amount</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>ent_zc946y142d</td><td>acc_8n36k615kk</td><td>transfer_debit</td><td class="num debit">&minus;3363</td></tr>
+          <tr><td>ent_tg934qpv0t</td><td>acc_rkf1pgvt6k</td><td>transfer_credit</td><td class="num">+3333</td></tr>
+          <tr><td>ent_tw7b09hmx3</td><td>acc_fee_usd</td><td>fee</td><td class="num">+29</td></tr>
+        </tbody>
+        <tfoot>
+          <tr><td colspan="3">Sum — must be zero</td><td class="num sum-bad">&minus;1</td></tr>
+        </tfoot>
+      </table>
+
+      <figcaption class="tape-foot">conservation / transfer_entries_nonzero — verdict re-derived from <code>har.json</code> by a deterministic oracle. No model is in the verdict path.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <p class="eyebrow">The question</p>
+    <h2>Can a goal-directed actor find what schema fuzzing misses?</h2>
+    <p>Schema fuzzers are good at a specific thing: generating inputs a specification says are legal or illegal, and checking the response conforms. They are structurally unable to find a bug that requires <em class="term">four correct requests in the right order against state you had to build first</em>. A fee that rounds the wrong way only exists after an account is created, activated, funded, and used to send money that settles.</p>
+    <p>The claim under test is that an actor given a rule in plain language and a budget will construct that state on purpose. The claim is worth money if — and only if — it holds against faults the people who tuned the instrument have never seen, and if the false-positive cost is near zero.</p>
+    <p class="fine">The instrument, the fixture, the fault sets, the budgets, the scoring, and the pass mark were all committed before the measured round ran. That document is <code>studies/api-probe/PREREGISTRATION.md</code>; it is frozen at commit 9059797 and its tuning log records every change made along the way, including the ones that went badly.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <p class="eyebrow">Method</p>
+    <h2>Three arms, one oracle</h2>
+    <p>The failure mode of an experiment like this is an unfair comparison: the arm you are selling gets a better oracle, more budget, or knowledge the others lack. Three rules prevent it.</p>
+
+    <ol class="steps">
+      <li><b>Equal knowledge.</b> Every arm gets the served OpenAPI document and the same six invariant statements, word for word. No arm gets repository access. No arm is told which fault is present, or that one is.</li>
+      <li><b>Equal budget, enforced at the wire.</b> 360 requests per build per arm. The comparators send their traffic through a recording proxy that counts and stops at 360, because Schemathesis has no request cap and is not reproducible run-to-run even under a fixed seed — measured at 393 then 430 requests for byte-identical arguments.</li>
+      <li><b>One oracle, applied afterwards.</b> Every arm's traffic is scored by the same deterministic oracles, offline, from the recorded HAR. The probe's in-run gate is only its stop signal; the numbers come from the bench, and a violation is a violation regardless of which arm produced the traffic.</li>
+      <li><b>A sealed fault set.</b> Five held-out faults were authored by an isolated agent and kept outside the working checkout, committed to a sha256 in the preregistration. The people who tuned the probe never saw them. The measured round runs every story against every held-out build, so no story can be selected using knowledge of the fault it targets.</li>
+    </ol>
+
+    <div class="table-wrap">
+      <table class="data">
+        <caption>The arms, and what each was given.</caption>
+        <thead>
+          <tr><th scope="col">Arm</th><th scope="col">What it is</th><th scope="col">Knowledge</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="arm-probe">probe</td><td>Six goal-directed runs, one per invariant, api-fuzzer persona, 60 steps each</td><td>Spec + the six invariant statements</td></tr>
+          <tr><td class="arm-other">schemathesis</td><td>4.24.2, fuzzing + stateful phases, one session per build</td><td>Spec (which declares the same rules as consistency notes)</td></tr>
+          <tr><td class="arm-other">agent-suite</td><td>A zero-dependency test suite written by an isolated coding agent</td><td>Spec + the same six invariant statements</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="fine">The agent-suite arm is not a straw man, and it matters to the credibility of everything below that it isn't. Its author had no repository access, validated its own work against 20 injected defects behind a mutating proxy, and spent about two and a half hours. Its authoring transcript is committed beside it.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <p class="eyebrow">Development round · reported with a caveat</p>
+    <h2>Eight for eight, at $1.53 a fault</h2>
+    <p>Against the eight public development faults, the probe found every one, each with evidence citing the offending request and an oracle category matching the fault's actual mechanism.</p>
+    <div class="note caution">
+      <b>These numbers are excluded from the go/no-go.</b> The development round selected one matching story per fault using the public fault-to-invariant mapping — an advantage the measured round removes by running all six stories against every held-out build. They are reported because they establish cost and latency, not detection.
+    </div>
+  </div>
+
+  <div class="slab">
+    <div class="table-wrap">
+      <table class="data">
+        <caption>Probe arm, development faults, scored from artifacts by the bench.</caption>
+        <thead>
+          <tr><th scope="col">Fault</th><th scope="col">Tier</th><th scope="col">Oracle that caught it</th><th scope="col" class="num">Requests</th><th scope="col" class="num">Minutes</th><th scope="col" class="num">Cost</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>f-idempotency-replay-double</td><td>semantic</td><td>idempotency / phantom_ledger_effect</td><td class="num">18</td><td class="num">4.4</td><td class="num">$0.95</td></tr>
+          <tr><td>f-pagination-dup</td><td>semantic</td><td>pagination / duplicate_entry_in_enumeration</td><td class="num">19</td><td class="num">4.5</td><td class="num">$0.94</td></tr>
+          <tr><td>f-error-200</td><td>schema-reachable</td><td>error_shape / failure_masked_as_2xx</td><td class="num">23</td><td class="num">5.8</td><td class="num">$1.17</td></tr>
+          <tr><td>f-undocumented-500</td><td>schema-reachable</td><td>protocol / unexpected_server_error</td><td class="num">27</td><td class="num">7.4</td><td class="num">$1.59</td></tr>
+          <tr><td>f-close-ghost</td><td>semantic</td><td>lifecycle / transfer_on_closed_account</td><td class="num">28</td><td class="num">6.8</td><td class="num">$1.45</td></tr>
+          <tr><td>f-fee-rounding-drift</td><td>semantic</td><td>conservation / transfer_entries_nonzero</td><td class="num">32</td><td class="num">7.1</td><td class="num">$1.68</td></tr>
+          <tr><td>f-balance-cache-stale</td><td>semantic</td><td>balance_agreement / stored_balance_diverged</td><td class="num">36</td><td class="num">8.8</td><td class="num">$1.96</td></tr>
+          <tr><td>f-settle-cancel-race</td><td>semantic</td><td>lifecycle / cancel_after_settlement</td><td class="num">45</td><td class="num">10.4</td><td class="num">$2.49</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <p>The interesting column is the first number, not the last. A counterexample arrives in 18 to 45 requests — median 28 — against comparator arms that spend 285 and 360 requests per build and find less. The probe is expensive per request and cheap per finding, and it stops the moment it has proof.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <p class="eyebrow">False positives</p>
+    <h2>Twelve clean runs, nothing raised</h2>
+    <p>A bug-finder that cries wolf is worse than none, because every false alarm is paid for in someone's afternoon. The clean baseline is twelve probe runs — two full sweeps of all six stories — against a build with no seeded fault at all.</p>
+    <p><strong>Zero findings.</strong> Not merely zero red gates: zero violations at the bench across all twelve traces, 689 requests, 3.2 hours, $43.61. A clean run costs more than a detection, because nothing stops it early.</p>
+    <div class="note">
+      <b>Two earlier sweeps were thrown away, and that is part of the record.</b> The first stopped when the fixture's OpenAPI document turned out to declare no operation links at all, which had quietly crippled the Schemathesis arm. The second stopped when the idempotency oracle was found to ignore the authenticated principal, which would have produced a false positive on a clean build. Both were fixable only <em>before</em> the freeze. That is what the pre-freeze sweeps are for.
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <p class="eyebrow">Comparators</p>
+    <h2>What the other two arms found</h2>
+    <p>On the same eight development faults, scored by the same oracles:</p>
+  </div>
+
+  <div class="slab">
+    <div class="table-wrap">
+      <table class="data">
+        <caption>Detection by arm, development faults. Same builds, same budget, same oracles.</caption>
+        <thead>
+          <tr><th scope="col">Arm</th><th scope="col" class="num">Detected</th><th scope="col" class="num">Requests / build</th><th scope="col" class="num">Wall / build</th><th scope="col" class="num">Cost / build</th><th scope="col">Authoring</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="arm-probe">probe</td><td class="num yes">8 / 8</td><td class="num">18&ndash;45</td><td class="num">4&ndash;10 min</td><td class="num">$1.53</td><td>Six stories, one per rule</td></tr>
+          <tr><td class="arm-other">agent-suite</td><td class="num">6 / 8</td><td class="num">285&ndash;290</td><td class="num">0.3 s</td><td class="num">$0</td><td>~2.5 h, once</td></tr>
+          <tr><td class="arm-other">schemathesis</td><td class="num no">0 / 8</td><td class="num">360</td><td class="num">2.2 s</td><td class="num">$0</td><td>Configuration only</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <h3>Why Schemathesis found nothing</h3>
+    <p>Not because it was misconfigured, and the report should be read sceptically on this point because three configuration problems <em>were</em> found and fixed first: generated security parameters and two auth-negative checks were spending 136 of every 360 requests re-proving that the API rejects bad tokens, and the fixture's spec declared no operation links for its stateful phase to chain.</p>
+    <p>After all three fixes, it still completes zero deposits and zero transfers. The reason is structural: on this API the resource reference lives in the <em class="term">request body</em>, and OpenAPI links can populate path parameters but not body fields. Three link configurations were tried. The fuzzer creates accounts, and then has nothing to do with them.</p>
+    <p class="fine">This is a real limit of schema-driven stateful fuzzing rather than a defect in the tool, and it is the most transferable finding in the report: an API whose identifiers travel in bodies is largely invisible to this class of testing, no matter how long you run it.</p>
+
+    <h3>Why the agent-authored suite did well</h3>
+    <p>Six of eight, at zero marginal cost per run, is the number that should give the thesis most trouble. A competent engineer with the spec and the rules writes a suite that catches most seeded faults and then runs in a third of a second forever. The two it missed were the ones needing a specific value — a transfer exactly at the daily limit — or a specific interleaving.</p>
+    <p>The honest framing is that these are not competing products. The suite is a regression asset; the probe is a search. The question the held-out round settles is whether the search finds things the suite does not.</p>
+  </div>
+</section>
+
+<section id="verdict">
+  <div class="wrap">
+    <p class="eyebrow">Held-out round</p>
+    <h2>The measured result</h2>
+    <p>Five faults — one schema-reachable, four semantic — sealed outside the checkout before the instrument was tuned, spanning five oracle categories. All six stories run against every one of them, for all three arms, at the frozen budget.</p>
+
+    <div class="table-wrap">
+      <table class="data">
+        <caption>Held-out set, all three arms. Detection is by each arm&rsquo;s own reporting; the dagger marks where the shared oracle disagreed.</caption>
+        <thead>
+          <tr><th scope="col">Fault</th><th scope="col">Tier</th><th scope="col">probe</th><th scope="col">agent-suite</th><th scope="col">schemathesis</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>f-cursor-error-bare<br><span class="dash">bare {message} instead of the error envelope</span></td><td>schema</td><td class="yes">found</td><td class="yes">found</td><td class="yes">found</td></tr>
+          <tr><td>f-close-pending-inbound<br><span class="dash">close guard ignores inbound pending transfers</span></td><td>semantic</td><td class="yes">found</td><td class="yes">found</td><td class="no">miss</td></tr>
+          <tr><td>f-settle-failed-debit<br><span class="dash">failed settlement still writes its debit row</span></td><td>semantic</td><td class="yes">found</td><td class="yes">found &dagger;</td><td class="no">miss</td></tr>
+          <tr><td>f-idempotency-day-expiry<br><span class="dash">day rollover drops idempotency keys</span></td><td>semantic</td><td class="no">miss</td><td class="no">miss</td><td class="no">miss</td></tr>
+          <tr><td>f-fee-double-charged<br><span class="dash">fee deducted twice, on EUR settlements only</span></td><td>semantic</td><td class="no">miss</td><td class="yes">found</td><td class="no">miss</td></tr>
+          <tr><td><strong>Total</strong></td><td></td><td><strong>3 / 5</strong></td><td><strong>4 / 5</strong></td><td><strong>1 / 5</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>Semantic faults are the ones that matter here, because schema-reachable faults are what the comparators already exist for. The probe found <strong>two of the four</strong>. The bar was three.</p>
+
+    <div class="note caution">
+      <b>&dagger; Criterion (b) passes on a technicality, and I am not banking it.</b>
+      Under the frozen rule an arm detects a fault when the shared oracle confirms it in that arm&rsquo;s traffic, and by that rule the probe uniquely found <code>f-settle-failed-debit</code>. But the agent-suite caught it too, and said so precisely &mdash; <em>&ldquo;a failed transfer wrote ledger entries: tr_wczrq1mbd8 carries transfer_debit &minus;9125&rdquo;</em>. The oracle refused it because its balance-agreement rule needs a balance read and a complete enumeration with no write in between, and that traffic never landed in the window. The pass is an artifact of the measuring instrument, not a capability the probe has and the suite lacks.
+    </div>
+
+    <div class="table-wrap">
+      <table class="data">
+        <caption>What each arm cost per build.</caption>
+        <thead>
+          <tr><th scope="col">Arm</th><th scope="col" class="num">Detection</th><th scope="col" class="num">Requests</th><th scope="col" class="num">Wall</th><th scope="col" class="num">Cost</th><th scope="col">Authoring</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="arm-probe">probe</td><td class="num">3 / 5</td><td class="num">329</td><td class="num">~80 min</td><td class="num">$20.22</td><td>six stories</td></tr>
+          <tr><td class="arm-other">agent-suite</td><td class="num">4 / 5</td><td class="num">285&ndash;290</td><td class="num">0.26 s</td><td class="num">$0</td><td>~2.5 h, once</td></tr>
+          <tr><td class="arm-other">schemathesis</td><td class="num">1 / 5</td><td class="num">360</td><td class="num">2.2 s</td><td class="num">$0</td><td>config only</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Why the probe missed the two it missed</h3>
+    <p>The EUR fault is the instructive one. The fee is double-deducted <em>only</em> on EUR settlements; the probe worked in USD throughout and never widened. A goal-directed search optimises for reaching a state, and reaching one instance of that state feels like success. A test suite optimises for covering a space, and covering it is cheap once written. The fault lived in the second column of a two-column table nobody thought to widen.</p>
+    <p>The idempotency fault needed a retry to straddle a ledger-day rollover. No arm found it &mdash; less a verdict on the probe than a reminder that state includes time, and that nothing prompted any of them to reach for the clock.</p>
+
+    <h3>What held up anyway</h3>
+    <p>Zero false positives across twelve clean runs before the freeze and twenty-five non-detecting held-out runs after it. Every verdict re-derivable offline from committed artifacts, with no model in the path. And both faults the probe did find were constructed state: a transfer engineered to be affordable at creation and unaffordable at settlement, and an account closed from the receiving end of a pending transfer. That capability is real. It is not worth a generative engine on this evidence.</p>
+
+    <h3>The pass mark, set in advance</h3>
+    <ul class="criteria">
+      <li><span class="key">a</span><span>At least two-thirds of the held-out <strong>semantic</strong> faults detected with correct evidence — with four semantic faults, at least three.</span></li>
+      <li><span class="key">b</span><span>At least one held-out semantic fault detected that <strong>both</strong> comparator arms miss.</span></li>
+      <li><span class="key">c</span><span><strong>Zero</strong> unresolved false gate failures across the probe's clean-build runs.</span></li>
+    </ul>
+    <p class="fine">Cost and wall time are reported as judgment inputs, not gated. Criterion (c) was satisfied and stayed satisfied. Go required all three, and (a) failed outright &mdash; so the verdict does not rest on the argument about (b), though what anyone concludes next does.</p>
+
+    <h3>What follows</h3>
+    <p>Stage 3, the stateful fuzzer engine, is <strong>not licensed</strong>, and <code>DESIGN.md</code> &sect;7 is gated closed. Re-opening it needs a differently designed experiment, not a re-run of this one. Stage 2 &mdash; secrets and baseline hygiene, bindings and match rules, heal triage and the invariant gate kinds, cross-layer assertions &mdash; was always unconditional and shipped regardless. The probe suite stays as a worked example of custom assertions and as an exploratory tool, not as a release gate.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <p class="eyebrow">Side effects</p>
+    <h2>What building the experiment found</h2>
+    <p>Four defects surfaced before the measured round began, none of them in the thing being measured. They are listed because a study that only reports its headline is hiding its most reusable output.</p>
+
+    <h3>The probe found a real bug in its own fixture</h3>
+    <p>Against the <em>clean</em> build, the probe sent <code>/accounts/%</code> — a malformed percent-encoding — and the fixture's router threw, answering 500 and violating its own declared “no operation answers 5xx” rule. A true positive against a build that was supposed to be correct, found by the instrument without being asked to look for it.</p>
+
+    <h3>Two engine defects fell out of authoring the suite</h3>
+    <p><code>app.allowed_origins</code> was validated and honoured by the code but rejected by the JSON schema, so the egress allowlist shipped in P0 was unreachable from YAML. And <code>har.json</code> was flushed <em>after</em> the observing phase, so a custom assertion could read a truncated trace. Both are the same class: a feature that exists and cannot be used.</p>
+
+    <h3>The comparator improved the instrument</h3>
+    <p>The idempotency oracle reported a violation on a clean build: one key, two transfers. It was a false positive — the two requests used different credentials, and the invariant is scoped per authenticated principal. It was found by the agent-suite arm, which switches tokens mid-suite, and not by the probe. Had it survived the freeze it could have failed criterion (c) on an instrument defect.</p>
+
+    <h3>The instrument needed no tuning to reach the gateway</h3>
+    <p>Every pipeline failure in the pre-round work was in the model gateway's adapter — strict-schema rejection of untyped tool fields, <code>tool_choice: "required"</code> answered in prose, and free-form header maps sanitised into un-emittable empty objects, which produced a run of sixty consecutive 401s while the actor's own reasoning correctly said to send the bearer token. Three fixes, all gateway-side, zero changes to the probe.</p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    Playtest · P1 agentic invariant probe · preregistration frozen at 9059797<br>
+    Evidence: <code>studies/api-probe/rounds/</code> — manifests and bench scores are committed; run directories and <code>har.json</code> are not, because they carry full request and response bodies.<br>
+    Every verdict in this report is re-derivable offline from committed artifacts by <code>examples/ledger-api/bench/bench.js</code>, with no model call.
+  </div>
+</footer>
+
+</main>
+
+<script>
+// The request tape: 32 ticks in wire order, the flagged one at index 29.
+// Built here rather than hand-written so the count and the flag position stay
+// tied to the run they describe.
+(function () {
+  var host = document.getElementById("ticks");
+  if (!host) return;
+  var TOTAL = 32, HIT = 29;
+  var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  for (var i = 0; i < TOTAL; i++) {
+    var t = document.createElement("span");
+    t.className = "tick " + (i === HIT ? "hit" : "ok");
+    t.style.animationDelay = reduce ? "0s" : (i * 22) + "ms";
+    host.appendChild(t);
+  }
+})();
+</script>
+</body>
+</html>

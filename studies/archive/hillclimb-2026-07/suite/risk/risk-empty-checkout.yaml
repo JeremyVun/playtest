@@ -1,0 +1,16 @@
+description: Open checkout with an empty cart after reset — no items first.
+tags: [risk]
+story: |
+  You have nothing in your cart (the session was just reset — do not add
+  anything). Navigate directly to checkout, preferably by opening the URL
+  path /checkout or any Checkout control you find without adding a product.
+  Report exactly where you land and what the page shows: empty-cart
+  recovery, a form with a shipping charge for nothing, an error, or
+  something else. Do not complete a purchase unless the page clearly lets
+  you pay for zero items — if it does, stop and describe that instead.
+persona: [adversarial-tester]
+report:
+  - With an empty cart, where did opening checkout send the user?
+  - What did the page show (message, form, totals)? Was a $6 shipping / pay form offered for no items?
+  - Was recovery (back to cart or shop) obvious and correct?
+  - Was anything broken, misleading, or missing that a real shopper would notice? Be specific.

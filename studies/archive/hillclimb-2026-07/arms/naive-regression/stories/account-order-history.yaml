@@ -1,0 +1,11 @@
+description: The Account page must show order history so a returning shopper can look up a past order's contents, total, and status.
+story: |
+  You placed an order recently and want to check what was in it, what you paid,
+  and whether it has shipped. Go to the Account page — the obvious home base for a
+  returning customer. Look for a list of your past orders. Find a specific order,
+  read its total and status, and open it to see the full receipt.
+persona: [returning-regular]
+report:
+  - Does the Account page show an order-history list with each order's number, date, item count, total, and status?
+  - Can you open a listed order to reach its full receipt?
+  - Were you able to determine a past order's contents, cost, and shipping status, or did Account dead-end with only profile and address forms?

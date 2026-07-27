@@ -1,0 +1,778 @@
+{
+  "traces": [
+    {
+      "id": "agent-suite-f-close-pending-inbound.har",
+      "source": "har",
+      "arm": "agent-suite",
+      "label": "f-close-pending-inbound",
+      "label_kind": "faulty",
+      "fault": "f-close-pending-inbound",
+      "fault_tier": "semantic",
+      "requests": 285,
+      "steps": null,
+      "wall_ms": 315,
+      "cost_usd": null,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": true,
+        "idempotency": true,
+        "lifecycle": true,
+        "pagination": true,
+        "balance_agreement": true
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "conservation",
+        "idempotency",
+        "lifecycle",
+        "pagination",
+        "balance_agreement"
+      ],
+      "violations": [
+        {
+          "oracle": "lifecycle",
+          "code": "close_with_pending_transfers",
+          "message": "account acc_tcb0n3g3zq was closed while transfer tr_w9fx7pfd7p was still pending",
+          "evidence": {
+            "request": {
+              "index": 89,
+              "method": "POST",
+              "path": "/accounts/acc_tcb0n3g3zq/close",
+              "status": 200
+            },
+            "supporting": [
+              {
+                "index": 87,
+                "note": "transfer tr_w9fx7pfd7p last observed pending here"
+              }
+            ],
+            "subject": {
+              "account_id": "acc_tcb0n3g3zq",
+              "transfer_ids": [
+                "tr_w9fx7pfd7p"
+              ]
+            }
+          },
+          "evidence_resolvable": true,
+          "on_target": true,
+          "expected_for_label": true
+        }
+      ],
+      "detected": true,
+      "evidence_correct": true,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "/Users/jeremy/projects/playtest-p1/studies/api-probe/rounds/heldout-1/comparators/agent-suite-f-close-pending-inbound.har"
+    },
+    {
+      "id": "agent-suite-f-cursor-error-bare.har",
+      "source": "har",
+      "arm": "agent-suite",
+      "label": "f-cursor-error-bare",
+      "label_kind": "faulty",
+      "fault": "f-cursor-error-bare",
+      "fault_tier": "schema-reachable",
+      "requests": 285,
+      "steps": null,
+      "wall_ms": 315,
+      "cost_usd": null,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": true,
+        "idempotency": true,
+        "lifecycle": true,
+        "pagination": true,
+        "balance_agreement": true
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "conservation",
+        "idempotency",
+        "lifecycle",
+        "pagination",
+        "balance_agreement"
+      ],
+      "violations": [
+        {
+          "oracle": "error_shape",
+          "code": "error_envelope_violation",
+          "message": "400 response does not match {error:{code,message,details?}}",
+          "evidence": {
+            "request": {
+              "index": 222,
+              "method": "GET",
+              "path": "/accounts/acc_c9kpj3xdb2/entries",
+              "status": 400
+            },
+            "supporting": [],
+            "subject": {
+              "body": "{\"message\":\"cursor is not a cursor previously returned by this endpoint\"}\n"
+            }
+          },
+          "evidence_resolvable": true,
+          "on_target": true,
+          "expected_for_label": true
+        },
+        {
+          "oracle": "error_shape",
+          "code": "error_envelope_violation",
+          "message": "400 response does not match {error:{code,message,details?}}",
+          "evidence": {
+            "request": {
+              "index": 223,
+              "method": "GET",
+              "path": "/accounts/acc_c9kpj3xdb2/entries",
+              "status": 400
+            },
+            "supporting": [],
+            "subject": {
+              "body": "{\"message\":\"cursor is not a cursor previously returned by this endpoint\"}\n"
+            }
+          },
+          "evidence_resolvable": true,
+          "on_target": true,
+          "expected_for_label": true
+        },
+        {
+          "oracle": "error_shape",
+          "code": "error_envelope_violation",
+          "message": "400 response does not match {error:{code,message,details?}}",
+          "evidence": {
+            "request": {
+              "index": 224,
+              "method": "GET",
+              "path": "/accounts/acc_c9kpj3xdb2/entries",
+              "status": 400
+            },
+            "supporting": [],
+            "subject": {
+              "body": "{\"message\":\"cursor is not a cursor previously returned by this endpoint\"}\n"
+            }
+          },
+          "evidence_resolvable": true,
+          "on_target": true,
+          "expected_for_label": true
+        },
+        {
+          "oracle": "error_shape",
+          "code": "error_envelope_violation",
+          "message": "400 response does not match {error:{code,message,details?}}",
+          "evidence": {
+            "request": {
+              "index": 225,
+              "method": "GET",
+              "path": "/accounts/acc_c9kpj3xdb2/entries",
+              "status": 400
+            },
+            "supporting": [],
+            "subject": {
+              "body": "{\"message\":\"cursor is not a cursor previously returned by this endpoint\"}\n"
+            }
+          },
+          "evidence_resolvable": true,
+          "on_target": true,
+          "expected_for_label": true
+        },
+        {
+          "oracle": "error_shape",
+          "code": "error_envelope_violation",
+          "message": "400 response does not match {error:{code,message,details?}}",
+          "evidence": {
+            "request": {
+              "index": 226,
+              "method": "GET",
+              "path": "/accounts/acc_c9kpj3xdb2/entries",
+              "status": 400
+            },
+            "supporting": [],
+            "subject": {
+              "body": "{\"message\":\"cursor is not a cursor previously returned by this endpoint\"}\n"
+            }
+          },
+          "evidence_resolvable": true,
+          "on_target": true,
+          "expected_for_label": true
+        }
+      ],
+      "detected": true,
+      "evidence_correct": true,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "/Users/jeremy/projects/playtest-p1/studies/api-probe/rounds/heldout-1/comparators/agent-suite-f-cursor-error-bare.har"
+    },
+    {
+      "id": "agent-suite-f-fee-double-charged.har",
+      "source": "har",
+      "arm": "agent-suite",
+      "label": "f-fee-double-charged",
+      "label_kind": "faulty",
+      "fault": "f-fee-double-charged",
+      "fault_tier": "semantic",
+      "requests": 285,
+      "steps": null,
+      "wall_ms": 299,
+      "cost_usd": null,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": true,
+        "idempotency": true,
+        "lifecycle": true,
+        "pagination": true,
+        "balance_agreement": true
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "conservation",
+        "idempotency",
+        "lifecycle",
+        "pagination",
+        "balance_agreement"
+      ],
+      "violations": [
+        {
+          "oracle": "conservation",
+          "code": "transfer_entries_nonzero",
+          "message": "the ledger entries for transfer tr_xzstvqhrnn sum to -44, not 0",
+          "evidence": {
+            "request": {
+              "index": 34,
+              "method": "GET",
+              "path": "/accounts/acc_m2hjkt7x68/entries",
+              "status": 200,
+              "note": "entry observed in this response"
+            },
+            "supporting": [
+              {
+                "index": 34,
+                "note": "ent_phgjdk21n3 transfer_credit 12301 on acc_m2hjkt7x68"
+              },
+              {
+                "index": 35,
+                "note": "ent_y2rmdjtw8m transfer_debit -12389 on acc_fp9tzwhd5t"
+              },
+              {
+                "index": 40,
+                "note": "ent_zy0xdqg5r1 fee 44 on acc_fee_eur"
+              }
+            ],
+            "subject": {
+              "transfer_id": "tr_xzstvqhrnn",
+              "sum": -44,
+              "entry_ids": [
+                "ent_phgjdk21n3",
+                "ent_y2rmdjtw8m",
+                "ent_zy0xdqg5r1"
+              ]
+            }
+          },
+          "evidence_resolvable": true,
+          "on_target": true,
+          "expected_for_label": true
+        }
+      ],
+      "detected": true,
+      "evidence_correct": true,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "/Users/jeremy/projects/playtest-p1/studies/api-probe/rounds/heldout-1/comparators/agent-suite-f-fee-double-charged.har"
+    },
+    {
+      "id": "agent-suite-f-idempotency-day-expiry.har",
+      "source": "har",
+      "arm": "agent-suite",
+      "label": "f-idempotency-day-expiry",
+      "label_kind": "faulty",
+      "fault": "f-idempotency-day-expiry",
+      "fault_tier": "semantic",
+      "requests": 285,
+      "steps": null,
+      "wall_ms": 298,
+      "cost_usd": null,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": true,
+        "idempotency": true,
+        "lifecycle": true,
+        "pagination": true,
+        "balance_agreement": true
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "conservation",
+        "idempotency",
+        "lifecycle",
+        "pagination",
+        "balance_agreement"
+      ],
+      "violations": [],
+      "detected": false,
+      "evidence_correct": false,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "/Users/jeremy/projects/playtest-p1/studies/api-probe/rounds/heldout-1/comparators/agent-suite-f-idempotency-day-expiry.har"
+    },
+    {
+      "id": "agent-suite-f-settle-failed-debit.har",
+      "source": "har",
+      "arm": "agent-suite",
+      "label": "f-settle-failed-debit",
+      "label_kind": "faulty",
+      "fault": "f-settle-failed-debit",
+      "fault_tier": "semantic",
+      "requests": 285,
+      "steps": null,
+      "wall_ms": 310,
+      "cost_usd": null,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": true,
+        "idempotency": true,
+        "lifecycle": true,
+        "pagination": true,
+        "balance_agreement": true
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "conservation",
+        "idempotency",
+        "lifecycle",
+        "pagination",
+        "balance_agreement"
+      ],
+      "violations": [],
+      "detected": false,
+      "evidence_correct": false,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "/Users/jeremy/projects/playtest-p1/studies/api-probe/rounds/heldout-1/comparators/agent-suite-f-settle-failed-debit.har"
+    },
+    {
+      "id": "schemathesis-f-close-pending-inbound.har",
+      "source": "har",
+      "arm": "schemathesis",
+      "label": "f-close-pending-inbound",
+      "label_kind": "faulty",
+      "fault": "f-close-pending-inbound",
+      "fault_tier": "semantic",
+      "requests": 360,
+      "steps": null,
+      "wall_ms": 2729,
+      "cost_usd": null,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": false,
+        "idempotency": true,
+        "lifecycle": true,
+        "pagination": false,
+        "balance_agreement": false
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "idempotency",
+        "lifecycle"
+      ],
+      "violations": [],
+      "detected": false,
+      "evidence_correct": false,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "/Users/jeremy/projects/playtest-p1/studies/api-probe/rounds/heldout-1/comparators/schemathesis-f-close-pending-inbound.har"
+    },
+    {
+      "id": "schemathesis-f-cursor-error-bare.har",
+      "source": "har",
+      "arm": "schemathesis",
+      "label": "f-cursor-error-bare",
+      "label_kind": "faulty",
+      "fault": "f-cursor-error-bare",
+      "fault_tier": "schema-reachable",
+      "requests": 360,
+      "steps": null,
+      "wall_ms": 2708,
+      "cost_usd": null,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": false,
+        "idempotency": true,
+        "lifecycle": true,
+        "pagination": false,
+        "balance_agreement": false
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "idempotency",
+        "lifecycle"
+      ],
+      "violations": [
+        {
+          "oracle": "error_shape",
+          "code": "error_envelope_violation",
+          "message": "400 response does not match {error:{code,message,details?}}",
+          "evidence": {
+            "request": {
+              "index": 113,
+              "method": "GET",
+              "path": "/accounts/acc_fee_eur/entries",
+              "status": 400
+            },
+            "supporting": [],
+            "subject": {
+              "body": "{\"message\":\"cursor is not a cursor previously returned by this endpoint\"}\n"
+            }
+          },
+          "evidence_resolvable": true,
+          "on_target": true,
+          "expected_for_label": true
+        },
+        {
+          "oracle": "error_shape",
+          "code": "error_envelope_violation",
+          "message": "400 response does not match {error:{code,message,details?}}",
+          "evidence": {
+            "request": {
+              "index": 114,
+              "method": "GET",
+              "path": "/accounts/acc_m2hjkt7x68/entries",
+              "status": 400
+            },
+            "supporting": [],
+            "subject": {
+              "body": "{\"message\":\"cursor is not a cursor previously returned by this endpoint\"}\n"
+            }
+          },
+          "evidence_resolvable": true,
+          "on_target": true,
+          "expected_for_label": true
+        },
+        {
+          "oracle": "error_shape",
+          "code": "error_envelope_violation",
+          "message": "400 response does not match {error:{code,message,details?}}",
+          "evidence": {
+            "request": {
+              "index": 115,
+              "method": "GET",
+              "path": "/accounts/acc_zc946y142d/entries",
+              "status": 400
+            },
+            "supporting": [],
+            "subject": {
+              "body": "{\"message\":\"cursor is not a cursor previously returned by this endpoint\"}\n"
+            }
+          },
+          "evidence_resolvable": true,
+          "on_target": true,
+          "expected_for_label": true
+        },
+        {
+          "oracle": "error_shape",
+          "code": "error_envelope_violation",
+          "message": "400 response does not match {error:{code,message,details?}}",
+          "evidence": {
+            "request": {
+              "index": 116,
+              "method": "GET",
+              "path": "/accounts/acc_fp9tzwhd5t/entries",
+              "status": 400
+            },
+            "supporting": [],
+            "subject": {
+              "body": "{\"message\":\"cursor is not a cursor previously returned by this endpoint\"}\n"
+            }
+          },
+          "evidence_resolvable": true,
+          "on_target": true,
+          "expected_for_label": true
+        },
+        {
+          "oracle": "error_shape",
+          "code": "error_envelope_violation",
+          "message": "400 response does not match {error:{code,message,details?}}",
+          "evidence": {
+            "request": {
+              "index": 119,
+              "method": "GET",
+              "path": "/accounts/acc_m2hjkt7x68/entries",
+              "status": 400
+            },
+            "supporting": [],
+            "subject": {
+              "body": "{\"message\":\"cursor is not a cursor previously returned by this endpoint\"}\n"
+            }
+          },
+          "evidence_resolvable": true,
+          "on_target": true,
+          "expected_for_label": true
+        },
+        {
+          "oracle": "error_shape",
+          "code": "error_envelope_violation",
+          "message": "400 response does not match {error:{code,message,details?}}",
+          "evidence": {
+            "request": {
+              "index": 235,
+              "method": "GET",
+              "path": "/accounts/acc_s06zk51yhs/entries",
+              "status": 400
+            },
+            "supporting": [],
+            "subject": {
+              "body": "{\"message\":\"cursor is not a cursor previously returned by this endpoint\"}\n"
+            }
+          },
+          "evidence_resolvable": true,
+          "on_target": true,
+          "expected_for_label": true
+        },
+        {
+          "oracle": "error_shape",
+          "code": "error_envelope_violation",
+          "message": "400 response does not match {error:{code,message,details?}}",
+          "evidence": {
+            "request": {
+              "index": 293,
+              "method": "GET",
+              "path": "/accounts/acc_1n2jztv3pf/entries",
+              "status": 400
+            },
+            "supporting": [],
+            "subject": {
+              "body": "{\"message\":\"cursor is not a cursor previously returned by this endpoint\"}\n"
+            }
+          },
+          "evidence_resolvable": true,
+          "on_target": true,
+          "expected_for_label": true
+        }
+      ],
+      "detected": true,
+      "evidence_correct": true,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "/Users/jeremy/projects/playtest-p1/studies/api-probe/rounds/heldout-1/comparators/schemathesis-f-cursor-error-bare.har"
+    },
+    {
+      "id": "schemathesis-f-fee-double-charged.har",
+      "source": "har",
+      "arm": "schemathesis",
+      "label": "f-fee-double-charged",
+      "label_kind": "faulty",
+      "fault": "f-fee-double-charged",
+      "fault_tier": "semantic",
+      "requests": 360,
+      "steps": null,
+      "wall_ms": 2693,
+      "cost_usd": null,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": false,
+        "idempotency": true,
+        "lifecycle": true,
+        "pagination": false,
+        "balance_agreement": false
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "idempotency",
+        "lifecycle"
+      ],
+      "violations": [],
+      "detected": false,
+      "evidence_correct": false,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "/Users/jeremy/projects/playtest-p1/studies/api-probe/rounds/heldout-1/comparators/schemathesis-f-fee-double-charged.har"
+    },
+    {
+      "id": "schemathesis-f-idempotency-day-expiry.har",
+      "source": "har",
+      "arm": "schemathesis",
+      "label": "f-idempotency-day-expiry",
+      "label_kind": "faulty",
+      "fault": "f-idempotency-day-expiry",
+      "fault_tier": "semantic",
+      "requests": 360,
+      "steps": null,
+      "wall_ms": 2674,
+      "cost_usd": null,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": false,
+        "idempotency": true,
+        "lifecycle": true,
+        "pagination": false,
+        "balance_agreement": false
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "idempotency",
+        "lifecycle"
+      ],
+      "violations": [],
+      "detected": false,
+      "evidence_correct": false,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "/Users/jeremy/projects/playtest-p1/studies/api-probe/rounds/heldout-1/comparators/schemathesis-f-idempotency-day-expiry.har"
+    },
+    {
+      "id": "schemathesis-f-settle-failed-debit.har",
+      "source": "har",
+      "arm": "schemathesis",
+      "label": "f-settle-failed-debit",
+      "label_kind": "faulty",
+      "fault": "f-settle-failed-debit",
+      "fault_tier": "semantic",
+      "requests": 360,
+      "steps": null,
+      "wall_ms": 2684,
+      "cost_usd": null,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": false,
+        "idempotency": true,
+        "lifecycle": true,
+        "pagination": false,
+        "balance_agreement": false
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "idempotency",
+        "lifecycle"
+      ],
+      "violations": [],
+      "detected": false,
+      "evidence_correct": false,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "/Users/jeremy/projects/playtest-p1/studies/api-probe/rounds/heldout-1/comparators/schemathesis-f-settle-failed-debit.har"
+    }
+  ],
+  "summary": {
+    "trace_count": 10,
+    "clean_traces": 0,
+    "faulty_traces": 10,
+    "unlabeled_traces": 0,
+    "faults_seen": 5,
+    "faults_detected": 3,
+    "faults_evidence_correct": 3,
+    "detections": {
+      "f-close-pending-inbound": {
+        "fault": "f-close-pending-inbound",
+        "tier": "semantic",
+        "traces": 2,
+        "detected": 1,
+        "evidence_correct": 1,
+        "arms": {
+          "agent-suite": {
+            "traces": 1,
+            "detected": 1
+          },
+          "schemathesis": {
+            "traces": 1,
+            "detected": 0
+          }
+        }
+      },
+      "f-cursor-error-bare": {
+        "fault": "f-cursor-error-bare",
+        "tier": "schema-reachable",
+        "traces": 2,
+        "detected": 2,
+        "evidence_correct": 2,
+        "arms": {
+          "agent-suite": {
+            "traces": 1,
+            "detected": 1
+          },
+          "schemathesis": {
+            "traces": 1,
+            "detected": 1
+          }
+        }
+      },
+      "f-fee-double-charged": {
+        "fault": "f-fee-double-charged",
+        "tier": "semantic",
+        "traces": 2,
+        "detected": 1,
+        "evidence_correct": 1,
+        "arms": {
+          "agent-suite": {
+            "traces": 1,
+            "detected": 1
+          },
+          "schemathesis": {
+            "traces": 1,
+            "detected": 0
+          }
+        }
+      },
+      "f-idempotency-day-expiry": {
+        "fault": "f-idempotency-day-expiry",
+        "tier": "semantic",
+        "traces": 2,
+        "detected": 0,
+        "evidence_correct": 0,
+        "arms": {
+          "agent-suite": {
+            "traces": 1,
+            "detected": 0
+          },
+          "schemathesis": {
+            "traces": 1,
+            "detected": 0
+          }
+        }
+      },
+      "f-settle-failed-debit": {
+        "fault": "f-settle-failed-debit",
+        "tier": "semantic",
+        "traces": 2,
+        "detected": 0,
+        "evidence_correct": 0,
+        "arms": {
+          "agent-suite": {
+            "traces": 1,
+            "detected": 0
+          },
+          "schemathesis": {
+            "traces": 1,
+            "detected": 0
+          }
+        }
+      }
+    },
+    "false_positives": {
+      "total": 0,
+      "clean_traces_with_findings": 0,
+      "by_oracle": {}
+    },
+    "totals": {
+      "requests": 3225,
+      "steps": 0,
+      "wall_ms": 15025,
+      "cost_usd": 0
+    }
+  }
+}

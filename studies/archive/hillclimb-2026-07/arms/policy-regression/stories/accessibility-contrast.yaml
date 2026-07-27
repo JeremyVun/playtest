@@ -1,0 +1,11 @@
+description: Catalog and checkout text — product prices and validation messages — meet color-contrast standards with no axe violations.
+story: |
+  You are browsing the shop on a bright screen and are sensitive to faint,
+  washed-out text. Look over the catalog, open a product, and start a checkout,
+  paying attention to whether prices and any error or helper text are easy to
+  read. Trigger a validation error at checkout so any error text is on screen.
+persona: [cautious-first-timer]
+report:
+  - "Were product prices in the catalog dark and easy to read, or faint and washed out?"
+  - "When a checkout field showed an error, was the error text legible?"
+  - "Did the automated accessibility scan report any color-contrast violations?"

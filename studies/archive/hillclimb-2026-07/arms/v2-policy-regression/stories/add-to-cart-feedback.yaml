@@ -1,0 +1,12 @@
+description: Add to cart shows confirmation and updates the header badge immediately.
+persona: cautious-first-timer
+story: |
+  Open the shop and go to the Snake Plant product page. Add quantity 1 to the cart
+  with a single click on Add to cart. Stay on the product page. You must verify
+  that something immediately tells you the add worked (a confirmation message or
+  toast that names the plant) and that the header Cart badge is no longer 0.
+  Do not open the cart until you have checked the product page feedback and badge.
+report:
+  - After one Add click, was there an immediate confirmation on the product page?
+  - Did the header cart badge update without leaving the product page?
+  - Did the user avoid double-adding because feedback was clear?

@@ -1,0 +1,10 @@
+# Picker: locate a case's newest run and open it. The fixture set has two
+# similarly named families ("add-todo" and "todos/add-todo") on purpose —
+# the story disambiguates, the gate pins the right run (d926).
+description: Find and open the newest run of exactly "add-todo".
+story: |
+  A teammate asks what happened in the most recent run of the journey whose
+  id is exactly "add-todo" — not the one under "todos/". Find that run in
+  the viewer and open it so the recording is on screen.
+success:
+  - url_matches: "*run=*d926*"

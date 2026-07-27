@@ -1,0 +1,43 @@
+description: Add a todo through the UI, and hold the API underneath to its spec.
+story: |
+  You keep forgetting to buy milk on the way home. Use this todo app to add a
+  todo called "buy milk" so it shows up in your list.
+
+success:
+  # The ordinary web gate: did the user reach the goal?
+  - label: the todo is on the page
+    element_exists: "[data-testid=todo-item]"
+  - label: adding it went through the API
+    api_called: "POST /api/todos"
+
+  # And the cross-layer half: was the traffic the page produced on its way
+  # there actually correct? These read har.json — the recorded trace — and
+  # never issue a request of their own.
+  #
+  # `documented_status` is the one that earns its keep here. A UI that renders
+  # perfectly while its API answers an undeclared status is invisible to every
+  # other kind in this file: the element exists, the request was made, the page
+  # looks right. The spec is the only witness.
+  - label: nothing 5xx'd anywhere in the run
+    invariant: { policy: no_server_error }
+  - label: every API response carried a status the spec declares
+    invariant: { policy: documented_status }
+  - label: every API response body matched its declared schema
+    invariant: { policy: response_schema }
+  - label: every API response carried its declared media type
+    invariant: { policy: content_type }
+
+# Advisory: reported on the run page, never gates.
+#
+# The Tier-2 metamorphic policies need SEQUENCES, and a web story only produces
+# the sequence its clicks produce. This journey never deletes a todo and the UI
+# never reads one back on its own endpoint, so the lifecycle policy reports "not
+# exercised" rather than failing the run. That is the honest reading: it is a
+# gap in the story, not a defect in the app. Extend the story to delete the todo
+# and this moves under success:.
+observe:
+  - label: a deleted todo is gone from its own endpoint
+    invariant:
+      policy: lifecycle
+      delete: "DELETE /api/todos/{todoId}"
+      read: "GET /api/todos/{todoId}"

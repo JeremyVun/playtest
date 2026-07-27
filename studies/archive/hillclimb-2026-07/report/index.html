@@ -1,0 +1,711 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Decision report for the Playtest hill-climb evidence study.">
+  <title>Playtest / Hill-climb decision report</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to report</a>
+  <header class="topbar">
+    <a class="brand" href="#top" aria-label="Playtest report home">
+      <span class="brand-mark" aria-hidden="true">P/</span>
+      <span>Playtest <i>Research</i></span>
+    </a>
+    <nav class="nav" aria-label="Report sections">
+      <a href="#experiment" class="active">Experiment</a>
+      <a href="#results">Run record</a>
+      <a href="#decision">Decision</a>
+      <a href="#evidence">Analysis</a>
+      <a href="#roadmap">Oracle path</a>
+      <a href="#sdlc">Lifecycle</a>
+      <a href="#ledger">Ledger</a>
+    </nav>
+    <a class="source-link" href="evidence.html?doc=full-report">Full write-up <span aria-hidden="true">↗</span></a>
+  </header>
+
+  <main id="main">
+    <section class="hero report-section" id="top" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <div class="eyebrow"><span class="live-dot"></span> Evidence study · M1.5 · July 2026</div>
+        <h1 id="hero-title">Useful scout.<br><em>Not a release oracle.</em></h1>
+        <p class="hero-lede">The experiment shows enough value to justify more investment in Playtest—but only if the next work closes its measured coverage and truth gaps. It is already useful for exploration and repair; it is not ready to approve releases alone.</p>
+        <div class="hero-actions">
+          <a class="button primary" href="#experiment">How the experiment worked</a>
+          <a class="button ghost" href="#decision">Read the investment decision</a>
+        </div>
+      </div>
+      <aside class="verdict-card" aria-label="Overall product verdict">
+        <div class="verdict-top">
+          <span class="label">Investment decision</span>
+          <span class="confidence">Medium confidence</span>
+        </div>
+        <div class="verdict-word">BUILD</div>
+        <p>Invest further in a narrower product: behavioural exploration plus an evidence-gated repair loop. Build deterministic coverage and contract checks before pursuing a release-gate claim.</p>
+        <div class="score-row">
+          <div><strong>20</strong><span>of 26 policy-fixed</span></div>
+          <div><strong>0</strong><span>policy regressions</span></div>
+          <div><strong>11</strong><span>bridgeable misses</span></div>
+        </div>
+        <p class="microcopy">This is a targeted build decision, not approval to scale unattended use. One app and one run per repair strategy limit confidence.</p>
+      </aside>
+    </section>
+
+    <section class="metric-strip" aria-label="Study headline metrics">
+      <article><span>Faults testers noticed</span><strong>14 <small>/ 26</small></strong><b>54% detection recall</b></article>
+      <article><span>Faults policy removed</span><strong>20 <small>/ 26</small></strong><b>77% resolution</b></article>
+      <article><span>New breakage from fixes</span><strong>0 <small>vs 11</small></strong><b>Policy vs naive</b></article>
+      <article><span>Pre-registered predictions</span><strong>4 <small>/ 5 lost</small></strong><b>1 could not be tested</b></article>
+    </section>
+
+    <section class="report-section experiment-section" id="experiment" aria-labelledby="experiment-title">
+      <div class="section-heading">
+        <div><span class="section-index">01</span><span class="eyebrow">Experiment walkthrough</span></div>
+        <h2 id="experiment-title">What was tested,<br>and how.</h2>
+        <p>The study asked whether an AI user-testing system could repeatedly find problems, hand evidence to a coding agent, and improve the same application until the test suite stopped finding blocking issues.</p>
+      </div>
+
+      <div class="research-question panel">
+        <div><span class="label">The research question</span><h3>Can Playtest hill-climb a deliberately broken app back toward a good user experience—and can “clean” ever mean safe to release?</h3></div>
+        <p>“Hill-climb” means a repeated loop: test the app, repair evidence-backed problems, test again, and keep the change only when regression checks still pass. The experiment compared two ways of choosing and verifying repairs.</p>
+      </div>
+
+      <div class="setup-grid">
+        <article class="setup-card panel">
+          <span class="setup-number">A</span><span class="label">The subject</span>
+          <h3>One small, complete storefront</h3>
+          <p>Fern &amp; Fog is a zero-dependency plant shop with catalog, product, cart, checkout, receipt, account, and order-history flows. A written <code>SPEC.md</code> defined intended behaviour.</p>
+          <dl><div><dt>App</dt><dd>Server-rendered web shop</dd></div><div><dt>State</dt><dd>Reset before every case</dd></div><div><dt>Ground truth</dt><dd>Frozen spec + fault catalog</dd></div></dl>
+        </article>
+        <article class="setup-card panel">
+          <span class="setup-number">B</span><span class="label">The challenge</span>
+          <h3>26 known faults were injected</h3>
+          <p>The clean app was copied and mechanically altered. Each fault had a test proving it was present in the broken copy and absent in the clean reference.</p>
+          <dl><div><dt>Surface</dt><dd>7 copy / visual faults</dd></div><div><dt>Interaction</dt><dd>8 control / validation faults</dd></div><div><dt>Flow</dt><dd>6 transition / edge faults</dd></div><div><dt>Absence</dt><dd>5 removed capabilities</dd></div></dl>
+        </article>
+        <article class="setup-card panel">
+          <span class="setup-number">C</span><span class="label">The instrument</span>
+          <h3>8 stories, 4 personas, 15 cells</h3>
+          <p>Stories were written from the clean specification before the fault catalog existed. Each story ran only with personas relevant to that journey, producing 15 story–persona combinations per full round.</p>
+          <dl><div><dt>Actor</dt><dd>GPT-5.4-mini drove the browser</dd></div><div><dt>Grader</dt><dd>GPT-5.5 reviewed the trajectory</dd></div><div><dt>Sensors</dt><dd>Browser snapshots, vision, axe</dd></div></dl>
+        </article>
+        <article class="setup-card panel">
+          <span class="setup-number">D</span><span class="label">The comparison</span>
+          <h3>Two repair strategies</h3>
+          <p>Both started from the identical broken app and the same baseline findings. Both repair agents were blind to the injected fault list and manifestation tests.</p>
+          <dl><div><dt>Naive arm</dt><dd>Fix everything plausible from the report</dd></div><div><dt>Policy arm</dt><dd>Probe ambiguity; pin a regression per fix</dd></div><div><dt>Stop rule</dt><dd>Two consecutive “clean” rounds</dd></div></dl>
+        </article>
+      </div>
+
+      <div class="fault-levels panel">
+        <div class="panel-heading"><div><span class="label">Fault taxonomy</span><h3>What L1, L2, L3, and L4 mean</h3></div><span class="panel-note">The level describes scope, not severity</span></div>
+        <div class="fault-level-grid">
+          <article><span class="level-badge">L1</span><h4>Surface</h4><p>The page is present and works, but text, contrast, or messaging is wrong.</p><small>Example: “Free shipping” beside a $6 charge</small></article>
+          <article><span class="level-badge">L2</span><h4>Interaction</h4><p>A visible control, feedback state, validation rule, or error response fails.</p><small>Example: Add to cart succeeds silently</small></article>
+          <article><span class="level-badge">L3</span><h4>Flow</h4><p>A transition, retry, recovery path, retained value, or boundary behaves incorrectly.</p><small>Example: validation wipes payment fields</small></article>
+          <article><span class="level-badge">L4</span><h4>Absence</h4><p>A capability or local navigation route promised by the specification is missing.</p><small>Example: order history removed</small></article>
+        </div>
+      </div>
+
+      <div class="execution-block">
+        <div class="subheading"><span class="label">Execution timeline</span><h3>From clean reference to final accounting</h3></div>
+        <ol class="execution-timeline">
+          <li><span>01</span><div><h4>Calibrate on the clean app</h4><p>Five shakedown runs checked whether the test itself produced noise on a good app. It found one real reference defect, which was fixed; the next shakedown round was clean.</p><b>5 runs · $0.82</b></div></li>
+          <li><span>02</span><div><h4>Inject and verify 26 faults</h4><p>The injector produced identical broken copies for the two repair arms. Manifestation tests proved every catalogued mutation was live; three faults were initially hidden behind another removed capability.</p><b>23 reachable at baseline · 3 masked</b></div></li>
+          <li><span>03</span><div><h4>Measure the broken baseline twice</h4><p>All 15 story–persona cells ran in two rounds. Actors drove the real browser; graders produced findings; a catalog-aware adjudicator labelled each finding against ground truth.</p><b>30 runs · 377 raw findings · 13 unique faults found</b></div></li>
+          <li><span>04</span><div><h4>Run the naive repair arm</h4><p>A blind coding agent received the baseline findings and app specification, fixed everything it considered plausible, then ran a focused journey set plus new regression stories.</p><b>60 runs · 16 seeded faults fixed · 11 regression observations</b></div></li>
+          <li><span>05</span><div><h4>Run the disciplined policy arm</h4><p>A separate blind operator deduplicated issue classes, probed ambiguous findings, required a regression story for each fix, and rotated journeys toward untested risk.</p><b>61 runs · 20 seeded faults fixed · 0 regressions</b></div></li>
+          <li><span>06</span><div><h4>Reconcile every known fault</h4><p>The final catalog-aware pass separated faults the tester detected, faults repaired only through code inspection, accepted residuals, and faults still live at the end.</p><b>156 ledgered runs · $40.99 actor/grader cost</b></div></li>
+        </ol>
+      </div>
+
+      <div class="interpretation-grid">
+        <article class="panel"><span class="label">Detection is not resolution</span><h3>Did the tester name it?</h3><p><strong>Detection recall</strong> counts known faults explicitly surfaced by an actor or grader. <strong>Resolution</strong> counts faults removed by any route, including a repair agent finding adjacent bugs while reading code.</p></article>
+        <article class="panel"><span class="label">“Clean” is a local statement</span><h3>Did this suite find anything new?</h3><p>A clean round did not mean the app was fault-free. It meant no registered blocking finding appeared under the exercised stories and pinned regressions passed. Known faults could remain outside those paths.</p></article>
+        <article class="panel"><span class="label">Findings are not faults</span><h3>One problem can produce many reports</h3><p>Actors generated hundreds of observations. Adjudication removed duplicates and separated seeded faults from preferences, out-of-scope wishes, timing artifacts, and fix-induced problems.</p></article>
+      </div>
+
+      <details class="glossary panel">
+        <summary><span><span class="label">Plain-language glossary</span><strong>Terms used throughout this report</strong></span><i>+</i></summary>
+        <dl class="glossary-grid">
+          <div><dt>Actor</dt><dd>The language model controlling the browser as a user.</dd></div>
+          <div><dt>Grader</dt><dd>A second model reviewing the run and writing findings.</dd></div>
+          <div><dt>Arm</dt><dd>One branch of the experiment using a particular repair strategy.</dd></div>
+          <div><dt>Seeded fault</dt><dd>A known bug deliberately inserted so detection can be measured.</dd></div>
+          <div><dt>Finding</dt><dd>An observation reported from one run; it may be true, duplicate, or noise.</dd></div>
+          <div><dt>Adjudication</dt><dd>Mapping a finding to the known catalog and deciding what it represents.</dd></div>
+          <div><dt>Reachable</dt><dd>The current stories can expose the fault without another fault being fixed first.</dd></div>
+          <div><dt>Masked</dt><dd>A fault hidden because another missing capability blocks the route to it.</dd></div>
+          <div><dt>Oracle</dt><dd>An independent source that says what the correct result must be.</dd></div>
+          <div><dt>Regression story</dt><dd>A pinned journey rerun after a fix to catch the same breakage returning.</dd></div>
+          <div><dt>Emergent regression</dt><dd>New breakage introduced by the attempted repair.</dd></div>
+          <div><dt>Precision</dt><dd>The share of non-duplicate findings that correspond to real seeded faults.</dd></div>
+        </dl>
+      </details>
+    </section>
+
+    <section class="report-section results-section" id="results" aria-labelledby="results-title">
+      <div class="section-heading">
+        <div><span class="section-index">02</span><span class="eyebrow">Experiment record</span></div>
+        <h2 id="results-title">Watch the policy climb,<br>state by state.</h2>
+        <p>This is the experiment itself rather than an interpretation of it: what code existed, what the tester did, what the evidence showed, what changed, and what the next run encountered.</p>
+      </div>
+
+      <div class="evidence-rule panel">
+        <div><span class="label">How to read this section</span><h3>Every claim has a source at the level that can prove it.</h3></div>
+        <div class="evidence-key">
+          <span><i class="source-kind visual"></i><strong>Screen</strong> proves what the user could see.</span>
+          <span><i class="source-kind run"></i><strong>Run</strong> preserves steps, grader findings, cost, and adjudication.</span>
+          <span><i class="source-kind code"></i><strong>Code</strong> proves the intended contract and exact repair.</span>
+        </div>
+      </div>
+
+      <div class="climb-record" aria-label="Policy-arm experiment states and transitions">
+        <article class="climb-state initial">
+          <div class="state-rail"><span>S0</span><i></i></div>
+          <div class="state-body">
+            <header><div><span class="label">Initial state · deliberately broken</span><h3>26 verified faults; 23 reachable through the starting suite.</h3></div><strong class="state-score bad">0 / 26 removed</strong></header>
+            <p>The clean Fern &amp; Fog reference was copied into both arms, then mechanically mutated. Manifestation tests proved all 26 catalogued faults were live. Search removal and the missing empty-checkout guard hid three downstream faults until an earlier capability was restored.</p>
+            <div class="source-row">
+              <a href="evidence.html?doc=spec"><span>Contract</span> Clean app specification ↗</a>
+              <a href="evidence.html?doc=fault-catalog"><span>Ground truth</span> 26-fault catalog ↗</a>
+              <a href="evidence.html?doc=manifestation-tests"><span>Verification</span> Manifestation checks ↗</a>
+            </div>
+          </div>
+        </article>
+
+        <article class="climb-state run-state">
+          <div class="state-rail"><span>R0</span><i></i></div>
+          <div class="state-body">
+            <header><div><span class="label">Baseline run · same broken state, twice</span><h3>30 journeys generated 377 findings and named 13 distinct seeded faults.</h3></div><strong class="state-score">30 runs</strong></header>
+            <p>Fifteen frozen story–persona cells ran twice. The grader produced 192 findings in round 1 and 185 in round 2; adjudication collapsed repeats and non-defects. The repair agent received those findings and the specification, but not the fault catalog.</p>
+            <dl class="run-accounting"><div><dt>Actor / grader</dt><dd>GPT-5.4-mini / GPT-5.5</dd></div><div><dt>Detected at baseline</dt><dd>13 of 26 faults</dd></div><div><dt>Not yet reachable</dt><dd>3 faults</dd></div><div><dt>Repair input</dt><dd>Findings + SPEC only</dd></div></dl>
+            <div class="source-row">
+              <a href="evidence.html?doc=baseline-01"><span>Run ledger</span> Baseline round 1 ↗</a>
+              <a href="evidence.html?doc=baseline-02"><span>Run ledger</span> Baseline round 2 ↗</a>
+              <a href="evidence.html?doc=baseline-01#findings"><span>Human view</span> Findings with screenshots ↗</a>
+            </div>
+          </div>
+        </article>
+
+        <article class="climb-state next-state">
+          <div class="state-rail"><span>S1</span><i></i></div>
+          <div class="state-body">
+            <header><div><span class="label">Next app state · first repair pass</span><h3>16 repair packages removed 17 seeded faults; each gained a pinned regression journey.</h3></div><strong class="state-score good">17 / 26 removed</strong></header>
+            <p>Commit <code>6e75923</code> restored feedback, cart editing, checkout recovery, search, sorting, account history, contrast, and four code-derived edge cases. A separate probe led to commit <code>564bac8</code>, an above-clean improvement that preserved catalog state on a product round trip.</p>
+            <div class="repair-chips" aria-label="First-pass repaired capability classes"><span>Feedback</span><span>Cart controls</span><span>Checkout</span><span>Search + sort</span><span>Account</span><span>Contrast</span><span>Boundaries</span><span>Recovery</span></div>
+            <div class="source-row">
+              <a href="evidence.html?doc=accepted-fixes"><span>Repair record</span> Accepted fixes and evidence ↗</a>
+              <a href="evidence.html?doc=regression-suite"><span>Verification</span> Pinned regression suite ↗</a>
+              <a href="evidence.html?doc=policy-plan"><span>Run plan</span> Persona rotation and probes ↗</a>
+            </div>
+          </div>
+        </article>
+
+        <article class="climb-state run-state discovery">
+          <div class="state-rail"><span>R1</span><i></i></div>
+          <div class="state-body">
+            <header><div><span class="label">Verification run · repaired state</span><h3>The repairs held, but a newly reachable page exposed one more fault.</h3></div><strong class="state-score warn">1 blocker</strong></header>
+            <p>Nineteen verification cells plus two one-shot probes produced 213 findings. The only in-scope true positive was <code>f-empty-cart-jargon</code>: fixing the empty-checkout guard now sent the tester to a page saying “Cart collection returned 0 rows.” The stop rule correctly refused to call this round clean.</p>
+            <div class="discovery-proof">
+              <button class="image-button" data-lightbox="assets/2026-07-11T1308-df78-empty-cart-and-back-link@weekend-browser-005.png" aria-label="Open newly reachable empty-cart fault evidence">
+                <img src="assets/2026-07-11T1308-df78-empty-cart-and-back-link@weekend-browser-005.png" alt="Empty cart page showing developer jargon: Cart collection returned 0 rows" loading="lazy">
+              </button>
+              <div><span class="label">The discovery</span><blockquote>“Cart collection returned 0 rows.”</blockquote><p>This was not visible in either baseline round. Repair B15 made the page reachable, and the regression story then caught the latent copy fault.</p></div>
+            </div>
+            <div class="source-row">
+              <a href="evidence.html?doc=policy-01"><span>Run ledger</span> Policy round 1 ↗</a>
+              <a href="evidence.html?doc=policy-01#findings"><span>Human view</span> All 213 findings ↗</a>
+              <a href="evidence.html?doc=empty-cart-story"><span>Story source</span> Unmasking journey ↗</a>
+            </div>
+          </div>
+        </article>
+
+        <article class="climb-state next-state">
+          <div class="state-rail"><span>S2</span><i></i></div>
+          <div class="state-body">
+            <header><div><span class="label">Next app state · class-level repair</span><h3>One reported fault led to three verified removals.</h3></div><strong class="state-score good">20 / 26 removed</strong></header>
+            <p>Commit <code>c3fd1d1</code> replaced the empty-cart jargon. While checking the same implementation-speak class against the spec, the blind operator also found and fixed two faults no tester had reported: no-results jargon and a “Clear the search” link that reopened the same empty query.</p>
+            <div class="class-fix-grid"><article><span>Reported</span><strong>Empty-cart jargon</strong></article><article><span>Inspection</span><strong>No-results jargon</strong></article><article><span>Inspection</span><strong>Clear-search loop</strong></article></div>
+            <div class="source-row">
+              <a href="evidence.html?doc=policy-02"><span>Repair + run ledger</span> Policy round 2 ↗</a>
+              <a href="evidence.html?doc=warm-empty-states"><span>Regression source</span> Three obligations ↗</a>
+              <a href="evidence.html?doc=policy-02#findings"><span>Human view</span> Verification evidence ↗</a>
+            </div>
+          </div>
+        </article>
+
+        <article class="climb-state final-state">
+          <div class="state-rail"><span>S3</span></div>
+          <div class="state-body">
+            <header><div><span class="label">Final observed state · stop rule met</span><h3>Two consecutive clean rounds; zero fix-induced regressions; six known faults still live.</h3></div><strong class="state-score good">20 / 26 removed</strong></header>
+            <p>Round 2 produced 201 findings and round 3 produced 203; adjudication found no in-scope true positives or emergent regressions. Both ran against app hash <code>3061d6de…</code>, proving no code changed between confirmation rounds. “Clean” therefore means this suite found no blocker—not that the catalog was empty.</p>
+            <div class="final-accounting"><article><strong>20</strong><span>seeded faults removed</span></article><article><strong>6</strong><span>known faults still live</span></article><article><strong>0</strong><span>emergent regressions</span></article><article><strong>2×</strong><span>consecutive clean rounds</span></article></div>
+            <div class="source-row">
+              <a href="evidence.html?doc=policy-02"><span>Clean round 1</span> 201 findings ↗</a>
+              <a href="evidence.html?doc=policy-03"><span>Clean round 2</span> 203 findings ↗</a>
+              <a href="#ledger"><span>Final accounting</span> Inspect all 26 faults ↓</a>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <aside class="branch-record panel" aria-labelledby="naive-record-title">
+        <div class="branch-heading"><div><span class="label">Comparison branch · same S0 and R0</span><h3 id="naive-record-title">Where the naive climb diverged.</h3></div><strong>16 / 26 removed</strong></div>
+        <div class="branch-steps">
+          <article><span>N1</span><h4>Broad first repair</h4><p>Commit <code>22ce8b9</code> removed 16 seeded faults from the same baseline, without the policy’s probe-and-pin discipline.</p></article>
+          <article><span>R1</span><h4>Eleven regression observations</h4><p>Eighteen runs produced 180 findings. Eight observations traced to a short-lived cart toast, two to silent checkout no-ops, and one to stale validation feedback. The raw <code>clean_round</code> flag still read true because that stop rule did not count emergent regressions.</p></article>
+          <article><span>N2</span><h4>Repair the repairs</h4><p>Commit <code>6755871</code> addressed the three emergent classes. Two later rounds were clean under the suite, but 10 known seeded faults remained: nine missed and one detected-but-accepted.</p></article>
+        </div>
+        <div class="source-row">
+          <a href="evidence.html?doc=naive-01"><span>First repair run</span> 180 findings + amendments ↗</a>
+          <a href="evidence.html?doc=naive-02"><span>Clean round 1</span> 206 findings ↗</a>
+          <a href="evidence.html?doc=naive-03"><span>Clean round 2</span> Unchanged app hash ↗</a>
+        </div>
+      </aside>
+
+      <div class="run-microscope">
+        <div class="subheading"><span class="label">One baseline run, under the microscope</span><h3>What “the tester found a checkout fault” actually looked like.</h3></div>
+        <div class="run-brief panel">
+          <div><span class="label">Frozen story</span><p>Buy one plant with the temperamental card. If it fails, recover with the backup card and finish without losing work.</p></div>
+          <dl><div><dt>Run</dt><dd><code>2026-07-10T1415-934f</code></dd></div><div><dt>Persona</dt><dd>Cautious first-timer</dd></div><div><dt>Trajectory</dt><dd>19 browser steps</dd></div><div><dt>Grade / cost</dt><dd>73 · $0.3153</dd></div></dl>
+          <a href="evidence.html?doc=checkout-story">Open the exact story source ↗</a>
+        </div>
+
+        <ol class="trajectory-steps">
+          <li><span>01</span><div><h4>The actor filled the complete checkout form.</h4><p>It used the shop’s own four-digit postcode and supplied card, expiry, and security code before submitting.</p></div></li>
+          <li><span>02</span><div><h4>A valid local postcode was rejected—and the payment fields were erased.</h4><p>The screenshot is the direct post-action state. The grader mapped it to <code>f-postcode-validation</code> and <code>f-validation-wipes-payment</code>.</p></div><button class="image-button" data-lightbox="assets/2026-07-10T1415-934f-checkout-hiccup@cautious-first-timer-010.png" aria-label="Open baseline postcode and erased-payment evidence"><img src="assets/2026-07-10T1415-934f-checkout-hiccup@cautious-first-timer-010.png" alt="Checkout rejecting postcode 5041 while card, expiry, and security code fields are empty" loading="lazy"></button></li>
+          <li><span>03</span><div><h4>The actor padded the postcode, retyped payment, and submitted the declining card.</h4><p>The page stayed unchanged with an active Place order button. With no decline or no-charge message, the actor submitted again—evidence for <code>f-decline-swallowed</code> and <code>f-place-order-no-feedback</code>.</p></div><button class="image-button" data-lightbox="assets/2026-07-10T1415-934f-checkout-hiccup@cautious-first-timer-016.png" aria-label="Open baseline silent-decline evidence"><img src="assets/2026-07-10T1415-934f-checkout-hiccup@cautious-first-timer-016.png" alt="Checkout unchanged after a card decline, with no error and Place order still active" loading="lazy"></button></li>
+          <li><span>04</span><div><h4>The actor recovered with the backup card and completed order FF-1053.</h4><p>Goal completion did not erase the transition failures: the grader separately reported lost input, silent decline, retry uncertainty, and weak add-to-cart feedback.</p></div></li>
+        </ol>
+
+        <div class="before-after panel">
+          <figure><button class="image-button" data-lightbox="assets/2026-07-10T1415-934f-checkout-hiccup@cautious-first-timer-016.png" aria-label="Open before-repair checkout evidence"><img src="assets/2026-07-10T1415-934f-checkout-hiccup@cautious-first-timer-016.png" alt="Before repair: declined checkout remains unchanged with no message" loading="lazy"></button><figcaption><span>Before · baseline step 16</span><strong>Decline is silent; retry state is ambiguous.</strong></figcaption></figure>
+          <div class="change-column"><span>Repair <code>6e75923</code></span><strong>Render the server error, state that no charge occurred, preserve entered fields, and pin the recovery journey.</strong><a href="evidence.html?doc=checkout-recovery">Open regression contract ↗</a></div>
+          <figure><button class="image-button" data-lightbox="assets/2026-07-11T1249-5bf8-checkout-hiccup@cautious-first-timer-011.png" aria-label="Open after-repair checkout evidence"><img src="assets/2026-07-11T1249-5bf8-checkout-hiccup@cautious-first-timer-011.png" alt="After repair: checkout displays an explicit card-declined and no-charge message" loading="lazy"></button><figcaption><span>After · policy round 1 step 11</span><strong>Decline is explicit; no-charge reassurance is visible.</strong></figcaption></figure>
+        </div>
+        <p class="provenance-note">The images prove visible browser state. The baseline ledger records the actor steps and grader claims; the policy ledger records adjudication, fixes, app fingerprint, and rerun outcome. The fault catalog and SPEC provide independent ground truth.</p>
+      </div>
+    </section>
+
+    <section class="report-section decision-section" id="decision" aria-labelledby="decision-title">
+      <div class="section-heading">
+        <div><span class="section-index">03</span><span class="eyebrow">Investment decision</span></div>
+        <h2 id="decision-title">Build—but narrow<br>what is being built.</h2>
+        <p>Under these definitions, the evidence supports more investment. It does not support replacing Playtest, freezing it at its current capability, or abandoning it.</p>
+      </div>
+
+      <div class="decision-grid">
+        <article class="decision-card build selected">
+          <div class="recommendation-ribbon">Recommended</div>
+          <header><span class="decision-icon">B</span><div><span class="label">Invest more</span><h3>Build</h3></div></header>
+          <p class="decision-summary">Continue funding Playtest as a behavioural test and repair-loop product.</p>
+          <ul>
+            <li>Deterministic risk matrix for every critical transition</li>
+            <li>DOM/API contract oracles for exact business truth</li>
+            <li>Adversarial and semantic-audit actor modes</li>
+            <li>Coverage-aware reporting with “unknown” as non-green</li>
+          </ul>
+          <div class="decision-proof">Why: <strong>77% resolved, zero policy regressions, 11/12 misses bridgeable</strong></div>
+        </article>
+
+        <article class="decision-card buy">
+          <header><span class="decision-icon">B</span><div><span class="label">Replace it</span><h3>Buy</h3></div></header>
+          <p class="decision-summary">Stop building Playtest and adopt an off-the-shelf alternative.</p>
+          <ul>
+            <li>This experiment did not compare competing products</li>
+            <li>No evidence that a vendor closes the flow or oracle gaps</li>
+            <li>Still buy commodity browser, axe, and assertion engines underneath</li>
+          </ul>
+          <div class="decision-proof neutral">Decision: <strong>not supported or ruled out</strong> without a vendor benchmark</div>
+        </article>
+
+        <article class="decision-card hold">
+          <header><span class="decision-icon">H</span><div><span class="label">Freeze investment</span><h3>Hold</h3></div></header>
+          <p class="decision-summary">Keep using the current product, but stop adding capability.</p>
+          <ul>
+            <li>Current version remains useful as an exploratory scout</li>
+            <li>But 54% recall leaves too much value unrealised</li>
+            <li>Measured gaps have specific, testable interventions</li>
+            <li>Choose only if investment capacity is unavailable</li>
+          </ul>
+          <div class="decision-proof neutral">Decision: <strong>safe but strategically premature</strong></div>
+        </article>
+
+        <article class="decision-card sell">
+          <header><span class="decision-icon">S</span><div><span class="label">Stop using</span><h3>Sell</h3></div></header>
+          <p class="decision-summary">Abandon Playtest and remove it from the development process.</p>
+          <ul>
+            <li>Contradicted by useful detection and repair outcomes</li>
+            <li>Would discard evidence unavailable from unit tests</li>
+            <li>Only justified if operating cost exceeds discovery value</li>
+            <li>The study did not measure team-level return on investment</li>
+          </ul>
+          <div class="decision-proof danger">Decision: <strong>not supported by this experiment</strong></div>
+        </article>
+      </div>
+      <p class="decision-caveat"><strong>What “build” does not mean:</strong> do not spend first on larger models, autonomous merging, or more personas. Invest in forced coverage, independent truth checks, and build-system packaging; rerun the study to prove those changes close the measured gaps.</p>
+    </section>
+
+    <section class="report-section evidence-section" id="evidence" aria-labelledby="evidence-title">
+      <div class="section-heading compact">
+        <div><span class="section-index">04</span><span class="eyebrow">What the evidence says</span></div>
+        <h2 id="evidence-title">The loop climbs.<br>The suite sets the ceiling.</h2>
+      </div>
+
+      <div class="chart-grid">
+        <article class="panel arm-panel">
+          <div class="panel-heading">
+            <div><span class="label">Strategy comparison</span><h3>Resolution and collateral</h3></div>
+            <span class="panel-note">One realization per arm</span>
+          </div>
+          <div class="arm-chart" role="img" aria-label="Policy resolved 20 faults with zero regressions; naive resolved 16 faults with 11 regressions">
+            <div class="chart-axis"><span>0</span><span>5</span><span>10</span><span>15</span><span>20</span><span>25</span></div>
+            <div class="arm-row">
+              <div class="arm-name"><strong>Policy</strong><span>$12.76 · 61 runs</span></div>
+              <div class="bar-track"><div class="bar-fill policy" style="--value:76.92%"><span>20 resolved</span></div></div>
+              <div class="regression-count good"><strong>0</strong><span>regressions</span></div>
+            </div>
+            <div class="arm-row">
+              <div class="arm-name"><strong>Naive</strong><span>$12.24 · 60 runs</span></div>
+              <div class="bar-track"><div class="bar-fill naive" style="--value:61.54%"><span>16 resolved</span></div></div>
+              <div class="regression-count bad"><strong>11</strong><span>regressions</span></div>
+            </div>
+          </div>
+          <p class="chart-takeaway"><strong>What changed:</strong> disciplined fixing did not save time or run cost. It reduced collateral and resolved four more seeded faults.</p>
+        </article>
+
+        <article class="panel recall-panel">
+          <div class="panel-heading">
+            <div><span class="label">Reachable recall</span><h3>The predicted gradient inverted</h3></div>
+            <span class="panel-note">Broken baseline</span>
+          </div>
+          <div class="recall-bars" id="recall-chart"></div>
+          <p class="chart-takeaway"><strong>Surprise:</strong> goal-cued absence was easiest to spot. Subtly wrong flows were the hardest.</p>
+        </article>
+      </div>
+
+      <div class="hypothesis-block">
+        <div class="subheading"><span class="label">Pre-registered hypotheses</span><h3>Four bets lost. That is the useful result.</h3></div>
+        <div class="hypothesis-grid" id="hypotheses"></div>
+      </div>
+
+      <div class="evidence-gallery" aria-label="Trajectory evidence examples">
+        <figure>
+          <button class="image-button" data-lightbox="assets/2026-07-10T0751-8e76-moving-house@cautious-first-timer-021.png" aria-label="Open checkout validation evidence">
+            <img src="assets/2026-07-10T0751-8e76-moving-house@cautious-first-timer-021.png" alt="Checkout rejects a valid four-digit postcode and has cleared the payment fields" loading="lazy">
+          </button>
+          <figcaption><span>L2 + L3 · Detected</span><strong>One validation trip rejected a valid postcode and wiped payment data.</strong></figcaption>
+        </figure>
+        <figure>
+          <button class="image-button" data-lightbox="assets/2026-07-10T1134-4567-wheres-my-order@returning-regular-015.png" aria-label="Open missing order history evidence">
+            <img src="assets/2026-07-10T1134-4567-wheres-my-order@returning-regular-015.png" alt="Account page ends after settings and contains no order history" loading="lazy">
+          </button>
+          <figcaption><span>L4 · Detected</span><strong>The returning user had nowhere to find past orders and eventually gave up.</strong></figcaption>
+        </figure>
+        <figure>
+          <button class="image-button" data-lightbox="assets/2026-07-11T1308-df78-empty-cart-and-back-link@weekend-browser-005.png" aria-label="Open developer jargon evidence">
+            <img src="assets/2026-07-11T1308-df78-empty-cart-and-back-link@weekend-browser-005.png" alt="Empty cart shows developer jargon saying cart collection returned zero rows" loading="lazy">
+          </button>
+          <figcaption><span>L1 · Masked, then detected</span><strong>Fixing search exposed a second fault: developer language in an empty state.</strong></figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="report-section gaps-section" id="gaps" aria-labelledby="gaps-title">
+      <div class="section-heading">
+        <div><span class="section-index">05</span><span class="eyebrow">Blindness analysis</span></div>
+        <h2 id="gaps-title">Most gaps can be bridged.<br>One needs external truth.</h2>
+        <p>Twelve faults were never surfaced by any tester. Their trajectories separate missing coverage from model perception and from a real oracle ceiling.</p>
+      </div>
+
+      <div class="gap-layout">
+        <article class="gap-viz panel">
+          <div class="donut" role="img" aria-label="Of 12 undetected faults, 8 were coverage gaps, 3 recognition gaps, and 1 oracle gap">
+            <div class="donut-center"><strong>12</strong><span>never detected</span></div>
+          </div>
+          <div class="gap-legend">
+            <button class="gap-filter active" data-gap="coverage"><i class="coverage"></i><span><strong>8</strong> Coverage</span><small>Bridge with forced states</small></button>
+            <button class="gap-filter" data-gap="recognition"><i class="recognition"></i><span><strong>3</strong> Recognition</span><small>Bridge with QA mode</small></button>
+            <button class="gap-filter" data-gap="oracle"><i class="oracle"></i><span><strong>1</strong> Oracle</span><small>Needs a contract</small></button>
+          </div>
+        </article>
+
+        <article class="gap-detail panel" id="gap-detail" aria-live="polite"></article>
+      </div>
+
+      <div class="truth-rule">
+        <span class="truth-icon" aria-hidden="true">≠</span>
+        <div><span class="label">The boundary</span><h3>Journey success is not business correctness.</h3><p>An actor can tell you that an order completed. It cannot know whether its tax, inventory, date, entitlement, or status copy is correct unless you give it an oracle.</p></div>
+      </div>
+    </section>
+
+    <section class="report-section roadmap-section" id="roadmap" aria-labelledby="roadmap-title">
+      <div class="section-heading compact">
+        <div><span class="section-index">06</span><span class="eyebrow">Product roadmap</span></div>
+        <h2 id="roadmap-title">What it takes to become<br>a release oracle.</h2>
+      </div>
+
+      <div class="oracle-definition panel">
+        <div><span class="label">First, define the claim</span><h3>“Release oracle” can only mean safe for the encoded surface.</h3></div>
+        <p>Playtest cannot prove an entire product correct. It can become a trustworthy release signal for the routes, states, transitions, and business rules a team explicitly registers. Anything outside that contract remains unknown.</p>
+        <div class="release-equation" aria-label="Release eligibility formula"><span>Release eligible</span><b>=</b><strong>contracts green</strong><b>+</b><strong>required transitions covered</strong><b>+</b><strong>no unresolved high-risk finding</strong><b>+</b><strong>no emergent regression</strong></div>
+      </div>
+
+      <div class="leverage-grid">
+        <article class="leverage-card coverage panel"><span class="leverage-count">8</span><span class="label">of 12 misses</span><h3>Story and coverage system</h3><p>The actor never reached the state that exposed the bug. Better prose or a larger model cannot evaluate a transition that never happened.</p><strong>Highest leverage</strong></article>
+        <article class="leverage-card recognition panel"><span class="leverage-count">3</span><span class="label">of 12 misses</span><h3>Actor and grader behaviour</h3><p>The evidence was visible, but the actor rationalised success and the grader repeated its account instead of checking the state change.</p><strong>Prompt + protocol work</strong></article>
+        <article class="leverage-card oracle panel"><span class="leverage-count">1</span><span class="label">of 12 misses</span><h3>Deterministic truth</h3><p>The result looked plausible and no journey-level clue could reveal it was wrong. An external specification or calculation is mandatory.</p><strong>Cannot be prompt-solved</strong></article>
+      </div>
+
+      <div class="capability-spec">
+        <div class="subheading"><span class="label">Required product capabilities</span><h3>The release-oracle stack</h3></div>
+        <div class="capability-table panel" aria-label="Required release oracle capabilities">
+          <div class="capability-row header"><span>Layer</span><span>What must change</span><span>Machine-readable output</span><span>Gate behaviour</span></div>
+          <div class="capability-row"><strong>1 · Risk planner</strong><p>Turn the spec, diff, incidents, and route map into required state–action–postcondition obligations.</p><code>obligations[]</code><small>A critical obligation cannot silently disappear.</small></div>
+          <div class="capability-row"><strong>2 · State control</strong><p>Seed accounts, carts, inventory, permissions, feature flags, clocks, and failures deterministically.</p><code>fixture_id</code><small>Unseedable preconditions are reported as unknown.</small></div>
+          <div class="capability-row"><strong>3 · Story runner</strong><p>Force the required action and capture before/after URL, DOM, network, screenshot, and relevant state.</p><code>executed + delta</code><small>Skipped action is “not covered,” never pass.</small></div>
+          <div class="capability-row"><strong>4 · Actor + grader</strong><p>Separate realistic exploration from adversarial auditing; independently judge each observed transition.</p><code>pass|fail|unknown</code><small>Unsupported success claims become unknown.</small></div>
+          <div class="capability-row"><strong>5 · Contract engine</strong><p>Assert arithmetic, copy mappings, redirects, persistence, entitlements, inventory, and accessibility.</p><code>oracle_results[]</code><small>Any critical contract failure blocks release.</small></div>
+          <div class="capability-row"><strong>6 · Repair governor</strong><p>Give the coding agent verified evidence, cap scope and retries, and require a regression per accepted repair.</p><code>repair_chain</code><small>Emergent breakage invalidates the round.</small></div>
+          <div class="capability-row"><strong>7 · Release report</strong><p>Keep discovery findings, coverage, contracts, residual risk, and repair-by-inspection as separate metrics.</p><code>release_evidence.json</code><small>One cleanliness score cannot turn the check green.</small></div>
+        </div>
+      </div>
+
+      <div class="prompt-section">
+        <div class="subheading"><span class="label">Actor and grader design</span><h3>Better prompts help—but only after coverage is forced.</h3></div>
+        <div class="prompt-grid">
+          <article class="prompt-card panel">
+            <div class="prompt-role"><span>A</span><div><span class="label">Actor protocol</span><h3>Act, then verify the delta</h3></div></div>
+            <p class="prompt-purpose">The actor should still behave like a person during discovery. In release mode it also receives explicit obligations that it must execute and verify.</p>
+            <ol>
+              <li><strong>Record before state.</strong> Name the value, route, control, or message expected to change.</li>
+              <li><strong>Perform the required action.</strong> Do not substitute a workaround before recording the failed path.</li>
+              <li><strong>Record after state.</strong> Point to concrete changed or unchanged evidence.</li>
+              <li><strong>Refuse to infer success.</strong> No error is not proof; a click is not a receipt; goal completion is not transition correctness.</li>
+              <li><strong>Return unknown honestly.</strong> If the state cannot be observed or the action was skipped, say so.</li>
+            </ol>
+            <div class="prompt-output"><span>Required output per obligation</span><code>{ executed, before, action, after, observed_delta, confidence }</code></div>
+          </article>
+          <article class="prompt-card panel">
+            <div class="prompt-role"><span>G</span><div><span class="label">Grader protocol</span><h3>Judge evidence, not the actor’s story</h3></div></div>
+            <p class="prompt-purpose">The grader must independently read raw trajectory evidence. The actor’s conclusion is a claim to test, not a trusted summary.</p>
+            <ol>
+              <li><strong>Grade every obligation separately.</strong> Never let overall journey success mask a failed transition.</li>
+              <li><strong>Compare expectation with evidence.</strong> Reconcile before/after values, destination, copy, totals, and co-located claims.</li>
+              <li><strong>Demand an oracle source.</strong> Mark exact business truth unknown when no contract exists.</li>
+              <li><strong>Detect rationalisation.</strong> Flag “worked” when no result changed, and contradictions the actor normalised.</li>
+              <li><strong>Separate UX from correctness.</strong> A frustrating pass and a pleasant failure are different outputs.</li>
+            </ol>
+            <div class="prompt-output"><span>Required output per obligation</span><code>{ verdict, evidence_refs, oracle_source, contradiction, rationale }</code></div>
+          </article>
+        </div>
+      </div>
+
+      <div class="story-skills-section">
+        <div class="subheading"><span class="label">Playtest story skills</span><h3>Split one broad “write a story” skill into four jobs.</h3></div>
+        <div class="story-skills-grid">
+          <article><span>01</span><h4>Journey discovery</h4><p>Create realistic goals and persona context. Optimise for natural friction and unknown unknowns. Useful evidence, but never a release gate alone.</p></article>
+          <article><span>02</span><h4>Risk-matrix authoring</h4><p>For every changed surface enumerate happy path, invalid input, retry, retention, empty state, exact boundaries, recovery controls, permissions, and interruption.</p></article>
+          <article><span>03</span><h4>Deterministic regression</h4><p>Compile one fault or obligation into explicit setup, required action, observable postcondition, and failure condition. Remove optional language from the critical path.</p></article>
+          <article><span>04</span><h4>Contract-oracle authoring</h4><p>Extract exact expected values from specifications, APIs, schemas, or business rules. Keep these assertions outside the LLM’s judgment.</p></article>
+        </div>
+        <div class="story-contract panel">
+          <div><span class="label">Minimum story contract</span><h3>A story is gateable only when each field is explicit.</h3><p>The current natural-language stories remain valuable for exploration. A release story adds a compiled obligation layer the harness can validate before the actor starts.</p></div>
+          <pre><code>obligation: checkout-empty-redirect
+precondition: cart.items = 0
+action: navigate("/checkout")
+observe: [url, heading, payment_form]
+expect:
+  url: "/cart"
+  payment_form: absent
+oracle: contract.checkout.empty_redirect
+if_action_skipped: NOT_COVERED
+if_oracle_missing: UNKNOWN</code></pre>
+        </div>
+        <div class="story-lint"><span class="label">Story lint should reject</span><p>unseeded preconditions · optional critical actions · unobservable postconditions · missing oracle source · success defined only by goal completion · reports that ask about behaviour the story never forced</p></div>
+      </div>
+
+      <div class="validation-plan panel">
+        <div><span class="label">How to prove the investment worked</span><h3>Rerun the frozen hill-climb before calling any of this solved.</h3></div>
+        <div class="validation-metrics">
+          <article><strong>≥ 85%</strong><span>reachable seeded-fault recall</span></article>
+          <article><strong>100%</strong><span>critical obligation coverage</span></article>
+          <article><strong>0</strong><span>unknown critical contracts</span></article>
+          <article><strong>0</strong><span>emergent regressions in clean rounds</span></article>
+          <article><strong>2+</strong><span>subjects and repeated strategy runs</span></article>
+        </div>
+        <p>These are proposed product acceptance thresholds, not results from this study. Add a second subject, repeat each arm, and vary actor and grader tiers independently only after the new coverage system is in place.</p>
+      </div>
+
+      <div class="subheading roadmap-subheading"><span class="label">Sequenced backlog</span><h3>Build in this order</h3></div>
+      <div class="roadmap">
+        <article class="roadmap-item priority">
+          <div class="roadmap-number">01</div>
+          <div class="roadmap-copy"><span class="label">Now · Coverage</span><h3>Deterministic risk matrix</h3><p>Force happy path, validation failure, retry, retention, exact boundaries, empty states, and recovery CTAs. A skipped obligation becomes “not covered,” never green.</p></div>
+          <div class="impact"><span>Targets</span><strong>8 / 12</strong><small>blind spots</small></div>
+        </article>
+        <article class="roadmap-item">
+          <div class="roadmap-number">02</div>
+          <div class="roadmap-copy"><span class="label">Next · Truth</span><h3>Contract oracles</h3><p>Add exact assertions for status-to-copy mappings, arithmetic, redirect destinations, local affordances, and persisted values.</p></div>
+          <div class="impact"><span>Closes</span><strong>hard</strong><small>oracle ceiling</small></div>
+        </article>
+        <article class="roadmap-item">
+          <div class="roadmap-number">03</div>
+          <div class="roadmap-copy"><span class="label">Next · Recognition</span><h3>Adversarial actor + semantic grader</h3><p>Test invalid values, format variants, 0/1/N/N+1 boundaries, retries, and every terminal control. Require observed deltas and independent claim reconciliation.</p></div>
+          <div class="impact"><span>Targets</span><strong>3 / 12</strong><small>blind spots</small></div>
+        </article>
+        <article class="roadmap-item">
+          <div class="roadmap-number">04</div>
+          <div class="roadmap-copy"><span class="label">Then · Governance</span><h3>Replace the clean-round gate</h3><p>Release only when contracts are green, required transitions are covered, no high-severity findings remain, and no emergent regression exists.</p></div>
+          <div class="impact"><span>Fixes</span><strong>stop</strong><small>rule hole</small></div>
+        </article>
+        <article class="roadmap-item muted-roadmap">
+          <div class="roadmap-number">05</div>
+          <div class="roadmap-copy"><span class="label">Later · Models</span><h3>Tier experiments</h3><p>Vary actor and grader independently only after instrumentation is fixed. This study used one pairing, so H5 remains inconclusive.</p></div>
+          <div class="impact"><span>Evidence</span><strong>low</strong><small>priority</small></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="report-section sdlc-section" id="sdlc" aria-labelledby="sdlc-title">
+      <div class="section-heading">
+        <div><span class="section-index">07</span><span class="eyebrow">SDLC placement</span></div>
+        <h2 id="sdlc-title">The behavioural critic<br>inside the coding loop.</h2>
+        <p>Coding agents can already take an issue, change a branch, and open or update a pull request. Playtest’s highest-value position is after deterministic build checks and before human acceptance: it supplies realistic browser evidence the coding agent can act on.</p>
+      </div>
+
+      <div class="sdlc-map panel" aria-label="Playtest position in the software development lifecycle">
+        <div class="sdlc-stage"><span>01</span><strong>Intent</strong><small>Issue · spec · acceptance risks</small></div>
+        <i>→</i>
+        <div class="sdlc-stage"><span>02</span><strong>Agent builds</strong><small>Branch · code · unit tests</small></div>
+        <i>→</i>
+        <div class="sdlc-stage"><span>03</span><strong>CI proves</strong><small>Types · tests · security · contracts</small></div>
+        <i>→</i>
+        <div class="sdlc-stage active"><span>04</span><strong>Playtest explores</strong><small>Journeys · friction · missing capability</small></div>
+        <i>→</i>
+        <div class="sdlc-stage"><span>05</span><strong>Human decides</strong><small>Risk review · merge · release</small></div>
+        <svg class="loop-arrow" viewBox="0 0 600 80" preserveAspectRatio="none" aria-hidden="true"><path d="M575 8 C560 70 80 70 25 14"/><path d="M25 14 l11 2 M25 14 l5 10"/></svg>
+        <div class="loop-label">Structured finding → repair agent → new commit → rerun</div>
+      </div>
+
+      <div class="sdlc-cards">
+        <article class="panel value-card">
+          <span class="label">Highest value now</span>
+          <h3>PR-level behavioural review</h3>
+          <p>Run a small risk-selected story set against the preview environment. Attach trajectory evidence and structured obligations to the pull request. Ask the coding agent to repair only evidence-backed failures, then rerun the affected story plus deterministic regressions.</p>
+          <div class="value-meter"><span>Confidence</span><strong>Supported by this study</strong></div>
+        </article>
+        <article class="panel value-card">
+          <span class="label">Greenfield potential</span>
+          <h3>Acceptance-driven hill climbing</h3>
+          <p>Start from a product brief, derive critical journeys and contracts, let the coding agent implement, and use Playtest to expose behavioural gaps. This is strongest when the intended experience is known but the UI is still fluid.</p>
+          <div class="value-meter partial"><span>Condition</span><strong>Human owns intent and contracts</strong></div>
+        </article>
+        <article class="panel value-card">
+          <span class="label">Brownfield potential</span>
+          <h3>Change-aware regression mining</h3>
+          <p>Map the diff to affected surfaces, replay pinned journeys, then explore adjacent states. Existing telemetry, production incidents, contracts, and known workflows make brownfield the safer first integration target.</p>
+          <div class="value-meter"><span>Best first bet</span><strong>Narrow, high-risk features</strong></div>
+        </article>
+      </div>
+
+      <div class="loop-architecture">
+        <div class="subheading"><span class="label">Build-system integration</span><h3>Yes—but as a bounded repair loop, not a self-merging oracle.</h3></div>
+        <div class="architecture-grid">
+          <article><span class="arch-number">1</span><h4>Trigger</h4><p>PR opened, preview ready, or feature flag deployed. Select journeys from changed surfaces and risk metadata.</p></article>
+          <article><span class="arch-number">2</span><h4>Gate</h4><p>Run unit, integration, security, and contract checks first. Do not spend agent runs on a deterministically broken build.</p></article>
+          <article><span class="arch-number">3</span><h4>Explore</h4><p>Run Playtest personas and adversarial obligations. Emit finding class, evidence, severity, coverage, and oracle source.</p></article>
+          <article><span class="arch-number">4</span><h4>Repair</h4><p>Give an isolated coding agent only verified findings and repository context. Require a pinned regression for each fix.</p></article>
+          <article><span class="arch-number">5</span><h4>Bound</h4><p>Stop after a small retry budget, repeated failure, scope expansion, or any unknown high-risk obligation. Escalate to a human.</p></article>
+          <article><span class="arch-number">6</span><h4>Decide</h4><p>Publish separate checks for contracts, coverage, unresolved findings, and emergent regressions. Humans retain merge authority.</p></article>
+        </div>
+      </div>
+
+      <div class="sdlc-verdict">
+        <div><span class="label">Recommended adoption sequence</span><strong>Brownfield PR check</strong><i>→</i><strong>Feature-level repair loop</strong><i>→</i><strong>Greenfield acceptance loop</strong><i>→</i><strong>Release gate, only after validation</strong></div>
+        <p>The study demonstrated a closed repair mechanism on one controlled app, not an unattended CI product. Branch protection and passing status checks are established merge controls; contemporary coding agents can work on branches and iterate on pull requests. Playtest can connect those pieces, but its own check must report <em>coverage and truth separately</em> before it is safe to require.</p>
+        <small>Industry context: <a href="https://docs.github.com/en/copilot/concepts/agents/about-third-party-coding-agents">coding agents create and update pull requests</a>; <a href="https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches">protected branches require passing checks</a>. Product efficacy claims on this page come from the hill-climb ledgers, not those external sources.</small>
+      </div>
+    </section>
+
+    <section class="report-section persona-section" aria-labelledby="persona-title">
+      <div class="section-heading compact">
+        <div><span class="section-index">08</span><span class="eyebrow">Operating model</span></div>
+        <h2 id="persona-title">Run three personas.<br>Retire one.</h2>
+      </div>
+      <div class="persona-layout">
+        <div class="panel persona-chart" id="persona-chart"></div>
+        <article class="panel persona-call">
+          <span class="label">Recommended core panel</span>
+          <div class="persona-stack"><span>Cautious first-timer</span><span>Weekend browser</span><span>Returning regular</span></div>
+          <p>This trio reaches all 14 detected faults. Two personas already reach 13; returning-regular adds the otherwise unique order-history signal.</p>
+          <div class="retire-persona"><span>Demote</span><strong>Gift rusher</strong><small>9 faults, no unique coverage</small></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="report-section ledger-section" id="ledger" aria-labelledby="ledger-title">
+      <div class="section-heading ledger-heading">
+        <div><span class="section-index">09</span><span class="eyebrow">Fault ledger</span></div>
+        <h2 id="ledger-title">Every seeded fault,<br>accounted for.</h2>
+        <p>Filter the verified catalog by level, final policy outcome, or why Playtest missed it. Select a row for the ground-truth oracle.</p>
+      </div>
+
+      <div class="ledger-controls">
+        <div class="search-wrap"><span aria-hidden="true">⌕</span><label class="sr-only" for="fault-search">Search faults</label><input id="fault-search" type="search" placeholder="Search fault, surface, or class…"></div>
+        <div class="filter-group" aria-label="Filter fault level">
+          <button class="filter active" data-level="all">All <span>26</span></button>
+          <button class="filter" data-level="L1">L1 <span>7</span></button>
+          <button class="filter" data-level="L2">L2 <span>8</span></button>
+          <button class="filter" data-level="L3">L3 <span>6</span></button>
+          <button class="filter" data-level="L4">L4 <span>5</span></button>
+        </div>
+        <label class="select-wrap">Outcome
+          <select id="outcome-filter">
+            <option value="all">All policy outcomes</option>
+            <option value="detected-fixed">Detected & fixed</option>
+            <option value="undetected-fixed">Fixed by inspection</option>
+            <option value="missed">Still live / missed</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="ledger-table-wrap">
+        <table class="ledger-table">
+          <thead><tr><th>Fault</th><th>Level</th><th>Surface</th><th>Detected</th><th>Naive</th><th>Policy</th><th></th></tr></thead>
+          <tbody id="fault-rows"></tbody>
+        </table>
+        <div class="empty-results" id="empty-results" hidden>No faults match these filters.</div>
+      </div>
+      <div class="ledger-footer"><span id="result-count">26 faults</span><span>Ground truth: <code>faults.json</code> · Outcomes: committed ledgers</span></div>
+    </section>
+
+    <section class="method-section" aria-labelledby="method-title">
+      <div><span class="eyebrow">Method in one minute</span><h2 id="method-title">A deliberately broken storefront.<br>Two blind fix strategies.</h2></div>
+      <div class="method-steps">
+        <article><strong>26</strong><span>catalogued faults across surface, interaction, flow, and absence</span></article>
+        <i aria-hidden="true">→</i>
+        <article><strong>15</strong><span>frozen story–persona cells per full baseline round</span></article>
+        <i aria-hidden="true">→</i>
+        <article><strong>2</strong><span>blind repair arms: naive “fix all” and evidence-gated policy</span></article>
+        <i aria-hidden="true">→</i>
+        <article><strong>2×</strong><span>clean-round stop rule, then catalog-aware fault accounting</span></article>
+      </div>
+      <p class="method-note">Limits: one storefront, one actor/grader pairing, one realization per repair strategy, and catalog-aware adjudication. Directions are decision-useful; exact rates should not be treated as universal.</p>
+    </section>
+  </main>
+
+  <footer>
+    <div><span class="brand-mark">P/</span><p>Hill-climb evidence study<br><small>Verified ledger · July 2026</small></p></div>
+    <nav aria-label="Evidence files"><a href="evidence.html?doc=full-report">Full report</a><a href="evidence.html?doc=fault-catalog">Fault catalog</a><a href="#ledger">Fault ledger</a><a href="evidence.html?doc=blindness-analysis">Blindness analysis</a></nav>
+  </footer>
+
+  <dialog id="fault-dialog" class="fault-dialog"><button class="dialog-close" aria-label="Close fault detail">×</button><div id="fault-dialog-content"></div></dialog>
+  <dialog id="lightbox" class="lightbox"><button class="dialog-close" aria-label="Close image">×</button><img alt="Expanded trajectory evidence"></dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>

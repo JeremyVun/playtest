@@ -1,0 +1,4457 @@
+{
+  "round": "s0-sealed-1",
+  "generated_at": "2026-07-26T06:44:17.981Z",
+  "seed": "4adf038b88f9421c",
+  "sealed_set": {
+    "tarball_sha256": "842a4689d3486db1031841fe28ba4ee675a726564c13570a23e8da9d0eaa1daf",
+    "patch_sha256": "2d7a0d2875b448bd1d9543071b2852f0d3b59a4d3eb77750c9cb238227beb406",
+    "faults": 14,
+    "semantic": 13,
+    "column_one_covered": 4
+  },
+  "faults": {
+    "f-activate-after-close": {
+      "category": "state-machine",
+      "tier": "semantic",
+      "column_one_covered": false
+    },
+    "f-transfer-to-pending-destination": {
+      "category": "state-machine",
+      "tier": "semantic",
+      "column_one_covered": true
+    },
+    "f-deposit-entry-mismatch": {
+      "category": "cross-resource-invariant",
+      "tier": "semantic",
+      "column_one_covered": false
+    },
+    "f-fee-account-balance-untouched": {
+      "category": "cross-resource-invariant",
+      "tier": "semantic",
+      "column_one_covered": true
+    },
+    "f-eur-fee-flat": {
+      "category": "conditional-branch",
+      "tier": "semantic",
+      "column_one_covered": false
+    },
+    "f-include-closed-ignored": {
+      "category": "conditional-branch",
+      "tier": "semantic",
+      "column_one_covered": false
+    },
+    "f-transfers-filter-after-page": {
+      "category": "pagination",
+      "tier": "semantic",
+      "column_one_covered": false
+    },
+    "f-idempotency-conflict-ignored": {
+      "category": "idempotency",
+      "tier": "semantic",
+      "column_one_covered": false
+    },
+    "f-idempotency-freed-by-cancel": {
+      "category": "idempotency",
+      "tier": "semantic",
+      "column_one_covered": true
+    },
+    "f-day-usage-carryover": {
+      "category": "temporal-boundary",
+      "tier": "semantic",
+      "column_one_covered": false
+    },
+    "f-tick-day-skips-settlement": {
+      "category": "temporal-boundary",
+      "tier": "semantic",
+      "column_one_covered": false
+    },
+    "f-entries-cross-principal": {
+      "category": "authorization",
+      "tier": "semantic",
+      "column_one_covered": false
+    },
+    "f-transfer-source-unowned": {
+      "category": "authorization",
+      "tier": "semantic",
+      "column_one_covered": false
+    },
+    "f-same-account-envelope-bare": {
+      "category": "error-semantics",
+      "tier": "schema-reachable",
+      "column_one_covered": true
+    }
+  },
+  "arms": {
+    "t1": {
+      "arm": "t1",
+      "label": "statements-trial 1",
+      "faults": {
+        "f-activate-after-close": {
+          "category": "state-machine",
+          "tier": "semantic",
+          "column_one_covered": false,
+          "column_one": null,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "none",
+          "first_false": null,
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 1
+          },
+          "attributed_checks": [
+            {
+              "check_id": "lifecycle-closure-is-terminal",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            }
+          ],
+          "requests": 214,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 85,
+            "failing": 2,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        },
+        "f-transfer-to-pending-destination": {
+          "category": "state-machine",
+          "tier": "semantic",
+          "column_one_covered": true,
+          "column_one": true,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "none",
+          "first_false": null,
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 1
+          },
+          "attributed_checks": [
+            {
+              "check_id": "lifecycle-transfer-refused-on-a-never-activated-account",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            },
+            {
+              "check_id": "status-400-for-a-wrongly-typed-field",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": false
+            },
+            {
+              "check_id": "conservation-usd",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": false
+            }
+          ],
+          "requests": 216,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 85,
+            "failing": 3,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        },
+        "f-deposit-entry-mismatch": {
+          "category": "cross-resource-invariant",
+          "tier": "semantic",
+          "column_one_covered": false,
+          "column_one": null,
+          "column_two": false,
+          "column_two_strict": false,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": false,
+            "manifested_in_traffic": false,
+            "assertion_detected": false,
+            "evidence_correctly_cited": false
+          },
+          "diagnosis": "reachability",
+          "first_false": "scenario_executed",
+          "witness": {
+            "known": true,
+            "reached": false,
+            "manifestations": 0
+          },
+          "attributed_checks": [],
+          "requests": 214,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 85,
+            "failing": 1,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        },
+        "f-fee-account-balance-untouched": {
+          "category": "cross-resource-invariant",
+          "tier": "semantic",
+          "column_one_covered": true,
+          "column_one": false,
+          "column_two": true,
+          "column_two_strict": false,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": false,
+            "manifested_in_traffic": false,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "reachability",
+          "first_false": "scenario_executed",
+          "witness": {
+            "known": true,
+            "reached": false,
+            "manifestations": 0
+          },
+          "attributed_checks": [
+            {
+              "check_id": "balance-equals-the-sum-of-the-entries",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": false
+            },
+            {
+              "check_id": "balance-fee-accounts-hold-the-fees-they-collected",
+              "rule": null,
+              "evidence_correct": false,
+              "evidence_strict": false
+            }
+          ],
+          "requests": 214,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 85,
+            "failing": 3,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        },
+        "f-eur-fee-flat": {
+          "category": "conditional-branch",
+          "tier": "semantic",
+          "column_one_covered": false,
+          "column_one": null,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "none",
+          "first_false": null,
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 2
+          },
+          "attributed_checks": [
+            {
+              "check_id": "fee-declared-eur-1000",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            },
+            {
+              "check_id": "fee-declared-eur-66667",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            },
+            {
+              "check_id": "status-400-for-a-wrongly-typed-field",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": false
+            }
+          ],
+          "requests": 214,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 85,
+            "failing": 3,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        },
+        "f-include-closed-ignored": {
+          "category": "conditional-branch",
+          "tier": "semantic",
+          "column_one_covered": false,
+          "column_one": null,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "none",
+          "first_false": null,
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 5
+          },
+          "attributed_checks": [
+            {
+              "check_id": "lifecycle-closure-is-terminal",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            },
+            {
+              "check_id": "param-include-closed",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            }
+          ],
+          "requests": 213,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 85,
+            "failing": 3,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        },
+        "f-transfers-filter-after-page": {
+          "category": "pagination",
+          "tier": "semantic",
+          "column_one_covered": false,
+          "column_one": null,
+          "column_two": false,
+          "column_two_strict": false,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": false,
+            "assertion_detected": false,
+            "evidence_correctly_cited": false
+          },
+          "diagnosis": "reachability",
+          "first_false": "manifested_in_traffic",
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 0
+          },
+          "attributed_checks": [],
+          "requests": 214,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 85,
+            "failing": 1,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        },
+        "f-idempotency-conflict-ignored": {
+          "category": "idempotency",
+          "tier": "semantic",
+          "column_one_covered": false,
+          "column_one": null,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "none",
+          "first_false": null,
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 1
+          },
+          "attributed_checks": [
+            {
+              "check_id": "status-400-for-a-wrongly-typed-field",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": false
+            },
+            {
+              "check_id": "idem-same-key-different-body-is-a-conflict-that-creates-nothing",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            }
+          ],
+          "requests": 214,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 85,
+            "failing": 2,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        },
+        "f-idempotency-freed-by-cancel": {
+          "category": "idempotency",
+          "tier": "semantic",
+          "column_one_covered": true,
+          "column_one": true,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "none",
+          "first_false": null,
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 2
+          },
+          "attributed_checks": [
+            {
+              "check_id": "status-400-for-a-wrongly-typed-field",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": false
+            },
+            {
+              "check_id": "idem-key-is-not-released-by-cancelling",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            },
+            {
+              "check_id": "idem-key-survives-settlement-and-the-day-rollover",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            }
+          ],
+          "requests": 216,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 85,
+            "failing": 3,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        },
+        "f-day-usage-carryover": {
+          "category": "temporal-boundary",
+          "tier": "semantic",
+          "column_one_covered": false,
+          "column_one": null,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": false,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "enumeration",
+          "first_false": "obligation_enumerated",
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 1
+          },
+          "attributed_checks": [
+            {
+              "check_id": "status-400-for-a-wrongly-typed-field",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": false
+            },
+            {
+              "check_id": "daily-rolling-the-day-starts-the-count-at-zero",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            },
+            {
+              "check_id": "roundtrip-a-created-resource-reads-back-unchanged",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            }
+          ],
+          "requests": 214,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 85,
+            "failing": 3,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        },
+        "f-tick-day-skips-settlement": {
+          "category": "temporal-boundary",
+          "tier": "semantic",
+          "column_one_covered": false,
+          "column_one": null,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "none",
+          "first_false": null,
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 2
+          },
+          "attributed_checks": [
+            {
+              "check_id": "param-tick-advance-day-and-settle-limit-do-what-they-say",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            }
+          ],
+          "requests": 214,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 85,
+            "failing": 2,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        },
+        "f-entries-cross-principal": {
+          "category": "authorization",
+          "tier": "semantic",
+          "column_one_covered": false,
+          "column_one": null,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "none",
+          "first_false": null,
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 1
+          },
+          "attributed_checks": [
+            {
+              "check_id": "ownership-a-customer-cannot-reach-another-customers-account",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            },
+            {
+              "check_id": "status-400-for-a-wrongly-typed-field",
+              "rule": null,
+              "evidence_correct": false,
+              "evidence_strict": false
+            }
+          ],
+          "requests": 214,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 85,
+            "failing": 2,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        },
+        "f-transfer-source-unowned": {
+          "category": "authorization",
+          "tier": "semantic",
+          "column_one_covered": false,
+          "column_one": null,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "none",
+          "first_false": null,
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 1
+          },
+          "attributed_checks": [
+            {
+              "check_id": "ownership-a-customer-cannot-reach-another-customers-account",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            },
+            {
+              "check_id": "status-400-for-a-wrongly-typed-field",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": false
+            }
+          ],
+          "requests": 216,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 85,
+            "failing": 2,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        },
+        "f-same-account-envelope-bare": {
+          "category": "error-semantics",
+          "tier": "schema-reachable",
+          "column_one_covered": true,
+          "column_one": true,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "none",
+          "first_false": null,
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 1
+          },
+          "attributed_checks": [
+            {
+              "check_id": "status-400-for-a-wrongly-typed-field",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": false
+            },
+            {
+              "check_id": "envelope-every-refusal-uses-the-one-error-envelope",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            }
+          ],
+          "requests": 214,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 85,
+            "failing": 2,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        }
+      },
+      "categories": {
+        "state-machine": {
+          "faults": 2,
+          "fault_ids": [
+            "f-activate-after-close",
+            "f-transfer-to-pending-destination"
+          ],
+          "column_one_covered": 1,
+          "column_one_detected": 1,
+          "column_two_detected": 2,
+          "semantic": 2,
+          "semantic_column_two": 2,
+          "missed_ids": []
+        },
+        "cross-resource-invariant": {
+          "faults": 2,
+          "fault_ids": [
+            "f-deposit-entry-mismatch",
+            "f-fee-account-balance-untouched"
+          ],
+          "column_one_covered": 1,
+          "column_one_detected": 0,
+          "column_two_detected": 1,
+          "semantic": 2,
+          "semantic_column_two": 1,
+          "missed_ids": [
+            "f-deposit-entry-mismatch"
+          ]
+        },
+        "conditional-branch": {
+          "faults": 2,
+          "fault_ids": [
+            "f-eur-fee-flat",
+            "f-include-closed-ignored"
+          ],
+          "column_one_covered": 0,
+          "column_one_detected": 0,
+          "column_two_detected": 2,
+          "semantic": 2,
+          "semantic_column_two": 2,
+          "missed_ids": []
+        },
+        "pagination": {
+          "faults": 1,
+          "fault_ids": [
+            "f-transfers-filter-after-page"
+          ],
+          "column_one_covered": 0,
+          "column_one_detected": 0,
+          "column_two_detected": 0,
+          "semantic": 1,
+          "semantic_column_two": 0,
+          "missed_ids": [
+            "f-transfers-filter-after-page"
+          ]
+        },
+        "idempotency": {
+          "faults": 2,
+          "fault_ids": [
+            "f-idempotency-conflict-ignored",
+            "f-idempotency-freed-by-cancel"
+          ],
+          "column_one_covered": 1,
+          "column_one_detected": 1,
+          "column_two_detected": 2,
+          "semantic": 2,
+          "semantic_column_two": 2,
+          "missed_ids": []
+        },
+        "temporal-boundary": {
+          "faults": 2,
+          "fault_ids": [
+            "f-day-usage-carryover",
+            "f-tick-day-skips-settlement"
+          ],
+          "column_one_covered": 0,
+          "column_one_detected": 0,
+          "column_two_detected": 2,
+          "semantic": 2,
+          "semantic_column_two": 2,
+          "missed_ids": []
+        },
+        "authorization": {
+          "faults": 2,
+          "fault_ids": [
+            "f-entries-cross-principal",
+            "f-transfer-source-unowned"
+          ],
+          "column_one_covered": 0,
+          "column_one_detected": 0,
+          "column_two_detected": 2,
+          "semantic": 2,
+          "semantic_column_two": 2,
+          "missed_ids": []
+        },
+        "error-semantics": {
+          "faults": 1,
+          "fault_ids": [
+            "f-same-account-envelope-bare"
+          ],
+          "column_one_covered": 1,
+          "column_one_detected": 1,
+          "column_two_detected": 1,
+          "semantic": 0,
+          "semantic_column_two": 0,
+          "missed_ids": []
+        }
+      },
+      "totals": {
+        "sealed": 14,
+        "semantic": 13,
+        "column_one_covered": 4,
+        "column_one_detected": 3,
+        "column_one_not_covered": 10,
+        "column_two_detected": 12,
+        "column_two_detected_semantic": 11,
+        "column_two_strict_semantic": 10,
+        "reported_without_evidence": 0
+      },
+      "diagnoses": {
+        "none": 10,
+        "reachability": 3,
+        "enumeration": 1
+      },
+      "misses": [
+        {
+          "fault": "f-deposit-entry-mismatch",
+          "category": "cross-resource-invariant",
+          "tier": "semantic",
+          "diagnosis": "reachability",
+          "first_false": "scenario_executed",
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": false,
+            "manifested_in_traffic": false,
+            "assertion_detected": false,
+            "evidence_correctly_cited": false
+          },
+          "witness": {
+            "known": true,
+            "reached": false,
+            "manifestations": 0
+          },
+          "column_one": null,
+          "column_one_covered": false
+        },
+        {
+          "fault": "f-transfers-filter-after-page",
+          "category": "pagination",
+          "tier": "semantic",
+          "diagnosis": "reachability",
+          "first_false": "manifested_in_traffic",
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": false,
+            "assertion_detected": false,
+            "evidence_correctly_cited": false
+          },
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 0
+          },
+          "column_one": null,
+          "column_one_covered": false
+        }
+      ],
+      "false_positives": {
+        "conforming_builds": 17,
+        "oracle": 0,
+        "reported": 17,
+        "by_label": {
+          "clean": {
+            "traces": 3,
+            "oracle": 0,
+            "reported": 3,
+            "checks": [
+              {
+                "build": "t1.clean-1",
+                "check_id": "status-400-for-a-wrongly-typed-field",
+                "rule": null,
+                "title": "a wrongly typed request is 400 — amount is a documented integer and this request sends a string",
+                "observed": "422 {\"error\":{\"code\":\"invalid_amount\",\"message\":\"amount must be a positive integer in minor units\",\"details\":{\"field\":\"amount\"}}}",
+                "citations_resolved": 2,
+                "citations_total": 2,
+                "routes": [
+                  "transfers_create"
+                ]
+              },
+              {
+                "build": "t1.clean-2",
+                "check_id": "status-400-for-a-wrongly-typed-field",
+                "rule": null,
+                "title": "a wrongly typed request is 400 — amount is a documented integer and this request sends a string",
+                "observed": "422 {\"error\":{\"code\":\"invalid_amount\",\"message\":\"amount must be a positive integer in minor units\",\"details\":{\"field\":\"amount\"}}}",
+                "citations_resolved": 2,
+                "citations_total": 2,
+                "routes": [
+                  "transfers_create"
+                ]
+              },
+              {
+                "build": "t1.clean-3",
+                "check_id": "status-400-for-a-wrongly-typed-field",
+                "rule": null,
+                "title": "a wrongly typed request is 400 — amount is a documented integer and this request sends a string",
+                "observed": "422 {\"error\":{\"code\":\"invalid_amount\",\"message\":\"amount must be a positive integer in minor units\",\"details\":{\"field\":\"amount\"}}}",
+                "citations_resolved": 2,
+                "citations_total": 2,
+                "routes": [
+                  "transfers_create"
+                ]
+              }
+            ]
+          },
+          "clean.all-variants": {
+            "traces": 1,
+            "oracle": 0,
+            "reported": 1,
+            "checks": [
+              {
+                "build": "t1.clean.all-variants",
+                "check_id": "status-400-for-a-wrongly-typed-field",
+                "rule": null,
+                "title": "a wrongly typed request is 400 — amount is a documented integer and this request sends a string",
+                "observed": "422 {\"error\":{\"code\":\"invalid_amount\",\"message\":\"amount must be a positive integer in minor units\",\"details\":{\"field\":\"amount\"}}}",
+                "citations_resolved": 2,
+                "citations_total": 2,
+                "routes": [
+                  "transfers_create"
+                ]
+              }
+            ]
+          },
+          "clean.jitter": {
+            "traces": 10,
+            "oracle": 0,
+            "reported": 10,
+            "checks": [
+              {
+                "build": "t1.clean.jitter-1",
+                "check_id": "status-400-for-a-wrongly-typed-field",
+                "rule": null,
+                "title": "a wrongly typed request is 400 — amount is a documented integer and this request sends a string",
+                "observed": "422 {\"error\":{\"code\":\"invalid_amount\",\"message\":\"amount must be a positive integer in minor units\",\"details\":{\"field\":\"amount\"}}}",
+                "citations_resolved": 2,
+                "citations_total": 2,
+                "routes": [
+                  "transfers_create"
+                ]
+              },
+              {
+                "build": "t1.clean.jitter-10",
+                "check_id": "status-400-for-a-wrongly-typed-field",
+                "rule": null,
+                "title": "a wrongly typed request is 400 — amount is a documented integer and this request sends a string",
+                "observed": "422 {\"error\":{\"code\":\"invalid_amount\",\"message\":\"amount must be a positive integer in minor units\",\"details\":{\"field\":\"amount\"}}}",
+                "citations_resolved": 2,
+                "citations_total": 2,
+                "routes": [
+                  "transfers_create"
+                ]
+              },
+              {
+                "build": "t1.clean.jitter-2",
+                "check_id": "status-400-for-a-wrongly-typed-field",
+                "rule": null,
+                "title": "a wrongly typed request is 400 — amount is a documented integer and this request sends a string",
+                "observed": "422 {\"error\":{\"code\":\"invalid_amount\",\"message\":\"amount must be a positive integer in minor units\",\"details\":{\"field\":\"amount\"}}}",
+                "citations_resolved": 2,
+                "citations_total": 2,
+                "routes": [
+                  "transfers_create"
+                ]
+              },
+              {
+                "build": "t1.clean.jitter-3",
+                "check_id": "status-400-for-a-wrongly-typed-field",
+                "rule": null,
+                "title": "a wrongly typed request is 400 — amount is a documented integer and this request sends a string",
+                "observed": "422 {\"error\":{\"code\":\"invalid_amount\",\"message\":\"amount must be a positive integer in minor units\",\"details\":{\"field\":\"amount\"}}}",
+                "citations_resolved": 2,
+                "citations_total": 2,
+                "routes": [
+                  "transfers_create"
+                ]
+              },
+              {
+                "build": "t1.clean.jitter-4",
+                "check_id": "status-400-for-a-wrongly-typed-field",
+                "rule": null,
+                "title": "a wrongly typed request is 400 — amount is a documented integer and this request sends a string",
+                "observed": "422 {\"error\":{\"code\":\"invalid_amount\",\"message\":\"amount must be a positive integer in minor units\",\"details\":{\"field\":\"amount\"}}}",
+                "citations_resolved": 2,
+                "citations_total": 2,
+                "routes": [
+                  "transfers_create"
+                ]
+              },
+              {
+                "build": "t1.clean.jitter-5",
+                "check_id": "status-400-for-a-wrongly-typed-field",
+                "rule": null,
+                "title": "a wrongly typed request is 400 — amount is a documented integer and this request sends a string",
+                "observed": "422 {\"error\":{\"code\":\"invalid_amount\",\"message\":\"amount must be a positive integer in minor units\",\"details\":{\"field\":\"amount\"}}}",
+                "citations_resolved": 2,
+                "citations_total": 2,
+                "routes": [
+                  "transfers_create"
+                ]
+              },
+              {
+                "build": "t1.clean.jitter-6",
+                "check_id": "status-400-for-a-wrongly-typed-field",
+                "rule": null,
+                "title": "a wrongly typed request is 400 — amount is a documented integer and this request sends a string",
+                "observed": "422 {\"error\":{\"code\":\"invalid_amount\",\"message\":\"amount must be a positive integer in minor units\",\"details\":{\"field\":\"amount\"}}}",
+                "citations_resolved": 2,
+                "citations_total": 2,
+                "routes": [
+                  "transfers_create"
+                ]
+              },
+              {
+                "build": "t1.clean.jitter-7",
+                "check_id": "status-400-for-a-wrongly-typed-field",
+                "rule": null,
+                "title": "a wrongly typed request is 400 — amount is a documented integer and this request sends a string",
+                "observed": "422 {\"error\":{\"code\":\"invalid_amount\",\"message\":\"amount must be a positive integer in minor units\",\"details\":{\"field\":\"amount\"}}}",
+                "citations_resolved": 2,
+                "citations_total": 2,
+                "routes": [
+                  "transfers_create"
+                ]
+              },
+              {
+                "build": "t1.clean.jitter-8",
+                "check_id": "status-400-for-a-wrongly-typed-field",
+                "rule": null,
+                "title": "a wrongly typed request is 400 — amount is a documented integer and this request sends a string",
+                "observed": "422 {\"error\":{\"code\":\"invalid_amount\",\"message\":\"amount must be a positive integer in minor units\",\"details\":{\"field\":\"amount\"}}}",
+                "citations_resolved": 2,
+                "citations_total": 2,
+                "routes": [
+                  "transfers_create"
+                ]
+              },
+              {
+                "build": "t1.clean.jitter-9",
+                "check_id": "status-400-for-a-wrongly-typed-field",
+                "rule": null,
+                "title": "a wrongly typed request is 400 — amount is a documented integer and this request sends a string",
+                "observed": "422 {\"error\":{\"code\":\"invalid_amount\",\"message\":\"amount must be a positive integer in minor units\",\"details\":{\"field\":\"amount\"}}}",
+                "citations_resolved": 2,
+                "citations_total": 2,
+                "routes": [
+                  "transfers_create"
+                ]
+              }
+            ]
+          },
+          "clean.terse-optionals": {
+            "traces": 1,
+            "oracle": 0,
+            "reported": 1,
+            "checks": [
+              {
+                "build": "t1.clean.terse-optionals",
+                "check_id": "status-400-for-a-wrongly-typed-field",
+                "rule": null,
+                "title": "a wrongly typed request is 400 — amount is a documented integer and this request sends a string",
+                "observed": "422 {\"error\":{\"code\":\"invalid_amount\",\"message\":\"amount must be a positive integer in minor units\",\"details\":{\"field\":\"amount\"}}}",
+                "citations_resolved": 2,
+                "citations_total": 2,
+                "routes": [
+                  "transfers_create"
+                ]
+              }
+            ]
+          },
+          "clean.trailing-page": {
+            "traces": 1,
+            "oracle": 0,
+            "reported": 1,
+            "checks": [
+              {
+                "build": "t1.clean.trailing-page",
+                "check_id": "status-400-for-a-wrongly-typed-field",
+                "rule": null,
+                "title": "a wrongly typed request is 400 — amount is a documented integer and this request sends a string",
+                "observed": "422 {\"error\":{\"code\":\"invalid_amount\",\"message\":\"amount must be a positive integer in minor units\",\"details\":{\"field\":\"amount\"}}}",
+                "citations_resolved": 2,
+                "citations_total": 2,
+                "routes": [
+                  "transfers_create"
+                ]
+              }
+            ]
+          },
+          "clean.wide-ids": {
+            "traces": 1,
+            "oracle": 0,
+            "reported": 1,
+            "checks": [
+              {
+                "build": "t1.clean.wide-ids",
+                "check_id": "status-400-for-a-wrongly-typed-field",
+                "rule": null,
+                "title": "a wrongly typed request is 400 — amount is a documented integer and this request sends a string",
+                "observed": "422 {\"error\":{\"code\":\"invalid_amount\",\"message\":\"amount must be a positive integer in minor units\",\"details\":{\"field\":\"amount\"}}}",
+                "citations_resolved": 2,
+                "citations_total": 2,
+                "routes": [
+                  "transfers_create"
+                ]
+              }
+            ]
+          }
+        },
+        "by_check": {
+          "status-400-for-a-wrongly-typed-field": {
+            "check_id": "status-400-for-a-wrongly-typed-field",
+            "rule": null,
+            "title": "a wrongly typed request is 400 — amount is a documented integer and this request sends a string",
+            "builds": 17,
+            "labels": {
+              "clean": 3,
+              "clean.all-variants": 1,
+              "clean.jitter": 10,
+              "clean.terse-optionals": 1,
+              "clean.trailing-page": 1,
+              "clean.wide-ids": 1
+            },
+            "observed_sample": "422 {\"error\":{\"code\":\"invalid_amount\",\"message\":\"amount must be a positive integer in minor units\",\"details\":{\"field\":\"amount\"}}}"
+          }
+        },
+        "distinct_checks": 1,
+        "reported_excluding_D2": 0
+      },
+      "flake": {
+        "jitter_repeats": 10,
+        "distinct_outcome_signatures": 1,
+        "canonical_repeats": 3,
+        "canonical_distinct_signatures": 1,
+        "jitter_matches_canonical": true,
+        "flake_rate": 0
+      }
+    },
+    "t2": {
+      "arm": "t2",
+      "label": "statements-trial 2",
+      "faults": {
+        "f-activate-after-close": {
+          "category": "state-machine",
+          "tier": "semantic",
+          "column_one_covered": false,
+          "column_one": null,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "none",
+          "first_false": null,
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 1
+          },
+          "attributed_checks": [
+            {
+              "check_id": "life-activate-closed",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            },
+            {
+              "check_id": "split-state-activate-closed",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            },
+            {
+              "check_id": "life-close-closed",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": false
+            },
+            {
+              "check_id": "split-state-close-closed",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": false
+            },
+            {
+              "check_id": "err-refusals-are-4xx",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": false
+            },
+            {
+              "check_id": "err-status-split",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": false
+            }
+          ],
+          "requests": 246,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 188,
+            "failing": 6,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        },
+        "f-transfer-to-pending-destination": {
+          "category": "state-machine",
+          "tier": "semantic",
+          "column_one_covered": true,
+          "column_one": true,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "none",
+          "first_false": null,
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 1
+          },
+          "attributed_checks": [
+            {
+              "check_id": "life-transfer-to-pending",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            },
+            {
+              "check_id": "split-state-transfer-to-pending",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            },
+            {
+              "check_id": "life-refusals-create-nothing",
+              "rule": null,
+              "evidence_correct": false,
+              "evidence_strict": false
+            },
+            {
+              "check_id": "settle-creation-order",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": false
+            },
+            {
+              "check_id": "err-refusals-are-4xx",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": false
+            },
+            {
+              "check_id": "err-status-split",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": false
+            }
+          ],
+          "requests": 246,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 188,
+            "failing": 6,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        },
+        "f-deposit-entry-mismatch": {
+          "category": "cross-resource-invariant",
+          "tier": "semantic",
+          "column_one_covered": false,
+          "column_one": null,
+          "column_two": false,
+          "column_two_strict": false,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": false,
+            "evidence_correctly_cited": false
+          },
+          "diagnosis": "assertion",
+          "first_false": "assertion_detected",
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 1
+          },
+          "attributed_checks": [],
+          "requests": 246,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 188,
+            "failing": 0,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        },
+        "f-fee-account-balance-untouched": {
+          "category": "cross-resource-invariant",
+          "tier": "semantic",
+          "column_one_covered": true,
+          "column_one": false,
+          "column_two": true,
+          "column_two_strict": false,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": false,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "reachability",
+          "first_false": "manifested_in_traffic",
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 0
+          },
+          "attributed_checks": [
+            {
+              "check_id": "balance-agrees-with-entries",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": false
+            },
+            {
+              "check_id": "balance-fee-accounts",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": false
+            }
+          ],
+          "requests": 246,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 188,
+            "failing": 2,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        },
+        "f-eur-fee-flat": {
+          "category": "conditional-branch",
+          "tier": "semantic",
+          "column_one_covered": false,
+          "column_one": null,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "none",
+          "first_false": null,
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 3
+          },
+          "attributed_checks": [
+            {
+              "check_id": "fee-schedule-at-creation",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            },
+            {
+              "check_id": "fee-one-schedule-both-currencies",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            },
+            {
+              "check_id": "fee-settles-at-declared-value-eur",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            },
+            {
+              "check_id": "fee-every-probe-settles-at-schedule",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            }
+          ],
+          "requests": 246,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 188,
+            "failing": 4,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        },
+        "f-include-closed-ignored": {
+          "category": "conditional-branch",
+          "tier": "semantic",
+          "column_one_covered": false,
+          "column_one": null,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "none",
+          "first_false": null,
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 1
+          },
+          "attributed_checks": [
+            {
+              "check_id": "param-include-closed",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            }
+          ],
+          "requests": 245,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 188,
+            "failing": 1,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        },
+        "f-transfers-filter-after-page": {
+          "category": "pagination",
+          "tier": "semantic",
+          "column_one_covered": false,
+          "column_one": null,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "none",
+          "first_false": null,
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 9
+          },
+          "attributed_checks": [
+            {
+              "check_id": "page-transfers-filtered-short-page-is-last",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            }
+          ],
+          "requests": 254,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 188,
+            "failing": 1,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        },
+        "f-idempotency-conflict-ignored": {
+          "category": "idempotency",
+          "tier": "semantic",
+          "column_one_covered": false,
+          "column_one": null,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "none",
+          "first_false": null,
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 1
+          },
+          "attributed_checks": [
+            {
+              "check_id": "split-state-idempotency-conflict",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            },
+            {
+              "check_id": "idem-conflict-is-refused",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            },
+            {
+              "check_id": "err-refusals-are-4xx",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": false
+            },
+            {
+              "check_id": "err-status-split",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": false
+            }
+          ],
+          "requests": 246,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 188,
+            "failing": 4,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        },
+        "f-idempotency-freed-by-cancel": {
+          "category": "idempotency",
+          "tier": "semantic",
+          "column_one_covered": true,
+          "column_one": true,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "none",
+          "first_false": null,
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 1
+          },
+          "attributed_checks": [
+            {
+              "check_id": "idem-key-survives-cancellation",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            },
+            {
+              "check_id": "idem-one-transfer-per-key",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            }
+          ],
+          "requests": 246,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 188,
+            "failing": 2,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        },
+        "f-day-usage-carryover": {
+          "category": "temporal-boundary",
+          "tier": "semantic",
+          "column_one_covered": false,
+          "column_one": null,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": false,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "enumeration",
+          "first_false": "obligation_enumerated",
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 1
+          },
+          "attributed_checks": [
+            {
+              "check_id": "daily-rollover-resets-usage",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            }
+          ],
+          "requests": 246,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 188,
+            "failing": 1,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        },
+        "f-tick-day-skips-settlement": {
+          "category": "temporal-boundary",
+          "tier": "semantic",
+          "column_one_covered": false,
+          "column_one": null,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "none",
+          "first_false": null,
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 1
+          },
+          "attributed_checks": [
+            {
+              "check_id": "settle-day-rolling-tick-still-settles",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            }
+          ],
+          "requests": 246,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 188,
+            "failing": 1,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        },
+        "f-entries-cross-principal": {
+          "category": "authorization",
+          "tier": "semantic",
+          "column_one_covered": false,
+          "column_one": null,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "none",
+          "first_false": null,
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 1
+          },
+          "attributed_checks": [
+            {
+              "check_id": "own-read-other-entries",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            },
+            {
+              "check_id": "split-forbidden-read-other-entries",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            },
+            {
+              "check_id": "own-refusal-discloses-nothing",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            },
+            {
+              "check_id": "err-refusals-are-4xx",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            },
+            {
+              "check_id": "err-status-split",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            }
+          ],
+          "requests": 246,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 188,
+            "failing": 5,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        },
+        "f-transfer-source-unowned": {
+          "category": "authorization",
+          "tier": "semantic",
+          "column_one_covered": false,
+          "column_one": null,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "none",
+          "first_false": null,
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 1
+          },
+          "attributed_checks": [
+            {
+              "check_id": "own-spend-from-other-account",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            },
+            {
+              "check_id": "split-forbidden-spend-from-other-account",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            },
+            {
+              "check_id": "own-refusal-discloses-nothing",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            },
+            {
+              "check_id": "settle-creation-order",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": false
+            },
+            {
+              "check_id": "err-refusals-are-4xx",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            },
+            {
+              "check_id": "err-status-split",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            }
+          ],
+          "requests": 246,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 188,
+            "failing": 6,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        },
+        "f-same-account-envelope-bare": {
+          "category": "error-semantics",
+          "tier": "schema-reachable",
+          "column_one_covered": true,
+          "column_one": true,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "none",
+          "first_false": null,
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 1
+          },
+          "attributed_checks": [
+            {
+              "check_id": "err-envelope-everywhere",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            }
+          ],
+          "requests": 246,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 188,
+            "failing": 1,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        }
+      },
+      "categories": {
+        "state-machine": {
+          "faults": 2,
+          "fault_ids": [
+            "f-activate-after-close",
+            "f-transfer-to-pending-destination"
+          ],
+          "column_one_covered": 1,
+          "column_one_detected": 1,
+          "column_two_detected": 2,
+          "semantic": 2,
+          "semantic_column_two": 2,
+          "missed_ids": []
+        },
+        "cross-resource-invariant": {
+          "faults": 2,
+          "fault_ids": [
+            "f-deposit-entry-mismatch",
+            "f-fee-account-balance-untouched"
+          ],
+          "column_one_covered": 1,
+          "column_one_detected": 0,
+          "column_two_detected": 1,
+          "semantic": 2,
+          "semantic_column_two": 1,
+          "missed_ids": [
+            "f-deposit-entry-mismatch"
+          ]
+        },
+        "conditional-branch": {
+          "faults": 2,
+          "fault_ids": [
+            "f-eur-fee-flat",
+            "f-include-closed-ignored"
+          ],
+          "column_one_covered": 0,
+          "column_one_detected": 0,
+          "column_two_detected": 2,
+          "semantic": 2,
+          "semantic_column_two": 2,
+          "missed_ids": []
+        },
+        "pagination": {
+          "faults": 1,
+          "fault_ids": [
+            "f-transfers-filter-after-page"
+          ],
+          "column_one_covered": 0,
+          "column_one_detected": 0,
+          "column_two_detected": 1,
+          "semantic": 1,
+          "semantic_column_two": 1,
+          "missed_ids": []
+        },
+        "idempotency": {
+          "faults": 2,
+          "fault_ids": [
+            "f-idempotency-conflict-ignored",
+            "f-idempotency-freed-by-cancel"
+          ],
+          "column_one_covered": 1,
+          "column_one_detected": 1,
+          "column_two_detected": 2,
+          "semantic": 2,
+          "semantic_column_two": 2,
+          "missed_ids": []
+        },
+        "temporal-boundary": {
+          "faults": 2,
+          "fault_ids": [
+            "f-day-usage-carryover",
+            "f-tick-day-skips-settlement"
+          ],
+          "column_one_covered": 0,
+          "column_one_detected": 0,
+          "column_two_detected": 2,
+          "semantic": 2,
+          "semantic_column_two": 2,
+          "missed_ids": []
+        },
+        "authorization": {
+          "faults": 2,
+          "fault_ids": [
+            "f-entries-cross-principal",
+            "f-transfer-source-unowned"
+          ],
+          "column_one_covered": 0,
+          "column_one_detected": 0,
+          "column_two_detected": 2,
+          "semantic": 2,
+          "semantic_column_two": 2,
+          "missed_ids": []
+        },
+        "error-semantics": {
+          "faults": 1,
+          "fault_ids": [
+            "f-same-account-envelope-bare"
+          ],
+          "column_one_covered": 1,
+          "column_one_detected": 1,
+          "column_two_detected": 1,
+          "semantic": 0,
+          "semantic_column_two": 0,
+          "missed_ids": []
+        }
+      },
+      "totals": {
+        "sealed": 14,
+        "semantic": 13,
+        "column_one_covered": 4,
+        "column_one_detected": 3,
+        "column_one_not_covered": 10,
+        "column_two_detected": 13,
+        "column_two_detected_semantic": 12,
+        "column_two_strict_semantic": 11,
+        "reported_without_evidence": 0
+      },
+      "diagnoses": {
+        "none": 11,
+        "assertion": 1,
+        "reachability": 1,
+        "enumeration": 1
+      },
+      "misses": [
+        {
+          "fault": "f-deposit-entry-mismatch",
+          "category": "cross-resource-invariant",
+          "tier": "semantic",
+          "diagnosis": "assertion",
+          "first_false": "assertion_detected",
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": false,
+            "evidence_correctly_cited": false
+          },
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 1
+          },
+          "column_one": null,
+          "column_one_covered": false
+        }
+      ],
+      "false_positives": {
+        "conforming_builds": 17,
+        "oracle": 0,
+        "reported": 0,
+        "by_label": {
+          "clean": {
+            "traces": 3,
+            "oracle": 0,
+            "reported": 0,
+            "checks": []
+          },
+          "clean.all-variants": {
+            "traces": 1,
+            "oracle": 0,
+            "reported": 0,
+            "checks": []
+          },
+          "clean.jitter": {
+            "traces": 10,
+            "oracle": 0,
+            "reported": 0,
+            "checks": []
+          },
+          "clean.terse-optionals": {
+            "traces": 1,
+            "oracle": 0,
+            "reported": 0,
+            "checks": []
+          },
+          "clean.trailing-page": {
+            "traces": 1,
+            "oracle": 0,
+            "reported": 0,
+            "checks": []
+          },
+          "clean.wide-ids": {
+            "traces": 1,
+            "oracle": 0,
+            "reported": 0,
+            "checks": []
+          }
+        },
+        "by_check": {},
+        "distinct_checks": 0,
+        "reported_excluding_D2": 0
+      },
+      "flake": {
+        "jitter_repeats": 10,
+        "distinct_outcome_signatures": 1,
+        "canonical_repeats": 3,
+        "canonical_distinct_signatures": 1,
+        "jitter_matches_canonical": true,
+        "flake_rate": 0
+      }
+    },
+    "t3": {
+      "arm": "t3",
+      "label": "statements-trial 3",
+      "faults": {
+        "f-activate-after-close": {
+          "category": "state-machine",
+          "tier": "semantic",
+          "column_one_covered": false,
+          "column_one": null,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "none",
+          "first_false": null,
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 1
+          },
+          "attributed_checks": [
+            {
+              "check_id": "closure-is-terminal",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            },
+            {
+              "check_id": "closing-a-closed-account-is-410",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": false
+            }
+          ],
+          "requests": 217,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 126,
+            "failing": 2,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        },
+        "f-transfer-to-pending-destination": {
+          "category": "state-machine",
+          "tier": "semantic",
+          "column_one_covered": true,
+          "column_one": true,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "none",
+          "first_false": null,
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 1
+          },
+          "attributed_checks": [
+            {
+              "check_id": "transfer-to-never-activated-account-is-409",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            },
+            {
+              "check_id": "settlement-runs-in-creation-order",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": false
+            }
+          ],
+          "requests": 218,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 126,
+            "failing": 5,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        },
+        "f-deposit-entry-mismatch": {
+          "category": "cross-resource-invariant",
+          "tier": "semantic",
+          "column_one_covered": false,
+          "column_one": null,
+          "column_two": true,
+          "column_two_strict": false,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "none",
+          "first_false": null,
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 1
+          },
+          "attributed_checks": [
+            {
+              "check_id": "identifiers-resolve-and-the-two-resources-agree",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": false
+            }
+          ],
+          "requests": 217,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 126,
+            "failing": 1,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        },
+        "f-fee-account-balance-untouched": {
+          "category": "cross-resource-invariant",
+          "tier": "semantic",
+          "column_one_covered": true,
+          "column_one": false,
+          "column_two": true,
+          "column_two_strict": false,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": false,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "reachability",
+          "first_false": "manifested_in_traffic",
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 0
+          },
+          "attributed_checks": [
+            {
+              "check_id": "balance-equals-the-sum-of-its-entries",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": false
+            }
+          ],
+          "requests": 217,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 126,
+            "failing": 2,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        },
+        "f-eur-fee-flat": {
+          "category": "conditional-branch",
+          "tier": "semantic",
+          "column_one_covered": false,
+          "column_one": null,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "none",
+          "first_false": null,
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 1
+          },
+          "attributed_checks": [
+            {
+              "check_id": "fee-schedule-is-one-schedule-across-currencies",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            },
+            {
+              "check_id": "every-transfer-charges-the-scheduled-fee",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": false
+            }
+          ],
+          "requests": 217,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 126,
+            "failing": 2,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        },
+        "f-include-closed-ignored": {
+          "category": "conditional-branch",
+          "tier": "semantic",
+          "column_one_covered": false,
+          "column_one": null,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "none",
+          "first_false": null,
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 5
+          },
+          "attributed_checks": [
+            {
+              "check_id": "include-closed-filters-both-ways",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            },
+            {
+              "check_id": "accounts-enumeration-is-complete",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            },
+            {
+              "check_id": "balance-equals-the-sum-of-its-entries",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            },
+            {
+              "check_id": "identifiers-resolve-and-the-two-resources-agree",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            }
+          ],
+          "requests": 214,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 126,
+            "failing": 4,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        },
+        "f-transfers-filter-after-page": {
+          "category": "pagination",
+          "tier": "semantic",
+          "column_one_covered": false,
+          "column_one": null,
+          "column_two": false,
+          "column_two_strict": false,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": false,
+            "assertion_detected": false,
+            "evidence_correctly_cited": false
+          },
+          "diagnosis": "reachability",
+          "first_false": "manifested_in_traffic",
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 0
+          },
+          "attributed_checks": [],
+          "requests": 217,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 126,
+            "failing": 0,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        },
+        "f-idempotency-conflict-ignored": {
+          "category": "idempotency",
+          "tier": "semantic",
+          "column_one_covered": false,
+          "column_one": null,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "none",
+          "first_false": null,
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 1
+          },
+          "attributed_checks": [
+            {
+              "check_id": "same-key-different-body-is-409-and-creates-nothing",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            }
+          ],
+          "requests": 217,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 126,
+            "failing": 1,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        },
+        "f-idempotency-freed-by-cancel": {
+          "category": "idempotency",
+          "tier": "semantic",
+          "column_one_covered": true,
+          "column_one": true,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "none",
+          "first_false": null,
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 2
+          },
+          "attributed_checks": [
+            {
+              "check_id": "cancelling-does-not-release-the-idempotency-key",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            },
+            {
+              "check_id": "settlement-runs-in-creation-order",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": false
+            },
+            {
+              "check_id": "the-idempotency-key-survives-the-day-roll",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            }
+          ],
+          "requests": 218,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 126,
+            "failing": 6,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        },
+        "f-day-usage-carryover": {
+          "category": "temporal-boundary",
+          "tier": "semantic",
+          "column_one_covered": false,
+          "column_one": null,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": false,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "enumeration",
+          "first_false": "obligation_enumerated",
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 1
+          },
+          "attributed_checks": [
+            {
+              "check_id": "rolling-the-day-resets-the-usage-to-zero",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            },
+            {
+              "check_id": "the-world-comes-to-rest",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            }
+          ],
+          "requests": 216,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 126,
+            "failing": 4,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        },
+        "f-tick-day-skips-settlement": {
+          "category": "temporal-boundary",
+          "tier": "semantic",
+          "column_one_covered": false,
+          "column_one": null,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "none",
+          "first_false": null,
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 1
+          },
+          "attributed_checks": [
+            {
+              "check_id": "a-day-rolling-tick-is-still-a-tick",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            },
+            {
+              "check_id": "the-world-comes-to-rest",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": false
+            }
+          ],
+          "requests": 217,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 126,
+            "failing": 2,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        },
+        "f-entries-cross-principal": {
+          "category": "authorization",
+          "tier": "semantic",
+          "column_one_covered": false,
+          "column_one": null,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "none",
+          "first_false": null,
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 1
+          },
+          "attributed_checks": [
+            {
+              "check_id": "cross-principal-entries-read-is-403",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            }
+          ],
+          "requests": 217,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 126,
+            "failing": 1,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        },
+        "f-transfer-source-unowned": {
+          "category": "authorization",
+          "tier": "semantic",
+          "column_one_covered": false,
+          "column_one": null,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "none",
+          "first_false": null,
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 1
+          },
+          "attributed_checks": [
+            {
+              "check_id": "spending-from-another-principals-account-is-403",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            },
+            {
+              "check_id": "settlement-runs-in-creation-order",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": false
+            }
+          ],
+          "requests": 218,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 126,
+            "failing": 5,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        },
+        "f-same-account-envelope-bare": {
+          "category": "error-semantics",
+          "tier": "schema-reachable",
+          "column_one_covered": true,
+          "column_one": true,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "none",
+          "first_false": null,
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 1
+          },
+          "attributed_checks": [
+            {
+              "check_id": "self-transfer-is-422",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            },
+            {
+              "check_id": "error-envelope-shape",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            }
+          ],
+          "requests": 217,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 126,
+            "failing": 2,
+            "defects": 0,
+            "unaccounted": 0
+          }
+        }
+      },
+      "categories": {
+        "state-machine": {
+          "faults": 2,
+          "fault_ids": [
+            "f-activate-after-close",
+            "f-transfer-to-pending-destination"
+          ],
+          "column_one_covered": 1,
+          "column_one_detected": 1,
+          "column_two_detected": 2,
+          "semantic": 2,
+          "semantic_column_two": 2,
+          "missed_ids": []
+        },
+        "cross-resource-invariant": {
+          "faults": 2,
+          "fault_ids": [
+            "f-deposit-entry-mismatch",
+            "f-fee-account-balance-untouched"
+          ],
+          "column_one_covered": 1,
+          "column_one_detected": 0,
+          "column_two_detected": 2,
+          "semantic": 2,
+          "semantic_column_two": 2,
+          "missed_ids": []
+        },
+        "conditional-branch": {
+          "faults": 2,
+          "fault_ids": [
+            "f-eur-fee-flat",
+            "f-include-closed-ignored"
+          ],
+          "column_one_covered": 0,
+          "column_one_detected": 0,
+          "column_two_detected": 2,
+          "semantic": 2,
+          "semantic_column_two": 2,
+          "missed_ids": []
+        },
+        "pagination": {
+          "faults": 1,
+          "fault_ids": [
+            "f-transfers-filter-after-page"
+          ],
+          "column_one_covered": 0,
+          "column_one_detected": 0,
+          "column_two_detected": 0,
+          "semantic": 1,
+          "semantic_column_two": 0,
+          "missed_ids": [
+            "f-transfers-filter-after-page"
+          ]
+        },
+        "idempotency": {
+          "faults": 2,
+          "fault_ids": [
+            "f-idempotency-conflict-ignored",
+            "f-idempotency-freed-by-cancel"
+          ],
+          "column_one_covered": 1,
+          "column_one_detected": 1,
+          "column_two_detected": 2,
+          "semantic": 2,
+          "semantic_column_two": 2,
+          "missed_ids": []
+        },
+        "temporal-boundary": {
+          "faults": 2,
+          "fault_ids": [
+            "f-day-usage-carryover",
+            "f-tick-day-skips-settlement"
+          ],
+          "column_one_covered": 0,
+          "column_one_detected": 0,
+          "column_two_detected": 2,
+          "semantic": 2,
+          "semantic_column_two": 2,
+          "missed_ids": []
+        },
+        "authorization": {
+          "faults": 2,
+          "fault_ids": [
+            "f-entries-cross-principal",
+            "f-transfer-source-unowned"
+          ],
+          "column_one_covered": 0,
+          "column_one_detected": 0,
+          "column_two_detected": 2,
+          "semantic": 2,
+          "semantic_column_two": 2,
+          "missed_ids": []
+        },
+        "error-semantics": {
+          "faults": 1,
+          "fault_ids": [
+            "f-same-account-envelope-bare"
+          ],
+          "column_one_covered": 1,
+          "column_one_detected": 1,
+          "column_two_detected": 1,
+          "semantic": 0,
+          "semantic_column_two": 0,
+          "missed_ids": []
+        }
+      },
+      "totals": {
+        "sealed": 14,
+        "semantic": 13,
+        "column_one_covered": 4,
+        "column_one_detected": 3,
+        "column_one_not_covered": 10,
+        "column_two_detected": 13,
+        "column_two_detected_semantic": 12,
+        "column_two_strict_semantic": 10,
+        "reported_without_evidence": 0
+      },
+      "diagnoses": {
+        "none": 11,
+        "reachability": 2,
+        "enumeration": 1
+      },
+      "misses": [
+        {
+          "fault": "f-transfers-filter-after-page",
+          "category": "pagination",
+          "tier": "semantic",
+          "diagnosis": "reachability",
+          "first_false": "manifested_in_traffic",
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": false,
+            "assertion_detected": false,
+            "evidence_correctly_cited": false
+          },
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 0
+          },
+          "column_one": null,
+          "column_one_covered": false
+        }
+      ],
+      "false_positives": {
+        "conforming_builds": 17,
+        "oracle": 0,
+        "reported": 0,
+        "by_label": {
+          "clean": {
+            "traces": 3,
+            "oracle": 0,
+            "reported": 0,
+            "checks": []
+          },
+          "clean.all-variants": {
+            "traces": 1,
+            "oracle": 0,
+            "reported": 0,
+            "checks": []
+          },
+          "clean.jitter": {
+            "traces": 10,
+            "oracle": 0,
+            "reported": 0,
+            "checks": []
+          },
+          "clean.terse-optionals": {
+            "traces": 1,
+            "oracle": 0,
+            "reported": 0,
+            "checks": []
+          },
+          "clean.trailing-page": {
+            "traces": 1,
+            "oracle": 0,
+            "reported": 0,
+            "checks": []
+          },
+          "clean.wide-ids": {
+            "traces": 1,
+            "oracle": 0,
+            "reported": 0,
+            "checks": []
+          }
+        },
+        "by_check": {},
+        "distinct_checks": 0,
+        "reported_excluding_D2": 0
+      },
+      "flake": {
+        "jitter_repeats": 10,
+        "distinct_outcome_signatures": 1,
+        "canonical_repeats": 3,
+        "canonical_distinct_signatures": 1,
+        "jitter_matches_canonical": true,
+        "flake_rate": 0
+      }
+    },
+    "proposal": {
+      "arm": "proposal",
+      "label": "proposal trial",
+      "faults": {
+        "f-activate-after-close": {
+          "category": "state-machine",
+          "tier": "semantic",
+          "column_one_covered": false,
+          "column_one": null,
+          "column_two": false,
+          "column_two_strict": false,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": false,
+            "assertion_detected": false,
+            "evidence_correctly_cited": false
+          },
+          "diagnosis": "reachability",
+          "first_false": "manifested_in_traffic",
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 0
+          },
+          "attributed_checks": [],
+          "requests": 229,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 97,
+            "failing": 0,
+            "defects": 49,
+            "unaccounted": 0
+          }
+        },
+        "f-transfer-to-pending-destination": {
+          "category": "state-machine",
+          "tier": "semantic",
+          "column_one_covered": true,
+          "column_one": true,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "none",
+          "first_false": null,
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 1
+          },
+          "attributed_checks": [
+            {
+              "check_id": "pending-account-cannot-receive-a-transfer",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            }
+          ],
+          "requests": 231,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 97,
+            "failing": 1,
+            "defects": 49,
+            "unaccounted": 0
+          }
+        },
+        "f-deposit-entry-mismatch": {
+          "category": "cross-resource-invariant",
+          "tier": "semantic",
+          "column_one_covered": false,
+          "column_one": null,
+          "column_two": false,
+          "column_two_strict": false,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": false,
+            "assertion_detected": false,
+            "evidence_correctly_cited": false
+          },
+          "diagnosis": "reachability",
+          "first_false": "manifested_in_traffic",
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 0
+          },
+          "attributed_checks": [],
+          "requests": 229,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 97,
+            "failing": 0,
+            "defects": 49,
+            "unaccounted": 0
+          }
+        },
+        "f-fee-account-balance-untouched": {
+          "category": "cross-resource-invariant",
+          "tier": "semantic",
+          "column_one_covered": true,
+          "column_one": true,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "none",
+          "first_false": null,
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 4
+          },
+          "attributed_checks": [
+            {
+              "check_id": "balance-agrees-with-entries-acc_fee_usd",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            },
+            {
+              "check_id": "balance-agrees-with-entries-acc_fee_eur",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            }
+          ],
+          "requests": 229,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 97,
+            "failing": 2,
+            "defects": 49,
+            "unaccounted": 0
+          }
+        },
+        "f-eur-fee-flat": {
+          "category": "conditional-branch",
+          "tier": "semantic",
+          "column_one_covered": false,
+          "column_one": null,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "none",
+          "first_false": null,
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 2
+          },
+          "attributed_checks": [
+            {
+              "check_id": "fee-formula-eur-1000",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            },
+            {
+              "check_id": "fee-formula-eur-20000",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            },
+            {
+              "check_id": "persisted-transfers-all-match-the-fee-formula",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": false
+            }
+          ],
+          "requests": 229,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 97,
+            "failing": 3,
+            "defects": 49,
+            "unaccounted": 0
+          }
+        },
+        "f-include-closed-ignored": {
+          "category": "conditional-branch",
+          "tier": "semantic",
+          "column_one_covered": false,
+          "column_one": null,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "none",
+          "first_false": null,
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 2
+          },
+          "attributed_checks": [
+            {
+              "check_id": "closed-account-omitted-from-the-default-listing",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            }
+          ],
+          "requests": 228,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 97,
+            "failing": 1,
+            "defects": 49,
+            "unaccounted": 0
+          }
+        },
+        "f-transfers-filter-after-page": {
+          "category": "pagination",
+          "tier": "semantic",
+          "column_one_covered": false,
+          "column_one": null,
+          "column_two": false,
+          "column_two_strict": false,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": false,
+            "assertion_detected": false,
+            "evidence_correctly_cited": false
+          },
+          "diagnosis": "reachability",
+          "first_false": "manifested_in_traffic",
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 0
+          },
+          "attributed_checks": [],
+          "requests": 229,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 97,
+            "failing": 0,
+            "defects": 49,
+            "unaccounted": 0
+          }
+        },
+        "f-idempotency-conflict-ignored": {
+          "category": "idempotency",
+          "tier": "semantic",
+          "column_one_covered": false,
+          "column_one": null,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "none",
+          "first_false": null,
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 1
+          },
+          "attributed_checks": [
+            {
+              "check_id": "idempotency-key-with-a-different-body-is-refused-409",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            }
+          ],
+          "requests": 229,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 97,
+            "failing": 1,
+            "defects": 49,
+            "unaccounted": 0
+          }
+        },
+        "f-idempotency-freed-by-cancel": {
+          "category": "idempotency",
+          "tier": "semantic",
+          "column_one_covered": true,
+          "column_one": false,
+          "column_two": false,
+          "column_two_strict": false,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": false,
+            "assertion_detected": false,
+            "evidence_correctly_cited": false
+          },
+          "diagnosis": "reachability",
+          "first_false": "manifested_in_traffic",
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 0
+          },
+          "attributed_checks": [],
+          "requests": 229,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 97,
+            "failing": 0,
+            "defects": 49,
+            "unaccounted": 0
+          }
+        },
+        "f-day-usage-carryover": {
+          "category": "temporal-boundary",
+          "tier": "semantic",
+          "column_one_covered": false,
+          "column_one": null,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": false,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "enumeration",
+          "first_false": "obligation_enumerated",
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 1
+          },
+          "attributed_checks": [
+            {
+              "check_id": "daily-allowance-resets-on-a-new-ledger-day",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            }
+          ],
+          "requests": 227,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 97,
+            "failing": 1,
+            "defects": 49,
+            "unaccounted": 0
+          }
+        },
+        "f-tick-day-skips-settlement": {
+          "category": "temporal-boundary",
+          "tier": "semantic",
+          "column_one_covered": false,
+          "column_one": null,
+          "column_two": false,
+          "column_two_strict": false,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": false,
+            "assertion_detected": false,
+            "evidence_correctly_cited": false
+          },
+          "diagnosis": "reachability",
+          "first_false": "manifested_in_traffic",
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 0
+          },
+          "attributed_checks": [],
+          "requests": 229,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 97,
+            "failing": 0,
+            "defects": 49,
+            "unaccounted": 0
+          }
+        },
+        "f-entries-cross-principal": {
+          "category": "authorization",
+          "tier": "semantic",
+          "column_one_covered": false,
+          "column_one": null,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "none",
+          "first_false": null,
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 1
+          },
+          "attributed_checks": [
+            {
+              "check_id": "customer-cannot-act-on-another-principals-account",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            }
+          ],
+          "requests": 229,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 97,
+            "failing": 1,
+            "defects": 49,
+            "unaccounted": 0
+          }
+        },
+        "f-transfer-source-unowned": {
+          "category": "authorization",
+          "tier": "semantic",
+          "column_one_covered": false,
+          "column_one": null,
+          "column_two": true,
+          "column_two_strict": true,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": true,
+            "assertion_detected": true,
+            "evidence_correctly_cited": true
+          },
+          "diagnosis": "none",
+          "first_false": null,
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 1
+          },
+          "attributed_checks": [
+            {
+              "check_id": "customer-cannot-act-on-another-principals-account",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": true
+            },
+            {
+              "check_id": "system-fee-accounts-are-not-actable-by-customers",
+              "rule": null,
+              "evidence_correct": true,
+              "evidence_strict": false
+            }
+          ],
+          "requests": 230,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 97,
+            "failing": 2,
+            "defects": 49,
+            "unaccounted": 0
+          }
+        },
+        "f-same-account-envelope-bare": {
+          "category": "error-semantics",
+          "tier": "schema-reachable",
+          "column_one_covered": true,
+          "column_one": false,
+          "column_two": false,
+          "column_two_strict": false,
+          "reported_without_evidence": false,
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": false,
+            "manifested_in_traffic": false,
+            "assertion_detected": false,
+            "evidence_correctly_cited": false
+          },
+          "diagnosis": "reachability",
+          "first_false": "scenario_executed",
+          "witness": {
+            "known": true,
+            "reached": false,
+            "manifestations": 0
+          },
+          "attributed_checks": [],
+          "requests": 229,
+          "off_target_violations": 0,
+          "report": {
+            "checks": 97,
+            "failing": 0,
+            "defects": 49,
+            "unaccounted": 0
+          }
+        }
+      },
+      "categories": {
+        "state-machine": {
+          "faults": 2,
+          "fault_ids": [
+            "f-activate-after-close",
+            "f-transfer-to-pending-destination"
+          ],
+          "column_one_covered": 1,
+          "column_one_detected": 1,
+          "column_two_detected": 1,
+          "semantic": 2,
+          "semantic_column_two": 1,
+          "missed_ids": [
+            "f-activate-after-close"
+          ]
+        },
+        "cross-resource-invariant": {
+          "faults": 2,
+          "fault_ids": [
+            "f-deposit-entry-mismatch",
+            "f-fee-account-balance-untouched"
+          ],
+          "column_one_covered": 1,
+          "column_one_detected": 1,
+          "column_two_detected": 1,
+          "semantic": 2,
+          "semantic_column_two": 1,
+          "missed_ids": [
+            "f-deposit-entry-mismatch"
+          ]
+        },
+        "conditional-branch": {
+          "faults": 2,
+          "fault_ids": [
+            "f-eur-fee-flat",
+            "f-include-closed-ignored"
+          ],
+          "column_one_covered": 0,
+          "column_one_detected": 0,
+          "column_two_detected": 2,
+          "semantic": 2,
+          "semantic_column_two": 2,
+          "missed_ids": []
+        },
+        "pagination": {
+          "faults": 1,
+          "fault_ids": [
+            "f-transfers-filter-after-page"
+          ],
+          "column_one_covered": 0,
+          "column_one_detected": 0,
+          "column_two_detected": 0,
+          "semantic": 1,
+          "semantic_column_two": 0,
+          "missed_ids": [
+            "f-transfers-filter-after-page"
+          ]
+        },
+        "idempotency": {
+          "faults": 2,
+          "fault_ids": [
+            "f-idempotency-conflict-ignored",
+            "f-idempotency-freed-by-cancel"
+          ],
+          "column_one_covered": 1,
+          "column_one_detected": 0,
+          "column_two_detected": 1,
+          "semantic": 2,
+          "semantic_column_two": 1,
+          "missed_ids": [
+            "f-idempotency-freed-by-cancel"
+          ]
+        },
+        "temporal-boundary": {
+          "faults": 2,
+          "fault_ids": [
+            "f-day-usage-carryover",
+            "f-tick-day-skips-settlement"
+          ],
+          "column_one_covered": 0,
+          "column_one_detected": 0,
+          "column_two_detected": 1,
+          "semantic": 2,
+          "semantic_column_two": 1,
+          "missed_ids": [
+            "f-tick-day-skips-settlement"
+          ]
+        },
+        "authorization": {
+          "faults": 2,
+          "fault_ids": [
+            "f-entries-cross-principal",
+            "f-transfer-source-unowned"
+          ],
+          "column_one_covered": 0,
+          "column_one_detected": 0,
+          "column_two_detected": 2,
+          "semantic": 2,
+          "semantic_column_two": 2,
+          "missed_ids": []
+        },
+        "error-semantics": {
+          "faults": 1,
+          "fault_ids": [
+            "f-same-account-envelope-bare"
+          ],
+          "column_one_covered": 1,
+          "column_one_detected": 0,
+          "column_two_detected": 0,
+          "semantic": 0,
+          "semantic_column_two": 0,
+          "missed_ids": [
+            "f-same-account-envelope-bare"
+          ]
+        }
+      },
+      "totals": {
+        "sealed": 14,
+        "semantic": 13,
+        "column_one_covered": 4,
+        "column_one_detected": 2,
+        "column_one_not_covered": 10,
+        "column_two_detected": 8,
+        "column_two_detected_semantic": 8,
+        "column_two_strict_semantic": 8,
+        "reported_without_evidence": 0
+      },
+      "diagnoses": {
+        "reachability": 6,
+        "none": 7,
+        "enumeration": 1
+      },
+      "misses": [
+        {
+          "fault": "f-activate-after-close",
+          "category": "state-machine",
+          "tier": "semantic",
+          "diagnosis": "reachability",
+          "first_false": "manifested_in_traffic",
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": false,
+            "assertion_detected": false,
+            "evidence_correctly_cited": false
+          },
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 0
+          },
+          "column_one": null,
+          "column_one_covered": false
+        },
+        {
+          "fault": "f-deposit-entry-mismatch",
+          "category": "cross-resource-invariant",
+          "tier": "semantic",
+          "diagnosis": "reachability",
+          "first_false": "manifested_in_traffic",
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": false,
+            "assertion_detected": false,
+            "evidence_correctly_cited": false
+          },
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 0
+          },
+          "column_one": null,
+          "column_one_covered": false
+        },
+        {
+          "fault": "f-transfers-filter-after-page",
+          "category": "pagination",
+          "tier": "semantic",
+          "diagnosis": "reachability",
+          "first_false": "manifested_in_traffic",
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": false,
+            "assertion_detected": false,
+            "evidence_correctly_cited": false
+          },
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 0
+          },
+          "column_one": null,
+          "column_one_covered": false
+        },
+        {
+          "fault": "f-idempotency-freed-by-cancel",
+          "category": "idempotency",
+          "tier": "semantic",
+          "diagnosis": "reachability",
+          "first_false": "manifested_in_traffic",
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": false,
+            "assertion_detected": false,
+            "evidence_correctly_cited": false
+          },
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 0
+          },
+          "column_one": false,
+          "column_one_covered": true
+        },
+        {
+          "fault": "f-tick-day-skips-settlement",
+          "category": "temporal-boundary",
+          "tier": "semantic",
+          "diagnosis": "reachability",
+          "first_false": "manifested_in_traffic",
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": true,
+            "manifested_in_traffic": false,
+            "assertion_detected": false,
+            "evidence_correctly_cited": false
+          },
+          "witness": {
+            "known": true,
+            "reached": true,
+            "manifestations": 0
+          },
+          "column_one": null,
+          "column_one_covered": false
+        },
+        {
+          "fault": "f-same-account-envelope-bare",
+          "category": "error-semantics",
+          "tier": "schema-reachable",
+          "diagnosis": "reachability",
+          "first_false": "scenario_executed",
+          "funnel": {
+            "obligation_enumerated": true,
+            "scenario_executed": false,
+            "manifested_in_traffic": false,
+            "assertion_detected": false,
+            "evidence_correctly_cited": false
+          },
+          "witness": {
+            "known": true,
+            "reached": false,
+            "manifestations": 0
+          },
+          "column_one": false,
+          "column_one_covered": true
+        }
+      ],
+      "false_positives": {
+        "conforming_builds": 17,
+        "oracle": 0,
+        "reported": 0,
+        "by_label": {
+          "clean": {
+            "traces": 3,
+            "oracle": 0,
+            "reported": 0,
+            "checks": []
+          },
+          "clean.all-variants": {
+            "traces": 1,
+            "oracle": 0,
+            "reported": 0,
+            "checks": []
+          },
+          "clean.jitter": {
+            "traces": 10,
+            "oracle": 0,
+            "reported": 0,
+            "checks": []
+          },
+          "clean.terse-optionals": {
+            "traces": 1,
+            "oracle": 0,
+            "reported": 0,
+            "checks": []
+          },
+          "clean.trailing-page": {
+            "traces": 1,
+            "oracle": 0,
+            "reported": 0,
+            "checks": []
+          },
+          "clean.wide-ids": {
+            "traces": 1,
+            "oracle": 0,
+            "reported": 0,
+            "checks": []
+          }
+        },
+        "by_check": {},
+        "distinct_checks": 0,
+        "reported_excluding_D2": 0
+      },
+      "flake": {
+        "jitter_repeats": 10,
+        "distinct_outcome_signatures": 1,
+        "canonical_repeats": 3,
+        "canonical_distinct_signatures": 1,
+        "jitter_matches_canonical": true,
+        "flake_rate": 0
+      }
+    }
+  },
+  "cross_trial_variance": {
+    "column_two_semantic_per_trial": {
+      "t1": 11,
+      "t2": 12,
+      "t3": 12
+    },
+    "min": 11,
+    "max": 12,
+    "range": 1,
+    "mean": 11.667,
+    "sd": 0.471,
+    "unanimous_detected": [
+      "f-activate-after-close",
+      "f-transfer-to-pending-destination",
+      "f-fee-account-balance-untouched",
+      "f-eur-fee-flat",
+      "f-include-closed-ignored",
+      "f-idempotency-conflict-ignored",
+      "f-idempotency-freed-by-cancel",
+      "f-day-usage-carryover",
+      "f-tick-day-skips-settlement",
+      "f-entries-cross-principal",
+      "f-transfer-source-unowned",
+      "f-same-account-envelope-bare"
+    ],
+    "unanimous_missed": [],
+    "split": [
+      {
+        "fault": "f-deposit-entry-mismatch",
+        "detected_by": [
+          "t3"
+        ]
+      },
+      {
+        "fault": "f-transfers-filter-after-page",
+        "detected_by": [
+          "t2"
+        ]
+      }
+    ]
+  },
+  "economics": {
+    "per_arm": {
+      "t1": {
+        "builds": 31,
+        "requests_total": 6645,
+        "requests_per_build_min": 213,
+        "requests_per_build_max": 217,
+        "wall_ms_total": 292415,
+        "wall_ms_per_build_mean": 9433,
+        "wall_ms_canonical_clean_mean": 586,
+        "wall_ms_jitter_mean": 28050,
+        "model_calls": 0,
+        "cost_usd": 0,
+        "per_build": {
+          "clean.jitter-1": {
+            "requests": 214,
+            "wall_ms": 28049,
+            "exit": 1
+          },
+          "clean-3": {
+            "requests": 214,
+            "wall_ms": 621,
+            "exit": 1
+          },
+          "clean.jitter-9": {
+            "requests": 214,
+            "wall_ms": 27914,
+            "exit": 1
+          },
+          "clean.jitter-7": {
+            "requests": 214,
+            "wall_ms": 27910,
+            "exit": 1
+          },
+          "clean.trailing-page": {
+            "requests": 217,
+            "wall_ms": 573,
+            "exit": 1
+          },
+          "clean.jitter-4": {
+            "requests": 214,
+            "wall_ms": 27953,
+            "exit": 1
+          },
+          "f-activate-after-close": {
+            "requests": 214,
+            "wall_ms": 585,
+            "exit": 1
+          },
+          "f-same-account-envelope-bare": {
+            "requests": 214,
+            "wall_ms": 571,
+            "exit": 1
+          },
+          "clean-2": {
+            "requests": 214,
+            "wall_ms": 569,
+            "exit": 1
+          },
+          "clean.all-variants": {
+            "requests": 217,
+            "wall_ms": 585,
+            "exit": 1
+          },
+          "clean.jitter-10": {
+            "requests": 214,
+            "wall_ms": 28088,
+            "exit": 1
+          },
+          "f-idempotency-freed-by-cancel": {
+            "requests": 216,
+            "wall_ms": 571,
+            "exit": 1
+          },
+          "f-transfers-filter-after-page": {
+            "requests": 214,
+            "wall_ms": 555,
+            "exit": 1
+          },
+          "clean.jitter-5": {
+            "requests": 214,
+            "wall_ms": 28262,
+            "exit": 1
+          },
+          "clean-1": {
+            "requests": 214,
+            "wall_ms": 569,
+            "exit": 1
+          },
+          "clean.jitter-2": {
+            "requests": 214,
+            "wall_ms": 27978,
+            "exit": 1
+          },
+          "clean.jitter-6": {
+            "requests": 214,
+            "wall_ms": 28146,
+            "exit": 1
+          },
+          "f-transfer-to-pending-destination": {
+            "requests": 216,
+            "wall_ms": 553,
+            "exit": 1
+          },
+          "f-eur-fee-flat": {
+            "requests": 214,
+            "wall_ms": 541,
+            "exit": 1
+          },
+          "f-tick-day-skips-settlement": {
+            "requests": 214,
+            "wall_ms": 554,
+            "exit": 1
+          },
+          "f-idempotency-conflict-ignored": {
+            "requests": 214,
+            "wall_ms": 553,
+            "exit": 1
+          },
+          "clean.wide-ids": {
+            "requests": 214,
+            "wall_ms": 570,
+            "exit": 1
+          },
+          "f-fee-account-balance-untouched": {
+            "requests": 214,
+            "wall_ms": 544,
+            "exit": 1
+          },
+          "f-transfer-source-unowned": {
+            "requests": 216,
+            "wall_ms": 544,
+            "exit": 1
+          },
+          "clean.jitter-8": {
+            "requests": 214,
+            "wall_ms": 28083,
+            "exit": 1
+          },
+          "clean.terse-optionals": {
+            "requests": 214,
+            "wall_ms": 535,
+            "exit": 1
+          },
+          "clean.jitter-3": {
+            "requests": 214,
+            "wall_ms": 28113,
+            "exit": 1
+          },
+          "f-day-usage-carryover": {
+            "requests": 214,
+            "wall_ms": 585,
+            "exit": 1
+          },
+          "f-include-closed-ignored": {
+            "requests": 213,
+            "wall_ms": 606,
+            "exit": 1
+          },
+          "f-entries-cross-principal": {
+            "requests": 214,
+            "wall_ms": 571,
+            "exit": 1
+          },
+          "f-deposit-entry-mismatch": {
+            "requests": 214,
+            "wall_ms": 564,
+            "exit": 1
+          }
+        }
+      },
+      "t2": {
+        "builds": 31,
+        "requests_total": 7633,
+        "requests_per_build_min": 245,
+        "requests_per_build_max": 254,
+        "wall_ms_total": 332884,
+        "wall_ms_per_build_mean": 10738,
+        "wall_ms_canonical_clean_mean": 696,
+        "wall_ms_jitter_mean": 31929,
+        "model_calls": 0,
+        "cost_usd": 0,
+        "per_build": {
+          "clean.jitter-1": {
+            "requests": 246,
+            "wall_ms": 31910,
+            "exit": 0
+          },
+          "clean-3": {
+            "requests": 246,
+            "wall_ms": 747,
+            "exit": 0
+          },
+          "clean.jitter-9": {
+            "requests": 246,
+            "wall_ms": 32037,
+            "exit": 0
+          },
+          "clean.jitter-7": {
+            "requests": 246,
+            "wall_ms": 31941,
+            "exit": 0
+          },
+          "clean.trailing-page": {
+            "requests": 246,
+            "wall_ms": 649,
+            "exit": 0
+          },
+          "clean.jitter-4": {
+            "requests": 246,
+            "wall_ms": 31875,
+            "exit": 0
+          },
+          "f-activate-after-close": {
+            "requests": 246,
+            "wall_ms": 720,
+            "exit": 1
+          },
+          "f-same-account-envelope-bare": {
+            "requests": 246,
+            "wall_ms": 661,
+            "exit": 1
+          },
+          "clean-2": {
+            "requests": 246,
+            "wall_ms": 686,
+            "exit": 0
+          },
+          "clean.all-variants": {
+            "requests": 246,
+            "wall_ms": 655,
+            "exit": 0
+          },
+          "clean.jitter-10": {
+            "requests": 246,
+            "wall_ms": 31862,
+            "exit": 0
+          },
+          "f-idempotency-freed-by-cancel": {
+            "requests": 246,
+            "wall_ms": 639,
+            "exit": 1
+          },
+          "f-transfers-filter-after-page": {
+            "requests": 254,
+            "wall_ms": 650,
+            "exit": 1
+          },
+          "clean.jitter-5": {
+            "requests": 246,
+            "wall_ms": 31941,
+            "exit": 0
+          },
+          "clean-1": {
+            "requests": 246,
+            "wall_ms": 654,
+            "exit": 0
+          },
+          "clean.jitter-2": {
+            "requests": 246,
+            "wall_ms": 31872,
+            "exit": 0
+          },
+          "clean.jitter-6": {
+            "requests": 246,
+            "wall_ms": 32034,
+            "exit": 0
+          },
+          "f-transfer-to-pending-destination": {
+            "requests": 246,
+            "wall_ms": 626,
+            "exit": 1
+          },
+          "f-eur-fee-flat": {
+            "requests": 246,
+            "wall_ms": 613,
+            "exit": 1
+          },
+          "f-tick-day-skips-settlement": {
+            "requests": 246,
+            "wall_ms": 656,
+            "exit": 1
+          },
+          "f-idempotency-conflict-ignored": {
+            "requests": 246,
+            "wall_ms": 671,
+            "exit": 1
+          },
+          "clean.wide-ids": {
+            "requests": 246,
+            "wall_ms": 642,
+            "exit": 0
+          },
+          "f-fee-account-balance-untouched": {
+            "requests": 246,
+            "wall_ms": 624,
+            "exit": 1
+          },
+          "f-transfer-source-unowned": {
+            "requests": 246,
+            "wall_ms": 627,
+            "exit": 1
+          },
+          "clean.jitter-8": {
+            "requests": 246,
+            "wall_ms": 31882,
+            "exit": 0
+          },
+          "clean.terse-optionals": {
+            "requests": 246,
+            "wall_ms": 630,
+            "exit": 0
+          },
+          "clean.jitter-3": {
+            "requests": 246,
+            "wall_ms": 31937,
+            "exit": 0
+          },
+          "f-day-usage-carryover": {
+            "requests": 246,
+            "wall_ms": 612,
+            "exit": 1
+          },
+          "f-include-closed-ignored": {
+            "requests": 245,
+            "wall_ms": 591,
+            "exit": 1
+          },
+          "f-entries-cross-principal": {
+            "requests": 246,
+            "wall_ms": 625,
+            "exit": 1
+          },
+          "f-deposit-entry-mismatch": {
+            "requests": 246,
+            "wall_ms": 615,
+            "exit": 0
+          }
+        }
+      },
+      "t3": {
+        "builds": 31,
+        "requests_total": 6728,
+        "requests_per_build_min": 214,
+        "requests_per_build_max": 218,
+        "wall_ms_total": 295029,
+        "wall_ms_per_build_mean": 9517,
+        "wall_ms_canonical_clean_mean": 563,
+        "wall_ms_jitter_mean": 28299,
+        "model_calls": 0,
+        "cost_usd": 0,
+        "per_build": {
+          "clean.jitter-1": {
+            "requests": 217,
+            "wall_ms": 28220,
+            "exit": 0
+          },
+          "clean-3": {
+            "requests": 217,
+            "wall_ms": 590,
+            "exit": 0
+          },
+          "clean.jitter-9": {
+            "requests": 217,
+            "wall_ms": 28331,
+            "exit": 0
+          },
+          "clean.jitter-7": {
+            "requests": 217,
+            "wall_ms": 28342,
+            "exit": 0
+          },
+          "clean.trailing-page": {
+            "requests": 218,
+            "wall_ms": 540,
+            "exit": 0
+          },
+          "clean.jitter-4": {
+            "requests": 217,
+            "wall_ms": 28362,
+            "exit": 0
+          },
+          "f-activate-after-close": {
+            "requests": 217,
+            "wall_ms": 587,
+            "exit": 1
+          },
+          "f-same-account-envelope-bare": {
+            "requests": 217,
+            "wall_ms": 531,
+            "exit": 1
+          },
+          "clean-2": {
+            "requests": 217,
+            "wall_ms": 544,
+            "exit": 0
+          },
+          "clean.all-variants": {
+            "requests": 218,
+            "wall_ms": 535,
+            "exit": 0
+          },
+          "clean.jitter-10": {
+            "requests": 217,
+            "wall_ms": 28217,
+            "exit": 0
+          },
+          "f-idempotency-freed-by-cancel": {
+            "requests": 218,
+            "wall_ms": 574,
+            "exit": 1
+          },
+          "f-transfers-filter-after-page": {
+            "requests": 217,
+            "wall_ms": 560,
+            "exit": 0
+          },
+          "clean.jitter-5": {
+            "requests": 217,
+            "wall_ms": 28354,
+            "exit": 0
+          },
+          "clean-1": {
+            "requests": 217,
+            "wall_ms": 556,
+            "exit": 0
+          },
+          "clean.jitter-2": {
+            "requests": 217,
+            "wall_ms": 28303,
+            "exit": 0
+          },
+          "clean.jitter-6": {
+            "requests": 217,
+            "wall_ms": 28353,
+            "exit": 0
+          },
+          "f-transfer-to-pending-destination": {
+            "requests": 218,
+            "wall_ms": 544,
+            "exit": 1
+          },
+          "f-eur-fee-flat": {
+            "requests": 217,
+            "wall_ms": 542,
+            "exit": 1
+          },
+          "f-tick-day-skips-settlement": {
+            "requests": 217,
+            "wall_ms": 542,
+            "exit": 1
+          },
+          "f-idempotency-conflict-ignored": {
+            "requests": 217,
+            "wall_ms": 583,
+            "exit": 1
+          },
+          "clean.wide-ids": {
+            "requests": 217,
+            "wall_ms": 531,
+            "exit": 0
+          },
+          "f-fee-account-balance-untouched": {
+            "requests": 217,
+            "wall_ms": 522,
+            "exit": 1
+          },
+          "f-transfer-source-unowned": {
+            "requests": 218,
+            "wall_ms": 578,
+            "exit": 1
+          },
+          "clean.jitter-8": {
+            "requests": 217,
+            "wall_ms": 28287,
+            "exit": 0
+          },
+          "clean.terse-optionals": {
+            "requests": 217,
+            "wall_ms": 535,
+            "exit": 0
+          },
+          "clean.jitter-3": {
+            "requests": 217,
+            "wall_ms": 28218,
+            "exit": 0
+          },
+          "f-day-usage-carryover": {
+            "requests": 216,
+            "wall_ms": 656,
+            "exit": 1
+          },
+          "f-include-closed-ignored": {
+            "requests": 214,
+            "wall_ms": 651,
+            "exit": 1
+          },
+          "f-entries-cross-principal": {
+            "requests": 217,
+            "wall_ms": 675,
+            "exit": 1
+          },
+          "f-deposit-entry-mismatch": {
+            "requests": 217,
+            "wall_ms": 666,
+            "exit": 1
+          }
+        }
+      },
+      "proposal": {
+        "builds": 31,
+        "requests_total": 7105,
+        "requests_per_build_min": 227,
+        "requests_per_build_max": 232,
+        "wall_ms_total": 309293,
+        "wall_ms_per_build_mean": 9977,
+        "wall_ms_canonical_clean_mean": 599,
+        "wall_ms_jitter_mean": 29693,
+        "model_calls": 0,
+        "cost_usd": 0,
+        "per_build": {
+          "clean.jitter-1": {
+            "requests": 229,
+            "wall_ms": 29771,
+            "exit": 2
+          },
+          "clean-3": {
+            "requests": 229,
+            "wall_ms": 613,
+            "exit": 2
+          },
+          "clean.jitter-9": {
+            "requests": 229,
+            "wall_ms": 29724,
+            "exit": 2
+          },
+          "clean.jitter-7": {
+            "requests": 229,
+            "wall_ms": 29773,
+            "exit": 2
+          },
+          "clean.trailing-page": {
+            "requests": 232,
+            "wall_ms": 573,
+            "exit": 2
+          },
+          "clean.jitter-4": {
+            "requests": 229,
+            "wall_ms": 29671,
+            "exit": 2
+          },
+          "f-activate-after-close": {
+            "requests": 229,
+            "wall_ms": 562,
+            "exit": 2
+          },
+          "f-same-account-envelope-bare": {
+            "requests": 229,
+            "wall_ms": 582,
+            "exit": 2
+          },
+          "clean-2": {
+            "requests": 229,
+            "wall_ms": 600,
+            "exit": 2
+          },
+          "clean.all-variants": {
+            "requests": 232,
+            "wall_ms": 591,
+            "exit": 2
+          },
+          "clean.jitter-10": {
+            "requests": 229,
+            "wall_ms": 29596,
+            "exit": 2
+          },
+          "f-idempotency-freed-by-cancel": {
+            "requests": 229,
+            "wall_ms": 614,
+            "exit": 2
+          },
+          "f-transfers-filter-after-page": {
+            "requests": 229,
+            "wall_ms": 635,
+            "exit": 2
+          },
+          "clean.jitter-5": {
+            "requests": 229,
+            "wall_ms": 29596,
+            "exit": 2
+          },
+          "clean-1": {
+            "requests": 229,
+            "wall_ms": 583,
+            "exit": 2
+          },
+          "clean.jitter-2": {
+            "requests": 229,
+            "wall_ms": 29641,
+            "exit": 2
+          },
+          "clean.jitter-6": {
+            "requests": 229,
+            "wall_ms": 29750,
+            "exit": 2
+          },
+          "f-transfer-to-pending-destination": {
+            "requests": 231,
+            "wall_ms": 598,
+            "exit": 2
+          },
+          "f-eur-fee-flat": {
+            "requests": 229,
+            "wall_ms": 585,
+            "exit": 2
+          },
+          "f-tick-day-skips-settlement": {
+            "requests": 229,
+            "wall_ms": 574,
+            "exit": 2
+          },
+          "f-idempotency-conflict-ignored": {
+            "requests": 229,
+            "wall_ms": 592,
+            "exit": 2
+          },
+          "clean.wide-ids": {
+            "requests": 229,
+            "wall_ms": 607,
+            "exit": 2
+          },
+          "f-fee-account-balance-untouched": {
+            "requests": 229,
+            "wall_ms": 589,
+            "exit": 2
+          },
+          "f-transfer-source-unowned": {
+            "requests": 230,
+            "wall_ms": 580,
+            "exit": 2
+          },
+          "clean.jitter-8": {
+            "requests": 229,
+            "wall_ms": 29696,
+            "exit": 2
+          },
+          "clean.terse-optionals": {
+            "requests": 229,
+            "wall_ms": 593,
+            "exit": 2
+          },
+          "clean.jitter-3": {
+            "requests": 229,
+            "wall_ms": 29707,
+            "exit": 2
+          },
+          "f-day-usage-carryover": {
+            "requests": 227,
+            "wall_ms": 574,
+            "exit": 2
+          },
+          "f-include-closed-ignored": {
+            "requests": 228,
+            "wall_ms": 588,
+            "exit": 2
+          },
+          "f-entries-cross-principal": {
+            "requests": 229,
+            "wall_ms": 562,
+            "exit": 2
+          },
+          "f-deposit-entry-mismatch": {
+            "requests": 229,
+            "wall_ms": 573,
+            "exit": 2
+          }
+        }
+      }
+    },
+    "per_build_kind": {},
+    "round": {
+      "builds": 124,
+      "infrastructure_failures": 0,
+      "requests_total": 28111,
+      "wall_ms_total": 1229621,
+      "model_calls": 0,
+      "cost_usd": 0
+    }
+  }
+}

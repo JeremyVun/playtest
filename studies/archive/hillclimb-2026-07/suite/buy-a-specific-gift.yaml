@@ -1,0 +1,13 @@
+description: Find one named plant fast and buy it, browse to receipt.
+story: |
+  A friend's birthday is on Friday and she has been talking about wanting a
+  monstera for months. Buy her one from this shop — quickly, you're on a
+  break. Make sure the order actually went through before you close the
+  tab.
+persona: [gift-rusher, cautious-first-timer]
+report:
+  - How did the user try to find the monstera, and how directly did the shop take them to it?
+  - Where, if anywhere, did the user hesitate, backtrack, or get confused — and what on the screen caused it?
+  - Did every action produce a visible confirmation it had worked? Name any that did not.
+  - Could the user prove to themselves the order was placed? How?
+  - Was anything broken, misleading, or missing that a real shopper would notice? Be specific.

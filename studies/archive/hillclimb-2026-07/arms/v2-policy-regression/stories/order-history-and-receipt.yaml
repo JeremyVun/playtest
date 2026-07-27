@@ -1,0 +1,13 @@
+description: Account lists past orders; receipt shows status-consistent ETA.
+persona: returning-regular
+story: |
+  Open Account. You must find an Order history section listing past orders including
+  FF-1041 and FF-1052 (or their visible order numbers), with date, item count, total,
+  and status. Open the delivered order (FF-1041). Confirm the receipt loads with
+  items and total, and the delivery status/estimate does not claim a future
+  "arrives in 3–5 days" while also saying delivered. Then return via View your orders
+  or Account and open the shipped order; confirm its status copy agrees with shipped.
+report:
+  - Could the user open past orders from Account order history?
+  - What status and ETA/estimate text appeared on the delivered receipt?
+  - Did status and estimate agree for delivered and shipped orders?

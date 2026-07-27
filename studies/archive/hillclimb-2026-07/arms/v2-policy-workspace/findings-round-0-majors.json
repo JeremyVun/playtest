@@ -1,0 +1,350 @@
+[
+  {
+    "finding_id": "2026-07-13T0812-23cf/buy-a-specific-gift@cautious-first-timer#f3",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0812-23cf/buy-a-specific-gift@cautious-first-timer#f4",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0812-23cf/buy-a-specific-gift@cautious-first-timer#f5",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0812-23cf/buy-a-specific-gift@cautious-first-timer#q1",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0812-23cf/buy-a-specific-gift@gift-rusher#f3",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0812-23cf/checkout-hiccup@cautious-first-timer#f3",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0812-23cf/checkout-hiccup@cautious-first-timer#f4",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0812-a709/first-impressions@cautious-first-timer#f2",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0812-a709/first-impressions@cautious-first-timer#f3",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0812-a709/first-impressions@cautious-first-timer#f4",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0812-a709/first-impressions@cautious-first-timer#f7",
+    "severity": "minor",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0812-a709/first-impressions@weekend-browser#f2",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0812-a709/first-impressions@weekend-browser#f3",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0812-a709/first-impressions@weekend-browser#f4",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0812-a709/moving-house@cautious-first-timer#f0",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0812-a709/moving-house@cautious-first-timer#f2",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0812-a709/moving-house@cautious-first-timer#f3",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0812-ade1/change-your-mind@cautious-first-timer#f0",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0812-ade1/change-your-mind@cautious-first-timer#f1",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0812-ade1/change-your-mind@cautious-first-timer#f2",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0812-ade1/change-your-mind@weekend-browser#f0",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0812-ade1/change-your-mind@weekend-browser#f1",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0812-ade1/change-your-mind@weekend-browser#f2",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0812-ade1/checkout-hiccup@gift-rusher#f1",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0812-ade1/checkout-hiccup@gift-rusher#f2",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0812-ade1/checkout-hiccup@gift-rusher#f3",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0812-ade1/checkout-hiccup@gift-rusher#f4",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0812-ade1/checkout-hiccup@gift-rusher#q4",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0825-51dc/outfit-a-shelf@weekend-browser#f5",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0825-51dc/outfit-a-shelf@weekend-browser#f6",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0825-51dc/risk/risk-no-results-clear@adversarial-tester#f0",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0825-51dc/risk/risk-no-results-clear@adversarial-tester#f1",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0825-51dc/risk/risk-no-results-clear@adversarial-tester#f4",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0825-51dc/risk/risk-no-results-clear@adversarial-tester#f5",
+    "severity": "minor",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0825-51dc/risk/risk-oos-copy@adversarial-tester#f2",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0825-51dc/risk/risk-receipt-continue@adversarial-tester#f0",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0825-51dc/wheres-my-order@returning-regular#f0",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0825-51dc/wheres-my-order@returning-regular#f1",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0825-51dc/wheres-my-order@returning-regular#f2",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0825-64e7/club-order@returning-regular#f4",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0825-64e7/club-order@returning-regular#f5",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0825-64e7/club-order@returning-regular#f6",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0825-64e7/risk/risk-cart-local-continue@adversarial-tester#f0",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0825-64e7/risk/risk-cart-local-continue@adversarial-tester#f1",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0825-64e7/risk/risk-receipt-eta@adversarial-tester#f1",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0825-64e7/risk/risk-receipt-eta@adversarial-tester#f2",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0825-64e7/risk/risk-receipt-eta@adversarial-tester#f3",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0825-64e7/risk/risk-receipt-eta@cautious-first-timer#f1",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0825-64e7/risk/risk-receipt-eta@cautious-first-timer#f2",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0825-64e7/risk/risk-sort-order@adversarial-tester#f1",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0825-64e7/risk/risk-sort-order@adversarial-tester#f2",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0825-64e7/risk/risk-sort-order@cautious-first-timer#f2",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0856-2a58/club-order@weekend-browser#f3",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0856-2a58/club-order@weekend-browser#f4",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0856-2a58/club-order@weekend-browser#f5",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0856-2a58/moving-house@returning-regular#f0",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0856-2a58/outfit-a-shelf@returning-regular#f3",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0856-2a58/outfit-a-shelf@returning-regular#f4",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0856-2a58/outfit-a-shelf@returning-regular#f5",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0856-2a58/outfit-a-shelf@returning-regular#f6",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0856-2a58/risk/risk-card-unspaced@adversarial-tester#f2",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0856-2a58/risk/risk-card-unspaced@adversarial-tester#f4",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0856-2a58/risk/risk-empty-checkout@adversarial-tester#f1",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0856-2a58/risk/risk-empty-checkout@adversarial-tester#f3",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0856-2a58/risk/risk-invalid-email@adversarial-tester#f1",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0856-2a58/risk/risk-invalid-email@adversarial-tester#f3",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0856-2a58/risk/risk-last-unit@adversarial-tester#f2",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0856-2a58/risk/risk-last-unit@adversarial-tester#f3",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0856-2a58/risk/risk-last-unit@adversarial-tester#f4",
+    "severity": "major",
+    "text": ""
+  },
+  {
+    "finding_id": "2026-07-13T0856-2a58/risk/risk-last-unit@adversarial-tester#f5",
+    "severity": "major",
+    "text": ""
+  }
+]

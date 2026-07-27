@@ -1,0 +1,12 @@
+description: Probe — after sorting the catalog, does the chosen sort order survive navigating into a product and coming back?
+story: |
+  You are comparing plants by price. On the shop page, sort them from cheapest
+  to most expensive. Open one plant to read its details, then return to the
+  list of plants to keep comparing. Pay close attention to whether the list is
+  still sorted cheapest-first when you get back, or whether it has reverted to
+  the default order and you have to sort again.
+persona: [weekend-browser]
+report:
+  - "After sorting cheapest-first, opening a product, and returning to the catalog, was the list still sorted cheapest-first?"
+  - "Did you have to reselect the sort after coming back, and if so how many times across the task?"
+  - "When you returned to the catalog, did the sort control still show your chosen sort, or had it reset to Featured?"

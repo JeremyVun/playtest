@@ -1,0 +1,175 @@
+openapi: 3.1.0
+info:
+  title: Invariant API
+  version: "1.0.0"
+components:
+  parameters:
+    AccountId:
+      name: accountId
+      in: path
+      required: true
+      description: The account's opaque identifier.
+      schema: { type: string }
+  responses:
+    NotFound:
+      description: No such resource.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+    Account:
+      type: object
+      required: [id, owner, status, balance]
+      properties:
+        id: { type: string }
+        owner: { type: string }
+        status: { type: string }
+        balance: { type: integer }
+        created_at: { type: string }
+        updated_at: { type: string }
+    Entry:
+      type: object
+      required: [id, account_id, amount]
+      properties:
+        id: { type: string }
+        account_id: { type: string }
+        amount: { type: integer }
+        created_at: { type: string }
+    CreateAccountRequest:
+      type: object
+      required: [owner]
+      properties:
+        owner: { type: string }
+    CreateEntryRequest:
+      type: object
+      required: [account_id, amount]
+      properties:
+        account_id: { type: string }
+        amount: { type: integer }
+paths:
+  /accounts:
+    post:
+      operationId: createAccount
+      summary: Open an account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateAccountRequest" }
+      responses:
+        "201":
+          description: The opened account.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Account" }
+        "422":
+          description: The request was not acceptable.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /accounts/{accountId}:
+    parameters:
+      - $ref: "#/components/parameters/AccountId"
+    get:
+      operationId: readAccount
+      summary: Read an account
+      responses:
+        "200":
+          description: The account.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Account" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      operationId: deleteAccount
+      summary: Delete an account
+      responses:
+        "204": { description: The account is gone. }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /accounts/{accountId}/close:
+    parameters:
+      - $ref: "#/components/parameters/AccountId"
+    post:
+      operationId: closeAccount
+      summary: Close an account
+      responses:
+        "200":
+          description: The closed account.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, status]
+                properties:
+                  id: { type: string }
+                  status: { type: string }
+                  updated_at: { type: string }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /entries:
+    post:
+      operationId: createEntry
+      summary: Post a ledger entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateEntryRequest" }
+      responses:
+        "201":
+          description: The posted entry.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Entry" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: The account cannot accept entries.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422":
+          description: The request was not acceptable.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    get:
+      operationId: listEntries
+      summary: List an account's entries, one cursor page at a time
+      parameters:
+        - name: account
+          in: query
+          required: true
+          schema: { type: string }
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: integer }
+      responses:
+        "200":
+          description: One page of entries.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [entries, count]
+                properties:
+                  entries:
+                    type: array
+                    items: { $ref: "#/components/schemas/Entry" }
+                  count: { type: integer }
+                  next_cursor: { type: [integer, "null"] }
+  /admin/metrics:
+    get:
+      operationId: readMetrics
+      summary: Operator metrics
+      responses:
+        "401": { description: Not authorized. }

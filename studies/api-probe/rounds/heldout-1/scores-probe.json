@@ -1,0 +1,1373 @@
+{
+  "traces": [
+    {
+      "id": "conservation",
+      "source": "playtest-run",
+      "arm": "playtest",
+      "label": "f-cursor-error-bare",
+      "label_kind": "faulty",
+      "fault": "f-cursor-error-bare",
+      "fault_tier": "schema-reachable",
+      "requests": 48,
+      "steps": 48,
+      "wall_ms": 683016,
+      "cost_usd": 2.829241,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": true,
+        "idempotency": true,
+        "lifecycle": true,
+        "pagination": true,
+        "balance_agreement": false
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "conservation",
+        "idempotency",
+        "lifecycle",
+        "pagination"
+      ],
+      "violations": [],
+      "detected": false,
+      "evidence_correct": false,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "runs/2026-07-25T1704-bcb3/conservation"
+    },
+    {
+      "id": "idempotency",
+      "source": "playtest-run",
+      "arm": "playtest",
+      "label": "f-cursor-error-bare",
+      "label_kind": "faulty",
+      "fault": "f-cursor-error-bare",
+      "fault_tier": "schema-reachable",
+      "requests": 60,
+      "steps": 60,
+      "wall_ms": 819600,
+      "cost_usd": 3.61647,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": true,
+        "idempotency": true,
+        "lifecycle": true,
+        "pagination": true,
+        "balance_agreement": false
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "conservation",
+        "idempotency",
+        "lifecycle",
+        "pagination"
+      ],
+      "violations": [],
+      "detected": false,
+      "evidence_correct": false,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "runs/2026-07-25T1716-e4b9/idempotency"
+    },
+    {
+      "id": "lifecycle-legality",
+      "source": "playtest-run",
+      "arm": "playtest",
+      "label": "f-cursor-error-bare",
+      "label_kind": "faulty",
+      "fault": "f-cursor-error-bare",
+      "fault_tier": "schema-reachable",
+      "requests": 44,
+      "steps": 44,
+      "wall_ms": 643455,
+      "cost_usd": 2.479175,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": false,
+        "idempotency": false,
+        "lifecycle": true,
+        "pagination": false,
+        "balance_agreement": false
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "lifecycle"
+      ],
+      "violations": [],
+      "detected": false,
+      "evidence_correct": false,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "runs/2026-07-25T1730-4f55/lifecycle-legality"
+    },
+    {
+      "id": "pagination-identity",
+      "source": "playtest-run",
+      "arm": "playtest",
+      "label": "f-cursor-error-bare",
+      "label_kind": "faulty",
+      "fault": "f-cursor-error-bare",
+      "fault_tier": "schema-reachable",
+      "requests": 60,
+      "steps": 60,
+      "wall_ms": 920901,
+      "cost_usd": 3.989475,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": false,
+        "idempotency": true,
+        "lifecycle": true,
+        "pagination": true,
+        "balance_agreement": false
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "idempotency",
+        "lifecycle",
+        "pagination"
+      ],
+      "violations": [
+        {
+          "oracle": "error_shape",
+          "code": "error_envelope_violation",
+          "message": "400 response does not match {error:{code,message,details?}}",
+          "evidence": {
+            "request": {
+              "index": 42,
+              "method": "GET",
+              "path": "/accounts/acc_8n36k615kk/entries",
+              "status": 400
+            },
+            "supporting": [],
+            "subject": {
+              "body": "{\"message\":\"cursor is not a cursor previously returned by this endpoint\"}\n"
+            }
+          },
+          "evidence_resolvable": true,
+          "on_target": true,
+          "expected_for_label": true
+        }
+      ],
+      "detected": true,
+      "evidence_correct": true,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "runs/2026-07-25T1740-3a82/pagination-identity"
+    },
+    {
+      "id": "error-shape",
+      "source": "playtest-run",
+      "arm": "playtest",
+      "label": "f-cursor-error-bare",
+      "label_kind": "faulty",
+      "fault": "f-cursor-error-bare",
+      "fault_tier": "schema-reachable",
+      "requests": 47,
+      "steps": 47,
+      "wall_ms": 745816,
+      "cost_usd": 2.794752,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": false,
+        "idempotency": false,
+        "lifecycle": true,
+        "pagination": false,
+        "balance_agreement": false
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "lifecycle"
+      ],
+      "violations": [
+        {
+          "oracle": "error_shape",
+          "code": "error_envelope_violation",
+          "message": "400 response does not match {error:{code,message,details?}}",
+          "evidence": {
+            "request": {
+              "index": 43,
+              "method": "GET",
+              "path": "/accounts/acc_8n36k615kk/entries",
+              "status": 400
+            },
+            "supporting": [],
+            "subject": {
+              "body": "{\"message\":\"cursor is not a cursor previously returned by this endpoint\"}\n"
+            }
+          },
+          "evidence_resolvable": true,
+          "on_target": true,
+          "expected_for_label": true
+        },
+        {
+          "oracle": "error_shape",
+          "code": "error_envelope_violation",
+          "message": "400 response does not match {error:{code,message,details?}}",
+          "evidence": {
+            "request": {
+              "index": 46,
+              "method": "GET",
+              "path": "/accounts/acc_8n36k615kk/entries",
+              "status": 400
+            },
+            "supporting": [],
+            "subject": {
+              "body": "{\"message\":\"cursor is not a cursor previously returned by this endpoint\"}\n"
+            }
+          },
+          "evidence_resolvable": true,
+          "on_target": true,
+          "expected_for_label": true
+        }
+      ],
+      "detected": true,
+      "evidence_correct": true,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "runs/2026-07-25T1756-8cd2/error-shape"
+    },
+    {
+      "id": "balance-agreement",
+      "source": "playtest-run",
+      "arm": "playtest",
+      "label": "f-cursor-error-bare",
+      "label_kind": "faulty",
+      "fault": "f-cursor-error-bare",
+      "fault_tier": "schema-reachable",
+      "requests": 60,
+      "steps": 60,
+      "wall_ms": 869264,
+      "cost_usd": 3.62606,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": true,
+        "idempotency": true,
+        "lifecycle": true,
+        "pagination": true,
+        "balance_agreement": true
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "conservation",
+        "idempotency",
+        "lifecycle",
+        "pagination",
+        "balance_agreement"
+      ],
+      "violations": [],
+      "detected": false,
+      "evidence_correct": false,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "runs/2026-07-25T1808-4079/balance-agreement"
+    },
+    {
+      "id": "conservation",
+      "source": "playtest-run",
+      "arm": "playtest",
+      "label": "f-close-pending-inbound",
+      "label_kind": "faulty",
+      "fault": "f-close-pending-inbound",
+      "fault_tier": "semantic",
+      "requests": 60,
+      "steps": 60,
+      "wall_ms": 845113,
+      "cost_usd": 3.71692,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": true,
+        "idempotency": true,
+        "lifecycle": true,
+        "pagination": true,
+        "balance_agreement": false
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "conservation",
+        "idempotency",
+        "lifecycle",
+        "pagination"
+      ],
+      "violations": [],
+      "detected": false,
+      "evidence_correct": false,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "runs/2026-07-25T1823-849e/conservation"
+    },
+    {
+      "id": "idempotency",
+      "source": "playtest-run",
+      "arm": "playtest",
+      "label": "f-close-pending-inbound",
+      "label_kind": "faulty",
+      "fault": "f-close-pending-inbound",
+      "fault_tier": "semantic",
+      "requests": 60,
+      "steps": 60,
+      "wall_ms": 784920,
+      "cost_usd": 3.5699,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": true,
+        "idempotency": true,
+        "lifecycle": true,
+        "pagination": true,
+        "balance_agreement": false
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "conservation",
+        "idempotency",
+        "lifecycle",
+        "pagination"
+      ],
+      "violations": [],
+      "detected": false,
+      "evidence_correct": false,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "runs/2026-07-25T1837-eb37/idempotency"
+    },
+    {
+      "id": "lifecycle-legality",
+      "source": "playtest-run",
+      "arm": "playtest",
+      "label": "f-close-pending-inbound",
+      "label_kind": "faulty",
+      "fault": "f-close-pending-inbound",
+      "fault_tier": "semantic",
+      "requests": 40,
+      "steps": 40,
+      "wall_ms": 553520,
+      "cost_usd": 2.176849,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": false,
+        "idempotency": false,
+        "lifecycle": true,
+        "pagination": false,
+        "balance_agreement": false
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "lifecycle"
+      ],
+      "violations": [
+        {
+          "oracle": "lifecycle",
+          "code": "close_with_pending_transfers",
+          "message": "account acc_zc946y142d was closed while transfer tr_tg934qpv0t was still pending",
+          "evidence": {
+            "request": {
+              "index": 26,
+              "method": "POST",
+              "path": "/accounts/acc_zc946y142d/close",
+              "status": 200
+            },
+            "supporting": [
+              {
+                "index": 25,
+                "note": "transfer tr_tg934qpv0t last observed pending here"
+              }
+            ],
+            "subject": {
+              "account_id": "acc_zc946y142d",
+              "transfer_ids": [
+                "tr_tg934qpv0t"
+              ]
+            }
+          },
+          "evidence_resolvable": true,
+          "on_target": true,
+          "expected_for_label": true
+        },
+        {
+          "oracle": "lifecycle",
+          "code": "close_with_pending_transfers",
+          "message": "account acc_fp9tzwhd5t was closed while transfer tr_m2hjkt7x68 was still pending",
+          "evidence": {
+            "request": {
+              "index": 39,
+              "method": "POST",
+              "path": "/accounts/acc_fp9tzwhd5t/close",
+              "status": 200
+            },
+            "supporting": [
+              {
+                "index": 38,
+                "note": "transfer tr_m2hjkt7x68 last observed pending here"
+              }
+            ],
+            "subject": {
+              "account_id": "acc_fp9tzwhd5t",
+              "transfer_ids": [
+                "tr_m2hjkt7x68"
+              ]
+            }
+          },
+          "evidence_resolvable": true,
+          "on_target": true,
+          "expected_for_label": true
+        }
+      ],
+      "detected": true,
+      "evidence_correct": true,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "runs/2026-07-25T1850-bdc6/lifecycle-legality"
+    },
+    {
+      "id": "pagination-identity",
+      "source": "playtest-run",
+      "arm": "playtest",
+      "label": "f-close-pending-inbound",
+      "label_kind": "faulty",
+      "fault": "f-close-pending-inbound",
+      "fault_tier": "semantic",
+      "requests": 51,
+      "steps": 51,
+      "wall_ms": 842964,
+      "cost_usd": 3.319368,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": false,
+        "idempotency": true,
+        "lifecycle": true,
+        "pagination": true,
+        "balance_agreement": false
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "idempotency",
+        "lifecycle",
+        "pagination"
+      ],
+      "violations": [],
+      "detected": false,
+      "evidence_correct": false,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "runs/2026-07-25T1859-d6a7/pagination-identity"
+    },
+    {
+      "id": "error-shape",
+      "source": "playtest-run",
+      "arm": "playtest",
+      "label": "f-close-pending-inbound",
+      "label_kind": "faulty",
+      "fault": "f-close-pending-inbound",
+      "fault_tier": "semantic",
+      "requests": 60,
+      "steps": 60,
+      "wall_ms": 1001453,
+      "cost_usd": 3.950195,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": false,
+        "idempotency": false,
+        "lifecycle": true,
+        "pagination": false,
+        "balance_agreement": false
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "lifecycle"
+      ],
+      "violations": [],
+      "detected": false,
+      "evidence_correct": false,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "runs/2026-07-25T1913-6744/error-shape"
+    },
+    {
+      "id": "balance-agreement",
+      "source": "playtest-run",
+      "arm": "playtest",
+      "label": "f-close-pending-inbound",
+      "label_kind": "faulty",
+      "fault": "f-close-pending-inbound",
+      "fault_tier": "semantic",
+      "requests": 60,
+      "steps": 60,
+      "wall_ms": 786685,
+      "cost_usd": 3.655166,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": true,
+        "idempotency": true,
+        "lifecycle": true,
+        "pagination": true,
+        "balance_agreement": true
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "conservation",
+        "idempotency",
+        "lifecycle",
+        "pagination",
+        "balance_agreement"
+      ],
+      "violations": [],
+      "detected": false,
+      "evidence_correct": false,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "runs/2026-07-25T1930-dca9/balance-agreement"
+    },
+    {
+      "id": "conservation",
+      "source": "playtest-run",
+      "arm": "playtest",
+      "label": "f-settle-failed-debit",
+      "label_kind": "faulty",
+      "fault": "f-settle-failed-debit",
+      "fault_tier": "semantic",
+      "requests": 60,
+      "steps": 60,
+      "wall_ms": 860056,
+      "cost_usd": 3.766235,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": true,
+        "idempotency": true,
+        "lifecycle": true,
+        "pagination": true,
+        "balance_agreement": true
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "conservation",
+        "idempotency",
+        "lifecycle",
+        "pagination",
+        "balance_agreement"
+      ],
+      "violations": [
+        {
+          "oracle": "balance_agreement",
+          "code": "stored_balance_diverged",
+          "message": "account acc_10zrb1syqj reports balance 494 but its 3 entries sum to -12",
+          "evidence": {
+            "request": {
+              "index": 42,
+              "method": "GET",
+              "path": "/accounts/acc_10zrb1syqj",
+              "status": 200,
+              "note": "balance read here"
+            },
+            "supporting": [
+              {
+                "index": 38,
+                "note": "entry enumeration started here"
+              },
+              {
+                "index": 38,
+                "note": "entry enumeration completed here"
+              }
+            ],
+            "subject": {
+              "account_id": "acc_10zrb1syqj",
+              "stored": 494,
+              "derived": -12,
+              "entry_ids": [
+                "ent_52yy5z920j",
+                "ent_vrj7fd3vrs",
+                "ent_zvd7c1mtd0"
+              ]
+            }
+          },
+          "evidence_resolvable": true,
+          "on_target": true,
+          "expected_for_label": true
+        }
+      ],
+      "detected": true,
+      "evidence_correct": true,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "runs/2026-07-25T1943-b56a/conservation"
+    },
+    {
+      "id": "idempotency",
+      "source": "playtest-run",
+      "arm": "playtest",
+      "label": "f-settle-failed-debit",
+      "label_kind": "faulty",
+      "fault": "f-settle-failed-debit",
+      "fault_tier": "semantic",
+      "requests": 60,
+      "steps": 60,
+      "wall_ms": 795910,
+      "cost_usd": 3.57162,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": true,
+        "idempotency": true,
+        "lifecycle": true,
+        "pagination": true,
+        "balance_agreement": false
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "conservation",
+        "idempotency",
+        "lifecycle",
+        "pagination"
+      ],
+      "violations": [],
+      "detected": false,
+      "evidence_correct": false,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "runs/2026-07-25T1957-157e/idempotency"
+    },
+    {
+      "id": "lifecycle-legality",
+      "source": "playtest-run",
+      "arm": "playtest",
+      "label": "f-settle-failed-debit",
+      "label_kind": "faulty",
+      "fault": "f-settle-failed-debit",
+      "fault_tier": "semantic",
+      "requests": 46,
+      "steps": 46,
+      "wall_ms": 695315,
+      "cost_usd": 2.676523,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": false,
+        "idempotency": false,
+        "lifecycle": true,
+        "pagination": false,
+        "balance_agreement": false
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "lifecycle"
+      ],
+      "violations": [],
+      "detected": false,
+      "evidence_correct": false,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "runs/2026-07-25T2010-89c6/lifecycle-legality"
+    },
+    {
+      "id": "pagination-identity",
+      "source": "playtest-run",
+      "arm": "playtest",
+      "label": "f-settle-failed-debit",
+      "label_kind": "faulty",
+      "fault": "f-settle-failed-debit",
+      "fault_tier": "semantic",
+      "requests": 42,
+      "steps": 42,
+      "wall_ms": 691382,
+      "cost_usd": 2.565197,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": false,
+        "idempotency": true,
+        "lifecycle": true,
+        "pagination": true,
+        "balance_agreement": false
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "idempotency",
+        "lifecycle",
+        "pagination"
+      ],
+      "violations": [],
+      "detected": false,
+      "evidence_correct": false,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "runs/2026-07-25T2022-c5ee/pagination-identity"
+    },
+    {
+      "id": "error-shape",
+      "source": "playtest-run",
+      "arm": "playtest",
+      "label": "f-settle-failed-debit",
+      "label_kind": "faulty",
+      "fault": "f-settle-failed-debit",
+      "fault_tier": "semantic",
+      "requests": 60,
+      "steps": 60,
+      "wall_ms": 965738,
+      "cost_usd": 3.89091,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": false,
+        "idempotency": false,
+        "lifecycle": true,
+        "pagination": false,
+        "balance_agreement": false
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "lifecycle"
+      ],
+      "violations": [],
+      "detected": false,
+      "evidence_correct": false,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "runs/2026-07-25T2034-0317/error-shape"
+    },
+    {
+      "id": "balance-agreement",
+      "source": "playtest-run",
+      "arm": "playtest",
+      "label": "f-settle-failed-debit",
+      "label_kind": "faulty",
+      "fault": "f-settle-failed-debit",
+      "fault_tier": "semantic",
+      "requests": 45,
+      "steps": 45,
+      "wall_ms": 655311,
+      "cost_usd": 2.634059,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": false,
+        "idempotency": true,
+        "lifecycle": true,
+        "pagination": true,
+        "balance_agreement": true
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "idempotency",
+        "lifecycle",
+        "pagination",
+        "balance_agreement"
+      ],
+      "violations": [
+        {
+          "oracle": "balance_agreement",
+          "code": "stored_balance_diverged",
+          "message": "account acc_8n36k615kk reports balance 435 but its 4 entries sum to -191",
+          "evidence": {
+            "request": {
+              "index": 29,
+              "method": "GET",
+              "path": "/accounts/acc_8n36k615kk",
+              "status": 200,
+              "note": "balance read here"
+            },
+            "supporting": [
+              {
+                "index": 30,
+                "note": "entry enumeration started here"
+              },
+              {
+                "index": 30,
+                "note": "entry enumeration completed here"
+              }
+            ],
+            "subject": {
+              "account_id": "acc_8n36k615kk",
+              "stored": 435,
+              "derived": -191,
+              "entry_ids": [
+                "ent_r5p6w2g89v",
+                "ent_jvxcyy43sz",
+                "ent_zcshq4p7ds",
+                "ent_m2hjkt7x68"
+              ]
+            }
+          },
+          "evidence_resolvable": true,
+          "on_target": true,
+          "expected_for_label": true
+        },
+        {
+          "oracle": "balance_agreement",
+          "code": "stored_balance_diverged",
+          "message": "account acc_8n36k615kk reports balance 465 but its 3 entries sum to -161",
+          "evidence": {
+            "request": {
+              "index": 43,
+              "method": "GET",
+              "path": "/accounts/acc_8n36k615kk",
+              "status": 200,
+              "note": "balance read here"
+            },
+            "supporting": [
+              {
+                "index": 44,
+                "note": "entry enumeration started here"
+              },
+              {
+                "index": 44,
+                "note": "entry enumeration completed here"
+              }
+            ],
+            "subject": {
+              "account_id": "acc_8n36k615kk",
+              "stored": 465,
+              "derived": -161,
+              "entry_ids": [
+                "ent_s2xnsgk7j4",
+                "ent_tw7b09hmx3",
+                "ent_m2hjkt7x68"
+              ]
+            }
+          },
+          "evidence_resolvable": true,
+          "on_target": true,
+          "expected_for_label": true
+        }
+      ],
+      "detected": true,
+      "evidence_correct": true,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "runs/2026-07-25T2050-e499/balance-agreement"
+    },
+    {
+      "id": "conservation",
+      "source": "playtest-run",
+      "arm": "playtest",
+      "label": "f-idempotency-day-expiry",
+      "label_kind": "faulty",
+      "fault": "f-idempotency-day-expiry",
+      "fault_tier": "semantic",
+      "requests": 60,
+      "steps": 60,
+      "wall_ms": 841770,
+      "cost_usd": 3.890215,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": true,
+        "idempotency": true,
+        "lifecycle": true,
+        "pagination": true,
+        "balance_agreement": true
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "conservation",
+        "idempotency",
+        "lifecycle",
+        "pagination",
+        "balance_agreement"
+      ],
+      "violations": [],
+      "detected": false,
+      "evidence_correct": false,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "runs/2026-07-25T2101-a186/conservation"
+    },
+    {
+      "id": "idempotency",
+      "source": "playtest-run",
+      "arm": "playtest",
+      "label": "f-idempotency-day-expiry",
+      "label_kind": "faulty",
+      "fault": "f-idempotency-day-expiry",
+      "fault_tier": "semantic",
+      "requests": 60,
+      "steps": 60,
+      "wall_ms": 824221,
+      "cost_usd": 3.6352,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": true,
+        "idempotency": true,
+        "lifecycle": true,
+        "pagination": true,
+        "balance_agreement": false
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "conservation",
+        "idempotency",
+        "lifecycle",
+        "pagination"
+      ],
+      "violations": [],
+      "detected": false,
+      "evidence_correct": false,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "runs/2026-07-25T2115-4376/idempotency"
+    },
+    {
+      "id": "lifecycle-legality",
+      "source": "playtest-run",
+      "arm": "playtest",
+      "label": "f-idempotency-day-expiry",
+      "label_kind": "faulty",
+      "fault": "f-idempotency-day-expiry",
+      "fault_tier": "semantic",
+      "requests": 46,
+      "steps": 46,
+      "wall_ms": 674505,
+      "cost_usd": 2.658353,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": false,
+        "idempotency": false,
+        "lifecycle": true,
+        "pagination": false,
+        "balance_agreement": false
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "lifecycle"
+      ],
+      "violations": [],
+      "detected": false,
+      "evidence_correct": false,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "runs/2026-07-25T2128-cad1/lifecycle-legality"
+    },
+    {
+      "id": "pagination-identity",
+      "source": "playtest-run",
+      "arm": "playtest",
+      "label": "f-idempotency-day-expiry",
+      "label_kind": "faulty",
+      "fault": "f-idempotency-day-expiry",
+      "fault_tier": "semantic",
+      "requests": 46,
+      "steps": 46,
+      "wall_ms": 709736,
+      "cost_usd": 2.844278,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": false,
+        "idempotency": true,
+        "lifecycle": true,
+        "pagination": true,
+        "balance_agreement": false
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "idempotency",
+        "lifecycle",
+        "pagination"
+      ],
+      "violations": [],
+      "detected": false,
+      "evidence_correct": false,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "runs/2026-07-25T2140-2b71/pagination-identity"
+    },
+    {
+      "id": "error-shape",
+      "source": "playtest-run",
+      "arm": "playtest",
+      "label": "f-idempotency-day-expiry",
+      "label_kind": "faulty",
+      "fault": "f-idempotency-day-expiry",
+      "fault_tier": "semantic",
+      "requests": 60,
+      "steps": 60,
+      "wall_ms": 979813,
+      "cost_usd": 3.892075,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": false,
+        "idempotency": false,
+        "lifecycle": true,
+        "pagination": false,
+        "balance_agreement": false
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "lifecycle"
+      ],
+      "violations": [],
+      "detected": false,
+      "evidence_correct": false,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "runs/2026-07-25T2151-fee7/error-shape"
+    },
+    {
+      "id": "balance-agreement",
+      "source": "playtest-run",
+      "arm": "playtest",
+      "label": "f-idempotency-day-expiry",
+      "label_kind": "faulty",
+      "fault": "f-idempotency-day-expiry",
+      "fault_tier": "semantic",
+      "requests": 60,
+      "steps": 60,
+      "wall_ms": 813278,
+      "cost_usd": 3.66104,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": true,
+        "idempotency": true,
+        "lifecycle": true,
+        "pagination": true,
+        "balance_agreement": true
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "conservation",
+        "idempotency",
+        "lifecycle",
+        "pagination",
+        "balance_agreement"
+      ],
+      "violations": [],
+      "detected": false,
+      "evidence_correct": false,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "runs/2026-07-25T2208-0361/balance-agreement"
+    },
+    {
+      "id": "conservation",
+      "source": "playtest-run",
+      "arm": "playtest",
+      "label": "f-fee-double-charged",
+      "label_kind": "faulty",
+      "fault": "f-fee-double-charged",
+      "fault_tier": "semantic",
+      "requests": 60,
+      "steps": 60,
+      "wall_ms": 816162,
+      "cost_usd": 3.655265,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": false,
+        "idempotency": false,
+        "lifecycle": true,
+        "pagination": true,
+        "balance_agreement": false
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "lifecycle",
+        "pagination"
+      ],
+      "violations": [],
+      "detected": false,
+      "evidence_correct": false,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "runs/2026-07-25T2221-348b/conservation"
+    },
+    {
+      "id": "idempotency",
+      "source": "playtest-run",
+      "arm": "playtest",
+      "label": "f-fee-double-charged",
+      "label_kind": "faulty",
+      "fault": "f-fee-double-charged",
+      "fault_tier": "semantic",
+      "requests": 60,
+      "steps": 60,
+      "wall_ms": 823700,
+      "cost_usd": 3.651535,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": true,
+        "idempotency": true,
+        "lifecycle": true,
+        "pagination": true,
+        "balance_agreement": false
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "conservation",
+        "idempotency",
+        "lifecycle",
+        "pagination"
+      ],
+      "violations": [],
+      "detected": false,
+      "evidence_correct": false,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "runs/2026-07-25T2235-5682/idempotency"
+    },
+    {
+      "id": "lifecycle-legality",
+      "source": "playtest-run",
+      "arm": "playtest",
+      "label": "f-fee-double-charged",
+      "label_kind": "faulty",
+      "fault": "f-fee-double-charged",
+      "fault_tier": "semantic",
+      "requests": 51,
+      "steps": 51,
+      "wall_ms": 756667,
+      "cost_usd": 3.042708,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": false,
+        "idempotency": false,
+        "lifecycle": true,
+        "pagination": false,
+        "balance_agreement": false
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "lifecycle"
+      ],
+      "violations": [],
+      "detected": false,
+      "evidence_correct": false,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "runs/2026-07-25T2249-c9db/lifecycle-legality"
+    },
+    {
+      "id": "pagination-identity",
+      "source": "playtest-run",
+      "arm": "playtest",
+      "label": "f-fee-double-charged",
+      "label_kind": "faulty",
+      "fault": "f-fee-double-charged",
+      "fault_tier": "semantic",
+      "requests": 59,
+      "steps": 59,
+      "wall_ms": 934236,
+      "cost_usd": 3.96845,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": false,
+        "idempotency": true,
+        "lifecycle": true,
+        "pagination": true,
+        "balance_agreement": false
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "idempotency",
+        "lifecycle",
+        "pagination"
+      ],
+      "violations": [],
+      "detected": false,
+      "evidence_correct": false,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "runs/2026-07-25T2301-3ed9/pagination-identity"
+    },
+    {
+      "id": "error-shape",
+      "source": "playtest-run",
+      "arm": "playtest",
+      "label": "f-fee-double-charged",
+      "label_kind": "faulty",
+      "fault": "f-fee-double-charged",
+      "fault_tier": "semantic",
+      "requests": 60,
+      "steps": 60,
+      "wall_ms": 1007484,
+      "cost_usd": 3.78202,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": false,
+        "idempotency": false,
+        "lifecycle": true,
+        "pagination": false,
+        "balance_agreement": false
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "lifecycle"
+      ],
+      "violations": [],
+      "detected": false,
+      "evidence_correct": false,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "runs/2026-07-25T2317-a7b0/error-shape"
+    },
+    {
+      "id": "balance-agreement",
+      "source": "playtest-run",
+      "arm": "playtest",
+      "label": "f-fee-double-charged",
+      "label_kind": "faulty",
+      "fault": "f-fee-double-charged",
+      "fault_tier": "semantic",
+      "requests": 60,
+      "steps": 60,
+      "wall_ms": 807562,
+      "cost_usd": 3.596425,
+      "applicability": {
+        "protocol": true,
+        "error_shape": true,
+        "conservation": true,
+        "idempotency": true,
+        "lifecycle": true,
+        "pagination": true,
+        "balance_agreement": true
+      },
+      "oracles_applicable": [
+        "protocol",
+        "error_shape",
+        "conservation",
+        "idempotency",
+        "lifecycle",
+        "pagination",
+        "balance_agreement"
+      ],
+      "violations": [],
+      "detected": false,
+      "evidence_correct": false,
+      "false_positives": 0,
+      "off_target_violations": 0,
+      "path": "runs/2026-07-25T2334-7865/balance-agreement"
+    }
+  ],
+  "summary": {
+    "trace_count": 30,
+    "clean_traces": 0,
+    "faulty_traces": 30,
+    "unlabeled_traces": 0,
+    "faults_seen": 5,
+    "faults_detected": 3,
+    "faults_evidence_correct": 3,
+    "detections": {
+      "f-cursor-error-bare": {
+        "fault": "f-cursor-error-bare",
+        "tier": "schema-reachable",
+        "traces": 6,
+        "detected": 2,
+        "evidence_correct": 2,
+        "arms": {
+          "playtest": {
+            "traces": 6,
+            "detected": 2
+          }
+        }
+      },
+      "f-close-pending-inbound": {
+        "fault": "f-close-pending-inbound",
+        "tier": "semantic",
+        "traces": 6,
+        "detected": 1,
+        "evidence_correct": 1,
+        "arms": {
+          "playtest": {
+            "traces": 6,
+            "detected": 1
+          }
+        }
+      },
+      "f-settle-failed-debit": {
+        "fault": "f-settle-failed-debit",
+        "tier": "semantic",
+        "traces": 6,
+        "detected": 2,
+        "evidence_correct": 2,
+        "arms": {
+          "playtest": {
+            "traces": 6,
+            "detected": 2
+          }
+        }
+      },
+      "f-idempotency-day-expiry": {
+        "fault": "f-idempotency-day-expiry",
+        "tier": "semantic",
+        "traces": 6,
+        "detected": 0,
+        "evidence_correct": 0,
+        "arms": {
+          "playtest": {
+            "traces": 6,
+            "detected": 0
+          }
+        }
+      },
+      "f-fee-double-charged": {
+        "fault": "f-fee-double-charged",
+        "tier": "semantic",
+        "traces": 6,
+        "detected": 0,
+        "evidence_correct": 0,
+        "arms": {
+          "playtest": {
+            "traces": 6,
+            "detected": 0
+          }
+        }
+      }
+    },
+    "false_positives": {
+      "total": 0,
+      "clean_traces_with_findings": 0,
+      "by_oracle": {}
+    },
+    "totals": {
+      "requests": 1645,
+      "steps": 1645,
+      "wall_ms": 24149553,
+      "cost_usd": 101.105679
+    }
+  }
+}

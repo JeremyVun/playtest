@@ -1,0 +1,142 @@
+openapi: 3.1.0
+info:
+  title: Replay API
+  version: "1.0.0"
+security:
+  - bearerAuth: []
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    AccountId:
+      name: accountId
+      in: path
+      required: true
+      description: The account's opaque identifier.
+      schema: { type: string }
+  responses:
+    NotFound:
+      description: No such resource.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+    CreateAccountRequest:
+      type: object
+      required: [owner]
+      properties:
+        owner: { type: string }
+    CreateEntryRequest:
+      type: object
+      required: [account_id, amount]
+      properties:
+        account_id: { type: string }
+        amount: { type: integer }
+paths:
+  /accounts:
+    post:
+      operationId: createAccount
+      summary: Open an account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateAccountRequest" }
+      responses:
+        "201":
+          description: The opened account.
+          content:
+            application/json:
+              schema: { $ref: "./components.yaml#/schemas/Account" }
+          links:
+            ActivateAccount:
+              operationId: activateAccount
+              parameters:
+                accountId: $response.body#/id
+            ReadAccount:
+              operationId: readAccount
+              parameters:
+                accountId: $response.body#/id
+        "422":
+          description: The request was not acceptable.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /accounts/{accountId}:
+    parameters:
+      - $ref: "#/components/parameters/AccountId"
+    get:
+      operationId: readAccount
+      summary: Read an account
+      responses:
+        "200":
+          description: The account.
+          content:
+            application/json:
+              schema: { $ref: "./components.yaml#/schemas/Account" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /accounts/{accountId}/activate:
+    parameters:
+      - $ref: "#/components/parameters/AccountId"
+    post:
+      operationId: activateAccount
+      summary: Activate an account
+      responses:
+        "200":
+          description: The activated account.
+          content:
+            application/json:
+              schema: { $ref: "./components.yaml#/schemas/Account" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /entries:
+    post:
+      operationId: createEntry
+      summary: Post a ledger entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateEntryRequest" }
+      responses:
+        "201":
+          description: The posted entry.
+          content:
+            application/json:
+              schema: { $ref: "./components.yaml#/schemas/Entry" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: The account is not active.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    get:
+      operationId: listEntries
+      summary: List an account's entries
+      parameters:
+        - name: account
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: The account's entries.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  entries:
+                    type: array
+                    items: { $ref: "./components.yaml#/schemas/Entry" }
+                  count: { type: integer }

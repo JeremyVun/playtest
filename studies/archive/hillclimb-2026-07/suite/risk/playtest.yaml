@@ -1,0 +1,5 @@
+# Forced-risk cells for archived instrument v2; see ../MATRIX-v2.md.
+# Inherits mode, models, timeout, app from the parent suite/playtest.yaml
+# when the suite root is studies/hillclimb/suite/. This file marks the
+# directory as a nested suite root so risk/*.yaml cases are discovered.
+# Do not re-pin models here — the freeze lives in the parent defaults.

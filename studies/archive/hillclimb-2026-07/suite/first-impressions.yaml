@@ -1,0 +1,14 @@
+description: First-visit orientation — what is this shop, and does it earn trust?
+story: |
+  A friend sent you a link to this shop saying "this is where I get my
+  plant stuff." You have a few minutes to look around and decide whether
+  you'd buy from it: what do they actually sell, what would it cost to get
+  started, and does anything about the place make you hesitate to hand over
+  a card number? You don't have to buy anything — but leave knowing whether
+  you would.
+persona: [cautious-first-timer, weekend-browser]
+report:
+  - What did the user conclude the shop sells, and how quickly was that clear?
+  - Which pages or details built trust, and which — if any — eroded it? Quote the specifics.
+  - Did the user hit anything that looked unfinished, inconsistent, or broken while just looking around? Be specific.
+  - Where, if anywhere, did the user hesitate, backtrack, or get confused — and what on the screen caused it?

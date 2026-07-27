@@ -1,0 +1,13 @@
+description: The add-to-cart confirmation and its View cart link must stay on screen and stay clickable, not vanish or go stale before the shopper can follow it.
+story: |
+  You want to buy one Monstera Deliciosa. Open it from the shop grid and click
+  Add to cart. A confirmation should appear right next to the button, naming the
+  item and offering a link to the cart. Take your time — read it, then use its
+  View cart link to go to the cart. Do not fall back to the header cart link;
+  the point is to follow the confirmation's own View cart link and confirm it
+  actually works and lands you on the cart with the Monstera in it.
+persona: [cautious-first-timer]
+report:
+  - After adding the item, did a confirmation naming the item and a View cart link appear next to the Add to cart button and stay visible instead of disappearing?
+  - When you clicked the confirmation's own View cart link, did it work and take you to the cart, or did it fail with nothing happening because the link had gone away?
+  - Did the cart you reached contain the Monstera you just added?

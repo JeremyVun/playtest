@@ -1,0 +1,18 @@
+description: Card accepts unspaced digits; postcode presence-only; fields preserved; errors shown.
+persona: adversarial-tester
+story: |
+  Add Snake Plant (qty 1) and go to Checkout. Force these checks in order:
+  1) Leave delivery as prefilled (including a short postcode if shown) and enter
+     card number as sixteen digits with NO spaces (e.g. 4242424242424242), a future
+     expiry MM/YY, and a 3-digit CVC. Fix only fields that genuinely fail. Confirm
+     the unspaced card is accepted by client validation (not rejected for missing
+     spaces).
+  2) If you trigger any validation error (e.g. clear expiry then submit), confirm
+     the card number you typed is still in the field afterward — not wiped.
+  3) Place the order with a valid card, or with the known declined test card
+     4000 0000 0000 0002. If declined, confirm a plain message says the card was
+     declined and no charge was made, with the form still editable.
+report:
+  - Was an unspaced 16-digit card accepted without requiring spaces?
+  - After a validation failure, were payment fields still filled with what the user typed?
+  - If a decline or server error occurred, was it visible in plain language?

@@ -1,0 +1,11 @@
+description: The checkout order summary states shipping honestly — the label matches the amount charged.
+story: |
+  You are a careful first-time buyer sizing up whether this shop is trustworthy
+  before you hand over a card. Put one item in your cart and go to checkout.
+  Read the order summary line by line — subtotal, shipping, total — and decide
+  whether the numbers and their labels are internally consistent.
+persona: [cautious-first-timer]
+report:
+  - "Does the shipping line label agree with the amount shown next to it (no line calling a $6.00 charge 'free')?"
+  - "Do the subtotal, shipping, and total add up correctly?"
+  - "Did anything in the summary make the shop feel sloppy or untrustworthy?"

@@ -1,0 +1,12 @@
+description: Saving the profile email must visibly confirm and persist, so the updated email prefills at checkout.
+story: |
+  You have a new email address and want receipts to go there. On the Account
+  page, change the email in the Profile section and click Save profile. Look for a
+  clear confirmation that the save worked. Then add a plant to the cart and go to
+  checkout, and check whether the receipt email field is prefilled with your new
+  email or the old one.
+persona: [returning-regular]
+report:
+  - Did clicking Save profile produce a visible confirmation that the change was saved?
+  - When you reached checkout, was the receipt email the newly saved address rather than the old one?
+  - Did you have to re-type the updated email at checkout because the profile save had not really persisted?

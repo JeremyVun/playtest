@@ -1,0 +1,6 @@
+# Test-owned todo suite. Its compose file builds the sibling todo-app fixture;
+# reset.sh makes repeated external-mode runs deterministic.
+app:
+  compose: ./docker-compose.yml
+  base_url: http://app:4173
+  init: ./reset.sh

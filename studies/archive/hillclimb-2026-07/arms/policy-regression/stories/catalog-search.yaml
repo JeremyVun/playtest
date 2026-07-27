@@ -1,0 +1,11 @@
+description: A search box lets a shopper type words and find matching products, stating what was searched and how many matched.
+story: |
+  You arrived knowing you want a monstera. Rather than scanning the whole grid,
+  look for a way to search by name, type your search, and see the results. You
+  want the shop to tell you what it searched for and how many things matched.
+persona: [cautious-first-timer]
+report:
+  - "Was there a text box you could type a search term into (not just a button)?"
+  - "After searching for 'monstera', did the matching product appear?"
+  - "Did the page state what was searched and how many products matched?"
+  - "If a search had no matches, were you offered a one-click way to clear it rather than a blank grid?"

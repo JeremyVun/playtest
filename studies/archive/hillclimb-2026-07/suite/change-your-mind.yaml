@@ -1,0 +1,13 @@
+description: Fill a cart, then rework it — quantities, removals, totals — before paying.
+story: |
+  You got a little carried away: you want a few things from this shop, but
+  your budget is $80 all-in. Pick out more than that, then trim your cart
+  down — drop things, adjust how many of each — until the total including
+  shipping fits your budget, and place the order.
+persona: [weekend-browser, cautious-first-timer]
+report:
+  - Could the user change quantities and remove items where they expected to? Describe any edit that fought back.
+  - After each cart change, did every number on screen (line totals, subtotal, cart badge, checkout total) stay consistent? Note any lag or mismatch.
+  - Did the user trust the final total matched their budget arithmetic? Why or why not?
+  - Where, if anywhere, did the user hesitate, backtrack, or get confused — and what on the screen caused it?
+  - Was anything broken, misleading, or missing that a real shopper would notice? Be specific.

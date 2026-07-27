@@ -1,0 +1,5 @@
+# Anchors fixtures/pending/ as its own (synthetic) suite root, so the frozen
+# pending-heal candidate resolves to ./results/ exactly as a real suite's would
+# (trajectory.js baselinePaths walks up to the nearest playtest.yaml). This is
+# fixture scaffolding for the run viewer's "changed journey" review, not a
+# runnable suite — there is no case file here, so it is never executed.

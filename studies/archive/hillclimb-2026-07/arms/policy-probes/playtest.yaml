@@ -1,0 +1,12 @@
+# Arm B (policy) probe suite — targeted probe stories authored by the arm's
+# blind policy operator to confirm or kill ambiguous findings before spending
+# a fix (prereg policy point 2). Environmental config mirrors the frozen
+# instrument; the operator may escalate actor tier per policy point 5 (any
+# escalation is recorded in the round ledger).
+mode: discovery
+actor_model: gpt5_4_mini
+grader_model: gpt5_5
+timeout: "60m"
+app:
+  base_url: http://127.0.0.1:4183
+  init: ./reset.mjs

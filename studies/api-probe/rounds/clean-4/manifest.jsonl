@@ -1,0 +1,13 @@
+{"build":"clean","story":"conservation","runDir":"runs/2026-07-25T1340-29d5","exit":0,"wallMs":870247,"at":"2026-07-25T13:54:46.587Z"}
+{"build":"clean","story":"idempotency","runDir":"runs/2026-07-25T1354-bd4e","exit":0,"wallMs":870914,"at":"2026-07-25T14:09:17.501Z"}
+{"build":"clean","story":"lifecycle-legality","runDir":"runs/2026-07-25T1409-bd49","exit":0,"wallMs":850113,"at":"2026-07-25T14:23:27.614Z"}
+{"build":"clean","story":"pagination-identity","runDir":"runs/2026-07-25T1423-09a9","exit":0,"wallMs":1056544,"at":"2026-07-25T14:41:04.158Z"}
+{"build":"clean","story":"error-shape","runDir":"runs/2026-07-25T1441-2ebb","exit":0,"wallMs":1045087,"at":"2026-07-25T14:58:29.245Z"}
+{"build":"clean","story":"balance-agreement","runDir":"runs/2026-07-25T1458-7ece","exit":0,"wallMs":868249,"at":"2026-07-25T15:12:57.494Z"}
+{"build":"clean","story":"conservation","runDir":"runs/2026-07-25T1512-0e41","exit":0,"wallMs":882768,"at":"2026-07-25T15:27:41.096Z"}
+{"build":"clean","story":"idempotency","runDir":"runs/2026-07-25T1527-05c5","exit":0,"wallMs":914778,"at":"2026-07-25T15:42:55.875Z"}
+{"build":"clean","story":"lifecycle-legality","runDir":"runs/2026-07-25T1542-c0ed","exit":0,"wallMs":728313,"at":"2026-07-25T15:55:04.188Z"}
+{"build":"clean","story":"pagination-identity","runDir":"runs/2026-07-25T1555-24ac","exit":0,"wallMs":1103236,"at":"2026-07-25T16:13:27.425Z"}
+{"build":"clean","story":"error-shape","runDir":"runs/2026-07-25T1613-d2e0","exit":0,"wallMs":1286697,"at":"2026-07-25T16:34:54.125Z"}
+{"build":"clean","story":"balance-agreement","runDir":"runs/2026-07-25T1634-990f","exit":0,"wallMs":990816,"at":"2026-07-25T16:51:24.942Z"}
+CLEAN-4 SWEEP DONE 2026-07-25T16:51:24Z

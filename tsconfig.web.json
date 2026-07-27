@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "lib": ["es2023", "dom", "dom.iterable"],
+    "types": []
+  },
+  "include": [
+    "src/core/shared/**/*.ts",
+    "src/run-viewer/web/**/*.ts",
+    "src/platform/web/**/*.ts"
+  ],
+  "exclude": [
+    "src/platform/web/vendor/**"
+  ]
+}

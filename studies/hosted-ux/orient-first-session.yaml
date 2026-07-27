@@ -1,0 +1,13 @@
+description: First-session orientation — work out what this app is and what it checked.
+story: |
+  A teammate sent you a link to this app with the message "this could
+  replace our manual QA — have a look". You have never seen it before.
+  Work out what the product actually does, what it has been checking for
+  this team, and whether the team can trust its results — enough to
+  recommend adopting it or not.
+persona: [first-time-evaluator]
+report:
+  - What mental model of the product did they build, and from which labels/screens? Where was it wrong?
+  - Which screen did they treat as "the answer" to what has this been checking, and did the home page's tiles/needs-attention list help or mislead?
+  - Which term or affordance confused them first, and did any screen assume knowledge (runs, healing, baselines) they didn't have?
+  - What verdict did they render on adoption, and what single change would most have moved it?

@@ -1,0 +1,2270 @@
+{
+  "script_report_version": 1,
+  "contract_version": 1,
+  "script": {
+    "path": "suite.mjs",
+    "sha256": "4da25ade5b63a25d14019686bf7d694d8ea7ae8034ff20e14dfabf5f99f4f682",
+    "bytes": 1569
+  },
+  "run": {
+    "started_at": "2026-07-26T05:53:44.507Z",
+    "finished_at": "2026-07-26T05:53:45.000Z",
+    "duration_ms": 493,
+    "base_url": "http://127.0.0.1:4304",
+    "allowed_origins": [],
+    "mode": "read-write",
+    "write_grant": {
+      "origin": "http://127.0.0.1:4304",
+      "approved_by": "S0 study owner — disposable loopback ledger fixture (studies/api-suite/TARGET-AUTHORIZATION.md)",
+      "approved_at": "2026-07-26"
+    },
+    "budget": {
+      "limit": 360,
+      "used": 229,
+      "remaining": 131
+    },
+    "timeout_ms": 600000,
+    "read_only_methods": [
+      "GET",
+      "HEAD"
+    ],
+    "secrets_declared": [
+      "LEDGER_ADMIN_TOKEN",
+      "LEDGER_CUSTOMER_B_TOKEN",
+      "LEDGER_CUSTOMER_TOKEN"
+    ],
+    "params": {
+      "seed": "ledger-dev-seed"
+    },
+    "exit": {
+      "code": 0
+    }
+  },
+  "checks": [
+    {
+      "id": "reset-establishes-known-state",
+      "obligation": "operation:POST /admin/reset",
+      "title": "POST /admin/reset seeds a known world the rest of the suite starts from",
+      "pass": true,
+      "exercised": true,
+      "expected": "status 200 with {ok:true, seed, day}",
+      "observed": "status 200 body={\"ok\":true,\"seed\":\"ledger-dev-seed\",\"day\":0}",
+      "evidence": {
+        "har_entries": [
+          0
+        ]
+      }
+    },
+    {
+      "id": "new-account-is-pending",
+      "obligation": "rule:lifecycle-legality",
+      "title": "a newly opened account is created in status 'pending' and cannot yet transact",
+      "pass": true,
+      "exercised": true,
+      "expected": "status 201 with account status \"pending\" and balance 0",
+      "observed": "status 201 status=\"pending\" balance=0",
+      "evidence": {
+        "har_entries": [
+          5
+        ]
+      }
+    },
+    {
+      "id": "owner-principal-defaults-to-caller-and-differs-per-token",
+      "obligation": "rule:ownership",
+      "title": "each customer token owns its own principal, and the two customer tokens are different principals",
+      "pass": true,
+      "exercised": true,
+      "expected": "two distinct non-empty owner_principal values, one per customer token",
+      "observed": "A=\"customer_a\" B=\"customer_b\"",
+      "evidence": {
+        "har_entries": [
+          5,
+          14
+        ]
+      }
+    },
+    {
+      "id": "admin-may-open-account-for-another-principal",
+      "obligation": "rule:ownership",
+      "title": "the administrator may open an account whose owner_principal is another principal",
+      "pass": true,
+      "exercised": true,
+      "expected": "status 201 with owner_principal \"customer_b\"",
+      "observed": "status 201 owner_principal=\"customer_b\"",
+      "evidence": {
+        "har_entries": [
+          16
+        ]
+      }
+    },
+    {
+      "id": "customer-may-not-open-account-for-another-principal",
+      "obligation": "rule:ownership",
+      "title": "a customer principal supplying owner_principal is refused 403",
+      "pass": true,
+      "exercised": true,
+      "expected": "status 403",
+      "observed": "status 403 code \"forbidden\"",
+      "evidence": {
+        "har_entries": [
+          17
+        ]
+      }
+    },
+    {
+      "id": "activate-makes-an-account-active",
+      "obligation": "rule:lifecycle-legality",
+      "title": "activation moves a pending account to 'active' so that it may transact",
+      "pass": true,
+      "exercised": true,
+      "expected": "status 200 with status \"active\" and a non-null activated_at",
+      "observed": "status 200 status=\"active\"",
+      "evidence": {
+        "har_entries": [
+          5,
+          18
+        ]
+      }
+    },
+    {
+      "id": "deposit-settles-immediately",
+      "obligation": "rule:ledger-arithmetic",
+      "title": "a deposit is created already settled against the named account",
+      "pass": true,
+      "exercised": true,
+      "expected": "status 201, deposit status \"settled\", amount and account_id echoed",
+      "observed": "status 201 body={\"id\":\"dep_zcshq4p7ds\",\"account_id\":\"acc_8n36k615kk\",\"amount\":200000,\"currency\":\"USD\",\"status\":\"settled\",\"created_at\":\"2026-01-01T00:00:23.000Z\",\"entry_id\":\"ent_4168cg3v73\"}",
+      "evidence": {
+        "har_entries": [
+          29
+        ]
+      }
+    },
+    {
+      "id": "deposit-readable-by-its-account-owner",
+      "obligation": "rule:ownership",
+      "title": "the owner of the funded account may read the deposit",
+      "pass": true,
+      "exercised": true,
+      "expected": "status 200 with the deposit",
+      "observed": "status 200",
+      "evidence": {
+        "har_entries": [
+          36
+        ]
+      }
+    },
+    {
+      "id": "deposit-not-readable-by-other-principal",
+      "obligation": "rule:ownership",
+      "title": "a customer may not read a deposit made into another principal's account",
+      "pass": true,
+      "exercised": true,
+      "expected": "status 403",
+      "observed": "status 403 code \"forbidden\" body={\"error\":{\"code\":\"forbidden\",\"message\":\"account acc_8n36k615kk does not belong to this principal\",\"details\":{\"id\":\"acc_8n36k615kk\"}}}",
+      "evidence": {
+        "har_entries": [
+          37
+        ]
+      }
+    },
+    {
+      "id": "deposit-into-pending-account-refused-409",
+      "obligation": "rule:lifecycle-legality",
+      "title": "a deposit naming a pending account is refused 409",
+      "pass": true,
+      "exercised": true,
+      "expected": "status 409",
+      "observed": "status 409 code \"account_not_active\"",
+      "evidence": {
+        "har_entries": [
+          11,
+          38
+        ]
+      }
+    },
+    {
+      "id": "customer-may-not-fund-another-principals-account",
+      "obligation": "rule:ownership",
+      "title": "a customer may not deposit into an account it does not own",
+      "pass": true,
+      "exercised": true,
+      "expected": "status 403",
+      "observed": "status 403 code \"forbidden\" body={\"error\":{\"code\":\"forbidden\",\"message\":\"account acc_s2xnsgk7j4 does not belong to this principal\",\"details\":{\"id\":\"acc_s2xnsgk7j4\"}}}",
+      "evidence": {
+        "har_entries": [
+          39
+        ]
+      }
+    },
+    {
+      "id": "transfer-is-created-pending",
+      "obligation": "rule:settlement",
+      "title": "POST /transfers creates the transfer in status 'pending'",
+      "pass": true,
+      "exercised": true,
+      "expected": "status 201 with transfer status \"pending\" and settled_at null",
+      "observed": "status 201 status=\"pending\" settled_at=null",
+      "evidence": {
+        "har_entries": [
+          40
+        ]
+      }
+    },
+    {
+      "id": "pending-transfer-creation-moves-no-balance",
+      "obligation": "rule:settlement",
+      "title": "creating a pending transfer does not move the source balance",
+      "pass": true,
+      "exercised": true,
+      "expected": "balance still 100000 (the deposited amount) while all three transfers are pending",
+      "observed": "status 200 balance=100000",
+      "evidence": {
+        "har_entries": [
+          32,
+          40,
+          41,
+          42,
+          43
+        ]
+      }
+    },
+    {
+      "id": "pending-transfer-creation-writes-no-entries",
+      "obligation": "rule:settlement",
+      "title": "creating a pending transfer writes no ledger entries",
+      "pass": true,
+      "exercised": true,
+      "expected": "no ledger entry carries a still-pending transfer's transfer_id",
+      "observed": "no entries carry any of the three pending transfer ids",
+      "evidence": {
+        "har_entries": [
+          40,
+          41,
+          42,
+          44
+        ]
+      }
+    },
+    {
+      "id": "transfer-does-not-settle-without-a-tick",
+      "obligation": "rule:settlement",
+      "title": "a pending transfer stays pending across unrelated requests; only a tick moves it",
+      "pass": true,
+      "exercised": true,
+      "expected": "status \"pending\" after several intervening non-tick requests",
+      "observed": "status 200 status=\"pending\"",
+      "evidence": {
+        "har_entries": [
+          40,
+          43,
+          44,
+          45
+        ]
+      }
+    },
+    {
+      "id": "tick-settles-in-creation-order",
+      "obligation": "rule:settlement",
+      "title": "a bounded tick settles the oldest pending transfers first, in creation order",
+      "pass": true,
+      "exercised": true,
+      "expected": "settled == [\"tr_r5p6w2g89v\",\"tr_hxf94wpr0h\"] — the first two of three transfers created, in that order",
+      "observed": "status 200 settled=[\"tr_r5p6w2g89v\",\"tr_hxf94wpr0h\"]",
+      "evidence": {
+        "har_entries": [
+          40,
+          41,
+          42,
+          46
+        ]
+      }
+    },
+    {
+      "id": "settle-limit-leaves-the-rest-pending",
+      "obligation": "rule:settlement",
+      "title": "settle_limit bounds how many transfers a tick settles and leaves the rest pending",
+      "pass": true,
+      "exercised": true,
+      "expected": "TickResult.pending == 1 and the newest of the three transfers still pending",
+      "observed": "pending=1 S2B=\"pending\"",
+      "evidence": {
+        "har_entries": [
+          46,
+          47
+        ]
+      }
+    },
+    {
+      "id": "an-unbounded-tick-settles-the-remaining-pending-transfer",
+      "obligation": "rule:settlement",
+      "title": "an unbounded tick settles what a bounded tick left behind",
+      "pass": true,
+      "exercised": true,
+      "expected": "settled == [\"tr_52yy5z920j\"] and pending == 0",
+      "observed": "status 200 settled=[\"tr_52yy5z920j\"] pending=0",
+      "evidence": {
+        "har_entries": [
+          42,
+          48
+        ]
+      }
+    },
+    {
+      "id": "canceled-transfer-is-never-picked-up-by-a-later-tick",
+      "obligation": "rule:settlement",
+      "title": "a canceled transfer stays canceled and is not settled or failed by a subsequent tick",
+      "pass": true,
+      "exercised": true,
+      "expected": "cancel 200 -> \"canceled\"; the next tick reports it neither settled nor failed; it reads back \"canceled\"",
+      "observed": "cancel=status 200 tick.settled=[] tick.failed=[] read=\"canceled\"",
+      "evidence": {
+        "har_entries": [
+          49,
+          50,
+          51,
+          52
+        ]
+      }
+    },
+    {
+      "id": "close-refused-while-a-transfer-is-pending",
+      "obligation": "rule:lifecycle-legality",
+      "title": "an account with pending transfers cannot be closed",
+      "pass": true,
+      "exercised": true,
+      "expected": "status 409",
+      "observed": "status 409 code \"account_has_pending_transfers\"",
+      "evidence": {
+        "har_entries": [
+          55,
+          56
+        ]
+      }
+    },
+    {
+      "id": "close-succeeds-once-nothing-is-pending",
+      "obligation": "rule:lifecycle-legality",
+      "title": "an account with no pending transfers closes and reports status 'closed'",
+      "pass": true,
+      "exercised": true,
+      "expected": "status 200 with status \"closed\" and a non-null closed_at",
+      "observed": "status 200 status=\"closed\"",
+      "evidence": {
+        "har_entries": [
+          57,
+          58
+        ]
+      }
+    },
+    {
+      "id": "closed-account-read-answers-410-with-a-tombstone",
+      "obligation": "rule:lifecycle-legality",
+      "title": "GET /accounts/{accountId} on a closed account answers 410 with a tombstone",
+      "pass": true,
+      "exercised": true,
+      "expected": "status 410 with error.details carrying the tombstone",
+      "observed": "status 410 code \"account_closed\" details={\"id\":\"acc_zc946y142d\",\"status\":\"closed\",\"closed_at\":\"2026-01-01T00:00:40.000Z\"}",
+      "evidence": {
+        "har_entries": [
+          59
+        ]
+      }
+    },
+    {
+      "id": "closed-account-keeps-serving-its-ledger-history",
+      "obligation": "rule:lifecycle-legality",
+      "title": "a closed account's ledger history is still served after closure",
+      "pass": true,
+      "exercised": true,
+      "expected": "status 200 listing the single +1000 deposit entry written before closure",
+      "observed": "status 200 items=[[\"deposit\",1000]]",
+      "evidence": {
+        "har_entries": [
+          33,
+          58,
+          60
+        ]
+      }
+    },
+    {
+      "id": "closed-account-omitted-from-the-default-listing",
+      "obligation": "rule:lifecycle-legality",
+      "title": "GET /accounts omits a closed account unless include_closed=true",
+      "pass": true,
+      "exercised": true,
+      "expected": "acc_zc946y142d absent from GET /accounts and present with include_closed=true",
+      "observed": "default=absent include_closed=present",
+      "evidence": {
+        "har_entries": [
+          61,
+          62
+        ]
+      }
+    },
+    {
+      "id": "closed-account-cannot-transact",
+      "obligation": "rule:lifecycle-legality",
+      "title": "a deposit or transfer naming a closed account is refused 410",
+      "pass": true,
+      "exercised": true,
+      "expected": "410 for a deposit into it, for sending from it, and for receiving into it",
+      "observed": "deposit=status 410 code \"account_closed\" source=status 410 code \"account_closed\" destination=status 410 code \"account_closed\"",
+      "evidence": {
+        "har_entries": [
+          63,
+          64,
+          65
+        ]
+      }
+    },
+    {
+      "id": "pending-account-cannot-receive-a-transfer",
+      "obligation": "rule:lifecycle-legality",
+      "title": "a transfer naming a pending account as destination is refused 409",
+      "pass": true,
+      "exercised": true,
+      "expected": "status 409",
+      "observed": "status 409 code \"account_not_active\"",
+      "evidence": {
+        "har_entries": [
+          11,
+          67
+        ]
+      }
+    },
+    {
+      "id": "pending-account-cannot-send-a-transfer",
+      "obligation": "rule:lifecycle-legality",
+      "title": "a transfer naming a pending account as source is refused 409",
+      "pass": true,
+      "exercised": true,
+      "expected": "status 409 (state is evaluated before the funding rule)",
+      "observed": "status 409 code \"account_not_active\"",
+      "evidence": {
+        "har_entries": [
+          11,
+          68
+        ]
+      }
+    },
+    {
+      "id": "settlement-rechecks-funds-and-fails-the-uncovered-transfer",
+      "obligation": "rule:settlement",
+      "title": "a tick re-checks amount+fee at settlement time and fails a transfer the source can no longer cover",
+      "pass": true,
+      "exercised": true,
+      "expected": "both created against a 60000 balance; the first (needs 50100) settles, the second (needs 50100 against 9900) fails",
+      "observed": "status 200 settled=[\"tr_35bsr4px3c\"] failed=[\"tr_rjy206mn9d\"] F2=\"failed\"",
+      "evidence": {
+        "har_entries": [
+          69,
+          70,
+          71,
+          72
+        ]
+      }
+    },
+    {
+      "id": "failed-transfer-carries-a-failure-reason",
+      "obligation": "rule:settlement",
+      "title": "a transfer failed at settlement carries a failure_reason",
+      "pass": true,
+      "exercised": true,
+      "expected": "a non-empty failure_reason string",
+      "observed": "failure_reason=\"insufficient_funds\"",
+      "evidence": {
+        "har_entries": [
+          72
+        ]
+      }
+    },
+    {
+      "id": "failed-transfer-moves-no-money",
+      "obligation": "rule:settlement",
+      "title": "only the settled transfer moved money out of the source account",
+      "pass": true,
+      "exercised": true,
+      "expected": "balance 9900 (60000 less the one settled amount+fee)",
+      "observed": "status 200 balance=9900",
+      "evidence": {
+        "har_entries": [
+          69,
+          70,
+          71,
+          73
+        ]
+      }
+    },
+    {
+      "id": "daily-allowance-not-released-by-a-failed-settlement",
+      "obligation": "rule:daily-limit",
+      "title": "a transfer that fails at settlement does not return its amount to the daily allowance",
+      "pass": true,
+      "exercised": true,
+      "expected": "status 422 with code \"daily_limit_exceeded\" (2 x 50000 already reserved, funds are ample)",
+      "observed": "status 422 code \"daily_limit_exceeded\"",
+      "evidence": {
+        "har_entries": [
+          69,
+          70,
+          71,
+          73,
+          74
+        ]
+      }
+    },
+    {
+      "id": "daily-limit-refuses-an-amount-that-would-exceed-it",
+      "obligation": "rule:daily-limit",
+      "title": "a transfer that would take the source past 100 000 in the ledger day is refused 422 daily_limit_exceeded",
+      "pass": true,
+      "exercised": true,
+      "expected": "60000 accepted, then 40001 (total 100001) refused 422 \"daily_limit_exceeded\"",
+      "observed": "60000=status 201 40001=status 422 code \"daily_limit_exceeded\"",
+      "evidence": {
+        "har_entries": [
+          75,
+          76
+        ]
+      }
+    },
+    {
+      "id": "daily-limit-accepts-exactly-reaching-the-limit",
+      "obligation": "rule:daily-limit",
+      "title": "an amount that brings the day's total exactly to 100 000 is accepted",
+      "pass": true,
+      "exercised": true,
+      "expected": "40000 accepted (total exactly 100000), then a further 1 refused 422",
+      "observed": "40000=status 201 then 1=status 422 code \"daily_limit_exceeded\"",
+      "evidence": {
+        "har_entries": [
+          75,
+          77,
+          78
+        ]
+      }
+    },
+    {
+      "id": "daily-limit-measures-amount-only-not-amount-plus-fee",
+      "obligation": "rule:daily-limit",
+      "title": "the allowance is consumed by amount alone: 60000+40000 fits although amount+fee totals 100200",
+      "pass": true,
+      "exercised": true,
+      "expected": "both accepted even though the balance was debited 100200 in total",
+      "observed": "60000=status 201 40000=status 201",
+      "evidence": {
+        "har_entries": [
+          75,
+          77
+        ]
+      }
+    },
+    {
+      "id": "customer-may-not-cancel-another-principals-transfer",
+      "obligation": "rule:ownership",
+      "title": "a customer may not cancel a transfer between accounts it does not own",
+      "pass": true,
+      "exercised": true,
+      "expected": "status 403",
+      "observed": "status 403 code \"forbidden\" body={\"error\":{\"code\":\"forbidden\",\"message\":\"account acc_h1ggs61g6z does not belong to this principal\",\"details\":{\"id\":\"acc_h1ggs61g6z\"}}}",
+      "evidence": {
+        "har_entries": [
+          75,
+          79
+        ]
+      }
+    },
+    {
+      "id": "daily-allowance-not-released-by-cancelling",
+      "obligation": "rule:daily-limit",
+      "title": "cancelling a transfer does not return its amount to the daily allowance",
+      "pass": true,
+      "exercised": true,
+      "expected": "the 40000 transfer cancels, and a further 1 is still refused 422 \"daily_limit_exceeded\"",
+      "observed": "cancel=status 200 then 1=status 422 code \"daily_limit_exceeded\"",
+      "evidence": {
+        "har_entries": [
+          77,
+          80,
+          81
+        ]
+      }
+    },
+    {
+      "id": "daily-limit-is-scoped-to-the-source-account",
+      "obligation": "rule:daily-limit",
+      "title": "one account reaching its daily limit does not block another account of the same principal",
+      "pass": true,
+      "exercised": true,
+      "expected": "status 201 from a different source account owned by the same principal",
+      "observed": "status 201",
+      "evidence": {
+        "har_entries": [
+          78,
+          82
+        ]
+      }
+    },
+    {
+      "id": "fee-formula-usd-1",
+      "obligation": "rule:fee-schedule",
+      "title": "USD transfer of 1 minor units is charged a fee of 25",
+      "pass": true,
+      "exercised": true,
+      "expected": "fee 25 = 25 + round_half_away_from_zero(1 x 15 / 10000)",
+      "observed": "status 201 amount=1 fee=25",
+      "evidence": {
+        "har_entries": [
+          83
+        ]
+      }
+    },
+    {
+      "id": "fee-formula-usd-333",
+      "obligation": "rule:fee-schedule",
+      "title": "USD transfer of 333 minor units is charged a fee of 25",
+      "pass": true,
+      "exercised": true,
+      "expected": "fee 25 = 25 + round_half_away_from_zero(333 x 15 / 10000)",
+      "observed": "status 201 amount=333 fee=25",
+      "evidence": {
+        "har_entries": [
+          84
+        ]
+      }
+    },
+    {
+      "id": "fee-formula-usd-334",
+      "obligation": "rule:fee-schedule",
+      "title": "USD transfer of 334 minor units is charged a fee of 26",
+      "pass": true,
+      "exercised": true,
+      "expected": "fee 26 = 25 + round_half_away_from_zero(334 x 15 / 10000)",
+      "observed": "status 201 amount=334 fee=26",
+      "evidence": {
+        "har_entries": [
+          85
+        ]
+      }
+    },
+    {
+      "id": "fee-formula-usd-1000",
+      "obligation": "rule:fee-schedule",
+      "title": "USD transfer of 1000 minor units is charged a fee of 27",
+      "pass": true,
+      "exercised": true,
+      "expected": "fee 27 = 25 + round_half_away_from_zero(1000 x 15 / 10000)",
+      "observed": "status 201 amount=1000 fee=27",
+      "evidence": {
+        "har_entries": [
+          86
+        ]
+      }
+    },
+    {
+      "id": "fee-formula-usd-1667",
+      "obligation": "rule:fee-schedule",
+      "title": "USD transfer of 1667 minor units is charged a fee of 28",
+      "pass": true,
+      "exercised": true,
+      "expected": "fee 28 = 25 + round_half_away_from_zero(1667 x 15 / 10000)",
+      "observed": "status 201 amount=1667 fee=28",
+      "evidence": {
+        "har_entries": [
+          87
+        ]
+      }
+    },
+    {
+      "id": "fee-formula-usd-3000",
+      "obligation": "rule:fee-schedule",
+      "title": "USD transfer of 3000 minor units is charged a fee of 30",
+      "pass": true,
+      "exercised": true,
+      "expected": "fee 30 = 25 + round_half_away_from_zero(3000 x 15 / 10000)",
+      "observed": "status 201 amount=3000 fee=30",
+      "evidence": {
+        "har_entries": [
+          88
+        ]
+      }
+    },
+    {
+      "id": "fee-formula-usd-3333",
+      "obligation": "rule:fee-schedule",
+      "title": "USD transfer of 3333 minor units is charged a fee of 30",
+      "pass": true,
+      "exercised": true,
+      "expected": "fee 30 = 25 + round_half_away_from_zero(3333 x 15 / 10000)",
+      "observed": "status 201 amount=3333 fee=30",
+      "evidence": {
+        "har_entries": [
+          89
+        ]
+      }
+    },
+    {
+      "id": "fee-formula-usd-3334",
+      "obligation": "rule:fee-schedule",
+      "title": "USD transfer of 3334 minor units is charged a fee of 30",
+      "pass": true,
+      "exercised": true,
+      "expected": "fee 30 = 25 + round_half_away_from_zero(3334 x 15 / 10000)",
+      "observed": "status 201 amount=3334 fee=30",
+      "evidence": {
+        "har_entries": [
+          90
+        ]
+      }
+    },
+    {
+      "id": "fee-formula-usd-10000",
+      "obligation": "rule:fee-schedule",
+      "title": "USD transfer of 10000 minor units is charged a fee of 40",
+      "pass": true,
+      "exercised": true,
+      "expected": "fee 40 = 25 + round_half_away_from_zero(10000 x 15 / 10000)",
+      "observed": "status 201 amount=10000 fee=40",
+      "evidence": {
+        "har_entries": [
+          91
+        ]
+      }
+    },
+    {
+      "id": "transfer-destination-need-not-belong-to-the-caller",
+      "obligation": "rule:ownership",
+      "title": "a customer may send to an account owned by another principal",
+      "pass": true,
+      "exercised": true,
+      "expected": "status 201 with fee 28",
+      "observed": "status 201",
+      "evidence": {
+        "har_entries": [
+          92
+        ]
+      }
+    },
+    {
+      "id": "fee-formula-eur-1000",
+      "obligation": "rule:fee-schedule",
+      "title": "EUR transfer of 1000 minor units is charged a fee of 27 and routed to the EUR fee account",
+      "pass": true,
+      "exercised": true,
+      "expected": "fee 27, currency EUR, fee_account_id acc_fee_eur",
+      "observed": "status 201 fee=27 fee_account_id=\"acc_fee_eur\"",
+      "evidence": {
+        "har_entries": [
+          93
+        ]
+      }
+    },
+    {
+      "id": "fee-formula-eur-20000",
+      "obligation": "rule:fee-schedule",
+      "title": "EUR transfer of 20000 minor units is charged a fee of 55 and routed to the EUR fee account",
+      "pass": true,
+      "exercised": true,
+      "expected": "fee 55, currency EUR, fee_account_id acc_fee_eur",
+      "observed": "status 201 fee=55 fee_account_id=\"acc_fee_eur\"",
+      "evidence": {
+        "har_entries": [
+          94
+        ]
+      }
+    },
+    {
+      "id": "usd-transfer-fees-are-routed-to-the-usd-fee-account",
+      "obligation": "rule:fee-schedule",
+      "title": "every USD transfer names the USD system fee account as its fee account",
+      "pass": true,
+      "exercised": true,
+      "expected": "every USD transfer carries fee_account_id acc_fee_usd",
+      "observed": "10 USD transfers, 0 misrouted: []",
+      "evidence": {
+        "har_entries": [
+          83,
+          84,
+          85,
+          86,
+          87,
+          88,
+          89,
+          90,
+          91,
+          92
+        ]
+      }
+    },
+    {
+      "id": "idempotent-replay-returns-the-first-transfer-with-200",
+      "obligation": "rule:idempotency",
+      "title": "the same key with the same body answers 200 with the transfer the first request created",
+      "pass": true,
+      "exercised": true,
+      "expected": "201 then 200 returning \"tr_4tnmtfhqp4\"",
+      "observed": "first=status 201 id=\"tr_4tnmtfhqp4\"; replay=status 200 id=\"tr_4tnmtfhqp4\"",
+      "evidence": {
+        "har_entries": [
+          96,
+          97
+        ]
+      }
+    },
+    {
+      "id": "idempotent-replay-creates-no-second-transfer",
+      "obligation": "rule:idempotency",
+      "title": "a replay and a conflicting reuse of the key add exactly one transfer to the source account",
+      "pass": true,
+      "exercised": true,
+      "expected": "exactly one new transfer for the account (was 5)",
+      "observed": "before=5 after=6",
+      "evidence": {
+        "har_entries": [
+          95,
+          96,
+          97,
+          98,
+          100
+        ]
+      }
+    },
+    {
+      "id": "idempotency-key-with-a-different-body-is-refused-409",
+      "obligation": "rule:idempotency",
+      "title": "reusing the key with a different body is refused 409 and creates nothing",
+      "pass": true,
+      "exercised": true,
+      "expected": "status 409 and no additional transfer",
+      "observed": "status 409 code \"idempotency_key_conflict\"",
+      "evidence": {
+        "har_entries": [
+          98,
+          100
+        ]
+      }
+    },
+    {
+      "id": "idempotency-is-scoped-per-principal",
+      "obligation": "rule:idempotency",
+      "title": "the same key string used by a different principal creates that principal's own transfer",
+      "pass": true,
+      "exercised": true,
+      "expected": "status 201 with a distinct transfer of 700 for the second customer",
+      "observed": "status 201 id=\"tr_kg8brydt19\" amount=700",
+      "evidence": {
+        "har_entries": [
+          96,
+          99
+        ]
+      }
+    },
+    {
+      "id": "tick-settles-every-remaining-pending-transfer",
+      "obligation": "rule:settlement",
+      "title": "an unbounded tick settles all pending transfers and leaves none behind",
+      "pass": true,
+      "exercised": true,
+      "expected": "status 200 with pending 0 and a non-empty settled list",
+      "observed": "status 200 settled=16 failed=0 pending=0",
+      "evidence": {
+        "har_entries": [
+          101
+        ]
+      }
+    },
+    {
+      "id": "canceled-transfer-excluded-from-the-final-tick",
+      "obligation": "rule:settlement",
+      "title": "the transfer canceled during the daily-limit sequence is not settled by a later tick",
+      "pass": true,
+      "exercised": true,
+      "expected": "\"tr_zwyq5z81ph\" absent from the tick's settled list",
+      "observed": "absent, as required",
+      "evidence": {
+        "har_entries": [
+          101
+        ]
+      }
+    },
+    {
+      "id": "advance-day-rolls-the-ledger-day",
+      "obligation": "rule:daily-limit",
+      "title": "POST /admin/tick with advance_day rolls the ledger day forward",
+      "pass": true,
+      "exercised": true,
+      "expected": "day 1",
+      "observed": "status 200 day 0 -> 1",
+      "evidence": {
+        "har_entries": [
+          101,
+          102
+        ]
+      }
+    },
+    {
+      "id": "daily-allowance-resets-on-a-new-ledger-day",
+      "obligation": "rule:daily-limit",
+      "title": "the source account that exhausted its allowance may transfer again after the day rolls over",
+      "pass": true,
+      "exercised": true,
+      "expected": "status 201 from the account that was refused 422 before the roll",
+      "observed": "status 201",
+      "evidence": {
+        "har_entries": [
+          102,
+          103
+        ]
+      }
+    },
+    {
+      "id": "customer-reads-its-own-account",
+      "obligation": "rule:ownership",
+      "title": "a customer may read an account whose owner_principal is that principal",
+      "pass": true,
+      "exercised": true,
+      "expected": "status 200 with owner_principal \"customer_a\"",
+      "observed": "status 200 owner_principal=\"customer_a\"",
+      "evidence": {
+        "har_entries": [
+          105
+        ]
+      }
+    },
+    {
+      "id": "customer-cannot-read-another-principals-account",
+      "obligation": "rule:ownership",
+      "title": "reading another principal's account is refused 403 with no representation of it",
+      "pass": true,
+      "exercised": true,
+      "expected": "status 403 and a body carrying no account representation",
+      "observed": "status 403 code \"forbidden\" body=\"{\\\"error\\\":{\\\"code\\\":\\\"forbidden\\\",\\\"message\\\":\\\"account acc_s2xnsgk7j4 does not belong to this principal\\\",\\\"details\\\":{\\\"id\\\":\\\"acc_s2xnsgk7j4\\\"}}}\\n\"",
+      "evidence": {
+        "har_entries": [
+          106
+        ]
+      }
+    },
+    {
+      "id": "customer-cannot-act-on-another-principals-account",
+      "obligation": "rule:ownership",
+      "title": "listing entries of, activating, closing, or spending from another principal's account is refused 403",
+      "pass": true,
+      "exercised": true,
+      "expected": "403 for entries, activate, close, and transfer-from",
+      "observed": "entries=status 403 code \"forbidden\" activate=status 403 code \"forbidden\" close=status 403 code \"forbidden\" spend=status 403 code \"forbidden\"",
+      "evidence": {
+        "har_entries": [
+          107,
+          108,
+          109,
+          110
+        ]
+      }
+    },
+    {
+      "id": "owner-principal-assignment-decides-reach",
+      "obligation": "rule:ownership",
+      "title": "an account the administrator opened for the second customer is reachable by that customer and by nobody else",
+      "pass": true,
+      "exercised": true,
+      "expected": "200 for the named owner_principal, 403 for the other customer",
+      "observed": "asB=status 200 asA=status 403 code \"forbidden\"",
+      "evidence": {
+        "har_entries": [
+          16,
+          111,
+          112
+        ]
+      }
+    },
+    {
+      "id": "unknown-account-is-404-not-403",
+      "obligation": "rule:ownership",
+      "title": "existence is resolved before ownership: an unknown account id answers 404",
+      "pass": true,
+      "exercised": true,
+      "expected": "status 404",
+      "observed": "status 404 code \"account_not_found\"",
+      "evidence": {
+        "har_entries": [
+          113
+        ]
+      }
+    },
+    {
+      "id": "system-fee-accounts-are-readable-by-every-principal",
+      "obligation": "rule:ownership",
+      "title": "the system fee accounts and their entries are readable by any customer",
+      "pass": true,
+      "exercised": true,
+      "expected": "200 for both fee accounts and for the USD fee account's entries",
+      "observed": "usdAsA=status 200 eurAsB=status 200 usdEntriesAsB=status 200",
+      "evidence": {
+        "har_entries": [
+          114,
+          115,
+          116
+        ]
+      }
+    },
+    {
+      "id": "administrator-is-unrestricted",
+      "obligation": "rule:ownership",
+      "title": "the administrator reaches accounts of both customer principals",
+      "pass": true,
+      "exercised": true,
+      "expected": "200 for an account of each customer principal",
+      "observed": "A=status 200 B=status 200",
+      "evidence": {
+        "har_entries": [
+          117,
+          118
+        ]
+      }
+    },
+    {
+      "id": "transfer-is-readable-by-the-owner-of-either-side",
+      "obligation": "rule:ownership",
+      "title": "a transfer is visible to both principals, without exposing the payer's account to the payee",
+      "pass": true,
+      "exercised": true,
+      "expected": "200 for the source owner, 200 for the destination owner, 403 when the payee reads the payer's account",
+      "observed": "source=status 200 dest=status 200 payerAccount=status 403 code \"forbidden\"",
+      "evidence": {
+        "har_entries": [
+          119,
+          120,
+          121
+        ]
+      }
+    },
+    {
+      "id": "balance-agrees-with-entries-feeSrc",
+      "obligation": "rule:ledger-arithmetic",
+      "title": "feeSrc: the stored balance equals the sum of its ledger entries",
+      "pass": true,
+      "exercised": true,
+      "expected": "balance == sum of 11 entry amounts",
+      "observed": "status 200 balance=174709 sum=174709 entries=11",
+      "evidence": {
+        "har_entries": [
+          123,
+          124
+        ],
+        "subject": {
+          "account": "acc_8n36k615kk"
+        }
+      }
+    },
+    {
+      "id": "balance-agrees-with-entries-feeDst",
+      "obligation": "rule:ledger-arithmetic",
+      "title": "feeDst: the stored balance equals the sum of its ledger entries",
+      "pass": true,
+      "exercised": true,
+      "expected": "balance == sum of 17 entry amounts",
+      "observed": "status 200 balance=135754 sum=135754 entries=17",
+      "evidence": {
+        "har_entries": [
+          125,
+          126
+        ],
+        "subject": {
+          "account": "acc_rkf1pgvt6k"
+        }
+      }
+    },
+    {
+      "id": "balance-agrees-with-entries-limitSrc",
+      "obligation": "rule:ledger-arithmetic",
+      "title": "limitSrc: the stored balance equals the sum of its ledger entries",
+      "pass": true,
+      "exercised": true,
+      "expected": "balance == sum of 3 entry amounts",
+      "observed": "status 200 balance=139859 sum=139859 entries=3",
+      "evidence": {
+        "har_entries": [
+          127,
+          128
+        ],
+        "subject": {
+          "account": "acc_h1ggs61g6z"
+        }
+      }
+    },
+    {
+      "id": "balance-agrees-with-entries-failSrc",
+      "obligation": "rule:ledger-arithmetic",
+      "title": "failSrc: the stored balance equals the sum of its ledger entries",
+      "pass": true,
+      "exercised": true,
+      "expected": "balance == sum of 2 entry amounts",
+      "observed": "status 200 balance=9900 sum=9900 entries=2",
+      "evidence": {
+        "har_entries": [
+          129,
+          130
+        ],
+        "subject": {
+          "account": "acc_fp9tzwhd5t"
+        }
+      }
+    },
+    {
+      "id": "balance-agrees-with-entries-idemSrc",
+      "obligation": "rule:ledger-arithmetic",
+      "title": "idemSrc: the stored balance equals the sum of its ledger entries",
+      "pass": true,
+      "exercised": true,
+      "expected": "balance == sum of 6 entry amounts",
+      "observed": "status 200 balance=97119 sum=97119 entries=6",
+      "evidence": {
+        "har_entries": [
+          131,
+          132
+        ],
+        "subject": {
+          "account": "acc_m2hjkt7x68"
+        }
+      }
+    },
+    {
+      "id": "balance-agrees-with-entries-eurSrc",
+      "obligation": "rule:ledger-arithmetic",
+      "title": "eurSrc: the stored balance equals the sum of its ledger entries",
+      "pass": true,
+      "exercised": true,
+      "expected": "balance == sum of 3 entry amounts",
+      "observed": "status 200 balance=78918 sum=78918 entries=3",
+      "evidence": {
+        "har_entries": [
+          133,
+          134
+        ],
+        "subject": {
+          "account": "acc_tw7b09hmx3"
+        }
+      }
+    },
+    {
+      "id": "balance-agrees-with-entries-eurDst",
+      "obligation": "rule:ledger-arithmetic",
+      "title": "eurDst: the stored balance equals the sum of its ledger entries",
+      "pass": true,
+      "exercised": true,
+      "expected": "balance == sum of 2 entry amounts",
+      "observed": "status 200 balance=21000 sum=21000 entries=2",
+      "evidence": {
+        "har_entries": [
+          135,
+          136
+        ],
+        "subject": {
+          "account": "acc_n1bsvj2wr9"
+        }
+      }
+    },
+    {
+      "id": "balance-agrees-with-entries-bDst",
+      "obligation": "rule:ledger-arithmetic",
+      "title": "bDst: the stored balance equals the sum of its ledger entries",
+      "pass": true,
+      "exercised": true,
+      "expected": "balance == sum of 2 entry amounts",
+      "observed": "status 200 balance=2700 sum=2700 entries=2",
+      "evidence": {
+        "har_entries": [
+          137,
+          138
+        ],
+        "subject": {
+          "account": "acc_73jcjqkppr"
+        }
+      }
+    },
+    {
+      "id": "balance-agrees-with-entries-bSrc",
+      "obligation": "rule:ledger-arithmetic",
+      "title": "bSrc: the stored balance equals the sum of its ledger entries",
+      "pass": true,
+      "exercised": true,
+      "expected": "balance == sum of 2 entry amounts",
+      "observed": "status 200 balance=49274 sum=49274 entries=2",
+      "evidence": {
+        "har_entries": [
+          139,
+          140
+        ],
+        "subject": {
+          "account": "acc_s2xnsgk7j4"
+        }
+      }
+    },
+    {
+      "id": "balance-agrees-with-entries-pendingAcct",
+      "obligation": "rule:ledger-arithmetic",
+      "title": "pendingAcct: the stored balance equals the sum of its ledger entries",
+      "pass": true,
+      "exercised": true,
+      "expected": "balance == sum of 0 entry amounts",
+      "observed": "status 200 balance=0 sum=0 entries=0",
+      "evidence": {
+        "har_entries": [
+          141,
+          142
+        ],
+        "subject": {
+          "account": "acc_tg934qpv0t"
+        }
+      }
+    },
+    {
+      "id": "balance-agrees-with-entries-obAcct",
+      "obligation": "rule:ledger-arithmetic",
+      "title": "obAcct: the stored balance equals the sum of its ledger entries",
+      "pass": true,
+      "exercised": true,
+      "expected": "balance == sum of 0 entry amounts",
+      "observed": "status 200 balance=0 sum=0 entries=0",
+      "evidence": {
+        "har_entries": [
+          143,
+          144
+        ],
+        "subject": {
+          "account": "acc_cc8jf33gg9"
+        }
+      }
+    },
+    {
+      "id": "balance-agrees-with-entries-acc_fee_usd",
+      "obligation": "rule:ledger-arithmetic",
+      "title": "acc_fee_usd: the stored balance equals the sum of its ledger entries",
+      "pass": true,
+      "exercised": true,
+      "expected": "balance == sum of 19 entry amounts",
+      "observed": "status 200 balance=685 sum=685 entries=19",
+      "evidence": {
+        "har_entries": [
+          145,
+          146
+        ],
+        "subject": {
+          "account": "acc_fee_usd"
+        }
+      }
+    },
+    {
+      "id": "balance-agrees-with-entries-acc_fee_eur",
+      "obligation": "rule:ledger-arithmetic",
+      "title": "acc_fee_eur: the stored balance equals the sum of its ledger entries",
+      "pass": true,
+      "exercised": true,
+      "expected": "balance == sum of 2 entry amounts",
+      "observed": "status 200 balance=82 sum=82 entries=2",
+      "evidence": {
+        "har_entries": [
+          147,
+          148
+        ],
+        "subject": {
+          "account": "acc_fee_eur"
+        }
+      }
+    },
+    {
+      "id": "settled-transfer-has-exactly-three-entries-summing-to-zero",
+      "obligation": "rule:ledger-arithmetic",
+      "title": "every settled transfer's ledger entries are exactly three and sum to zero",
+      "pass": true,
+      "exercised": true,
+      "expected": "three entries summing to 0 for each of the 21 settled transfers",
+      "observed": "all 21 settled transfers conserve",
+      "evidence": {
+        "har_entries": [
+          123,
+          124,
+          125,
+          126,
+          127,
+          128,
+          129,
+          130,
+          131,
+          132,
+          133,
+          134,
+          135,
+          136,
+          137,
+          138,
+          139,
+          140,
+          141,
+          142,
+          143,
+          144,
+          145,
+          146,
+          147,
+          148,
+          149,
+          122
+        ],
+        "subject": {
+          "settled_transfers": 21
+        }
+      }
+    },
+    {
+      "id": "settled-destination-is-credited-the-amount",
+      "obligation": "rule:ledger-arithmetic",
+      "title": "the destination account of a settled transfer is credited exactly the amount",
+      "pass": true,
+      "exercised": true,
+      "expected": "a transfer_credit of +amount on the destination account",
+      "observed": "every destination credit matches",
+      "evidence": {
+        "har_entries": [
+          123,
+          124,
+          125,
+          126,
+          127,
+          128,
+          129,
+          130,
+          131,
+          132,
+          133,
+          134,
+          135,
+          136,
+          137,
+          138,
+          139,
+          140,
+          141,
+          142,
+          143,
+          144,
+          145,
+          146,
+          147,
+          148,
+          149,
+          122
+        ],
+        "subject": {
+          "settled_transfers": 21
+        }
+      }
+    },
+    {
+      "id": "settled-source-is-debited-amount-plus-fee",
+      "obligation": "rule:fee-schedule",
+      "title": "the source account is debited amount + fee, never just the amount",
+      "pass": true,
+      "exercised": true,
+      "expected": "a transfer_debit of -(amount + fee) on the source account",
+      "observed": "every source debit carries the fee",
+      "evidence": {
+        "har_entries": [
+          123,
+          124,
+          125,
+          126,
+          127,
+          128,
+          129,
+          130,
+          131,
+          132,
+          133,
+          134,
+          135,
+          136,
+          137,
+          138,
+          139,
+          140,
+          141,
+          142,
+          143,
+          144,
+          145,
+          146,
+          147,
+          148,
+          149,
+          122
+        ],
+        "subject": {
+          "settled_transfers": 21
+        }
+      }
+    },
+    {
+      "id": "settlement-fee-entry-credits-the-currencys-fee-account",
+      "obligation": "rule:fee-schedule",
+      "title": "the fee is credited to the system fee account for the transfer's own currency",
+      "pass": true,
+      "exercised": true,
+      "expected": "a fee entry of +fee on acc_fee_usd for USD and acc_fee_eur for EUR",
+      "observed": "every fee entry is routed and valued correctly",
+      "evidence": {
+        "har_entries": [
+          123,
+          124,
+          125,
+          126,
+          127,
+          128,
+          129,
+          130,
+          131,
+          132,
+          133,
+          134,
+          135,
+          136,
+          137,
+          138,
+          139,
+          140,
+          141,
+          142,
+          143,
+          144,
+          145,
+          146,
+          147,
+          148,
+          149,
+          122
+        ],
+        "subject": {
+          "settled_transfers": 21
+        }
+      }
+    },
+    {
+      "id": "persisted-transfers-all-match-the-fee-formula",
+      "obligation": "rule:fee-schedule",
+      "title": "every transfer the service persisted carries the scheduled fee for its amount",
+      "pass": true,
+      "exercised": true,
+      "expected": "fee == 25 + round_half_away_from_zero(amount x 15 / 10000) for all 25 transfers",
+      "observed": "all 25 persisted transfers match",
+      "evidence": {
+        "har_entries": [
+          122
+        ]
+      }
+    },
+    {
+      "id": "fee-account-collects-exactly-the-scheduled-fees-usd",
+      "obligation": "rule:fee-schedule",
+      "title": "acc_fee_usd holds exactly the sum of the fees of the settled USD transfers",
+      "pass": true,
+      "exercised": true,
+      "expected": "sum of fee entries == 685",
+      "observed": "sum=685 over 19 entries, kinds=[\"fee\"]",
+      "evidence": {
+        "har_entries": [
+          145,
+          146
+        ]
+      }
+    },
+    {
+      "id": "fee-account-collects-exactly-the-scheduled-fees-eur",
+      "obligation": "rule:fee-schedule",
+      "title": "acc_fee_eur holds exactly the sum of the fees of the settled EUR transfers",
+      "pass": true,
+      "exercised": true,
+      "expected": "sum of fee entries == 82",
+      "observed": "sum=82 over 2 entries, kinds=[\"fee\"]",
+      "evidence": {
+        "har_entries": [
+          147,
+          148
+        ]
+      }
+    },
+    {
+      "id": "deposit-writes-one-entry-and-carries-no-fee",
+      "obligation": "rule:fee-schedule",
+      "title": "a deposit writes a single +amount entry with no counter-entry and no fee",
+      "pass": true,
+      "exercised": true,
+      "expected": "exactly one 'deposit' entry of +amount per deposit, and no fee entry naming a deposit",
+      "observed": "all 7 deposits match",
+      "evidence": {
+        "har_entries": [
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          123,
+          124
+        ]
+      }
+    },
+    {
+      "id": "canceled-and-failed-transfers-write-no-entries",
+      "obligation": "rule:ledger-arithmetic",
+      "title": "a transfer ending canceled or failed writes no ledger entries and moves nothing",
+      "pass": true,
+      "exercised": true,
+      "expected": "no entries for any of the 4 canceled/failed transfers",
+      "observed": "all 4 moved nothing",
+      "evidence": {
+        "har_entries": [
+          123,
+          124,
+          125,
+          126,
+          127,
+          128,
+          129,
+          130,
+          131,
+          132,
+          133,
+          134,
+          135,
+          136,
+          137,
+          138,
+          139,
+          140,
+          141,
+          142,
+          143,
+          144,
+          145,
+          146,
+          147,
+          148,
+          149,
+          122
+        ],
+        "subject": {
+          "settled_transfers": 21
+        }
+      }
+    },
+    {
+      "id": "idempotent-replay-produced-exactly-one-set-of-ledger-effects",
+      "obligation": "rule:idempotency",
+      "title": "the replayed transfer settled once, with a single three-entry effect",
+      "pass": true,
+      "exercised": true,
+      "expected": "exactly three entries for the replayed transfer id",
+      "observed": "3 entries for tr_4tnmtfhqp4",
+      "evidence": {
+        "har_entries": [
+          123,
+          124,
+          125,
+          126,
+          127,
+          128,
+          129,
+          130,
+          131,
+          132,
+          133,
+          134,
+          135,
+          136,
+          137,
+          138,
+          139,
+          140,
+          141,
+          142,
+          143,
+          144,
+          145,
+          146,
+          147,
+          148,
+          149,
+          122
+        ],
+        "subject": {
+          "settled_transfers": 21
+        }
+      }
+    },
+    {
+      "id": "pagination-complete-accounts-page-size-1",
+      "obligation": "rule:pagination-completeness",
+      "title": "walking /accounts?include_closed=true at page size 1 returns every item present at the start of the walk, exactly once",
+      "pass": true,
+      "exercised": true,
+      "expected": "the same 14 ids as the page-size-100 walk of the same quiescent collection, no duplicates, terminating",
+      "observed": "pages=14 returned=14 missing=[] unexpected=[] duplicated=[]",
+      "evidence": {
+        "har_entries": [
+          150,
+          151,
+          152,
+          153,
+          154,
+          155,
+          156,
+          157,
+          158,
+          159,
+          160,
+          161,
+          162,
+          163,
+          164
+        ],
+        "subject": {
+          "baseline": 14
+        }
+      }
+    },
+    {
+      "id": "pagination-complete-accounts-page-size-3",
+      "obligation": "rule:pagination-completeness",
+      "title": "walking /accounts?include_closed=true at page size 3 returns every item present at the start of the walk, exactly once",
+      "pass": true,
+      "exercised": true,
+      "expected": "the same 14 ids as the page-size-100 walk of the same quiescent collection, no duplicates, terminating",
+      "observed": "pages=5 returned=14 missing=[] unexpected=[] duplicated=[]",
+      "evidence": {
+        "har_entries": [
+          150,
+          165,
+          166,
+          167,
+          168,
+          169
+        ],
+        "subject": {
+          "baseline": 14
+        }
+      }
+    },
+    {
+      "id": "pagination-complete-transfers-page-size-1",
+      "obligation": "rule:pagination-completeness",
+      "title": "walking /transfers at page size 1 returns every item present at the start of the walk, exactly once",
+      "pass": true,
+      "exercised": true,
+      "expected": "the same 25 ids as the page-size-100 walk of the same quiescent collection, no duplicates, terminating",
+      "observed": "pages=25 returned=25 missing=[] unexpected=[] duplicated=[]",
+      "evidence": {
+        "har_entries": [
+          170,
+          171,
+          172,
+          173,
+          174,
+          175,
+          176,
+          177,
+          178,
+          179,
+          180,
+          181,
+          182,
+          183,
+          184,
+          185,
+          186,
+          187,
+          188,
+          189,
+          190,
+          191,
+          192,
+          193,
+          194,
+          195
+        ],
+        "subject": {
+          "baseline": 25
+        }
+      }
+    },
+    {
+      "id": "pagination-complete-transfers-page-size-7",
+      "obligation": "rule:pagination-completeness",
+      "title": "walking /transfers at page size 7 returns every item present at the start of the walk, exactly once",
+      "pass": true,
+      "exercised": true,
+      "expected": "the same 25 ids as the page-size-100 walk of the same quiescent collection, no duplicates, terminating",
+      "observed": "pages=4 returned=25 missing=[] unexpected=[] duplicated=[]",
+      "evidence": {
+        "har_entries": [
+          170,
+          196,
+          197,
+          198,
+          199
+        ],
+        "subject": {
+          "baseline": 25
+        }
+      }
+    },
+    {
+      "id": "pagination-complete-entries-page-size-1",
+      "obligation": "rule:pagination-completeness",
+      "title": "walking /accounts/acc_fee_usd/entries at page size 1 returns every item present at the start of the walk, exactly once",
+      "pass": true,
+      "exercised": true,
+      "expected": "the same 19 ids as the page-size-100 walk of the same quiescent collection, no duplicates, terminating",
+      "observed": "pages=19 returned=19 missing=[] unexpected=[] duplicated=[]",
+      "evidence": {
+        "har_entries": [
+          200,
+          201,
+          202,
+          203,
+          204,
+          205,
+          206,
+          207,
+          208,
+          209,
+          210,
+          211,
+          212,
+          213,
+          214,
+          215,
+          216,
+          217,
+          218,
+          219
+        ],
+        "subject": {
+          "baseline": 19
+        }
+      }
+    },
+    {
+      "id": "pagination-complete-entries-page-size-5",
+      "obligation": "rule:pagination-completeness",
+      "title": "walking /accounts/acc_fee_usd/entries at page size 5 returns every item present at the start of the walk, exactly once",
+      "pass": true,
+      "exercised": true,
+      "expected": "the same 19 ids as the page-size-100 walk of the same quiescent collection, no duplicates, terminating",
+      "observed": "pages=4 returned=19 missing=[] unexpected=[] duplicated=[]",
+      "evidence": {
+        "har_entries": [
+          200,
+          220,
+          221,
+          222,
+          223
+        ],
+        "subject": {
+          "baseline": 19
+        }
+      }
+    },
+    {
+      "id": "admin-routes-are-refused-to-customers",
+      "obligation": "rule:ownership",
+      "title": "only the administrator may call /admin/*",
+      "pass": true,
+      "exercised": true,
+      "expected": "403 for POST /admin/tick and POST /admin/reset under a customer token",
+      "observed": "tick=status 403 code \"forbidden\" reset=status 403 code \"forbidden\"",
+      "evidence": {
+        "har_entries": [
+          224,
+          225
+        ]
+      }
+    },
+    {
+      "id": "system-fee-accounts-are-not-actable-by-customers",
+      "obligation": "rule:ownership",
+      "title": "the system fee accounts are readable by every customer but may not be closed or spent from by one",
+      "pass": true,
+      "exercised": true,
+      "expected": "403 when a customer closes a fee account and 403 when a customer spends from one",
+      "observed": "customerClose=status 403 code \"forbidden\" customerSpend=status 403 code \"forbidden\"",
+      "evidence": {
+        "har_entries": [
+          226,
+          227
+        ]
+      }
+    }
+  ],
+  "advisories": [
+    {
+      "title": "service metadata",
+      "detail": "GET /health status 200 ok=true; GET /openapi.json status 200",
+      "evidence": {
+        "requests": [
+          1,
+          2
+        ]
+      }
+    },
+    {
+      "title": "an unauthenticated listing is refused",
+      "detail": "status 401 code \"unauthorized\"; www-authenticate=\"Bearer realm=\\\"minibank\\\"\"",
+      "evidence": {
+        "requests": [
+          3
+        ]
+      }
+    },
+    {
+      "title": "re-activating an already active account",
+      "detail": "status 409 code \"account_not_pending\" (spec documents 409 for this operation; not covered by an adjudicated card)",
+      "evidence": {
+        "requests": [
+          28
+        ]
+      }
+    },
+    {
+      "title": "cancelling a transfer that is no longer pending",
+      "detail": "re-cancel a canceled transfer: status 409 code \"transfer_not_pending\"; cancel a settled transfer: status 409 code \"transfer_not_pending\" (spec documents 409; not covered by an adjudicated card)",
+      "evidence": {
+        "requests": [
+          53,
+          54
+        ]
+      }
+    },
+    {
+      "title": "closing an already closed account",
+      "detail": "status 410 code \"account_closed\" (spec documents 410; not covered by an adjudicated card)",
+      "evidence": {
+        "requests": [
+          66
+        ]
+      }
+    },
+    {
+      "title": "Idempotency-Replayed header on the replay",
+      "detail": "header=\"true\"",
+      "evidence": {
+        "requests": [
+          97
+        ]
+      }
+    },
+    {
+      "title": "the administrator can spend from a system fee account",
+      "detail": "POST /transfers with source_account_id=acc_fee_usd under the admin token answered status 201. The ownership card's exception says the fee accounts are \"actable by none\", but its applicability sentence scopes the card to customer principals and states the administrator is unrestricted, so this is not gated here. See TRANSCRIPT.md.",
+      "evidence": {
+        "requests": [
+          228
+        ]
+      }
+    },
+    {
+      "title": "request budget at the end of the run",
+      "detail": "{\"limit\":360,\"used\":229,\"remaining\":131}",
+      "evidence": {
+        "requests": []
+      }
+    }
+  ],
+  "defects": [],
+  "hygiene": {
+    "leak_findings": []
+  },
+  "guard": [],
+  "obligations": {
+    "manifest_version": 1,
+    "summary": {
+      "total": 28,
+      "covered": 28,
+      "skipped": 0,
+      "unsupported": 0,
+      "unaccounted": 0
+    },
+    "entries": [
+      {
+        "id": "policy:no_server_error",
+        "source": "policy",
+        "statement": "the no_server_error policy holds over this execution's traffic",
+        "status": "covered",
+        "checks": []
+      },
+      {
+        "id": "policy:documented_status",
+        "source": "policy",
+        "statement": "the documented_status policy holds over this execution's traffic",
+        "status": "covered",
+        "checks": []
+      },
+      {
+        "id": "policy:response_schema",
+        "source": "policy",
+        "statement": "the response_schema policy holds over this execution's traffic",
+        "status": "covered",
+        "checks": []
+      },
+      {
+        "id": "policy:content_type",
+        "source": "policy",
+        "statement": "the content_type policy holds over this execution's traffic",
+        "status": "covered",
+        "checks": []
+      },
+      {
+        "id": "operation:GET /health",
+        "source": "operation",
+        "statement": "GET /health is exercised",
+        "status": "covered",
+        "checks": []
+      },
+      {
+        "id": "operation:GET /openapi.json",
+        "source": "operation",
+        "statement": "GET /openapi.json is exercised",
+        "status": "covered",
+        "checks": []
+      },
+      {
+        "id": "operation:GET /accounts",
+        "source": "operation",
+        "statement": "GET /accounts is exercised",
+        "status": "covered",
+        "checks": []
+      },
+      {
+        "id": "operation:POST /accounts",
+        "source": "operation",
+        "statement": "POST /accounts is exercised",
+        "status": "covered",
+        "checks": []
+      },
+      {
+        "id": "operation:GET /accounts/{accountId}",
+        "source": "operation",
+        "statement": "GET /accounts/{accountId} is exercised",
+        "status": "covered",
+        "checks": []
+      },
+      {
+        "id": "operation:POST /accounts/{accountId}/activate",
+        "source": "operation",
+        "statement": "POST /accounts/{accountId}/activate is exercised",
+        "status": "covered",
+        "checks": []
+      },
+      {
+        "id": "operation:POST /accounts/{accountId}/close",
+        "source": "operation",
+        "statement": "POST /accounts/{accountId}/close is exercised",
+        "status": "covered",
+        "checks": []
+      },
+      {
+        "id": "operation:GET /accounts/{accountId}/entries",
+        "source": "operation",
+        "statement": "GET /accounts/{accountId}/entries is exercised",
+        "status": "covered",
+        "checks": []
+      },
+      {
+        "id": "operation:POST /deposits",
+        "source": "operation",
+        "statement": "POST /deposits is exercised",
+        "status": "covered",
+        "checks": []
+      },
+      {
+        "id": "operation:GET /deposits/{depositId}",
+        "source": "operation",
+        "statement": "GET /deposits/{depositId} is exercised",
+        "status": "covered",
+        "checks": []
+      },
+      {
+        "id": "operation:GET /transfers",
+        "source": "operation",
+        "statement": "GET /transfers is exercised",
+        "status": "covered",
+        "checks": []
+      },
+      {
+        "id": "operation:POST /transfers",
+        "source": "operation",
+        "statement": "POST /transfers is exercised",
+        "status": "covered",
+        "checks": []
+      },
+      {
+        "id": "operation:GET /transfers/{transferId}",
+        "source": "operation",
+        "statement": "GET /transfers/{transferId} is exercised",
+        "status": "covered",
+        "checks": []
+      },
+      {
+        "id": "operation:POST /transfers/{transferId}/cancel",
+        "source": "operation",
+        "statement": "POST /transfers/{transferId}/cancel is exercised",
+        "status": "covered",
+        "checks": []
+      },
+      {
+        "id": "operation:POST /admin/tick",
+        "source": "operation",
+        "statement": "POST /admin/tick is exercised",
+        "status": "covered",
+        "checks": []
+      },
+      {
+        "id": "operation:POST /admin/reset",
+        "source": "operation",
+        "statement": "POST /admin/reset is exercised",
+        "status": "covered",
+        "checks": [
+          "reset-establishes-known-state"
+        ]
+      },
+      {
+        "id": "rule:fee-schedule",
+        "source": "rule",
+        "statement": "Every transfer's `fee` is exactly `25 + round_half_away_from_zero(amount × 15 / 10000)` minor units, the source account is debited `amount + fee` — never just `amount` — and the fee is credited to the system fee account for the transfer's own currency.",
+        "applicability": "It applies to `POST /transfers` at creation (the `fee` field of the returned transfer) and to the fee entry written at settlement, in both currencies. There are no exceptions: rounding is half away from zero (an exact `.5` basis-point component rounds up), and deposits carry no fee at all.",
+        "status": "covered",
+        "checks": [
+          "fee-formula-usd-1",
+          "fee-formula-usd-333",
+          "fee-formula-usd-334",
+          "fee-formula-usd-1000",
+          "fee-formula-usd-1667",
+          "fee-formula-usd-3000",
+          "fee-formula-usd-3333",
+          "fee-formula-usd-3334",
+          "fee-formula-usd-10000",
+          "fee-formula-eur-1000",
+          "fee-formula-eur-20000",
+          "usd-transfer-fees-are-routed-to-the-usd-fee-account",
+          "settled-source-is-debited-amount-plus-fee",
+          "settlement-fee-entry-credits-the-currencys-fee-account",
+          "persisted-transfers-all-match-the-fee-formula",
+          "fee-account-collects-exactly-the-scheduled-fees-usd",
+          "fee-account-collects-exactly-the-scheduled-fees-eur",
+          "deposit-writes-one-entry-and-carries-no-fee"
+        ]
+      },
+      {
+        "id": "rule:ledger-arithmetic",
+        "source": "rule",
+        "statement": "Every account's stored `balance` — including the system fee accounts — equals the sum of the amounts of all its ledger entries, and the entries carrying a settled transfer's `transfer_id` are exactly three (source debit `−(amount + fee)`, destination credit `+amount`, fee credit `+fee`) which sum to exactly zero.",
+        "applicability": "It applies to every account after every settled movement, read as a `GET /accounts/{accountId}` balance against a complete entry enumeration. Exceptions: a deposit writes one `deposit` entry of `+amount` with no counter-entry; a transfer ending `canceled` or `failed` writes no entries and must move nothing. Compare balance and entries with no intervening write.",
+        "status": "covered",
+        "checks": [
+          "deposit-settles-immediately",
+          "balance-agrees-with-entries-feeSrc",
+          "balance-agrees-with-entries-feeDst",
+          "balance-agrees-with-entries-limitSrc",
+          "balance-agrees-with-entries-failSrc",
+          "balance-agrees-with-entries-idemSrc",
+          "balance-agrees-with-entries-eurSrc",
+          "balance-agrees-with-entries-eurDst",
+          "balance-agrees-with-entries-bDst",
+          "balance-agrees-with-entries-bSrc",
+          "balance-agrees-with-entries-pendingAcct",
+          "balance-agrees-with-entries-obAcct",
+          "balance-agrees-with-entries-acc_fee_usd",
+          "balance-agrees-with-entries-acc_fee_eur",
+          "settled-transfer-has-exactly-three-entries-summing-to-zero",
+          "settled-destination-is-credited-the-amount",
+          "canceled-and-failed-transfers-write-no-entries"
+        ]
+      },
+      {
+        "id": "rule:ownership",
+        "source": "rule",
+        "statement": "A customer principal may read, fund, activate, close, spend from, and cancel against only the accounts whose `owner_principal` is that principal — anything else is refused `403` with no representation of the resource — and only the administrator may call `/admin/*` or open an account for someone else via `owner_principal`.",
+        "applicability": "It applies to every account-scoped and transfer-scoped operation for customer principals; the administrator is unrestricted. Exceptions: the system fee accounts and their entries are readable by every principal and actable by none; a transfer's destination need not belong to the caller; a transfer is readable by the owner of either side. Ownership is fixed at creation.",
+        "status": "covered",
+        "checks": [
+          "owner-principal-defaults-to-caller-and-differs-per-token",
+          "admin-may-open-account-for-another-principal",
+          "customer-may-not-open-account-for-another-principal",
+          "deposit-readable-by-its-account-owner",
+          "deposit-not-readable-by-other-principal",
+          "customer-may-not-fund-another-principals-account",
+          "customer-may-not-cancel-another-principals-transfer",
+          "transfer-destination-need-not-belong-to-the-caller",
+          "customer-reads-its-own-account",
+          "customer-cannot-read-another-principals-account",
+          "customer-cannot-act-on-another-principals-account",
+          "owner-principal-assignment-decides-reach",
+          "unknown-account-is-404-not-403",
+          "system-fee-accounts-are-readable-by-every-principal",
+          "administrator-is-unrestricted",
+          "transfer-is-readable-by-the-owner-of-either-side",
+          "admin-routes-are-refused-to-customers",
+          "system-fee-accounts-are-not-actable-by-customers"
+        ]
+      },
+      {
+        "id": "rule:lifecycle-legality",
+        "source": "rule",
+        "statement": "Money moves only between `active` accounts — a transfer or deposit naming a `pending` account is refused `409` and one naming a `closed` account is refused `410` — an account with pending transfers cannot be closed (`409`), and a closed account keeps serving its ledger history while `GET /accounts/{accountId}` answers `410` with a tombstone.",
+        "applicability": "It applies to `POST /transfers`, `POST /deposits`, `POST /accounts/{accountId}/close`, `GET /accounts/{accountId}`, `GET /accounts/{accountId}/entries`, and `GET /accounts` (closed accounts omitted unless `include_closed=true`). The history-after-closure behavior is deliberate, not an exception to legality.",
+        "status": "covered",
+        "checks": [
+          "new-account-is-pending",
+          "activate-makes-an-account-active",
+          "deposit-into-pending-account-refused-409",
+          "close-refused-while-a-transfer-is-pending",
+          "close-succeeds-once-nothing-is-pending",
+          "closed-account-read-answers-410-with-a-tombstone",
+          "closed-account-keeps-serving-its-ledger-history",
+          "closed-account-omitted-from-the-default-listing",
+          "closed-account-cannot-transact",
+          "pending-account-cannot-receive-a-transfer",
+          "pending-account-cannot-send-a-transfer"
+        ]
+      },
+      {
+        "id": "rule:idempotency",
+        "source": "rule",
+        "statement": "Two `POST /transfers` requests from the same principal carrying the same `Idempotency-Key` and the same body produce exactly one transfer and exactly one set of ledger effects, the second answering `200` with the first transfer; the same key with a different body is refused `409` and creates nothing.",
+        "applicability": "It applies to `POST /transfers`, scoped per authenticated principal: two principals sharing a key string each get their own transfer. A replay is a genuine replay — no second debit, no second fee, and balance and daily usage move exactly once.",
+        "status": "covered",
+        "checks": [
+          "idempotent-replay-returns-the-first-transfer-with-200",
+          "idempotent-replay-creates-no-second-transfer",
+          "idempotency-key-with-a-different-body-is-refused-409",
+          "idempotency-is-scoped-per-principal",
+          "idempotent-replay-produced-exactly-one-set-of-ledger-effects"
+        ]
+      },
+      {
+        "id": "rule:settlement",
+        "source": "rule",
+        "statement": "A pending transfer changes state only during `POST /admin/tick`, which settles pending transfers in creation order, re-checks at settlement time that the source still covers `amount + fee`, and marks a transfer that no longer does as `failed` with a `failure_reason` and no ledger entries.",
+        "applicability": "It applies to `POST /transfers` (creation leaves `pending` and writes nothing), `POST /admin/tick`, and the resulting transfer and entries. Exceptions: `settle_limit` bounds how many transfers a tick settles and leaves the rest pending, in order; a canceled transfer is never picked up by a later tick.",
+        "status": "covered",
+        "checks": [
+          "transfer-is-created-pending",
+          "pending-transfer-creation-moves-no-balance",
+          "pending-transfer-creation-writes-no-entries",
+          "transfer-does-not-settle-without-a-tick",
+          "tick-settles-in-creation-order",
+          "settle-limit-leaves-the-rest-pending",
+          "an-unbounded-tick-settles-the-remaining-pending-transfer",
+          "canceled-transfer-is-never-picked-up-by-a-later-tick",
+          "settlement-rechecks-funds-and-fails-the-uncovered-transfer",
+          "failed-transfer-carries-a-failure-reason",
+          "failed-transfer-moves-no-money",
+          "tick-settles-every-remaining-pending-transfer",
+          "canceled-transfer-excluded-from-the-final-tick"
+        ]
+      },
+      {
+        "id": "rule:daily-limit",
+        "source": "rule",
+        "statement": "The sum of the amounts of the transfers a source account creates in the current ledger day may not exceed 100 000 minor units — exactly reaching the limit is accepted, anything beyond is refused `422 daily_limit_exceeded` — and cancelling a transfer or having it fail at settlement does not return its amount to the allowance.",
+        "applicability": "It applies per source account, per ledger day, to `POST /transfers`, measured against `amount` only. **Adjudication note: your reading is ruled correct — the fee is charged to the balance but does not consume the allowance.** The allowance resets only via `POST /admin/tick` with `advance_day: true`; the limit is per source account.",
+        "status": "covered",
+        "checks": [
+          "daily-allowance-not-released-by-a-failed-settlement",
+          "daily-limit-refuses-an-amount-that-would-exceed-it",
+          "daily-limit-accepts-exactly-reaching-the-limit",
+          "daily-limit-measures-amount-only-not-amount-plus-fee",
+          "daily-allowance-not-released-by-cancelling",
+          "daily-limit-is-scoped-to-the-source-account",
+          "advance-day-rolls-the-ledger-day",
+          "daily-allowance-resets-on-a-new-ledger-day"
+        ]
+      },
+      {
+        "id": "rule:pagination-completeness",
+        "source": "rule",
+        "statement": "Starting without a cursor and following `next_cursor` to termination returns every item that was present when the walk began, exactly once, regardless of the page size chosen.",
+        "applicability": "It applies to `GET /accounts`, `GET /transfers`, and `GET /accounts/{accountId}/entries`, for an enumeration during which nothing is written to the collection; items appended after the enumeration begins may be missed, and that is not a violation. **Adjudication note: the anomaly your observation pass found was confirmed by hand as a genuine defect and has been fixed — quiescent completeness is intended, your rule stands as proposed, and the environment you author against now honors it.**",
+        "status": "covered",
+        "checks": [
+          "pagination-complete-accounts-page-size-1",
+          "pagination-complete-accounts-page-size-3",
+          "pagination-complete-transfers-page-size-1",
+          "pagination-complete-transfers-page-size-7",
+          "pagination-complete-entries-page-size-1",
+          "pagination-complete-entries-page-size-5"
+        ]
+      }
+    ]
+  },
+  "gate": {
+    "pass": true,
+    "checks": [
+      {
+        "policy": "no_server_error",
+        "tier": 1,
+        "spec": "invariant: no_server_error",
+        "obligation": "policy:no_server_error",
+        "applicable": true,
+        "pass": true,
+        "detail": "229 response(s), none 5xx",
+        "har_entries": []
+      },
+      {
+        "policy": "documented_status",
+        "tier": 1,
+        "spec": "invariant: documented_status",
+        "obligation": "policy:documented_status",
+        "applicable": true,
+        "pass": true,
+        "detail": "229 response(s) carried a documented status",
+        "har_entries": []
+      },
+      {
+        "policy": "response_schema",
+        "tier": 1,
+        "spec": "invariant: response_schema",
+        "obligation": "policy:response_schema",
+        "applicable": true,
+        "pass": true,
+        "detail": "229 response(s) matched their declared schema",
+        "har_entries": []
+      },
+      {
+        "policy": "content_type",
+        "tier": 1,
+        "spec": "invariant: content_type",
+        "obligation": "policy:content_type",
+        "applicable": true,
+        "pass": true,
+        "detail": "229 response(s) carried a declared media type",
+        "har_entries": []
+      }
+    ]
+  },
+  "soundness": {
+    "ok": true,
+    "reasons": []
+  },
+  "verdict": {
+    "pass": true,
+    "report_pass": true,
+    "gate_pass": true,
+    "sound": true,
+    "failing_checks": [],
+    "exit_code": 0
+  }
+}

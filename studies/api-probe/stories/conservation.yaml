@@ -1,0 +1,35 @@
+description: Falsify conservation — a settled transfer's ledger entries must sum to zero.
+tags: [invariant]
+story: |
+  Try to falsify this rule:
+
+  For a settled transfer, the ledger entries carrying its transfer id — the
+  source debit, the destination credit, and the fee credit — sum to exactly
+  zero.
+
+  It applies to transfers whose status is "settled". Deposits are a declared
+  exception: external funding has no counter-entry and is excluded. A transfer
+  that ends "failed", or that is canceled before it settles, writes no entries
+  at all, so it is not a counterexample either.
+
+  Get to a state where the rule is testable and then attack it. That means
+  building the workflow end to end: open accounts, activate them, fund them,
+  move money between them, and advance settlement — nothing settles until you
+  ask it to. Then vary what a transfer is made of. Amounts at the small end and
+  the large end, amounts whose fee lands awkwardly, several transfers settling
+  in one go, transfers in both directions between the same pair, transfers that
+  cannot be covered by the time they settle. Money is an integer in minor units,
+  so read the fee schedule in the spec and pick amounts that make it work hard.
+
+  The evidence lives in the ledger, so read it back. A transfer can only be
+  judged when all three of its legs have been seen, and the fee leg does not
+  land on either account you created — it is credited to the system fee account
+  for the currency (acc_fee_usd, acc_fee_eur). Enumerate the payer's entries,
+  the payee's entries, and the fee account's entries for every settled transfer
+  you want counted, following the pagination cursor until you have them all.
+
+  If a settled transfer's three legs do not sum to zero, you have it. Reproduce
+  it in as few requests as you can, then stop.
+
+success:
+  - ledger_conservation: "settled same-currency transfers, all three legs observed"

@@ -1,0 +1,11 @@
+description: Sorting the catalog by price and by name actually reorders the products and the active sort is visible in the control.
+story: |
+  You are outfitting a shelf on a budget and want to start from the cheapest
+  options. On the shop page, sort the products from lowest price to highest,
+  and check the grid really is in that order. Try the name sort too. You care
+  that the ordering on screen matches what you asked for.
+persona: [weekend-browser]
+report:
+  - "When you chose Price: low to high, did the products actually reorder so the cheapest came first?"
+  - "Did the high-to-low and name sorts also reorder the grid as asked?"
+  - "Was the currently active sort clearly shown in the control?"

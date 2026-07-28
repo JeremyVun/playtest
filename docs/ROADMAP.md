@@ -36,20 +36,20 @@ Plan: [`docs/backlog/api-testing/BUILD_PLAN.md`](backlog/api-testing/BUILD_PLAN.
 Design: [`docs/backlog/live-runs/DESIGN.md`](backlog/live-runs/DESIGN.md).
 Plan: [`docs/backlog/live-runs/BUILD_PLAN.md`](backlog/live-runs/BUILD_PLAN.md).
 
-- [ ] **L0 — Viewer live mode:** liveness from the persisted event stream,
+- [x] **L0 — Viewer live mode:** liveness from the persisted event stream,
       the long-poll `live` route on the local viewer host, live picker and
       history projections, and the viewer's live mode (follow mode,
       progress-driven pending step, seal transition), hermetic against a
       locally recording run; interfaces.md gains the route contract.
-- [ ] **L1 — Control-plane open runs:** `open` + acked, idempotent
+- [x] **L1 — Control-plane open runs:** `open` + acked, idempotent
       `live/*` runner routes; trajectory staging in SQLite and two-phase
       ledger-owned step artifacts served through the `runEntry` fallback;
       the hosted live endpoint; verified-seal cleanup and retention GC;
       hosted.md gains the staging lifecycle.
-- [ ] **L2 — Runner-agent live uploader:** best-effort coalesced streaming
+- [x] **L2 — Runner-agent live uploader:** best-effort coalesced streaming
       beside the progress reporter, end to end on `npm run hosted`; sealed
       bundles byte-identical to non-live runs.
-- [ ] **L3 — Console polish:** the run page streams in the embedded viewer,
+- [x] **L3 — Console polish:** the run page streams in the embedded viewer,
       the runs list gains a watch affordance, ux-lab covers the live page.
 
 ### Seeded-fault hill-climb rerun

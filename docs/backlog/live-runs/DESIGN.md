@@ -1,12 +1,11 @@
 # Live runs: open runs streaming into the viewer
 
-**Status:** proposed. Implementation phases and gates live in
-[`BUILD_PLAN.md`](./BUILD_PLAN.md). Until those phases land,
-[`docs/contracts/hosted.md`](../../contracts/hosted.md) and
-[`docs/contracts/interfaces.md`](../../contracts/interfaces.md) remain
-authoritative: a hosted run becomes viewable only when its sealed `.ptrun`
-bundle and final case report have landed, and the viewer loads a run exactly
-once per navigation.
+**Status:** implemented, 2026-07-28 (phases L0–L3 of
+[`BUILD_PLAN.md`](./BUILD_PLAN.md)). The behavior is now recorded in
+[`docs/contracts/hosted.md`](../../contracts/hosted.md),
+[`docs/contracts/interfaces.md`](../../contracts/interfaces.md), and
+[`docs/contracts/engine.md`](../../contracts/engine.md); this document is
+the design rationale.
 
 The async-axe work that once rode along here shipped independently; its runtime
 contract is recorded in [`docs/contracts/engine.md`](../../contracts/engine.md).

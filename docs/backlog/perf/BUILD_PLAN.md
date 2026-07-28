@@ -1,5 +1,13 @@
 # Recording performance build plan
 
+**Status:** implemented. All phases landed 2026-07-28 (Phase 0 `7256c3f`,
+Phase 1 `0bd6568`, Phase 2 + T5.1 `635acc6`, Phase 3 `16750c8`,
+Phase 4 + T5.2 `b4f98e4`); measurements and per-phase results live in
+[`BASELINE.md`](./BASELINE.md). T2.3 was measured and skipped (2.8% of
+`action_dispatch`), T5.3 remains deferred as written. The paths below
+predate the TypeScript monorepo split (`src/core/…` is now
+`packages/core/src/…`); this document records the plan and its rationale.
+
 Date: 2026-07-27
 Source: `docs/backlog/perf/ANALYSIS.md`. Every code-level claim in that
 analysis was re-verified against the current source before this plan was

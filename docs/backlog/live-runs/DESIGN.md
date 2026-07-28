@@ -8,6 +8,9 @@ authoritative: a hosted run becomes viewable only when its sealed `.ptrun`
 bundle and final case report have landed, and the viewer loads a run exactly
 once per navigation.
 
+The async-axe work that once rode along here is its own backlog item:
+[`docs/backlog/async-axe.md`](../async-axe.md).
+
 ## Problem
 
 A hosted run is invisible while it executes. The runner-agent posts a coarse
@@ -55,6 +58,12 @@ traverses proxies without ceremony, and one in-flight request per viewer tab
 is the correct concurrency. The viewer is the only consumer; there is no
 fan-out problem to solve.
 
+And wherever a signal already exists, reuse it rather than minting a new
+one: liveness derives from the event stream the engine already persists,
+"what is the run doing" derives from the progress fold the runner already
+computes, and the two hosts share those derivations as code, not as
+parallel implementations.
+
 ## The benchmark
 
 The design is done when this demo works on a laptop:
@@ -86,38 +95,51 @@ needs exist for crash-safety reasons:
   only after its artifacts are acknowledged — so a *served* line's artifacts
   exist. (The viewer keeps its existing "not captured" placeholder anyway;
   degradation stays boring even if the platform violates the invariant.)
+- Every engine event is synchronously persisted to the run dir's
+  `events.jsonl`, and `case_end` is emitted at the true end of the
+  finishing tail — after grading, video, and every manifest rewrite. The
+  run dir therefore already carries a durable open/sealed bracket and a
+  durable activity record; no new artifact is needed.
 - A valid placeholder manifest exists from the first instant of the case
   (written for Ctrl-C orphan visibility), so the viewer's first fetch has an
-  answer from birth. Its status field, however, says `interrupted` — the
-  placeholder *is* the crash evidence — so liveness is never inferred from
-  manifest status; both hosts carry an explicit open signal (below).
+  answer from birth. Its status field says `interrupted` — the placeholder
+  *is* the crash evidence — so nothing infers liveness from manifest
+  contents, ever.
 - The control plane already serves runs per entry, not per blob
   (`runEntry` resolves sibling artifacts first, then bundle entries). A
   staging rung and two virtual entries extend an existing ladder rather
   than building a new one.
-- The runner-agent already folds engine events into a coalesced reporter;
-  the live uploader is a second consumer of the same `onEvent` stream.
+- The runner-agent already folds engine events into a coalesced progress
+  snapshot; the live uploader is a second consumer of the same `onEvent`
+  stream, and the fold itself becomes shared code both hosts reuse.
 
 ## What "open" and "sealed" mean
 
-Liveness is explicit state, never an inference from artifact contents:
+Liveness is explicit state, never an inference from manifest contents:
 
 - **Hosted**, a run is open from the `open` call until its final case report
   lands (`live_opened_at` set, status non-terminal). The reconciler failing
   the run terminates openness the same way a report does.
-- **Locally**, the run writer creates an `open` marker file beside the
-  manifest when the run dir is born and removes it at the very end of the
-  finishing tail — after grading, video, and every manifest rewrite — and in
-  the SIGINT path. "Sealed" locally means the marker is gone; the manifest's
-  status field plays no part. A crash that never removes the marker is an
-  **abandoned** run: the local host reports it open-but-stale once the
-  trajectory stops growing past a threshold, and the viewer shows a stalled
-  state rather than a phantom live one.
+- **Locally**, liveness reads the event stream the engine already writes:
+  `case_start` present with no terminal `case_end` means open; a terminal
+  event means sealed; no `events.jsonl` at all means a legacy (sealed) run.
+  `case_end` is written after the finishing tail completes — grading,
+  video, and every manifest rewrite included — so "sealed" genuinely means
+  the run dir has stopped changing. The SIGINT flusher (which already
+  writes the placeholder manifest durably) additionally appends a terminal
+  event, so a Ctrl-C run seals; a `kill -9` leaves no terminal event and
+  the run reads as open-but-inactive, which is the truth.
 
-This exists because the obvious inference is wrong twice over: the
-placeholder manifest carries a terminal-looking status by design, and the
-"final" manifest is written *before* the tail's grade and video rewrites —
-terminal status is reached long before the run dir stops changing.
+This replaces any manifest-status inference, which is wrong twice over: the
+placeholder carries a terminal-looking status by design, and the "final"
+manifest write precedes the tail's grade and video rewrites.
+
+**Both hosts' pickers project openness the same way.** An open run reports
+a live status and no verdict — never the placeholder's `interrupted` — and
+is excluded from history and movement/changed projections until sealed, in
+the hosted adapter *and* the local `runs.json`/`history.json` (which today
+read the placeholder manifest verbatim). A half-recorded run is not
+history.
 
 ## The open-run lifecycle
 
@@ -127,8 +149,7 @@ When a claimed case starts, the runner-agent waits for the placeholder
 manifest to exist (the `case_start` event precedes the placeholder write;
 the event carries the run dir, so readiness is one watched stat) and POSTs
 `/runner/groups/:g/cases/:run_id/open` carrying it. The control plane
-stores the manifest on the run row, sets `live_opened_at`, and creates a
-staging ledger row (ownership and byte accounting; see cleanup). Opening is
+stores the manifest on the run row and sets `live_opened_at`. Opening is
 idempotent and best-effort: if it never arrives, the run stays invisible
 until seal, which is today's behavior.
 
@@ -139,15 +160,18 @@ requests. Order is the run-dir order; nothing is in flight concurrently, so
 nothing can complete out of order:
 
 - **Step artifacts** (`steps/NNN.png` and profile-dependent siblings) as
-  individual staged objects: `PUT /runner/runs/:r/live/<entry-path>`.
+  staged objects: `PUT /runner/runs/:r/live/<entry-path>`. `(run, entry
+  path)` is unique and immutable: a retry with identical bytes returns the
+  original acknowledgement without charging budget twice; different bytes
+  for an existing path are refused.
 - **Trajectory lines** batched: `POST /runner/runs/:r/live/trajectory` with
-  `{ from_line, lines }`, where `from_line` is the index of the first line
-  in the batch. The server knows its authoritative line count and answers
-  with it: an overlapping resend has its duplicate prefix dropped and its
-  new suffix appended (so a lost response followed by a larger resend loses
-  nothing); a batch that would leave a gap is refused and the answered
-  count tells the uploader where to rewind. Idempotent, self-healing,
-  order-preserving.
+  `{ from_line, lines }`. The server holds the authoritative line count
+  and answers with it. An overlapping resend is verified — the resent
+  prefix must match the stored lines (hash comparison) before being
+  dropped, so a divergent retry is refused, never silently merged — and
+  the new suffix appended; a batch that would leave a gap is refused and
+  the answered count tells the uploader where to rewind. Idempotent,
+  self-healing, order-preserving.
 - **Manifest snapshots** whenever the runner rewrote it, replacing the
   row-stored copy (generation-bumped; small, rewritten whole today).
 
@@ -162,74 +186,98 @@ affects the recording, and the queue drops itself (not the run) if it falls
 hopelessly behind — the seal carries everything regardless.
 
 Staged bytes count against a per-run live budget (the existing bundle limit
-as ceiling), accounted in the staging ledger. Live routes authenticate with
-the existing group-scoped runner token — the same guard as the bundle PUT.
+as ceiling). Live routes authenticate with the existing group-scoped runner
+token — the same guard as the bundle PUT.
+
+### Staging storage: two shapes, chosen by transactionality
+
+The metadata store (SQLite) and the object store cannot share a
+transaction, so staged state is split by what each side is good at:
+
+- **Trajectory batches and the manifest copy live in SQLite** — ledger
+  rows holding the line text itself. They are transient, KB-scale,
+  budget-capped, and deleted at seal; storing them beside the
+  authoritative line count makes accept-batch = one transaction (count,
+  budget, bytes, text move together), makes the live read one indexed
+  query, and removes any object-ownership race for the highest-frequency
+  write path entirely.
+- **Step artifacts live in the object store** (they are the real bytes),
+  owned through a **two-phase ledger row**: reserve `pending` (budget
+  charged) in SQLite → write the object → mark `ready` with size and
+  hash. Readers serve only `ready` rows; retention treats both states as
+  owned and reaps stale `pending` rows (a crashed upload's reservation)
+  on the same grace schedule. The existing orphan sweep — which deletes
+  any unowned `runs/`-prefixed object in the same cycle — never sees a
+  window where a live object is unowned.
 
 ### Serving
 
 Entry precedence becomes: **sibling artifact → sealed bundle entry → staged
 live object** — extending today's order (siblings already override sealed
 entries so generated clips win; that must survive) with staging as the
-final rung. Two entries are virtual for open runs rather than staged
-objects, because their sources are not files on the platform:
-
-- `manifest.json` is served from the run row (seeded by `open`, replaced by
-  snapshots) — so the viewer's first fetch works the moment the run opens,
-  independent of any staged upload landing.
-- `trajectory.jsonl` is served as the in-order concatenation of the staged
-  line batches.
-
-The picker projects open runs from **database state, not manifest
-contents**: an open run reports a live status (no verdict), never the
-placeholder's `interrupted`. Open runs are excluded from `history.json`
-and the movement/`changed` projections until sealed — a half-recorded run
-is not history and must not pollute baselines-adjacent views.
+final rung. Two entries are virtual for open runs, because their sources
+are rows, not objects: `manifest.json` from the run row (seeded by `open`,
+replaced by snapshots — the viewer's first fetch works the moment the run
+opens) and `trajectory.jsonl` as the ordered concatenation of the ledger's
+line batches.
 
 ### The live endpoint
 
 Both hosts expose, beside the run's entry routes:
 
 ```
-GET <run base>/live?after=<cursor>&wait=<seconds>
-→ { open, stale?, cursor, has_more, lines, manifest_generation, phase }
+GET <run base>/live?after=<line>&wait=<seconds>
 ```
 
-- `cursor` is an opaque token minted by the host (line-count-derived on the
-  hosted side, byte-offset-derived locally); viewers only echo it. An
-  unrecognizable or out-of-range cursor answers with a full-resync
-  indication rather than guessing.
-- Responses are capped (bytes and line count); `has_more: true` tells the
-  viewer to drain immediately instead of long-polling, so a late joiner
-  pages through the backlog in bounded responses rather than receiving an
-  entire trajectory inline.
-- The request is held up to `wait` seconds (capped like the feed) only when
-  the viewer is caught up. Hosted, ingest wakes holders through the same
-  waker mechanism as the feed; locally the host detects trajectory growth.
-- `phase` carries what the run is doing now (recording step N, healing,
-  grading, finishing) — sourced from engine events hosted-side and from the
-  run dir's event stream locally — so the viewer's pending row reflects
-  reality instead of arithmetic on the step budget.
-- `open: false` is the terminal answer; `stale: true` (local) flags an
-  abandoned run. On `open: false` the viewer does one full reload through
-  the normal path — picking up the terminal envelope rewrite, `grade.json`,
-  video, and the sealed artifact set — and stops polling.
+```jsonc
+{
+  "open": true,                 // false is the terminal answer
+  "reset": false,               // true: client state is invalid; reload fully
+  "next": 41,                   // line cursor to echo as `after`
+  "has_more": false,            // true: drain immediately, do not long-poll
+  "lines": ["…"],               // whole trajectory lines, capped count/bytes
+  "manifest_generation": 3,     // monotonic per host; inequality means refetch
+  "progress": {                 // the shared progress fold (may be null)
+    "step": 7, "max_steps": 20, "doing": "recording", "action": "…"
+  },
+  "inactive_ms": 0              // time since the run last showed activity
+}
+```
+
+- The cursor is a plain line number on both hosts (hosted counts ledger
+  lines; the local host keeps a private line→byte index for efficient
+  reads). A cursor the host cannot honor answers `reset: true` — no
+  guessing.
+- Responses are capped (bytes and line count); `has_more` pages a late
+  joiner through the backlog in bounded responses. The request is held up
+  to `wait` seconds (capped like the feed) only when the caller is caught
+  up. Hosted, ingest wakes holders through the feed-waker mechanism;
+  locally the host detects trajectory growth.
+- `progress` comes from one shared, pure event-folding function extracted
+  from the runner-agent's progress reporter into core: the hosted side
+  serves the stored snapshot it already has; the local side folds
+  `events.jsonl`. Same code, same vocabulary, no drift — and no new
+  "phase" field to plumb through the progress whitelist.
+- `inactive_ms` is a fact, not a diagnosis: time since the last persisted
+  event (hosted: last progress/ingest). A long model call, a retry
+  backoff, and a dead runner all look inactive; the viewer says "no
+  activity for 3m" and claims nothing more. No heartbeat machinery in v1.
+- `open: false` ends the conversation: the viewer does one full reload
+  through the normal path — picking up the terminal envelope rewrite,
+  `grade.json`, video, and the sealed artifact set — and stops polling.
 
 ### Sealing and cleanup
 
 Nothing about sealing changes: the runner builds and PUTs the `.ptrun`,
 then POSTs the case report, exactly as today. Staging is deleted **only
 when a verified sealed bundle exists for the run** — on the report that
-follows a successful bundle upload. A terminal report *without* a bundle
-(the runner reports `infra` when the bundle upload itself fails, and the
-reconciler fails runs whose runner died) leaves staging in place through
+follows a successful bundle upload (ledger rows in the report transaction;
+staged objects after it commits). A terminal report *without* a bundle —
+the runner reports `infra` when the bundle upload itself fails, and the
+reconciler fails runs whose runner died — leaves staging in place through
 the retention grace window, because staging is then the only evidence the
-run ever produced; the retention worker collects it afterward.
-
-Staged objects are owned by staging ledger rows from the moment they are
-written — necessary not just for budgets and grace windows but because the
-existing retention sweep treats any `runs/`-prefixed object without an
-owning row as an orphan and deletes it in the same cycle. Unowned staging
-would be collected while the run is still executing.
+run ever produced; the retention worker collects it afterward, ledger and
+objects together.
 
 ## Viewer live mode
 
@@ -242,55 +290,21 @@ or `open: false` means today's behavior, unchanged). In live mode:
   a log tail does. Any user selection of an earlier step disengages it;
   a "Live" affordance re-engages. Repaints never steal focus or collapse
   what the user opened — the platform's established live-update rule.
-- The pending row renders from the endpoint's `phase` — "recording step 7",
-  "healing", "grading" — and disappears for phases past recording, so an
-  early `done` or a grading tail never shows a phantom in-flight step.
-- A run header badge distinguishes ● live from sealed (and "stalled" for an
-  abandoned local run); on `open: false` the badge flips and the full
-  reload lands the grade panel in place.
+- The pending row renders from `progress` — "recording step 7 of 20",
+  "grading" — and disappears for stages past recording, so an early `done`
+  or a grading tail never shows a phantom in-flight step.
+- A run header badge distinguishes ● live from sealed; sustained
+  `inactive_ms` renders as neutral inactivity ("no activity for 3m"),
+  never as a claim the run died. On `open: false` the badge flips and the
+  full reload lands the grade panel in place.
 - Degradation is boring by design: a missed poll retries with backoff; a
-  screenshot the platform never received renders the existing "not
-  captured" placeholder; a viewer opened long after seal never knows the
-  run was ever live.
+  `reset` answer triggers one full reload; a screenshot the platform never
+  received renders the existing "not captured" placeholder; a viewer
+  opened long after seal never knows the run was ever live.
 
 The console's run page needs almost nothing: the iframe it already renders
 for running runs starts working instead of 404ing. The runs list gains a
 "watch" affordance on live rows next to the progress it already patches.
-
-## Async axe capture
-
-Bundled into this effort because it was the perf plan's one un-picked
-always-on cost (BASELINE.md: 22.5 ms p50, 58.7 ms p95 per web step, worse
-under concurrency). It is independent scope — phase A0 stands alone and can
-ship regardless of the live-run phases.
-
-Today the web driver awaits the axe scan inline between settle and the
-`execute()` return. Every consumer — the `accessibility_violations` gate,
-the grader's a11y summary, the viewer — reads it from the trajectory after
-the run; the actor never sees it; the contract already declares the field
-best-effort and possibly absent. So the wait can move off the critical
-path. The one thing the scan may not overlap is **any other page
-operation** — and that includes snapshot capture, which mutates the DOM
-(it strips and reassigns `data-dummy-ref` attributes on every call).
-The safe window is therefore the actor's model wait:
-
-- Step N's `execute()` returns without a scan. The runner captures step
-  N+1's snapshot exactly as today; once that capture completes, the scan
-  starts and runs concurrently with the actor request — seconds of pure
-  network wait against tens of milliseconds of scan.
-- Step N's envelope append latches on the scan settling (result, or absent
-  field on failure, as today); appends stay strictly step-ordered.
-- A dispatch barrier guarantees the scan has settled before action N+1
-  performs, and nothing else touches the page in that window by
-  construction. In practice the barrier never bites.
-- Terminal steps keep today's inline `captureAxe()`.
-
-One honest consequence: the scan now observes the DOM after the *next*
-snapshot's ref reassignment rather than before it, so the ref attributes
-embedded in violation HTML snippets can differ from today's bytes. The
-violations themselves — rules, targets, counts — are unchanged, and the
-field is best-effort by contract with no comparability pin. Acceptance
-compares semantics, not snippet bytes.
 
 ## Security notes
 
@@ -300,8 +314,9 @@ compares semantics, not snippet bytes.
 - Viewer live/entry routes sit behind the same console session auth as every
   other viewer-adapter route. The local server keeps its loopback, read-only
   posture.
-- Staged objects are ledger-owned from creation, budget-accounted, deleted
-  on verified seal or by retention GC; they never outlive the run row.
+- Staged state is ledger-owned from reservation onward, budget-accounted,
+  deleted on verified seal or by retention GC; it never outlives the run
+  row.
 - The stream carries only bytes the sealed bundle would carry (commitment 2).
   The 32 KiB whitelisted progress channel is unchanged and remains the only
   place a run's data crosses into platform *events*.
@@ -311,21 +326,22 @@ compares semantics, not snippet bytes.
 Deferred to landing, per contract rules; the touched surfaces are:
 
 - [`docs/contracts/hosted.md`](../../contracts/hosted.md): the runner
-  protocol gains `open` and `live/*` routes (ack semantics, budget,
-  auth); the staging ledger and its lifecycle; live picker projection and
-  history exclusion; the statement that a run may be viewer-visible before
-  its bundle exists.
+  protocol gains `open` and `live/*` routes (ack and idempotency
+  semantics, budget, auth); the staging ledger and its lifecycle; live
+  picker projection and history exclusion; the statement that a run may
+  be viewer-visible before its bundle exists.
 - [`docs/contracts/interfaces.md`](../../contracts/interfaces.md): the
-  viewer's `live` HTTP route on both hosts, its long-poll and paging
-  semantics, and its degradation (absence of the route must leave the
-  viewer exactly as it is today).
-- [`docs/contracts/engine.md`](../../contracts/engine.md): axe timing
-  (still "after settled actions, best-effort"; no longer blocking the step
-  return, snippet-byte caveat) and the local open marker in the run-dir
-  lifecycle.
-- [`docs/contracts/artifacts.md`](../../contracts/artifacts.md): the open
-  marker's name and lifecycle (it lives in the run dir); staged live
-  objects remain transient serving state, not a persisted format; the
+  viewer's `live` HTTP route on both hosts — response shape, line
+  cursors, paging, `reset` — its degradation (absence must leave the
+  viewer exactly as today), and the live projection in the local
+  `runs.json`/`history.json`.
+- [`docs/contracts/engine.md`](../../contracts/engine.md): documents what
+  is already true and now load-bearing — `case_end` as the durable seal
+  record written after the finishing tail — plus the SIGINT terminal
+  event.
+- [`docs/contracts/artifacts.md`](../../contracts/artifacts.md):
+  explicitly **not** changed. Staged live state is transient serving
+  state, not a persisted format; no new run-dir artifact exists; the
   `.ptrun` contract is untouched.
 
 ## Non-goals (v1)
@@ -337,5 +353,7 @@ Deferred to landing, per contract rules; the touched surfaces are:
 - No live HAR, video, or grading state: end-of-run artifacts stay
   end-of-run; the viewer's live mode shows recording evidence only.
 - No SSE, WebSocket, or multi-viewer fan-out machinery; long-poll per tab.
+- No heartbeat or abandonment detection; `inactive_ms` reports, the user
+  concludes.
 - No CLI `--follow` reporter changes; the terminal live reporter is already
   good, and this design leaves it alone.

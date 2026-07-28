@@ -79,17 +79,16 @@ Plan: [`docs/backlog/self-hosted-runners/BUILD_PLAN.md`](backlog/self-hosted-run
 Design: [`docs/backlog/live-runs/DESIGN.md`](backlog/live-runs/DESIGN.md).
 Plan: [`docs/backlog/live-runs/BUILD_PLAN.md`](backlog/live-runs/BUILD_PLAN.md).
 
-- [ ] **A0 — Async axe capture:** move the always-on web axe scan off the
-      step-loop critical path (latched envelope append, dispatch barrier);
-      behavior and contracts otherwise unchanged.
-- [ ] **L0 — Viewer live mode:** the long-poll `live` route on the local
-      viewer host and the viewer's live mode (follow mode, pending step,
-      seal transition), hermetic against a locally recording run;
-      interfaces.md gains the route contract.
-- [ ] **L1 — Control-plane open runs:** `open` + `live/*` runner routes,
-      staged objects served through the `runEntry` fallback, the hosted
-      live endpoint, seal cleanup and retention GC; hosted.md gains the
-      staging lifecycle.
+- [ ] **L0 — Viewer live mode:** liveness from the persisted event stream,
+      the long-poll `live` route on the local viewer host, live picker and
+      history projections, and the viewer's live mode (follow mode,
+      progress-driven pending step, seal transition), hermetic against a
+      locally recording run; interfaces.md gains the route contract.
+- [ ] **L1 — Control-plane open runs:** `open` + acked, idempotent
+      `live/*` runner routes; trajectory staging in SQLite and two-phase
+      ledger-owned step artifacts served through the `runEntry` fallback;
+      the hosted live endpoint; verified-seal cleanup and retention GC;
+      hosted.md gains the staging lifecycle.
 - [ ] **L2 — Runner-agent live uploader:** best-effort coalesced streaming
       beside the progress reporter, end to end on `npm run hosted`; sealed
       bundles byte-identical to non-live runs.
@@ -143,5 +142,9 @@ Prior evidence:
 - [ ] Improve Playwright export with opt-in idiomatic locators, API-driver
       export to `node --test`, and a viewer-reachable hosted download action.
 - [ ] Add an opt-in semantic LLM pass to `playtest lint`.
+- [ ] Move the always-on web axe scan off the step-loop critical path.
+      Plan: [`docs/backlog/async-axe.md`](backlog/async-axe.md) — deferred
+      scan overlapping the actor's model wait, with pending-scan flush on
+      every loop exit and honest semantic-drift acceptance.
 - [ ] Scope and complete the Lumen migration when its external dependency
       lands.

@@ -82,11 +82,13 @@
           "additionalProperties": false,
           "properties": {
             "total": { "anyOf": [{ "type": "integer", "minimum": 1 }, { "const": true }] },
-            "record": { "type": "integer", "minimum": 1 }
+            "record": { "type": "integer", "minimum": 1 },
+            "grade": { "type": "integer", "minimum": 0 },
+            "cpu": { "type": "integer", "minimum": 1 }
           }
         }
       ],
-      "description": "Run-wide concurrency: how many cases run at once. An integer n bounds the pool to n; true uses the default pool (min(4, cores)). Or an object { total, record } for a single pool of `total` workers (int or true) where at most `record` of them may be RECORDING (driving the actor with the model) at any instant — cheap baseline checks fill the rest, so you can record at low concurrency while checking at high. `record` omitted means no cap. Omit `parallel` entirely to auto-select — serial for external apps (they may share mutable state), the default pool for managed (compose) selections. A run-wide knob, so set it in the top-level playtest.yaml; the CLI --parallel / --parallel-record flags override it."
+      "description": "Run-wide concurrency: how many cases run at once. An integer n bounds the pool to n; true uses the default pool (min(4, cores)). Or an object { total, record, grade, cpu } for a single pool of `total` workers (int or true) where at most `record` of them may be RECORDING (driving the actor with the model) at any instant — cheap baseline checks fill the rest, so you can record at low concurrency while checking at high. `record` omitted means no cap. A case gives its worker back as soon as its browser is closed and its environment is down, so the next recording starts while it is still grading: `grade` caps how many cases may be finishing that way at once AND how many grader calls may be in flight (default: the record cap, or the pool when there is none; 0 turns the hand-off off), and `cpu` caps concurrent ffmpeg video builds (default: the pool). Omit `parallel` entirely to auto-select — serial for external apps (they may share mutable state), the default pool for managed (compose) selections. A run-wide knob, so set it in the top-level playtest.yaml; the CLI --parallel / --parallel-record flags override it."
     },
     "actor_model": {
       "type": "string",

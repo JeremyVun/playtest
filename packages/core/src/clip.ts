@@ -9,7 +9,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import { DummyConfigError } from "./config.ts";
 import { findRunsRoot, latestRun } from "./runs-root.ts";
 import { readTrajectory } from "./trajectory.ts";
@@ -293,11 +293,51 @@ const FFMPEG_FALLBACKS = [
   "/usr/local/opt/ffmpeg-full/bin/ffmpeg",
 ];
 
-function probeFfmpeg(bin: string): { runs: boolean; missing: string[] } {
-  const probe = spawnSync(bin, ["-hide_banner", "-filters"], { encoding: "utf8" });
-  if (probe.error || probe.status !== 0) return { runs: false, missing: [] };
-  const missing = ["subtitles", "drawtext"].filter((f) => !new RegExp(` ${f} +`).test(probe.stdout));
-  return { runs: true, missing };
+/**
+ * One child process, awaited. Every ffmpeg call in this module goes through
+ * here: a `spawnSync` blocks the WHOLE event loop, which in a parallel suite
+ * charges one case's ffmpeg to every other case in flight (BUILD_PLAN T4.1).
+ * `spawned` distinguishes "the binary could not be started" (ENOENT/EACCES —
+ * `error.code` is a string) from "it ran and exited non-zero" (numeric code).
+ */
+function run(bin: string, args: string[], cwd?: string): Promise<{ ok: boolean; spawned: boolean; stdout: string; stderr: string; message: string }> {
+  return new Promise((resolve) => {
+    execFile(bin, args, { encoding: "utf8", cwd, maxBuffer: 16 * 1024 * 1024 }, (error: DynamicValue, stdout, stderr) => {
+      const spawned = !error || typeof error.code === "number";
+      resolve({
+        ok: !error,
+        spawned,
+        stdout: stdout ?? "",
+        stderr: stderr ?? "",
+        message: error ? String(error.message ?? error) : "",
+      });
+    });
+  });
+}
+
+// One probe per binary per process. Phase 0 measured the repeated probe at
+// ~33 ms of blocked event loop PER CASE (BASELINE.md), and on an api run — no
+// stills to stitch — it was most of the `slideshow` span. The result cannot
+// change under a running suite, so memoize the in-flight promise itself:
+// concurrent cases probing at once share one child process.
+const ffmpegProbes = new Map<string, Promise<{ runs: boolean; missing: string[] }>>();
+
+function probeFfmpeg(bin: string): Promise<{ runs: boolean; missing: string[] }> {
+  let probe = ffmpegProbes.get(bin);
+  if (!probe) {
+    probe = (async () => {
+      const res = await run(bin, ["-hide_banner", "-filters"]);
+      if (!res.ok) return { runs: false, missing: [] };
+      return { runs: true, missing: ["subtitles", "drawtext"].filter((f) => !new RegExp(` ${f} +`).test(res.stdout)) };
+    })();
+    ffmpegProbes.set(bin, probe);
+  }
+  return probe;
+}
+
+/** Test seam: forget every memoized probe (a fixture binary changed on disk). */
+export function resetFfmpegProbes(): void {
+  ffmpegProbes.clear();
 }
 
 /** The ffmpeg binary; with burnFilters, also verified to carry the filters
@@ -305,12 +345,12 @@ function probeFfmpeg(bin: string): { runs: boolean; missing: string[] } {
  *  explicit override; otherwise a slim PATH build falls back to the
  *  conventional ffmpeg-full locations before failing. Throws DummyConfigError
  *  (exit 2) either way. `candidates` is a test seam. */
-export function resolveFfmpeg({ burnFilters = false, candidates }: { burnFilters?: boolean; candidates?: string[] } = {}): string {
+export async function resolveFfmpeg({ burnFilters = false, candidates }: { burnFilters?: boolean; candidates?: string[] } = {}): Promise<string> {
   const explicit = process.env.PLAYTEST_FFMPEG;
   const list = candidates ?? (explicit ? [explicit] : ["ffmpeg", ...FFMPEG_FALLBACKS]);
   let slim: { bin: string; missing: string[] } | null = null;
   for (const bin of list) {
-    const { runs, missing } = probeFfmpeg(bin);
+    const { runs, missing } = await probeFfmpeg(bin);
     if (!runs) continue;
     if (!burnFilters || missing.length === 0) return bin;
     slim ??= { bin, missing };
@@ -323,25 +363,24 @@ export function resolveFfmpeg({ burnFilters = false, candidates }: { burnFilters
   throw new DummyConfigError(`this clip needs ffmpeg and "${list[0]}" did not run — ${FFMPEG_HINT}`);
 }
 
-const ffmpegBinary = (opts: { burnFilters?: boolean; candidates?: string[] }): string => resolveFfmpeg(opts);
+const ffmpegBinary = (opts: { burnFilters?: boolean; candidates?: string[] }): Promise<string> => resolveFfmpeg(opts);
 
 /** Non-throwing ffmpeg probe: true when any candidate binary runs. The
  *  runner uses this to BUILD the slideshow opportunistically (ffmpeg optional —
  * absent leaves stills + the VTT sidecar and prints a hint); `playtest clip`
- * keeps the throwing resolveFfmpeg so an explicit clip request still exits 2. */
-export function ffmpegPresent(): boolean {
+ * keeps the throwing resolveFfmpeg so an explicit clip request still exits 2.
+ * Memoized per binary (probeFfmpeg), so a suite pays for the probe once. */
+export async function ffmpegPresent(): Promise<boolean> {
   const explicit = process.env.PLAYTEST_FFMPEG;
   const list = explicit ? [explicit] : ["ffmpeg", ...FFMPEG_FALLBACKS];
-  return list.some((bin) => {
-    const probe = spawnSync(bin, ["-hide_banner", "-version"], { encoding: "utf8" });
-    return !probe.error && probe.status === 0;
-  });
+  for (const bin of list) if ((await probeFfmpeg(bin)).runs) return true;
+  return false;
 }
 
-const ffmpeg = (bin: string, args: string[], cwd?: string): void => {
-  const res = spawnSync(bin, ["-hide_banner", "-loglevel", "error", "-y", ...args], { encoding: "utf8", cwd });
-  if (res.error || res.status !== 0) {
-    throw new DummyConfigError(`ffmpeg failed: ${(res.stderr || res.error?.message || "").trim().slice(0, 800)}`);
+const ffmpeg = async (bin: string, args: string[], cwd?: string): Promise<void> => {
+  const res = await run(bin, ["-hide_banner", "-loglevel", "error", "-y", ...args], cwd);
+  if (!res.ok) {
+    throw new DummyConfigError(`ffmpeg failed: ${(res.stderr || res.message || "").trim().slice(0, 800)}`);
   }
 };
 
@@ -502,6 +541,8 @@ function slideshowFrames(runDir: string, envelopes: DynamicValue[]): SlideshowFr
  * but no source, and every clip dies with "Output file does not contain any
  * stream" — a silent break of both `playtest clip` and hosted Export clip.
  */
+let listSeq = 0;
+
 export function slideshowArgs(runDir: string, envelopes: DynamicValue[], out: string): { listFile: string; frames: SlideshowFrame[]; args: string[] } {
   const frames: DynamicValue = slideshowFrames(runDir, envelopes);
   if (!frames.length) {
@@ -510,7 +551,10 @@ export function slideshowArgs(runDir: string, envelopes: DynamicValue[], out: st
   const list = frames
     .map((f: SlideshowFrame) => `file '${f.file.replace(/'/g, "'\\''")}'\nduration ${(f.ms / 1000).toFixed(3)}`)
     .join("\n");
-  const listFile = path.join(os.tmpdir(), `playtest-clip-${process.pid}.frames`);
+  // Unique per call, not just per process: with the async slideshow (T4.1) two
+  // cases can be stitching at the same instant, and a shared name would have
+  // one build overwrite the other's concat list mid-flight.
+  const listFile = path.join(os.tmpdir(), `playtest-clip-${process.pid}-${listSeq++}.frames`);
   // concat-demuxer quirk: the last duration is honored only with a trailing
   // repeat of the file — which then lingers for an extra beat of its own, so
   // the output is trimmed (-t) to the cue timeline's exact length.
@@ -536,11 +580,11 @@ export function slideshowArgs(runDir: string, envelopes: DynamicValue[], out: st
  * The thin wrapper the runner calls post-run (after probing ffmpegPresent) and
  * `clipRun`'s slideshow branch share. Throws DummyConfigError when ffmpeg can't
  * run or there are no screenshotted steps. Returns the out path. */
-export function buildSlideshow(runDir: string, envelopes: DynamicValue[], out: string, { burnFilters = false }: { burnFilters?: boolean } = {}): string {
-  const bin = ffmpegBinary({ burnFilters });
+export async function buildSlideshow(runDir: string, envelopes: DynamicValue[], out: string, { burnFilters = false }: { burnFilters?: boolean } = {}): Promise<string> {
+  const bin = await ffmpegBinary({ burnFilters });
   const show = slideshowArgs(runDir, envelopes, out);
   try {
-    ffmpeg(bin, show.args);
+    await ffmpeg(bin, show.args);
   } finally {
     fs.rmSync(show.listFile, { force: true });
   }
@@ -606,17 +650,34 @@ function clipBaseName(runDir: string): string {
  * so the sidecar mirrors the slideshow whether or not ffmpeg produced the mp4.
  * No-op (returns null) when the run recorded no screenshotted steps (an infra
  * death / non-web driver has none). Byte-identical to `clip`'s no-burn VTT, so
- * there's a single cue-timing recipe. */
-export function writeVideoSidecar(runDir: string, { style = "action" }: { style?: string } = {}): string | null {
-  let manifest: DynamicValue;
-  try {
-    manifest = JSON.parse(fs.readFileSync(path.join(runDir, "manifest.json"), "utf8"));
-  } catch {
-    return null;
+ * there's a single cue-timing recipe.
+ *
+ * `manifest`/`envelopes` are the runner's own in-memory copies (BUILD_PLAN
+ * T5.2): it has just written both, so re-reading and re-parsing them off disk
+ * is pure waste. External callers omit them and the file-read path stands. The
+ * runner must pass the SAME objects it wrote — this function only reads them. */
+export function writeVideoSidecar(
+  runDir: string,
+  { style = "action", manifest: given, envelopes: givenEnvelopes }:
+    { style?: string; manifest?: DynamicValue; envelopes?: DynamicValue[] } = {},
+): string | null {
+  let manifest: DynamicValue = given;
+  if (manifest === undefined) {
+    try {
+      manifest = JSON.parse(fs.readFileSync(path.join(runDir, "manifest.json"), "utf8"));
+    } catch {
+      return null;
+    }
   }
-  const trajPath = path.join(runDir, manifest.artifacts?.trajectory ?? "trajectory.jsonl");
-  if (!fs.existsSync(trajPath)) return null;
-  const envelopes = readTrajectory(trajPath);
+  if (!manifest) return null;
+  let envelopes: DynamicValue[];
+  if (givenEnvelopes) {
+    envelopes = givenEnvelopes;
+  } else {
+    const trajPath = path.join(runDir, manifest.artifacts?.trajectory ?? "trajectory.jsonl");
+    if (!fs.existsSync(trajPath)) return null;
+    envelopes = readTrajectory(trajPath);
+  }
   if (!envelopes.length) return null;
 
   const baselineByStep = new Map<DynamicValue, DynamicValue>();
@@ -690,11 +751,11 @@ async function clipRun(runDir: string, opts: ClipRunOptions = {}): Promise<Dynam
     // playable video.vtt sidecar with the burn's captions.
     const vttPath = path.join(runDir, "clip.vtt");
     fs.writeFileSync(vttPath, formatVtt(cues));
-    const bin = ffmpegBinary({ burnFilters: true });
+    const bin = await ffmpegBinary({ burnFilters: true });
     const out = path.resolve(opts.out ?? path.join(runDir, "clip.mp4"));
     const { work, args } = burnArgs({ input: videoPath, manifest, cues, out });
     try {
-      ffmpeg(bin, args, work);
+      await ffmpeg(bin, args, work);
     } finally {
       fs.rmSync(work, { recursive: true, force: true });
     }
@@ -718,26 +779,26 @@ async function clipRun(runDir: string, opts: ClipRunOptions = {}): Promise<Dynam
     if (opts.out) {
       const out = path.resolve(opts.out);
       fs.mkdirSync(path.dirname(out), { recursive: true });
-      buildSlideshow(runDir, envelopes, out);
+      await buildSlideshow(runDir, envelopes, out);
       const vttPath = out.replace(/\.(mp4|webm)$/i, "") + ".vtt";
       fs.writeFileSync(vttPath, formatVtt(cues));
       console.log(`clip pair ready (open both in any browser, or playtest view):\n  ${out}\n  ${vttPath}`);
       return { video: out, vtt: vttPath };
     }
     const out = path.join(runDir, "video.mp4");
-    buildSlideshow(runDir, envelopes, out);
+    await buildSlideshow(runDir, envelopes, out);
     const vttPath = writeVideoSidecar(runDir, { style });
     console.log(`clip pair ready (open both in any browser, or playtest view):\n  ${out}\n  ${vttPath}`);
     return { video: out, vtt: vttPath };
   }
-  const bin = ffmpegBinary({ burnFilters: true });
+  const bin = await ffmpegBinary({ burnFilters: true });
   const out = path.resolve(opts.out ?? path.join(runDir, "clip.mp4"));
   const vttPath = path.join(runDir, "clip.vtt");
   fs.writeFileSync(vttPath, formatVtt(cues));
-  buildSlideshow(runDir, envelopes, `${out}.base.mp4`, { burnFilters: true });
+  await buildSlideshow(runDir, envelopes, `${out}.base.mp4`, { burnFilters: true });
   const { work, args } = burnArgs({ input: `${out}.base.mp4`, manifest, cues, out });
   try {
-    ffmpeg(bin, args, work);
+    await ffmpeg(bin, args, work);
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
     fs.rmSync(`${out}.base.mp4`, { force: true });

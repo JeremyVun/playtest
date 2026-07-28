@@ -321,3 +321,113 @@ Measured on the api long cell — the fastest workload, ~130 spans written per
 `PLAYTEST_PERF_SIDECAR=0`. Within run-to-run noise. `perf.jsonl` is 0.6% of a
 long web run's bytes. The sidecar buffers spans and flushes in batches, so it
 never puts a syscall on the per-span path.
+
+## Phase 4 result (T4.1/T4.2 + T5.2), measured 2026-07-28
+
+Three changes, one commit: the ffmpeg slideshow became an awaited child process
+with a memoized probe; grading now runs concurrently with driver close, env
+teardown, captions and video; and a case hands its worker slot back when it
+stops **recording** rather than when it finishes, so the next recording starts
+while it grades.
+
+Two new harness knobs make the last of those measurable at all:
+
+```sh
+node tools/perf/baseline.mjs --driver=api --grader-ms=2000              # simulate a slow grader
+node tools/perf/baseline.mjs --driver=api --grader-ms=2000 --no-overlap # the pre-Phase-4 pool
+node tools/perf/baseline.mjs --driver=api --grader-ms=2000 --grade=4    # raise the grading headroom
+```
+
+**`--grader-ms` is a simulation, and it exists because this harness's loopback
+gateway answers a grade in about a millisecond.** A real grade is 42.8 s p50
+(ANALYSIS.md), and the entire value of T4.2 is that latency overlapping the next
+recording — at 1 ms there is nothing to overlap and the change is invisible.
+`--grader-ms=N` holds every `grade` call open for N ms; `--no-overlap` pins
+`parallel: { total: n, grade: 0 }`, which restores the pre-Phase-4 pool on the
+same binary. Never compare a `--grader-ms` cell against one without it.
+
+### The slideshow probe: the win that needed no simulation
+
+`ffmpegPresent()` used to `spawnSync` a fresh probe per case. On the api
+workload — no stills to stitch — that probe *was* the whole `slideshow` span,
+and because it was synchronous every other in-flight case paid it too.
+
+| api long cell | before | after |
+|---|---:|---:|
+| `slideshow` p50 | 34.7 ms | **0.40 ms** |
+| `case_total` p50, c1 | 56.4 ms | **23.3 ms** |
+| `case_total` p50, c4 | 50.9 ms | **19.0 ms** |
+| suite wall, c1 | 229 ms | **89 ms** |
+
+The probe is now memoized per binary per process: one case pays it (12.9 ms p50
+/ 42.7 ms p95 in a cold process, and up to ~360 ms the very first time a
+keg-only ffmpeg is executed since boot), every later case pays nothing. On web
+the span is unchanged at ~216 ms p50 because there it is real encoding work, not
+probing — but it no longer blocks the event loop, so it is charged to its own
+case instead of to every case in flight.
+
+Default-profile web cells are otherwise flat against Phase 3, which is the right
+answer: nothing here touches capture.
+
+| cell | `case_total` p50, P3 → P4 | suite wall, P3 → P4 |
+|---|---|---|
+| web short c1 | 4 523 → 4 495 ms | 18.1 → 17.7 s |
+| web short c4 | 4 484 → 4 476 ms | 4.5 → 4.5 s |
+| web long c1 | 14 112 → 14 148 ms | 56.5 → 56.1 s |
+| web long c4 | 14 491 → 14 689 ms | 14.6 → 14.7 s |
+
+(Suite walls above have the fixed `(concurrency − 1) × 500 ms` worker stagger
+subtracted, as everywhere else in this file.)
+
+### The overlap, priced with a 2 s grader
+
+Four cases, api long cell, raw suite wall:
+
+| concurrency | overlap off | overlap on | grade cap 4 |
+|---|---:|---:|---:|
+| 1 | 8 151 ms | 8 113 ms | **2 144 ms** |
+| 2 | 4 585 ms | 4 077 ms (−11%) | 2 087 ms |
+| 4 | 3 528 ms | 2 106 ms (**−40%**) | 2 077 ms |
+
+Web long cell, same 2 s grader:
+
+| concurrency | overlap off | overlap on |
+|---|---:|---:|
+| 1 | 62 606 ms | **56 576 ms (−9.6%)** |
+| 2 | 32 381 ms | 30 344 ms (−6.3%) |
+| 4 | 17 614 ms | 17 540 ms (−0.4%) |
+
+Four things those tables say, and one of them is a limit of the default:
+
+1. **The default caps grader load at exactly what it was.** `grade` defaults to
+   the pool size, because the pool size is how many cases could already have
+   been grading at once. So on the api c1 column the default buys nothing: one
+   grade at a time before, one grade at a time after. The `grade cap 4` column
+   is the same serial pool told it may keep four grades in flight — 8.1 s to
+   2.1 s, a 3.8× cut on a suite whose recordings cost 20 ms and whose grades
+   cost 2 s. That is the knob, and it is deliberately not the default: raising
+   it raises concurrent load on the grader gateway.
+2. **Four cases on four workers cannot pipeline.** The c4 web row is flat
+   because every case starts at once and the last case's grade is the tail
+   either way. Pipelining pays when cases outnumber workers, which is the shape
+   of every real suite.
+3. **The api c4 row beats its own stagger.** 2 106 ms is less than the
+   1 500 ms stagger plus a 2 000 ms grade, because with recordings this short a
+   single worker drains the whole queue before the later workers have finished
+   staggering. On a real suite a recording is minutes, not milliseconds, so the
+   stagger keeps doing its job — but it is worth knowing that the hand-off lets
+   one worker start recordings back to back.
+4. **Peak RSS does not move.** 234 MB with the overlap on versus 198 MB off at
+   web c4, and flat at 217–235 MB across the api cells. A detached case holds
+   its envelopes and an open HTTP request; its browser and its environment are
+   already gone, which is the whole reason the hand-off happens after teardown
+   rather than after the gate.
+
+### T5.2
+
+`gradeRun()` and `writeVideoSidecar()` now take the runner's in-memory
+trajectory and manifest instead of re-reading and re-parsing what it just wrote.
+Too small to see on these workloads (a long web run's `trajectory.jsonl` is
+163 KB), but it is what makes the overlap safe: with the grade reading the
+manifest from memory, nothing in the grading job can observe a half-written
+manifest.json from the tail job's video rewrite.

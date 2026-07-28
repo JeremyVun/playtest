@@ -32,6 +32,11 @@ export type ParallelConfig =
   | {
       total?: number | true;
       record?: number;
+      /** Cases that may be finishing (grading + video) off a worker slot, and
+       *  concurrent grader calls. 0 disables the hand-off. */
+      grade?: number;
+      /** Concurrent ffmpeg slideshow builds. */
+      cpu?: number;
     };
 
 export interface LimitsConfig {

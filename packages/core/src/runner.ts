@@ -246,7 +246,20 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
   // driverFactory is a test seam (docs/contracts/engine.md#run-lifecycle): the
   // hermetic engine tests inject a scripted in-memory driver to exercise the
   // act/heal loop without a browser. Production callers never pass it.
-  const { runsRoot, runId, mode = "auto", grade = true, headed = false, refresh = false, onEvent = () => {}, driverFactory = createDriver } = opts;
+  // envFactory is a second test seam alongside driverFactory: the finishing tail
+  // (T4.1) is the one place where env.teardown() can throw, and no hermetic
+  // fixture environment can be made to fail on demand. Production callers never
+  // pass it.
+  const { runsRoot, runId, mode = "auto", grade = true, headed = false, refresh = false, onEvent = () => {}, driverFactory = createDriver, envFactory = prepareEnv } = opts;
+  // Concurrency permits handed down by schedulePool (BUILD_PLAN T4.2). A case
+  // run on its own — `playtest run` of a single story, a hosted single-case
+  // executor, a test — gets the identity permits and behaves exactly as before:
+  // `release` is a no-op and the two semaphores run their thunk inline.
+  const permits = {
+    release: opts.permits?.release ?? (() => {}),
+    grade: opts.permits?.grade ?? (<T,>(fn: () => T | Promise<T>) => Promise.resolve(fn())),
+    cpu: opts.permits?.cpu ?? (<T,>(fn: () => T | Promise<T>) => Promise.resolve(fn())),
+  };
   const writer = new RunWriter(runsRoot, runId, rc.id);
   // The run's diagnostic timing sidecar (perf.ts). Diagnostic only: it never
   // appears in a manifest, an envelope, or trajectory.jsonl, and every call is a
@@ -434,7 +447,7 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
 
     let env: DynamicValue;
     try {
-      env = await prepareEnv(rc, runId);
+      env = await envFactory(rc, runId);
     } catch (e: DynamicValue) {
       return finishInfra(e.message);
     }
@@ -936,72 +949,112 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
   });
   writer.writeManifest(manifest);
   finalManifestWritten = true; // the SIGINT flusher must not clobber this now
-  const closeAt = perf.now();
-  await driver.close().catch(() => {});
-  perf.span("driver_close", closeAt);
-  const teardownAt = perf.now();
-  await env.teardown();
-  perf.span("env_teardown", teardownAt);
 
-  // The shareable video is a post-run slideshow stitched from the per-step
-  // stills (pure stills now on disk), not a live screencast. Emit the caption
-  // sidecar (video.vtt) regardless — pure-JS, cue-timed on the slideshow
-  // timeline (same recipe as `playtest clip`, byte-for-byte); a non-web /
-  // screenshot-less run leaves it a no-op. Then, if ffmpeg is present, build
-  // video.mp4 and point the manifest at it; absent, leave artifacts.video null
-  // (the stills + .vtt remain, the viewer shows "no video recorded") and print
-  // a one-line install hint. Best-effort — a build hiccup never fails the run.
-  const vttAt = perf.now();
-  try { writeVideoSidecar(writer.dir); } catch { /* sidecar is best-effort */ }
-  perf.span("vtt", vttAt);
-  const slideshowAt = perf.now();
-  try {
-    if (ffmpegPresent()) {
-      buildSlideshow(writer.dir, r.envelopes, path.join(writer.dir, "video.mp4"));
-      manifest.artifacts.video = "video.mp4";
-      writer.writeManifest(manifest);
-    } else {
-      emit("warn", { message: `note: no shareable video built (ffmpeg not found) — ${FFMPEG_HINT}` });
-    }
-  } catch { /* slideshow is best-effort; the stills + .vtt are the fallback */ }
-  // spawnSync ffmpeg blocks the whole event loop, so in a parallel suite this
-  // span is charged to every in-flight case, not just this one (Phase 4).
-  perf.span("slideshow", slideshowAt, null, { steps: r.envelopes.length });
-
-  // The score rides on the result so trend lines and --json need not re-read
-  // grade.json.
-    let score = null;
-    if (willGrade) {
-      emit("grading");
-      const gradeAt = perf.now();
-      try {
-        const grade = await gradeRun(writer.dir, rc, {
-          signal: r.signal,
-          perf,
-          onRetry: ({ status, attempt, maxAttempts, waitMs }) =>
-            emit("retry", { phase: "grading", status, attempt, maxAttempts, waitMs }),
-        });
-        addTokens(r.graderTokens, grade.tokens);
-        score = grade.score ?? null;
-        // Projection only (P1): the count of typed bug candidates the discovery
-        // grader emitted, so run listings/CLI can surface it without re-reading
-        // grade.json. Not a platform finding; hosted intake is a later phase.
-        if (Array.isArray(grade.bug_candidates) && grade.bug_candidates.length) {
-          manifest.totals.bug_candidates = grade.bug_candidates.length;
-        }
-      } catch (e) {
-        emit("warn", { message: `warning: grading ${rc.id} failed: ${firstLine(e)}` });
-        manifest.artifacts.grade = null;
+  // ------------------------------------------------------------- the tail
+  // Two independent finishing jobs, run CONCURRENTLY (BUILD_PLAN T4.1):
+  //
+  //   grade — the grader model call. Everything it reads exists already:
+  //     the trajectory and the manifest are handed to it in memory (T5.2),
+  //     final.a11y.txt was written by stopRecording before the gate, and the
+  //     per-step artifacts it may fetch were persisted by captureSnapshot. It
+  //     reads no har.json, so the HAR-flush ordering below is not its business.
+  //   tail — driver close, env teardown, the VTT sidecar, the mp4 slideshow.
+  //     driver.close() forces the final HAR flush; nothing in the grade branch
+  //     reads har.json, and the gate (which does) already ran above.
+  //
+  // JOIN ORDER: settle BOTH, then let the tail's error win. Only env.teardown()
+  // can throw here — driver.close, the sidecar and the slideshow are all
+  // best-effort — and a teardown throw leaves runCase as it always has: it
+  // escapes to runAll, which reports the case infra (exit 2). Rethrowing only
+  // after grading has settled is deliberate: an eager throw would leave a
+  // grade call writing grade.json into a directory nobody is waiting on.
+  // The one visible difference from the serial order is that a run whose
+  // teardown fails may now also have graded; status and exit code are
+  // unchanged.
+  let score: DynamicValue = null;
+  const gradeJob = async () => {
+    if (!willGrade) return;
+    emit("grading");
+    const gradeAt = perf.now();
+    try {
+      const grade = await permits.grade(() => gradeRun(writer.dir, rc, {
+        signal: r.signal,
+        perf,
+        // The runner's own copies — identical to the bytes it wrote, and no
+        // re-read to race the tail's manifest rewrite (T5.2).
+        envelopes: r.envelopes,
+        manifest,
+        onRetry: ({ status, attempt, maxAttempts, waitMs }: DynamicValue) =>
+          emit("retry", { phase: "grading", status, attempt, maxAttempts, waitMs }),
+      }));
+      addTokens(r.graderTokens, grade.tokens);
+      score = grade.score ?? null;
+      // Projection only (P1): the count of typed bug candidates the discovery
+      // grader emitted, so run listings/CLI can surface it without re-reading
+      // grade.json. Not a platform finding; hosted intake is a later phase.
+      if (Array.isArray(grade.bug_candidates) && grade.bug_candidates.length) {
+        manifest.totals.bug_candidates = grade.bug_candidates.length;
       }
-      perf.span("grade_total", gradeAt, null, { score });
-      // The manifest was written before grading; fold the grade's tokens into the
-      // merged run totals now (assert verdicts were already counted in the gate
-      // phase, before the first write). On a grade failure gradeRun throws without
-      // returning its usage, so a failed grade's tokens go unbilled — the rewrite
-      // still corrects the actor+assert total and nulls the grade artifact.
-      Object.assign(manifest.totals, runTotals(rc, r));
-      writer.writeManifest(manifest);
+    } catch (e) {
+      emit("warn", { message: `warning: grading ${rc.id} failed: ${firstLine(e)}` });
+      manifest.artifacts.grade = null;
     }
+    perf.span("grade_total", gradeAt, null, { score });
+    // The manifest was written before grading; fold the grade's tokens into the
+    // merged run totals now (assert verdicts were already counted in the gate
+    // phase, before the first write). On a grade failure gradeRun throws without
+    // returning its usage, so a failed grade's tokens go unbilled — the rewrite
+    // still corrects the actor+assert total and nulls the grade artifact.
+    Object.assign(manifest.totals, runTotals(rc, r));
+    writer.writeManifest(manifest);
+  };
+
+  const tailJob = async () => {
+    const closeAt = perf.now();
+    await driver.close().catch(() => {});
+    perf.span("driver_close", closeAt);
+    const teardownAt = perf.now();
+    try {
+      await env.teardown();
+    } finally {
+      perf.span("env_teardown", teardownAt);
+      // Everything expensive and exclusive — the browser/simulator, the managed
+      // container, the actor's model budget — is now released, so hand the
+      // recording permit back and let the pool start the next case while this
+      // one grades (T4.2). Idempotent; the pool releases it again on exit.
+      permits.release();
+    }
+
+    // The shareable video is a post-run slideshow stitched from the per-step
+    // stills (pure stills now on disk), not a live screencast. Emit the caption
+    // sidecar (video.vtt) regardless — pure-JS, cue-timed on the slideshow
+    // timeline (same recipe as `playtest clip`, byte-for-byte); a non-web /
+    // screenshot-less run leaves it a no-op. Then, if ffmpeg is present, build
+    // video.mp4 and point the manifest at it; absent, leave artifacts.video null
+    // (the stills + .vtt remain, the viewer shows "no video recorded") and print
+    // a one-line install hint. Best-effort — a build hiccup never fails the run.
+    const vttAt = perf.now();
+    try { writeVideoSidecar(writer.dir, { manifest, envelopes: r.envelopes }); } catch { /* sidecar is best-effort */ }
+    perf.span("vtt", vttAt);
+    const slideshowAt = perf.now();
+    try {
+      if (await ffmpegPresent()) {
+        // The ffmpeg child no longer blocks the event loop, so the CPU permit
+        // — not the runtime — is what bounds how many stitch at once.
+        await permits.cpu(() => buildSlideshow(writer.dir, r.envelopes, path.join(writer.dir, "video.mp4")));
+        manifest.artifacts.video = "video.mp4";
+        writer.writeManifest(manifest);
+      } else {
+        emit("warn", { message: `note: no shareable video built (ffmpeg not found) — ${FFMPEG_HINT}` });
+      }
+    } catch { /* slideshow is best-effort; the stills + .vtt are the fallback */ }
+    perf.span("slideshow", slideshowAt, null, { steps: r.envelopes.length });
+  };
+
+  // Both jobs mutate the same `manifest` object and may each write it; whichever
+  // finishes last writes the union, so the final bytes match the serial order.
+  const [, tailOutcome] = await Promise.allSettled([gradeJob(), tailJob()]);
+  if (tailOutcome.status === "rejected") throw tailOutcome.reason;
 
     // Discovery never writes baselines or healed candidates, refresh included
     // (baselineEligible is false there — its status is never "pass"; the guard
@@ -1908,9 +1961,18 @@ function readHar(runDir: string): DynamicValue[] {
  * forms, byte-identical to the old single-pool behavior). When `total` is `true`
  * or auto, it falls back to `auto` (the default pool unless every case is a
  * managed-compose external, matching the historical auto rule in the caller).
- * @param {number|true|{total?:number|true,record?:number}|null} parallel
+ *
+ * `grade` and `cpu` are the T4.2 tail permits. `grade` bounds BOTH how many
+ * cases may sit in their grading tail detached from a worker slot and how many
+ * grader calls may be in flight; `cpu` bounds concurrent ffmpeg slideshow
+ * builds. Both default to `total`, which is exactly the number of cases that
+ * could be grading before the split existed — so the defaults add pipelining
+ * without adding load on the grader gateway. `grade: 0` opts out of the
+ * hand-off entirely and restores the pre-Phase-4 shape.
+ *
+ * @param {number|true|{total?:number|true,record?:number,grade?:number,cpu?:number}|null} parallel
  * @param {number} auto the auto-selected pool size for this run
- * @returns {{ total: number, record: number }}
+ * @returns {{ total: number, record: number, grade: number, cpu: number }}
  */
 export function resolveBudget(parallel: DynamicValue, auto: number) {
   // Number.isFinite guards a non-finite value (NaN from a bad CLI coercion, ±Infinity)
@@ -1921,36 +1983,115 @@ export function resolveBudget(parallel: DynamicValue, auto: number) {
   // belt-and-suspenders guard on the pure scheduler seam.
   const poolOf = (t: DynamicValue) => (t === true || t === null || !Number.isFinite(t) ? auto : Math.max(1, t));
   const capOf = (r: DynamicValue) => (r !== null && Number.isFinite(r) ? Math.max(1, r) : Infinity);
-  if (typeof parallel === "number") return { total: poolOf(parallel), record: Infinity };
-  if (parallel === true) return { total: auto, record: Infinity };
-  if (parallel && typeof parallel === "object") {
-    return { total: poolOf(parallel.total), record: capOf(parallel.record) };
+  // A tail cap of 0 is meaningful ("never detach"), so it clamps at 0, not 1.
+  const tailOf = (v: DynamicValue, fallback: number) =>
+    (typeof v === "number" && Number.isFinite(v) ? Math.max(0, Math.trunc(v)) : fallback);
+  if (typeof parallel === "number") {
+    const total = poolOf(parallel);
+    return { total, record: Infinity, grade: total, cpu: total };
   }
-  return { total: auto, record: Infinity };
+  if (parallel === true) return { total: auto, record: Infinity, grade: auto, cpu: auto };
+  if (parallel && typeof parallel === "object") {
+    const total = poolOf(parallel.total);
+    const record = capOf(parallel.record);
+    // With a finite record cap the pool is deliberately lopsided (many cheap
+    // checks, few recordings) and only recordings ever grade, so the natural
+    // grading headroom is the record cap, not the whole pool.
+    const graded = Number.isFinite(record) ? Math.min(record, total) : total;
+    return { total, record, grade: tailOf(parallel.grade, graded), cpu: Math.max(1, tailOf(parallel.cpu, total)) };
+  }
+  return { total: auto, record: Infinity, grade: auto, cpu: auto };
 }
 
 /**
- * One worker pool of `budget.total` workers running `task(item)` over `items`,
- * with a record cap: at most `budget.record` items whose `.record` is true may be
- * in flight at once. A free worker picks the next eligible item — a check
- * (`.record` false) is always eligible; a record is eligible only while
+ * A counting semaphore over `limit` permits, FIFO. `Infinity` short-circuits to
+ * a plain call so the uncapped path allocates nothing.
+ */
+function semaphore(limit: number) {
+  let inFlight = 0;
+  const queue: (() => void)[] = [];
+  const release = () => {
+    const next = queue.shift();
+    // Hand the permit straight to the next waiter rather than dropping and
+    // re-taking it: with a synchronous resume in between, a third caller could
+    // otherwise slip past the cap.
+    if (next) next();
+    else inFlight--;
+  };
+  return async <T>(fn: () => T | Promise<T>): Promise<T> => {
+    if (!Number.isFinite(limit)) return await fn();
+    if (inFlight >= limit) await new Promise<void>((resolve) => queue.push(resolve));
+    else inFlight++;
+    try {
+      return await fn();
+    } finally {
+      release();
+    }
+  };
+}
+
+/**
+ * One worker pool of `budget.total` workers running `task(item, permits)` over
+ * `items`, with a record cap: at most `budget.record` items whose `.record` is
+ * true may be RECORDING at once. A free worker picks the next eligible item — a
+ * check (`.record` false) is always eligible; a record is eligible only while
  * `recordsInFlight < budget.record`. When the only remaining work is records and
  * the record cap is full, the worker waits for an in-flight record to finish
  * rather than busy-spinning. Original `items` order is preserved within each
  * class, so ids dispatch in a stable order. The pure scheduler — no I/O,
  * deterministic — so it can be unit-tested without a browser or a model.
+ *
+ * The task is handed three permits (BUILD_PLAN T4.2):
+ *
+ *   permits.release()  the case's recording is over — its browser is closed and
+ *                      its environment torn down. Gives the record permit back
+ *                      AND, if the tail budget allows, hands the worker slot
+ *                      back too: the task keeps running (its grade, its video)
+ *                      DETACHED while the worker starts the next recording.
+ *                      Idempotent, and always re-run when the task settles.
+ *   permits.grade(fn)  run fn under the grader cap (`budget.grade`).
+ *   permits.cpu(fn)    run fn under the CPU cap (`budget.cpu`) — ffmpeg.
+ *
+ * A task that never calls `release` behaves exactly as it did before the split:
+ * it owns its worker until it settles. `schedulePool` does not return until
+ * every detached tail has settled, and rethrows the first task error only then
+ * — an eager throw would abandon live tails to finish unobserved.
+ *
  * @param {{ index:number, record:boolean }[]} items
- * @param {{ total:number, record:number }} budget
- * @param {(item:object)=>Promise<void>} task
+ * @param {{ total:number, record:number, grade?:number, cpu?:number }} budget
+ * @param {(item:object, permits:object)=>Promise<void>} task
  * @param {{ stagger?: number, sleep?: (ms:number)=>Promise<void> }} [hooks]
  */
 export async function schedulePool(items: DynamicValue[], budget: DynamicValue, task: DynamicValue, hooks: DynamicValue = {}) {
   const { total, record } = budget;
   const stagger = hooks.stagger ?? (total > 1 ? 500 : 0);
   const sleep = hooks.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
+  // Absent from a caller that predates the split (the hosted executor passes a
+  // budget straight through resolveBudget, so this is the belt): fall back to
+  // the pool size, which is what could already have been grading at once.
+  const tailCap = Number.isFinite(budget.grade) ? budget.grade : total;
+  // `grade: 0` means "never detach", which is the pre-Phase-4 shape — and there
+  // the worker count already bounds concurrent grades, so it must NOT also
+  // serialize them.
+  const gradePermit = semaphore(tailCap > 0 && Number.isFinite(tailCap) ? tailCap : Infinity);
+  const cpuPermit = semaphore(Number.isFinite(budget.cpu) ? Math.max(1, budget.cpu) : Infinity);
 
   const queue = items.slice(); // FIFO; remove the chosen item to preserve order
   let recordsInFlight = 0;
+  // Cases that gave their worker back and are still finishing their tail.
+  let tailsInFlight = 0;
+  // Cases that have finished recording and want a tail slot, oldest first. Each
+  // entry claims a slot and returns true, or declines (already settled) so the
+  // slot passes on.
+  const wantsTail: (() => boolean)[] = [];
+  const admitTails = () => {
+    while (tailsInFlight < tailCap && wantsTail.length) {
+      if (wantsTail.shift()!()) break;
+    }
+  };
+  // Tails still running; the pool must outlive its workers by exactly this much.
+  const tails = new Set<Promise<void>>();
+  let firstError: DynamicValue = null;
   // Wakeups for workers parked because every remaining item is a record and the
   // record permit is full; resolved each time a record completes.
   let waiters: DynamicValue[] = [];
@@ -1986,16 +2127,66 @@ export async function schedulePool(items: DynamicValue[], budget: DynamicValue, 
         await new Promise((resolve) => waiters.push(resolve));
         continue;
       }
-      try {
-        await task(item);
-      } finally {
-        if (item.record) releaseRecord();
-      }
+      let holdsRecord = Boolean(item.record);
+      let detached = false;
+      let settled = false;
+      let freeSlot: () => void = () => {};
+      const slotFree = new Promise<void>((resolve) => { freeSlot = resolve; });
+      // Claim a tail slot and hand the worker back. Returns false when there is
+      // nothing to claim with (already detached, or the case finished while it
+      // was queued) or no slot to claim.
+      const claimTail = () => {
+        if (detached || settled || tailsInFlight >= tailCap) return false;
+        detached = true;
+        tailsInFlight++;
+        freeSlot();
+        return true;
+      };
+      const permits = {
+        release: () => {
+          if (holdsRecord) {
+            holdsRecord = false;
+            releaseRecord();
+          }
+          // `release` NEVER blocks — it is announcing a teardown that already
+          // happened, and waiting here would stall the tail it is freeing. With
+          // the tail budget full the case simply keeps its worker and finishes
+          // the way it always did, joining the queue in case a slot frees first.
+          if (!claimTail() && !detached && !settled) wantsTail.push(claimTail);
+        },
+        grade: gradePermit,
+        cpu: cpuPermit,
+      };
+      const running = (async () => {
+        try {
+          await task(item, permits);
+        } catch (e) {
+          firstError ??= e;
+        } finally {
+          settled = true;
+          if (holdsRecord) {
+            holdsRecord = false;
+            releaseRecord();
+          }
+          if (detached) {
+            tailsInFlight--;
+            admitTails();
+          }
+          freeSlot();
+        }
+      })();
+      tails.add(running);
+      void running.then(() => tails.delete(running));
+      await slotFree;
     }
   };
 
   const workers = Math.min(Math.max(1, total), items.length) || 1;
   await Promise.all(Array.from({ length: workers }, (_, slot) => worker(slot)));
+  // Detached tails outlive their workers by construction; drain them (a settling
+  // tail cannot start new work, so this converges).
+  while (tails.size) await Promise.all([...tails]);
+  if (firstError) throw firstError;
 }
 
 /**
@@ -2006,7 +2197,9 @@ export async function schedulePool(items: DynamicValue[], budget: DynamicValue, 
  * --parallel overrides. The pool is one set of `total` workers; at most `record`
  * of them may be performing a record (LLM-driven) at any instant — cheap baseline
  * checks fill the rest, so a free worker prefers a check over a blocked record and
- * the pool never stalls behind the record cap.
+ * the pool never stalls behind the record cap. A worker is released as soon as
+ * its case stops recording, so the next recording starts while the previous case
+ * is still grading (`budget.grade` bounds how many may be doing that).
  * See docs/contracts/engine.md#running-multiple-cases.
  * @returns {Promise<{ exitCode: 0|1|2, results: object[] }>}
  */
@@ -2032,8 +2225,8 @@ export async function runAll(resolvedCases: DynamicValue[], opts: DynamicValue):
   // with the model (expensive, rate-limit sensitive); checks replay a baseline.
   const items = resolvedCases.map((rc, index) => ({ index, rc, record: willRecord(rc, opts) }));
 
-  const runItem = (rc: DynamicValue, index: number) =>
-    runCase(rc, { ...opts, onEvent }).catch((e: DynamicValue) => {
+  const runItem = (rc: DynamicValue, index: number, permits: DynamicValue) =>
+    runCase(rc, { ...opts, onEvent, permits }).catch((e: DynamicValue) => {
       const result = {
         status: "infra",
         runDir: null,
@@ -2049,8 +2242,11 @@ export async function runAll(resolvedCases: DynamicValue[], opts: DynamicValue):
   // call at the same instant and trip the gateway rate limit (a synchronized
   // 429 burst no amount of backoff jitter can fully untangle). 500ms apart, only
   // when actually running >1 in parallel.
-  await schedulePool(items, budget, async ({ rc, index }: DynamicValue) => {
-    results[index] = await runItem(rc, index);
+  // The permits ride into runCase, which hands the recording slot back once the
+  // driver is closed and the environment is down, then finishes its grade and
+  // its video detached from the pool (T4.2).
+  await schedulePool(items, budget, async ({ rc, index }: DynamicValue, permits: DynamicValue) => {
+    results[index] = await runItem(rc, index, permits);
   });
 
   try {

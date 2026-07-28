@@ -254,7 +254,23 @@ Core-profile run: no trace/MHTML/native-AX files, viewer fully functional,
 all suites green including hosted tests; debug profile byte-equivalent to
 today. Measure close-time and bundle-size deltas via Phase 0 spans.
 
-## Phase 4 — Pipeline shape (no contract changes)
+## Phase 4 — Pipeline shape (no contract changes) — LANDED
+
+Measured in `BASELINE.md` ("Phase 4 result"). Two claims in this phase's text
+did not survive contact with the code, and the implementation differs
+accordingly:
+
+- **`gradeRun()` reads no `har.json`** (re-verified at HEAD: trajectory,
+  manifest, `final.a11y.txt`, the drift report, and per-step artifacts), so the
+  `#flushHar(true)` ordering inside `driver.close()` is not a constraint on the
+  overlap. It is `env.teardown()` — the only thing in the tail that can throw —
+  that shapes the join.
+- **Releasing the record permit is not enough on its own.** The permit gates
+  which *items* are eligible, not how many workers exist, and it defaults to
+  `Infinity`; with the pool otherwise unchanged, releasing it early moves
+  nothing. The worker slot itself has to come back, so `schedulePool` grew a
+  hand-off: a case that calls `permits.release()` finishes its tail detached
+  from the pool, bounded by a new `grade` cap (and `cpu` for ffmpeg).
 
 ### T4.1 Async slideshow and overlapped grading
 
@@ -302,7 +318,8 @@ via the Phase 0 harness at concurrency 2 and 4.
   on long runs. Write an append-only `har.journal.jsonl` during the run and
   finalize to `har.json` at close (and on crash-recovery read paths, if
   any). Keep `har.json`'s final shape identical.
-- **T5.2 In-memory inputs for `writeVideoSidecar()`/`gradeRun()`.** Both
+- **T5.2 In-memory inputs for `writeVideoSidecar()`/`gradeRun()`.** LANDED with
+  Phase 4. Both
   reread trajectory/manifest the runner already holds
   (`clip.js:568`, `grader.js:202`). Pass immutable in-memory data with the
   file-read path kept as fallback for external callers. Small win; do only

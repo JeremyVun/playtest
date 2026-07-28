@@ -288,19 +288,31 @@ export async function gradeRun(
     signal = null,
     onRetry = null,
     onFetch = null,
-    perf = PerfSidecar.off()
+    perf = PerfSidecar.off(),
+    envelopes: givenEnvelopes,
+    manifest: givenManifest,
   }: {
     signal?: AbortSignal | null;
     onRetry?: RetryCallback | null;
     onFetch?: SnapshotFetchCallback | null;
     perf?: PerfSidecar;
+    envelopes?: StepEnvelope[];
+    manifest?: GradingManifest | null;
   } = {}
 ): Promise<Record<string, unknown>> {
-  const envelopes = readTrajectory(join(runDir, "trajectory.jsonl"));
+  // The runner hands its own in-memory trajectory and manifest (BUILD_PLAN
+  // T5.2) — it wrote both moments earlier, so reading and re-parsing them is
+  // pure waste, and with grading now overlapped against the teardown tail
+  // (T4.1) it also removes any read/write race on manifest.json. Both inputs
+  // are READ-ONLY here. External callers (`playtest grade`, hosted re-grades)
+  // pass neither and keep the file path.
+  const envelopes = givenEnvelopes ?? readTrajectory(join(runDir, "trajectory.jsonl"));
   const manifestPath = join(runDir, "manifest.json");
-  const manifest = existsSync(manifestPath)
-    ? JSON.parse(readFileSync(manifestPath, "utf8")) as GradingManifest // SAFETY: manifest fields consumed here are harness-authored
-    : null;
+  const manifest = givenManifest !== undefined
+    ? givenManifest
+    : existsSync(manifestPath)
+      ? JSON.parse(readFileSync(manifestPath, "utf8")) as GradingManifest // SAFETY: manifest fields consumed here are harness-authored
+      : null;
   // Step snapshots are pre-action evidence: the last envelope says what the
   // actor saw before its final action. Web captures final.a11y.txt after the
   // actor loop, so prefer it for the true post-action terminal state. Other

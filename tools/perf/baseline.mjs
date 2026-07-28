@@ -10,6 +10,8 @@
 //   node tools/perf/baseline.mjs --driver=web    # real Chromium, local fixture
 //   node tools/perf/baseline.mjs --json out.json
 //   node tools/perf/baseline.mjs --driver=web --artifacts=debug
+//   node tools/perf/baseline.mjs --driver=api --grader-ms=2000
+//   node tools/perf/baseline.mjs --driver=api --grader-ms=2000 --no-overlap
 //
 // --artifacts pins the recording profile the generated suite declares (T3.1;
 // docs/contracts/artifacts.md#artifact-profiles). It is written explicitly into
@@ -32,6 +34,22 @@
 //     millisecond, where a real actor turn is tens of seconds (ANALYSIS.md:
 //     25.0 s p50). Read `actor_request` here as harness overhead per turn, never
 //     as a turn's real duration.
+//
+// --grader-ms is the one exception, and it exists for Phase 4 (T4.1/T4.2). The
+// value of overlapping the grade with the next recording is exactly the grade's
+// duration, which on a real gateway is 42.8 s p50 (ANALYSIS.md) and here is
+// about one millisecond — i.e. invisible. --grader-ms=N makes the gateway hold
+// every `grade` call open for N ms, standing in for that latency, so the suite
+// wall shows what the pipelining is worth. It is a SIMULATION knob: never
+// compare a --grader-ms cell against a cell without it.
+//
+// --no-overlap is its A/B partner: it pins `parallel: { total: n, grade: 0 }`,
+// which turns the T4.2 hand-off off and restores the pre-Phase-4 pool shape (a
+// case owns its worker until it has graded). Run the same cell with and without
+// it to price the pipelining on one binary, with no rebuild in between.
+// --grade=n pins the grading headroom (`parallel.grade`) instead, which is what
+// a user raises when they are willing to have more grader calls in flight than
+// the pool has workers.
 import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
@@ -141,7 +159,7 @@ const WORKLOADS = {
  * safe to share between concurrently recording cases. A request offering the
  * `grade` tool is the grader and gets a canned verdict instead.
  */
-async function startStepGateway(steps) {
+async function startStepGateway(steps, { graderMs = 0 } = {}) {
   const terminal = { thought: "the journey is finished", action: { type: "done", summary: "the scripted journey completed" }, expectation: "the run ends" };
   const grade = {
     score: 90,
@@ -161,7 +179,7 @@ async function startStepGateway(steps) {
   const server = http.createServer((req, res) => {
     let raw = "";
     req.on("data", (c) => (raw += c));
-    req.on("end", () => {
+    req.on("end", async () => {
       let body = null;
       try {
         body = JSON.parse(raw);
@@ -169,6 +187,7 @@ async function startStepGateway(steps) {
       const tools = body?.tools ?? [];
       let payload;
       if (tools.some((t) => t?.function?.name === "grade")) {
+        if (graderMs) await new Promise((r) => setTimeout(r, graderMs));
         payload = reply("grade", grade);
       } else if (tools.some((t) => t?.function?.name === "verdict")) {
         payload = reply("verdict", { pass: true, detail: "scripted" });
@@ -287,11 +306,11 @@ function writeSuite(dir, { workload, baseUrl, count, cases, artifacts }) {
   return dir;
 }
 
-async function runCell({ workload, label, count, concurrency, tmpRoot, target, artifacts }) {
+async function runCell({ workload, label, count, concurrency, tmpRoot, target, artifacts, graderMs, noOverlap, gradeCap }) {
   const cell = `${label}-c${concurrency}`;
   const suite = writeSuite(path.join(tmpRoot, `suite-${cell}`), { workload, count, cases: CASES_PER_CELL, artifacts });
   const runsRoot = path.join(tmpRoot, `runs-${cell}`);
-  const gateway = await startStepGateway(workload.steps(count));
+  const gateway = await startStepGateway(workload.steps(count), { graderMs });
   process.env.PLAYTEST_LLM_BASE_URL = gateway.url;
 
   let peakRss = 0;
@@ -305,7 +324,11 @@ async function runCell({ workload, label, count, concurrency, tmpRoot, target, a
     ({ results } = await runAll(cases, {
       runsRoot,
       runId: newRunId(),
-      parallel: concurrency,
+      parallel: noOverlap
+        ? { total: concurrency, grade: 0 }
+        : gradeCap !== undefined
+          ? { total: concurrency, grade: Number(gradeCap) }
+          : concurrency,
       reporter: { onEvent: () => {}, done: () => {} },
     }));
   } finally {
@@ -324,6 +347,9 @@ async function runCell({ workload, label, count, concurrency, tmpRoot, target, a
     cases: CASES_PER_CELL,
     concurrency,
     artifacts,
+    grader_ms: graderMs,
+    overlap: !noOverlap,
+    grade_cap: gradeCap === undefined ? null : Number(gradeCap),
     wall_ms: wallMs,
     statuses,
     peak_rss_mb: Math.round(peakRss / 1048576),
@@ -338,7 +364,11 @@ const kb = (n) => `${(n / 1024).toFixed(1)} KB`;
 
 function printCell(cell) {
   const statuses = Object.entries(cell.statuses).map(([k, v]) => `${v} ${k}`).join(", ");
-  console.log(`\n### ${cell.workload} · ${cell.length} (${cell.steps} steps) · concurrency ${cell.concurrency} · artifacts ${cell.artifacts}`);
+  const graderNote =
+    (cell.grader_ms ? ` · simulated grader ${cell.grader_ms} ms` : "") +
+    (cell.overlap ? "" : " · overlap OFF") +
+    (cell.grade_cap === null ? "" : ` · grade cap ${cell.grade_cap}`);
+  console.log(`\n### ${cell.workload} · ${cell.length} (${cell.steps} steps) · concurrency ${cell.concurrency} · artifacts ${cell.artifacts}${graderNote}`);
   // schedulePool staggers worker startup by 500 ms per slot so concurrent cases
   // do not fire their first model call together; at c>1 that is a fixed floor on
   // the suite wall, and on short workloads it dominates it.
@@ -364,6 +394,10 @@ async function main() {
   const driver = (args.find((a) => a.startsWith("--driver="))?.split("=")[1] ?? "api").trim();
   const jsonOut = args.includes("--json") ? args[args.indexOf("--json") + 1] : null;
   const artifacts = (args.find((a) => a.startsWith("--artifacts="))?.split("=")[1] ?? "core").trim();
+  const graderMs = Number(args.find((a) => a.startsWith("--grader-ms="))?.split("=")[1] ?? 0);
+  const only = (args.find((a) => a.startsWith("--only="))?.split("=")[1] ?? "").trim();
+  const noOverlap = args.includes("--no-overlap");
+  const gradeCap = args.find((a) => a.startsWith("--grade="))?.split("=")[1];
   const workload = WORKLOADS[driver];
   if (!workload) {
     console.error(`unknown --driver "${driver}" (expected ${Object.keys(WORKLOADS).join(" | ")})`);
@@ -372,6 +406,11 @@ async function main() {
   }
   if (artifacts !== "core" && artifacts !== "debug") {
     console.error(`unknown --artifacts "${artifacts}" (expected core | debug)`);
+    process.exitCode = 2;
+    return;
+  }
+  if (!Number.isFinite(graderMs) || graderMs < 0) {
+    console.error(`--grader-ms must be a non-negative number of milliseconds`);
     process.exitCode = 2;
     return;
   }
@@ -384,9 +423,10 @@ async function main() {
   const cells = [];
   try {
     for (const [label, count] of [["short", SHORT_STEPS], ["long", LONG_STEPS]]) {
+      if (only && only !== label) continue;
       for (const concurrency of CONCURRENCIES) {
         process.stderr.write(`running ${driver}/${artifacts}/${label}/c${concurrency}…\n`);
-        cells.push(await runCell({ workload, label, count, concurrency, tmpRoot, target, artifacts }));
+        cells.push(await runCell({ workload, label, count, concurrency, tmpRoot, target, artifacts, graderMs, noOverlap, gradeCap }));
       }
     }
   } finally {
@@ -399,7 +439,7 @@ async function main() {
 
   if (jsonOut) {
     const out = path.resolve(ROOT, jsonOut);
-    fs.writeFileSync(out, JSON.stringify({ driver, artifacts, node: process.version, cells }, null, 2) + "\n");
+    fs.writeFileSync(out, JSON.stringify({ driver, artifacts, grader_ms: graderMs, node: process.version, cells }, null, 2) + "\n");
     process.stderr.write(`wrote ${out}\n`);
   }
   fs.rmSync(tmpRoot, { recursive: true, force: true });

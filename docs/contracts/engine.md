@@ -993,10 +993,14 @@ After the loop:
    envelope.
 4. Journey gates run against the live final driver state and complete
    trajectory.
-5. Manifest, driver artifacts, teardown, captions, and optional slideshow are
-   finalized.
-6. Eligible record/heal/explore runs grade when requested and a model is
-   available.
+5. The final manifest is written.
+6. Two jobs then run concurrently and both must settle before the case ends:
+   driver artifacts, teardown, captions, and the optional slideshow on one
+   side; on the other, the grade an eligible record/heal/explore run gets when
+   requested and a model is available. The grader reads only the trajectory,
+   the manifest, the final accessibility snapshot, and per-step artifacts —
+   all of which exist before this point. A teardown failure still fails the
+   case as infrastructure, after the grade has settled.
 7. Eligible journeys update the baseline or healed candidate.
 
 `baselineEligible` requires every hard gate to pass and the actor to reach the
@@ -1459,12 +1463,26 @@ case_end     { status, result }
 cases default to `min(4, CPU count)`. `parallel` may be an integer, `true`, or:
 
 ```js
-{ total, record }
+{ total, record, grade, cpu }
 ```
 
 `total` caps all workers. `record` separately caps cases currently driving an
 actor, allowing baseline checks to use remaining slots. CLI overrides beat
 suite defaults.
+
+A case gives its worker slot and its record permit back at the end of its
+**recording**, not at the end of the case: the moment its driver is closed and
+its environment is torn down. Its grade and its video finish detached, so the
+next recording starts while the previous case is still with the grader. Nothing
+the released case still holds can touch the application under test, so a serial
+pool stays serial from the app's point of view.
+
+`grade` caps how many cases may be finishing detached at once and how many
+grader calls may be in flight; it defaults to the record cap when one is set,
+otherwise to `total` — the number that could already have been grading before
+the split — and `0` disables the hand-off entirely. `cpu` caps concurrent
+video builds and defaults to `total`. A case that cannot claim a detached slot
+simply keeps its worker and finishes in place.
 
 All output goes through a guarded reporter. `runAll` may write JUnit and
 returns `{ exitCode, results }`. Gate failure produces exit 1. Infrastructure

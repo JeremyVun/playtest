@@ -13,19 +13,26 @@ test("run-group limits override one resolved case without mutating suite default
 test("hosted concurrency inherits the project policy and lets the suite replace it", () => {
   assert.deepEqual(
     resolveHostedBudget([{ id: "a", parallel: null }], { total: 6, record: 2 }),
-    { total: 6, record: 2 },
+    { total: 6, record: 2, grade: 2, cpu: 6 },
   );
   assert.deepEqual(
     resolveHostedBudget([{ id: "a", parallel: { total: 3, record: 1 } }], { total: 6, record: 2 }),
-    { total: 3, record: 1 },
+    { total: 3, record: 1, grade: 1, cpu: 3 },
     "the pinned suite setting wins",
   );
   assert.deepEqual(
     resolveHostedBudget([{ id: "a", parallel: true }], { total: 6, record: 2 }, 4),
-    { total: 4, record: Infinity },
+    { total: 4, record: Infinity, grade: 4, cpu: 4 },
     "core's automatic pool remains available to imported suites",
   );
-  assert.deepEqual(resolveHostedBudget([], null), { total: 1, record: 1 }, "hosted remains serial by default");
+  assert.deepEqual(
+    resolveHostedBudget([], null),
+    { total: 1, record: 1, grade: 1, cpu: 1 },
+    "hosted remains serial by default",
+  );
+  // The tail permits (BUILD_PLAN T4.2) are carried but never exercised here:
+  // the hosted executor runs each case through runCaseIsolated without passing
+  // them down, so a hosted group keeps its strictly serial case boundary.
 });
 
 test("progressReporter folds engine events into throttled, redacted snapshots", async () => {

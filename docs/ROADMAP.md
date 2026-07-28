@@ -103,12 +103,15 @@ Prior evidence:
 - [ ] Reduce web and mobile driver settle time and per-step overhead. Audited
       in [`docs/backlog/perf/ANALYSIS.md`](backlog/perf/ANALYSIS.md); phased
       plan in [`docs/backlog/perf/BUILD_PLAN.md`](backlog/perf/BUILD_PLAN.md).
-      Phases 0–3 have landed and are measured in
+      Phases 0–4 have landed and are measured in
       [`docs/backlog/perf/BASELINE.md`](backlog/perf/BASELINE.md): a diagnostic
       `perf.jsonl` sidecar with the `tools/perf/baseline.mjs` harness, the mobile
-      hot path, the concurrent web capture with a HAR journal, and the
-      `artifacts: core | debug` recording profiles. Phases 4–5 (pipeline shape,
-      smaller measure-first wins) remain.
+      hot path, the concurrent web capture with a HAR journal, the
+      `artifacts: core | debug` recording profiles, and the pipeline shape —
+      an async ffmpeg slideshow with a memoized probe, grading overlapped with
+      teardown, and a worker released at the end of a case's *recording* rather
+      than at the end of the case. Of Phase 5 only T5.3 (a `context.jsonl`
+      delta format) remains, and it is still deferred as measure-first.
 - [x] Simplify run artifacts by folding or retiring redundant per-step files.
       Shipped as the `artifacts: core | debug` profiles (perf BUILD_PLAN Phase
       3): the default run no longer writes the Playwright trace, MHTML, or the

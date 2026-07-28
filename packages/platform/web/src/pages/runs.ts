@@ -877,17 +877,18 @@ function queuedLine(queued: WebDynamic) {
  * never produced one.
  *
  * In flight, the line becomes a live block (liveStoryLine): pulsing mode chip,
- * the name at full width, vitals on the right, a step-budget meter, and the
- * actor's recent actions as a fading trail. There is deliberately nowhere to
- * go — this block is the live view, and the old "Follow →" led to a page that
- * knew less than this block now does.
+ * the name at full width, vitals on the right, a step-budget meter, the actor's
+ * recent actions as a fading trail — and, since a run's evidence now streams
+ * while it executes (interfaces.md, live runs), a Watch link to the replay
+ * itself. This block says what the run is doing; the replay shows what it is
+ * seeing, screenshot by screenshot, and used to 404 until the run sealed.
  *
  * Queued stories never reach here: they are summarised on one line by
  * queuedLine, because a row each said "not yet" and nothing else.
  */
 function storyLine(projectKey: WebDynamic, g: WebDynamic, r: WebDynamic, registerTick: WebDynamic, trails: WebDynamic) {
   const done = isFinishedStatus(r.status);
-  if (!done) return liveStoryLine(r, registerTick, g, trails);
+  if (!done) return liveStoryLine(projectKey, g, r, registerTick, trails);
   const to = `/p/${projectKey}/runs/${g.id}/${r.id}`;
   const never = neverRanStatus(r.status);
   // One sentence about the story rather than a second set of columns: these
@@ -915,7 +916,7 @@ function storyLine(projectKey: WebDynamic, g: WebDynamic, r: WebDynamic, registe
 }
 
 /** The live block for a story still moving (see storyLine). */
-function liveStoryLine(r: WebDynamic, registerTick: WebDynamic, g: WebDynamic, trails: WebDynamic) {
+function liveStoryLine(projectKey: WebDynamic, g: WebDynamic, r: WebDynamic, registerTick: WebDynamic, trails: WebDynamic) {
   const p = r.progress || null;
   // The snapshot's action seeds a trail the feed hasn't fed yet (first paint,
   // or arriving mid-run) so the block never opens emptier than the server knows.
@@ -938,11 +939,27 @@ function liveStoryLine(r: WebDynamic, registerTick: WebDynamic, g: WebDynamic, t
   ].filter(Boolean).join(" · ");
   if (hover) detail.title = hover;
   const doing = r.status === "uploading" ? "uploading evidence" : p?.doing || modeDoing(r.mode);
+  // Where a story in flight leads. It sits in the same column as a finished
+  // story's "▶ Replay" and wears the ● of the live vocabulary the viewer uses,
+  // because it is the same destination in a different tense: the replay, filling
+  // up as the actor works. A queued story never reaches here, so the link never
+  // promises a stream that has not started.
+  const watch = link(
+    `/p/${projectKey}/runs/${g.id}/${r.id}`,
+    h("span.story-watch", {}, h("span.live-dot", { "aria-hidden": "true" }), "Watch"),
+  );
+  watch.className = "story-watch-link";
+  // Several runs of the same suite can have the same story moving at once, so
+  // the story id alone would put three identically named links on one screen —
+  // the run names them apart, exactly as it does for Cancel.
+  watch.setAttribute("aria-label", `Watch ${r.case_id} as it runs, in ${runTitle(g)}`);
+  watch.title = "Open the replay and watch the steps arrive";
   return h("div.story-live", {},
     h("div.story-line.story-live-head", {},
       statusChip("running", doing),
       h("span.story-name.id", {}, r.case_id),
       detail,
+      watch,
     ),
     // The step-budget meter: budget consumed, not distance to done — a story
     // that passes at step 12 of 100 was quick, not 12% finished, which is why

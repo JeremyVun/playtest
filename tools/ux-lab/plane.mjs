@@ -100,6 +100,11 @@ export async function startPlane({
     LOG_LEVEL: log ? "info" : "error",
     // Seeding writes far faster than a human; the limiter would 429 mid-seed.
     PLAYTEST_RATE_LIMIT_WRITES_PER_MIN: "0",
+    // The lab holds every in-flight state at once — four busy groups plus the
+    // open runs the live surfaces need — which is more than one project may
+    // really dispatch concurrently. The cap is a deployment policy, and nothing
+    // it guards (a real executor) exists here.
+    PLAYTEST_DISPATCH_MAX_ACTIVE_PER_PROJECT: "12",
     // No reconciler: the stub's dispatches would be declared dead mid-capture.
     PLAYTEST_RECONCILE_INTERVAL_S: "0",
   });

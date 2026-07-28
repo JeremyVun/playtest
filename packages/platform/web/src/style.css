@@ -756,14 +756,24 @@ button.story-more-btn:focus-visible { outline: 2px solid var(--accent); outline-
 .story-live .story-vitals {
   font-size: var(--fs-sm); font-variant-numeric: tabular-nums; white-space: nowrap;
 }
-.story-line.story-live-head { grid-template-columns: 150px minmax(0, 1fr) auto; }
+/* The fourth column is Watch, in the same place a finished story keeps
+   "▶ Replay": one column of destinations down the block, whatever state each
+   story is in. */
+.story-line.story-live-head { grid-template-columns: 150px minmax(0, 1fr) auto max-content; }
 .story-live-head .story-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.story-watch {
+  display: inline-flex; align-items: center; gap: 5px;
+  color: var(--accent); font-size: var(--fs-sm); white-space: nowrap;
+}
+a.story-watch-link:hover .story-watch { text-decoration: underline; }
+a.story-watch-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 /* The glyph breathes while the story moves — the between-events sign of life. */
 .story-live-head .status.running .glyph { animation: live-pulse 2.2s ease-in-out infinite; }
 @keyframes live-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
 @media (prefers-reduced-motion: reduce) {
   .story-live-head .status.running .glyph,
   .run-now .status.running .glyph,
+  .live-dot,
   .rp-moving { animation: none; }
 }
 /* A gauge, not a rule across the page: capped so it reads as a small dial next
@@ -1007,6 +1017,29 @@ a.quiet-link:hover .tile, a.quiet-link:hover .att-row { border-color: var(--acce
 .rd-meta .where { color: var(--ink); font-weight: var(--fw-med); }
 .rd-meta .num { font-variant-numeric: tabular-nums; }
 .rd-meta .mono { color: var(--dim); }
+
+/* A run still executing: the ● live badge in the masthead, and one line under
+   the provenance saying where it has got to. Both are fed by the event feed the
+   page already holds — the embedded viewer owns the live stream itself, and
+   this side of the seam must never open a second loop to say the same thing.
+   The badge is deliberately the viewer's own (run-viewer style.css .chip.live):
+   one word, one colour, one dot across the iframe boundary. */
+.chip.live {
+  color: var(--accent); border-color: var(--accent); background: var(--accent-soft);
+  font-weight: var(--fw-semi);
+}
+.live-dot {
+  width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none;
+  animation: live-pulse 1.9s ease-in-out infinite;
+}
+.rd-live {
+  margin-top: 5px; display: flex; align-items: baseline; gap: 8px;
+  font-size: var(--fs-sm); white-space: nowrap; overflow: hidden;
+}
+.rd-live-doing { flex: none; color: var(--accent); font-weight: var(--fw-semi); }
+/* The action absorbs all the shrinking: it is the one part that can end in an
+   ellipsis without the line losing its point. */
+.rd-live-action { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
 /* The strips below the masthead are one family: soft tone, a solid edge in the
    same colour so the block still reads at a glance in high-contrast mode. */

@@ -763,7 +763,7 @@ place — drain immediately while `has_more`, hold when caught up, jittered
 backoff on a failed poll, one full reload on `reset`, and a re-read of
 `manifest.json` whenever `manifest_generation` differs. Appended envelopes
 render in append order, identical to a full load. Follow mode tracks the newest
-step by default; any explicit step selection disengages it and a Live control
+step by default; any explicit step selection disengages it and a follow control
 re-engages it, and no repaint may take focus, selection, or an opened panel from
 the reader. The run header shows a live badge in place of a status the run has
 not earned — an open run's manifest is the placeholder, whose status is

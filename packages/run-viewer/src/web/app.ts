@@ -1557,7 +1557,7 @@ function stripCell(env: ViewerDynamic, i: ViewerDynamic) {
 function select(i: ViewerDynamic, { instant = false, auto = false } = {}) {
   if (!state.steps.length) return;
   if (!auto && state.playing) setPlaying(false); // manual navigation pauses the slideshow
-  // Any explicit step selection takes the view off the tail; the Live control
+  // Any explicit step selection takes the view off the tail; the follow control
   // hands it back. `ready` keeps loadRun's own opening select() out of this.
   if (!auto && state.live?.ready) setFollow(false);
   state.cur = Math.max(0, Math.min(i, state.steps.length - 1));

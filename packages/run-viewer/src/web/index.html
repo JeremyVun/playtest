@@ -59,8 +59,11 @@
         <button data-view="video" class="tab"><svg class="ic"><use href="#i-play"/></svg>Video</button>
         <button data-view="diff" class="tab" id="tab-diff" hidden><svg class="ic"><use href="#i-branch"/></svg>Diff</button>
         <button id="play" title="play through the steps (space)" aria-label="play through the steps"><svg class="ic"><use href="#i-play"/></svg>Play</button>
-        <!-- follow control for an open run; app.ts unhides it only in live mode -->
-        <button id="live-follow" class="live-follow on" aria-pressed="true" title="following the newest step — click to stay put" hidden><span class="live-dot"></span>Live</button>
+        <!-- follow control for an open run; app.ts unhides it only in live mode.
+             It says "Follow", not "Live": the run header already carries the ●
+             live badge, and a second control wearing the same word beside it
+             reads as a second status rather than as the switch it is. -->
+        <button id="live-follow" class="live-follow on" aria-pressed="true" title="following the newest step — click to stay put" hidden><span class="live-dot"></span>Follow</button>
         <span class="tabs-hint">←/→ steps · space play · tab cycle view</span>
       </nav>
 

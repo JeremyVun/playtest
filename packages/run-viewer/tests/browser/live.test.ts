@@ -152,7 +152,7 @@ test("live mode: the badge, the tail, and appends that land in place", async () 
   await page.close();
 });
 
-test("follow mode: an explicit selection disengages it, the Live control hands it back", async () => {
+test("follow mode: an explicit selection disengages it, the follow control hands it back", async () => {
   const run = openRun("follow");
   for (const step of [1, 2, 3]) envelope(run, step);
   startStep(run, 4);
@@ -160,7 +160,7 @@ test("follow mode: an explicit selection disengages it, the Live control hands i
   const { page, errors } = await open(run);
   await page.waitForSelector("#strip .cell");
   const follow = page.locator("#live-follow");
-  assert.ok(await follow.isVisible(), "the Live control is offered on an open run");
+  assert.ok(await follow.isVisible(), "the follow control is offered on an open run");
   assert.equal(await follow.getAttribute("aria-pressed"), "true", "follow is on by default");
 
   // An explicit selection takes the view off the tail, with a panel open.

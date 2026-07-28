@@ -90,9 +90,10 @@ export async function capture({ base, data, only = null, themes = ["dark", "ligh
 
     let current = "(boot)";
     const note = (kind, text) => {
-      // Leaving a page aborts its held feed long-poll. That is the design, not a
-      // defect, so it never enters the problem list.
-      if (/events\/feed/.test(text) && /ERR_ABORTED/.test(text)) return;
+      // Leaving a page aborts its held long-polls — the event feed, and the
+      // embedded viewer's live stream on an open run. That is the design, not a
+      // defect, so neither enters the problem list.
+      if (/events\/feed|\/live\?/.test(text) && /ERR_ABORTED/.test(text)) return;
       problems.push({ surface: current, theme, kind, text: String(text).slice(0, 400) });
     };
     page.on("console", (m) => m.type() === "error" && note("console", m.text()));
@@ -114,7 +115,10 @@ export async function capture({ base, data, only = null, themes = ["dark", "ligh
         await page.waitForSelector("#main, .boot, #scope-gate", { timeout: 10000 }).catch(() => {});
         await page.waitForFunction(() => !document.querySelector(".boot"), null, { timeout: 8000 }).catch(() => {});
         await page.waitForTimeout(900);
-        if (surface.act) await surface.act(page);
+        // `act` gets the seeded ids too, so a surface can change the SERVER
+        // while its page is open — sealing a live run under the run page is the
+        // only way to photograph a transition rather than a state.
+        if (surface.act) await surface.act(page, data);
         await page.waitForTimeout(200);
       } catch (e) {
         note("navigation", e.message);

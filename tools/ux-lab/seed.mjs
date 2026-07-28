@@ -194,6 +194,80 @@ async function reportGroup(api, groupId, plan, fixtures) {
   await runnerCall(api, token, "POST", `/runner/groups/${groupId}/complete`, { body: { summary: {} } });
 }
 
+/**
+ * An OPEN run: started, streaming, not sealed (docs/contracts/hosted.md, live
+ * runs). It goes through the same three live routes the runner-agent's uploader
+ * uses, in the same order — artifacts first, then the lines that name them, then
+ * a progress snapshot — so the console and the embedded viewer see exactly what
+ * a real streaming run gives them: a placeholder manifest, part of a trajectory,
+ * and the step images those lines point at.
+ *
+ * The returned handle can `seal()` the run mid-capture, which is how the seal
+ * transition gets photographed rather than described.
+ */
+async function openLiveRun(api, { projectKey, suiteId, envId, ids, note, fixtures, staged = 2, progress = null }) {
+  const groupId = await launch(api, { projectKey, suiteId, envId, ids, note });
+  const { token, cases } = await attachRunner(api, groupId);
+  const c = cases[0];
+  const fixtureDir = fixtures[0];
+  await runnerCall(api, token, "POST", `/runner/groups/${groupId}/cases/${c.run_id}/start`, { body: {} });
+  // The placeholder the engine writes before the first step: terminal-looking
+  // status by design (it IS the crash evidence), no verdict, no duration. The
+  // picker and the viewer both refuse to read liveness out of it.
+  const base = makeManifest(fixtureDir, {
+    runId: c.run_id, caseId: c.case_id, storyId: c.story_id || c.case_id, status: "interrupted",
+  });
+  const placeholder = {
+    ...base,
+    score: null,
+    duration_ms: null,
+    totals: null,
+    result: { status: "interrupted", end_reason: null, error: null, gate: null },
+  };
+  await runnerCall(api, token, "POST", `/runner/groups/${groupId}/cases/${c.run_id}/open`, { body: { manifest: placeholder } });
+
+  const all = fs.readFileSync(path.join(fixtureDir, "trajectory.jsonl"), "utf8").split("\n").filter(Boolean);
+  const lines = all.slice(0, staged);
+  for (const line of lines) {
+    const arts = JSON.parse(line).artifacts || {};
+    for (const entry of [arts.screenshot, arts.a11y, arts.mhtml].filter(Boolean)) {
+      const buf = fs.readFileSync(path.join(fixtureDir, entry));
+      await runnerCall(api, token, "PUT", `/runner/runs/${c.db_id}/live/${entry}`, {
+        raw: buf,
+        contentType: "application/octet-stream",
+      });
+    }
+  }
+  await runnerCall(api, token, "POST", `/runner/runs/${c.db_id}/live/trajectory`, { body: { from_line: 0, lines } });
+  await runnerCall(api, token, "POST", `/runner/groups/${groupId}/cases/${c.run_id}/progress`, {
+    body: {
+      step: lines.length + 1,
+      max_steps: 40,
+      doing: "recording",
+      action: progress ?? 'typed "walk the dog" into the new-todo field',
+      cost_usd: 0.08,
+      tokens: { ctx: 4800, in: 19000, out: 1600 },
+      model: "claude-sonnet-5",
+    },
+  });
+
+  const seal = async () => {
+    const manifest = makeManifest(fixtureDir, {
+      runId: c.run_id, caseId: c.case_id, storyId: c.story_id || c.case_id, status: "pass", score: 92,
+    });
+    const bundle = await buildBundle({ fixtureDir, manifest });
+    const { artifact } = await runnerCall(api, token, "PUT", `/runner/runs/${c.db_id}/bundle`, {
+      raw: bundle,
+      contentType: "application/vnd.playtest.run-bundle",
+    });
+    await runnerCall(api, token, "POST", `/runner/groups/${groupId}/cases/${c.run_id}/report`, {
+      body: { status: "pass", bundle: artifact, manifest, score: 92 },
+    });
+    await runnerCall(api, token, "POST", `/runner/groups/${groupId}/complete`, { body: { summary: {} } });
+  };
+  return { groupId, runDbId: c.db_id, caseId: c.case_id, seal };
+}
+
 /** SEAM: cosmetic time travel so trends and relative dates read like a real week. */
 async function backdate(db, groupId, when) {
   const ts = new Date(when);
@@ -316,7 +390,9 @@ export async function seed({ api, db, store }) {
     {
       name: "production",
       discovery_allowed: false,
-      runner_labels: ["self-hosted", "playtest", "pool:prod"],
+      // Labels are letters, digits, ".", "_" and "-" only (the pool's own rule,
+      // tightened when self-hosted runners landed); "pool:prod" is refused now.
+      runner_labels: ["self-hosted", "playtest", "pool-prod"],
       config: {
         app: { base_url: "https://todos.example.com" },
         auth: { default: "member", identities: { member: { $session: "sso/member" } } },
@@ -577,6 +653,40 @@ export async function seed({ api, db, store }) {
     } catch (e) {
       say(`(concurrent in-flight group "${b.note}" skipped:`, e.message + ")");
     }
+  }
+
+  // --- 5b. Open runs: evidence arriving while the case is still going ------
+  // The groups above are in flight but blind — progress numbers with nothing
+  // behind them. These ones STREAM (hosted.md, live runs): a placeholder
+  // manifest, part of a trajectory, and the step images those lines name, so
+  // the run page's embedded viewer has something real to play and the console
+  // chrome has a live run to wear its badge for.
+  //
+  // One stays open for the streaming surface. The rest are the seal transition:
+  // the capture opens a run page, seals that run underneath it, and photographs
+  // where the verdict lands — one per theme, since sealing is a one-way door.
+  try {
+    const streaming = await openLiveRun(api, {
+      projectKey: out.projectKey, suiteId: suite.id, envId: staging.id,
+      ids: ["add-todo"], note: "watching a live run", fixtures,
+    });
+    out.liveRun = { group: streaming.groupId, id: streaming.runDbId };
+    const sealable = [];
+    for (const n of [1, 2]) {
+      sealable.push(await openLiveRun(api, {
+        projectKey: out.projectKey, suiteId: suite.id, envId: staging.id,
+        ids: ["add-todo"], note: `live run about to finish (${n})`, fixtures,
+        progress: 'clicked "Add" after typing "walk the dog"',
+      }));
+    }
+    // `path` hands out the next unsealed run; `act` seals the one it was given.
+    // Both are called once per theme, in the same order, so they stay in step.
+    let cursor = 0;
+    out.nextSealRun = () => sealable[Math.min(cursor++, sealable.length - 1)];
+    out.sealCurrentRun = () => sealable[Math.min(cursor - 1, sealable.length - 1)].seal();
+    say(`open (streaming) run → ${streaming.groupId}, plus ${sealable.length} sealable`);
+  } catch (e) {
+    say("(open live runs skipped:", e.message + ")");
   }
 
   // --- 6. Findings triage --------------------------------------------------

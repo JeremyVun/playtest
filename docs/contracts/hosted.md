@@ -2184,9 +2184,26 @@ author stories, run them, inspect evidence, make a human decision.
   the whole suite is a different launch a click away on the suite. Per-story
   step and timeout overrides are a disclosure whose summary already states the
   limits in force, so folding them away hides no budget.
+- A run still executing is shown as live, never as a verdict it has not earned.
+  Its detail header wears the embedded viewer's own ● live badge — one word, one
+  colour, one dot across the iframe seam — plus a line of what the run is doing,
+  read from the progress snapshot the feed already delivers; a queued story is
+  not live yet and says so. Its story row on the runs index carries **Watch**, in
+  the column a finished story keeps **Replay**. The two halves of the run page
+  update over **separate channels and neither polls**: the embedded viewer owns
+  the live stream against the run's [`live` route](interfaces.md#live-runs), the
+  page owns the event feed, and the seal reaches them independently — `open:
+  false` on one side, one `run.status` event on the other — so they land within a
+  tick of each other with no second live loop in the console. The page re-mounts
+  the frame only when the frame came up empty (a run claimed a moment ago has
+  started but staged nothing yet), never while it is streaming, because a reload
+  would cost the reader their selection.
 - A run that produced no verdict (`infra`, `canceled`, `lost`) is presented as
   "didn't run" in amber with a plain-English cause and a retry, never as a
-  product failure, and does not offer to file a finding.
+  product failure, and does not offer to file a finding. If it *streamed* before
+  it died, the steps it staged are still played on the page and the provenance
+  says so — "no bundle — showing the steps it streamed" — because that stream is
+  the only record of what the run saw.
 - A run whose manifest ends with `end_reason: "timeout"` is labelled **timed
   out** on run lists and detail. Its detail header states the configured
   `timeout_ms` and `max_steps`, and the failure strip names the timeout before
@@ -2237,6 +2254,12 @@ argument), the one-time reveal, presence derived from the last check-in against
 the server's published window rather than asked for, the claim board's subset
 matching, the no-matching-runner launch warning in the words the failure would
 have used, and which placement failures earn the runner remedy.
+`tests/web-run-live.test.ts` pins the live half of the run page without a
+browser: which feed events it acts on (its own run's status and progress, and
+nothing else), that a progress snapshot patches rather than reloads, that the
+seal arrives as one status event, and that the words it says are only ever what
+the runner reported — a step number never invented from a budget, an action
+never carried over into a phase that has none.
 `tests/web-target-setup.test.ts` pins where an app runs: that the environment
 form's fields and its raw document are one document, that the artifact cap and
 accepted extensions are stated before an upload, that a new suite commits

@@ -3,6 +3,15 @@
 // full-bleed in an iframe. The viewer is served unmodified by the adapter at
 // /api/v1/projects/:key/view/ and deep-linked with its own ?run= param, so its
 // film strip, captions, diff tab and keyboard bindings all just work.
+//
+// A run that is still executing streams into that iframe
+// (docs/contracts/interfaces.md#live-runs), and the two halves of this screen
+// keep themselves up to date over SEPARATE channels, deliberately: the iframe
+// owns the live long-poll against the run's own `live` route, and this page
+// owns the event feed it already subscribes to. So the header's live badge and
+// its one-line "what it is doing" ride the progress events the feed already
+// delivers, and the seal arrives as the one `run.status` event the case report
+// emits — no second poll, and no repaint on a step counter ticking.
 import { api } from "../lib/api.js";
 import { h, mount } from "../lib/dom.js";
 import { link, navigate, onPageLeave } from "../lib/router.js";
@@ -13,6 +22,7 @@ import { modeLabel, chipStatus, fmtCost, fmtMs, ago, short, clamp } from "../lib
 import { didNotRunLabel } from "../lib/vocab.js";
 import { findingStateLabel, findingStateTone } from "../lib/finding-buckets.js";
 import { runName } from "../lib/run-stats.js";
+import { isLiveRun, liveFeedIntent, progressSnapshot, liveDoing, liveAction } from "../lib/run-live.js";
 import { subscribeFeed } from "../lib/feed.js";
 import { poolPlacementCause } from "../lib/runners.js";
 import { launchModal } from "./runs.js";
@@ -76,7 +86,19 @@ export async function runDetailPage(projectKey: WebDynamic, groupId: WebDynamic,
     candidate: items.find((c: WebDynamic) => c.status === "pending") || null,
     resolved: items.find((c: WebDynamic) => c.status === "accepted" || c.status === "rejected") || null,
   });
-  const ctl: WebDynamic = { run, ...pickCandidates(mine), clipping: false };
+  // `progress` is the run's own coalesced snapshot — seeded from the row so the
+  // header opens knowing what the feed has not yet said, then patched in place
+  // by every progress event (never re-fetched, never polled).
+  const ctl: WebDynamic = { run, ...pickCandidates(mine), clipping: false, progress: run.progress ?? null };
+  // The two nodes the feed writes into after the first paint: the live
+  // doing-line, whose words a progress event rewrites in place rather than by
+  // rebuilding the header around it, and the viewer frame. Both are declared
+  // before the subscription below so an event arriving while this page is still
+  // building finds initialised state, not a binding that does not exist yet.
+  let liveLineEl: WebDynamic = null;
+  let viewerEl: WebDynamic = null;
+  let viewerSrc = "";
+  let noEvidence = false;
   async function reloadCandidates() {
     const { items } = await api.get(`/projects/${projectKey}/candidates?run_id=${encodeURIComponent(runId)}`);
     Object.assign(ctl, pickCandidates(items));
@@ -88,9 +110,27 @@ export async function runDetailPage(projectKey: WebDynamic, groupId: WebDynamic,
     token,
     candidateTimer: null,
     sub: subscribeFeed(projectKey, {
-      types: ["clip.created", "retention.pruned", "run.event", "candidate.created", "candidate.accepted", "candidate.rejected", "candidate.superseded"],
+      types: ["clip.created", "retention.pruned", "run.status", "run.event", "candidate.created", "candidate.accepted", "candidate.rejected", "candidate.superseded"],
       onEvent: async (e: WebDynamic) => {
         if (!current()) return;
+        // This run's own liveness, off the feed and nothing else. A progress
+        // snapshot patches the live line where it stands; a status move — the
+        // seal included — refetches the run once and repaints the chrome. The
+        // iframe hears the same seal on its own live poll and reloads itself
+        // into the sealed run, so both halves land within a tick of each other.
+        const intent = liveFeedIntent(e, runId);
+        if (intent === "progress") {
+          ctl.progress = progressSnapshot(e);
+          fillLiveLine();
+          return retryViewer();
+        }
+        if (intent === "reload") {
+          try { ctl.run = await api.get(`/runs/${runId}`); } catch { return; /* the next event repaints */ }
+          if (!current()) return;
+          ctl.progress = ctl.run.progress ?? null;
+          paintHeader();
+          return retryViewer();
+        }
         if (e.type === "clip.created" && (e.entity?.run_id === runId || e.payload?.run_id === runId)) {
           // If this page kicked off the export, download automatically; otherwise
           // the clip is now durably ready and the More menu offers Download clip.
@@ -146,32 +186,67 @@ export async function runDetailPage(projectKey: WebDynamic, groupId: WebDynamic,
   // white viewer panel. With no explicit theme both sides fall back to
   // prefers-color-scheme and already agree; shell.js re-points this on toggle.
   const themeQs = currentTheme() ? `&theme=${currentTheme()}` : "";
-  const viewerSrc = `/api/v1/projects/${encodeURIComponent(projectKey)}/view/?run=${encodeURI(`${run.run_id}/${run.case_id}`)}${stepQs}${viewQs}${themeQs}&embed=1`;
+  viewerSrc = `/api/v1/projects/${encodeURIComponent(projectKey)}/view/?run=${encodeURI(`${run.run_id}/${run.case_id}`)}${stepQs}${viewQs}${themeQs}&embed=1`;
   // A run that finished without uploading a bundle has nothing to replay — the
   // embedded viewer would only say "No run found here" in CLI words. Explain
-  // instead (the header's error strip carries the why).
-  const noEvidence: WebDynamic = ["infra", "canceled", "lost"].includes(run.status) && !(run.artifact || groupRun?.artifact);
-  mount(main, h("div.run-detail", {},
-    headerEl,
-    noEvidence
-      ? h("div.viewer-embed", { style: "display:flex;align-items:center;justify-content:center" },
-          emptyState("Nothing to replay",
-            run.started_at
-              ? "This run ended before its evidence bundle was uploaded."
-              : "The runner never started this case, so no steps or screenshots were captured."))
-      // Same-origin iframe: hand it keyboard focus on load, or the viewer's
-      // bindings (space = play, arrows = step) silently never fire — the page
-      // looks interactive but every keypress lands on the parent document.
-      : h("iframe.viewer-embed", {
-          src: viewerSrc,
-          title: `Trajectory viewer — ${run.case_id}`,
-          onload: (e: WebDynamic) => { try { e.target.contentWindow.focus(); } catch { /* focus is a nicety */ } },
-        }),
-  ));
+  // instead (the header's error strip carries the why). A run that DID stream is
+  // a different case even when it died: its staged evidence outlives it through
+  // the retention grace window, and that stream is the only record of what the
+  // run saw before it went (docs/contracts/hosted.md, live runs).
+  noEvidence = ["infra", "canceled", "lost"].includes(run.status)
+    && !(run.artifact || groupRun?.artifact) && !run.live_opened_at;
+  viewerEl = noEvidence
+    ? h("div.viewer-embed", { style: "display:flex;align-items:center;justify-content:center" },
+        emptyState("Nothing to replay",
+          run.started_at
+            ? "This run ended before its evidence bundle was uploaded."
+            : "The runner never started this case, so no steps or screenshots were captured."))
+    // Same-origin iframe: hand it keyboard focus on load, or the viewer's
+    // bindings (space = play, arrows = step) silently never fire — the page
+    // looks interactive but every keypress lands on the parent document.
+    : h("iframe.viewer-embed", {
+        src: viewerSrc,
+        title: `Trajectory viewer — ${run.case_id}`,
+        onload: (e: WebDynamic) => { try { e.target.contentWindow.focus(); } catch { /* focus is a nicety */ } },
+      });
+  mount(main, h("div.run-detail", {}, headerEl, viewerEl));
   paintHeader();
+
+  /**
+   * Did the embedded viewer come up empty?
+   *
+   * There is one window where it can: a run claimed a moment ago has started
+   * but has not yet staged its first batch, so the viewer's single load probe
+   * finds neither a live run nor a bundle and renders its own "no run here".
+   * It never looks again — one probe per load is its contract — so the frame
+   * would sit empty for the whole run, under a header that says the run is
+   * recording. The frame is same-origin, so this is a DOM read, not a request.
+   */
+  function viewerFoundNothing() {
+    if (noEvidence) return false;
+    try { return viewerEl.contentDocument?.querySelector("#fatal")?.hidden === false; } catch { return false; }
+  }
+
+  /**
+   * Give the empty frame another go — and ONLY an empty one. A viewer that
+   * found its run is streaming it (or showing it sealed) and owns that view
+   * completely: reloading it under the reader would cost them their selection
+   * for nothing. This is not a poll: it rides feed events the page already
+   * receives, it does nothing unless the frame is showing an empty state, and
+   * it stops the instant the frame has something.
+   */
+  function retryViewer() {
+    if (!viewerFoundNothing()) return;
+    viewerEl.src = `${viewerSrc}&t=${Date.now()}`;
+  }
 
   function paintHeader() {
     const r = ctl.run;
+    const streaming = isLiveRun(r);
+    // The seal repaints the header without a live line; drop the stale handle
+    // before the rebuild so a late progress event can't write into a node that
+    // no longer belongs to the page.
+    if (!streaming) liveLineEl = null;
     const endReason = r.manifest?.result?.end_reason ?? null;
     const limits = r.manifest?.case?.limits ?? null;
     // "changed — tried to heal → passed" packed three terms of art into one
@@ -236,7 +311,14 @@ export async function runDetailPage(projectKey: WebDynamic, groupId: WebDynamic,
     // Every row in this menu is a verb — "Bundle" alone read as a heading.
     const bundleItem = artifact
       ? { label: "Download bundle", onclick: downloadBundle }
-      : { label: "Download bundle", disabled: true, title: "No evidence bundle was uploaded", onclick: () => {} };
+      : {
+          label: "Download bundle",
+          disabled: true,
+          // A run still executing has not failed to produce a bundle — it has
+          // not finished producing one. Same fact, opposite implication.
+          title: streaming ? "The evidence bundle is sealed when the run finishes" : "No evidence bundle was uploaded",
+          onclick: () => {},
+        };
     // Most findings now arrive on their own — assertion failures already file
     // themselves, and grader-found issues land in the triage queue — so filing
     // one by hand is the rare case. It sits in More, worded as the manual act it
@@ -256,7 +338,15 @@ export async function runDetailPage(projectKey: WebDynamic, groupId: WebDynamic,
       h("div.rd-line1", {},
         // Identity: what this run decided, and which story it decided it about.
         h("div.rd-ident", {},
-          statusChip(chipStatus(r), headline),
+          // A run still executing has no verdict to wear, and the finished-run
+          // words are wrong on it ("recorded" while it is still recording). It
+          // wears the same ● live badge the embedded viewer wears instead, and
+          // the doing-line below says where it has got to. A queued story is not
+          // live yet — nothing is streaming until a runner picks it up — so it
+          // says the plain truth and takes the badge when it starts.
+          streaming
+            ? (r.status === "queued" ? statusChip("neutral", "queued") : liveBadge())
+            : statusChip(chipStatus(r), headline),
           // The case id is this page's one true heading (the shell page() h1
           // doesn't exist here — the header sits over the full-bleed viewer).
           h("h1.rd-title", {}, r.case_id)),
@@ -277,6 +367,7 @@ export async function runDetailPage(projectKey: WebDynamic, groupId: WebDynamic,
           more),
       ),
       h("div.rd-meta", {}, ...provenance),
+      streaming ? liveLine() : null,
       failStrip(r),
       // Sign-off must leave residue: the banner vanishing was the only "proof"
       // of acceptance in round 3, and the reviewer double-checked elsewhere.
@@ -302,6 +393,43 @@ export async function runDetailPage(projectKey: WebDynamic, groupId: WebDynamic,
             canReview ? h("button.btn.btn-sm.primary", { onclick: () => resolveCandidate("accept") }, "Accept ✓") : null)
         : null,
     );
+  }
+
+  /**
+   * The badge a streaming run wears, in the embedded viewer's own words and
+   * colours (run-viewer style.css `.chip.live`): one vocabulary across the
+   * seam, so the header and the replay under it never look like two products.
+   */
+  function liveBadge() {
+    return h("span.chip.live", {
+      title: "This run is still executing — steps appear in the replay below as they are recorded.",
+    }, h("span.live-dot", { "aria-hidden": "true" }), "live");
+  }
+
+  /**
+   * What the run is doing right now, under the provenance line: the phase and
+   * step from the progress snapshot, then the actor's latest action. Patched in
+   * place by the feed — a step counter moving must never cost the reader their
+   * focus, their scroll, or an open menu.
+   */
+  function liveLine() {
+    liveLineEl = h("div.rd-live", { "aria-live": "polite" },
+      h("span.rd-live-doing"),
+      h("span.rd-live-action.dim"));
+    fillLiveLine();
+    return liveLineEl;
+  }
+
+  function fillLiveLine() {
+    if (!current() || !liveLineEl) return;
+    const doing = liveDoing(ctl.run, ctl.progress);
+    const action = liveAction(ctl.run, ctl.progress);
+    const doingEl = liveLineEl.querySelector(".rd-live-doing");
+    const actionEl = liveLineEl.querySelector(".rd-live-action");
+    if (doingEl.textContent !== (doing || "")) doingEl.textContent = doing || "";
+    const text = action ? `↳ ${action}` : "";
+    if (actionEl.textContent !== text) actionEl.textContent = text;
+    actionEl.title = action || "";
   }
 
   /**
@@ -687,6 +815,15 @@ function artifactLine(r: WebDynamic, groupRun: WebDynamic) {
   // "may have been pruned" is only honest when retention actually ran — a run
   // that never uploaded a bundle simply has no evidence.
   if (r.retention_pruned_at) return `${r.artifact_tier || "meta"} tier — evidence may have been pruned`;
+  // While the run is still executing there is no bundle YET: what the page is
+  // showing came off the live stream, and the sealed bundle is the last thing
+  // the run does. Saying "no evidence bundle was uploaded" under a replay that
+  // is visibly filling up would read as a fault.
+  if (isLiveRun(r)) return "bundle sealed when the run finishes";
+  // A run that died mid-case never sealed a bundle, but it did stream: what it
+  // saw is below, and it is the only record there will be. Saying only "no
+  // bundle" over a replay full of steps reads as a contradiction.
+  if (r.live_opened_at) return "no bundle — showing the steps it streamed";
   return r.started_at ? "no evidence bundle was uploaded" : "no evidence — the run never started";
 }
 

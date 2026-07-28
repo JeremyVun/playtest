@@ -9,7 +9,9 @@
 //   note  what a reviewer should be looking at here
 //
 // `act` steps use accessible names on purpose: if a control cannot be reached
-// by its visible label, that is itself an audit finding.
+// by its visible label, that is itself an audit finding. `act` also receives the
+// seeded ids, so a surface that needs the SERVER to move while its page is open
+// (sealing a live run under the run page) can do that too.
 
 // Exact accessible-name match first (a substring match once clicked the "Runs"
 // rail link while reaching for a "Run" button); fall back to a contains match
@@ -246,7 +248,8 @@ export const SURFACES = [
     title: "Runs — in flight",
     path: (d) => `/p/${d.projectKey}/runs?live=1`,
     note: "The watching tab: every run still queued or running, each opened to its live story "
-      + "blocks. This is where the full trail lives, so the dense default list never has to carry it.",
+      + "blocks. This is where the full trail lives, so the dense default list never has to carry it. "
+      + "Each live story carries ● Watch, in the column a finished story keeps ▶ Replay.",
   },
   {
     id: "runs-launch-modal",
@@ -277,6 +280,34 @@ export const SURFACES = [
     id: "run-group-explored",
     title: "Discovery run (index, expanded, Synthesize)",
     path: (d) => `/p/${d.projectKey}/runs/${d.exploredGroupId}`,
+  },
+  {
+    id: "run-detail-live",
+    title: "Run evidence — streaming (an open run)",
+    path: (d) => (d.liveRun ? `/p/${d.projectKey}/runs/${d.liveRun.group}/${d.liveRun.id}` : null),
+    note: "A run still executing. The header wears the ● live badge and one line of what it is "
+      + "doing; the embedded viewer plays the steps that have landed so far and holds a pending "
+      + "row for the one in flight. Nothing here polls — the iframe owns the live stream, the "
+      + "page owns the event feed. The 404s on grade.json and har.json are the design: an open "
+      + "run has no grade and no HAR yet, and the viewer degrades to showing neither.",
+  },
+  {
+    id: "run-detail-seal",
+    title: "Run evidence — the seal landing",
+    path: (d) => {
+      const run = d.nextSealRun?.();
+      return run ? `/p/${d.projectKey}/runs/${run.groupId}/${run.runDbId}` : null;
+    },
+    // Sealed underneath the open page, which is the only way to photograph the
+    // handoff: the chrome's verdict arrives on the feed, the iframe's grade
+    // arrives on its own live poll, and they have to land together.
+    act: async (page, d) => {
+      await d.sealCurrentRun();
+      await page.waitForTimeout(4000);
+    },
+    note: "The same page a moment later. The badge became a verdict, the provenance gained its "
+      + "duration and bundle, and the replay reloaded in place — check that nothing flashed empty "
+      + "and that the two halves agree.",
   },
   {
     id: "run-detail-pass",

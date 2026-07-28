@@ -74,6 +74,28 @@ Plan: [`docs/backlog/self-hosted-runners/BUILD_PLAN.md`](backlog/self-hosted-run
       `GET /run-groups/:id?wait=true` now actually holds, as the automation
       contract always said.
 
+### Live runs: open runs streaming into the viewer
+
+Design: [`docs/backlog/live-runs/DESIGN.md`](backlog/live-runs/DESIGN.md).
+Plan: [`docs/backlog/live-runs/BUILD_PLAN.md`](backlog/live-runs/BUILD_PLAN.md).
+
+- [ ] **A0 — Async axe capture:** move the always-on web axe scan off the
+      step-loop critical path (latched envelope append, dispatch barrier);
+      behavior and contracts otherwise unchanged.
+- [ ] **L0 — Viewer live mode:** the long-poll `live` route on the local
+      viewer host and the viewer's live mode (follow mode, pending step,
+      seal transition), hermetic against a locally recording run;
+      interfaces.md gains the route contract.
+- [ ] **L1 — Control-plane open runs:** `open` + `live/*` runner routes,
+      staged objects served through the `runEntry` fallback, the hosted
+      live endpoint, seal cleanup and retention GC; hosted.md gains the
+      staging lifecycle.
+- [ ] **L2 — Runner-agent live uploader:** best-effort coalesced streaming
+      beside the progress reporter, end to end on `npm run hosted`; sealed
+      bundles byte-identical to non-live runs.
+- [ ] **L3 — Console polish:** the run page streams in the embedded viewer,
+      the runs list gains a watch affordance, ux-lab covers the live page.
+
 ### Seeded-fault hill-climb rerun
 
 Plan: [`docs/backlog/hillclimb-rerun.md`](backlog/hillclimb-rerun.md).

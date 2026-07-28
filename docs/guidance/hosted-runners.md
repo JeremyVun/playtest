@@ -314,6 +314,13 @@ ring, not their display names; they never change once created; and nothing else
 in the file is visible to the platform. Rename an application freely — the
 binding holds.
 
+`app:` pointing at a path is the whole of v1's provider story: the build is
+already on this disk, however it got there — Xcode, a CI artifact download, a
+copy from a colleague. Pulling a build from an internal artifactory or registry
+by version is the stated v2: a runner-side provider behind the same
+application/ring binding, so when it lands nothing changes on the platform, the
+ring, or this file's keys.
+
 The runner validates the whole file at startup and refuses to run on a problem it
 can see from here: a target naming a backend you never declared, a platform that
 disagrees with its backend, a build that is not on this disk, a duplicate entry,

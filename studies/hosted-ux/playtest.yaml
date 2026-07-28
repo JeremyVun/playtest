@@ -1,10 +1,10 @@
 # Discovery study over the hosted Playtest web app (ROADMAP.md M1).
 #
-# No compose: the control plane runs on the host. Bring it up first
-# (packages/platform/control-plane/README.md): `docker compose -f infra/dev-compose.yml up`,
-# then packages/platform/control-plane with PLAYTEST_AUTH=dev → http://127.0.0.1:4177, and seed
-# a THROWAWAY project from the study-owned todo fixture — discovery actors mutate
-# state, so never point this study at real data.
+# No database service and no container: `npm run hosted` from the repository
+# root brings up the whole platform under PLAYTEST_AUTH=dev at
+# http://127.0.0.1:4177, with one peer runner beside it. Then seed a THROWAWAY
+# project from the study-owned todo fixture — discovery actors mutate state, so
+# never point this study at real data.
 #
 # Story files live beside this file (one per core journey — see ROADMAP.md
 # M1 step 2 for the list); personas are already authored in personas/.

@@ -1099,6 +1099,8 @@ const MODE_NOTE: WebDynamic = {
   agent: "Slower and costlier: the agent drives every story, and each recording replaces that story's saved path — discarding a changed path still waiting for review.",
 };
 export function launchModal(projectKey: WebDynamic, suites: WebDynamic = null, preselectSuiteId: WebDynamic = null, opts: WebDynamic = {}) {
+  // The placement line's live machinery, released on every exit path.
+  let stopLive = () => {};
   const close = formModal("Launch a run", () => {
     // Scope: launched from a story row or the story editor, the run covers just
     // those ids (server `selection.ids`). That is context, not a control — the
@@ -1136,7 +1138,11 @@ export function launchModal(projectKey: WebDynamic, suites: WebDynamic = null, p
     // for ten minutes and then fails naming labels nothing served.
     const placementSlot = h("div.launch-placement", {});
     const modelsSlot = h("p.launch-models", {});
-    const warnSlot = h("div.launch-warnings", {});
+    // Two owners, two slots: placement's warning follows the fleet (a runner
+    // checking in withdraws it live), the rest follow the preview.
+    const placementWarnSlot = h("div");
+    const previewWarnSlot = h("div");
+    const warnSlot = h("div.launch-warnings", {}, placementWarnSlot, previewWarnSlot);
     const planSlot = h("div.launch-plan", {}, h("span.dim", {}, "sizing this run…"));
     const limitsLabel = h("span", {}, "Limits");
     const launchBtn = h("button.btn.primary", {
@@ -1154,6 +1160,27 @@ export function launchModal(projectKey: WebDynamic, suites: WebDynamic = null, p
     // machinery talking about itself. Read through the shared cache, so opening
     // the dialog twice in a minute costs one request, and never polled.
     let runners: WebDynamic = [];
+    let lastPlacement: WebDynamic = null;
+
+    // The line is PRESENCE, so it stays true while the dialog is open: runner
+    // edges arrive on the feed (`run.status` because a group finishing is what
+    // releases a runner, and no runner event says so), and the request-free
+    // clock re-reads last-seen so "checked in" can quietly become "offline".
+    let liveDebounce: WebDynamic = null;
+    const sub = subscribeFeed(projectKey, {
+      types: ["runner.status", "run.status"],
+      onEvent: () => {
+        clearTimeout(liveDebounce);
+        liveDebounce = setTimeout(async () => {
+          try {
+            runners = (await api.get(`/projects/${projectKey}/runners`)).items || [];
+            paintPlacement();
+          } catch { /* the next edge retries */ }
+        }, 250);
+      },
+    });
+    const tick = setInterval(() => paintPlacement(), 15_000);
+    stopLive = () => { sub.stop(); clearInterval(tick); clearTimeout(liveDebounce); };
 
     const modeBtns = MODE_OPTIONS.map((o: WebDynamic) => h("button.launch-mode", {
       type: "button", role: "radio", onclick: () => setMode(o.value), onkeydown: onModeKey,
@@ -1359,7 +1386,9 @@ export function launchModal(projectKey: WebDynamic, suites: WebDynamic = null, p
         // (an uncommitted suite, say), which belongs with the other refusals.
         mount(targetSlot);
         mount(modelsSlot);
-        mount(warnSlot, err.status === 400 ? h("div.preview-warn", {}, String(err.message)) : null);
+        lastPlacement = null;
+        paintPlacement();
+        mount(previewWarnSlot, err.status === 400 ? h("div.preview-warn", {}, String(err.message)) : null);
         mount(planSlot, h("span.dim", {}, err.status === 400 ? "nothing to size yet" : "preview unavailable"));
         launchBtn.disabled = false;
       }
@@ -1398,28 +1427,9 @@ export function launchModal(projectKey: WebDynamic, suites: WebDynamic = null, p
 
       // Placement, said out loud before anyone spends money: which labels this
       // run needs, whose decision that was, and whether anything advertising
-      // them is actually checked in. All of it from what this dialog already
-      // holds — the preview and the runner list — never a new poll.
-      const placement = p.placement || null;
-      const readiness = placement
-        ? placementReadiness({
-            labels: placement.runner_labels || [],
-            runners,
-            windowS: state.me?.capabilities?.runner_check_in_window_s ?? 120,
-          })
-        : null;
-      placementSlot.className = `launch-placement${readiness && readiness.state !== "ready" ? " warn" : ""}`;
-      mount(placementSlot, readiness
-        ? h("span", {},
-            h("span.preview-key", {}, "Runs on"),
-            h("span.launch-target-main", {},
-              h("span.launch-target-url", {},
-                placement.runner_labels?.length
-                  ? `a runner advertising ${placement.runner_labels.join(", ")}`
-                  : "any runner in this project"),
-              h("span.launch-source", {},
-                placement.labels_source === "launch" ? "pinned by this launch" : "the ring's labels")))
-        : null);
+      // them is actually checked in.
+      lastPlacement = p.placement || null;
+      paintPlacement();
 
       // Which models the launch will use, and whose choice each one was —
       // server-resolved (suite beats project beats engine default).
@@ -1447,18 +1457,7 @@ export function launchModal(projectKey: WebDynamic, suites: WebDynamic = null, p
         h("div.launch-plan-cost", {}, est != null ? `est. ${fmtCost(est)}${coverage}` : "no cost history yet"),
       );
 
-      // A run nothing can claim is a ten-minute wait ending in a failure, and
-      // everything needed to say so is already on this screen. It is a warning,
-      // not a block: a runner started thirty seconds from now still takes it.
-      const placementWarn = readiness && readiness.state !== "ready" && readiness.state !== "busy"
-        ? h("div.preview-warn", {},
-            readiness.message, " ",
-            hasRole(state.projectByKey.get(projectKey)?.id, "developer")
-              ? link(`/p/${projectKey}/settings/runners`, "Set up a runner")
-              : null)
-        : null;
-      mount(warnSlot,
-        placementWarn,
+      mount(previewWarnSlot,
         // Discovery is blocked on a non-discovery ring, but a plain journey run
         // against production is allowed — and is worth saying out loud, because
         // these runs really click the buttons they find.
@@ -1480,6 +1479,44 @@ export function launchModal(projectKey: WebDynamic, suites: WebDynamic = null, p
         p.total_runs === 0 ? h("div.preview-warn", {}, "This selection matches no stories.") : null,
       );
     }
+    /**
+     * The placement line and its warning, from what this dialog already holds —
+     * the last preview's labels and a runner list the feed keeps fresh. Its own
+     * painter because it must repaint on a fleet edge without re-posting the
+     * preview.
+     */
+    function paintPlacement() {
+      const readiness = lastPlacement
+        ? placementReadiness({
+            labels: lastPlacement.runner_labels || [],
+            runners,
+            windowS: state.me?.capabilities?.runner_check_in_window_s ?? 120,
+          })
+        : null;
+      placementSlot.className = `launch-placement${readiness && readiness.state !== "ready" ? " warn" : ""}`;
+      mount(placementSlot, readiness
+        ? h("span", {},
+            h("span.preview-key", {}, "Runs on"),
+            h("span.launch-target-main", {},
+              h("span.launch-target-url", {},
+                lastPlacement.runner_labels?.length
+                  ? `a runner advertising ${lastPlacement.runner_labels.join(", ")}`
+                  : "any runner in this project"),
+              h("span.launch-source", {},
+                lastPlacement.labels_source === "launch" ? "pinned by this launch" : "the ring's labels")))
+        : null);
+      // A run nothing can claim is a ten-minute wait ending in a failure, and
+      // everything needed to say so is already on this screen. It is a warning,
+      // not a block — a runner started thirty seconds from now still takes it,
+      // and the feed edge that says so withdraws this line.
+      mount(placementWarnSlot, readiness && readiness.state !== "ready" && readiness.state !== "busy"
+        ? h("div.preview-warn", {},
+            readiness.message, " ",
+            hasRole(state.projectByKey.get(projectKey)?.id, "developer")
+              ? link(`/p/${projectKey}/settings/runners`, "Set up a runner")
+              : null)
+        : null);
+    }
     async function submit(e: WebDynamic) {
       e.preventDefault();
       try {
@@ -1493,7 +1530,7 @@ export function launchModal(projectKey: WebDynamic, suites: WebDynamic = null, p
         navigate(`/p/${projectKey}/runs/${out.run_group.id}`);
       } catch (err: WebDynamic) { toastError(err); }
     }
-  });
+  }, { onClose: () => stopLive() });
 }
 
 async function retryGroup(

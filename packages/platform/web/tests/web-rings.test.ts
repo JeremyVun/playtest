@@ -10,6 +10,7 @@ import {
   DRIVERS, PLATFORMS, driverLabel, driverGist, applicationLine, keyFromName, keyProblem,
   ringUrlProblem, ringConfigProblem, ringOptionLabel, isProdRing, defaultRingId,
   launchTargetWords, hostOf, PHYSICAL_APP_KEYS, LOGICAL_APP_KEYS,
+  identityRows, identityValue, withIdentities, identityProblem, sessionRefOptions,
 } from "../src/lib/rings.js";
 import { initialDefaultsYaml } from "../src/lib/defaults-form.js";
 
@@ -84,6 +85,122 @@ test("ring: the overlay is an allowlist, so the physical five are unrepresentabl
   // `device` or `app` deeper down is legitimate and must survive.
   assert.equal(ringConfigProblem({ auth: { identities: { device: {}, app: {} } } }), null);
   assert.equal(ringConfigProblem({ secret_env: { appium_url: { $secret: "s" } } }), null);
+});
+
+test("identities: the three shapes a person authors are recognized, and anything else is admitted", () => {
+  const rows = identityRows({
+    auth: {
+      default: "member",
+      identities: {
+        member: { $session: "sso/member" },          // a session a provider mints
+        legacy: "$session:sso/admin",                 // …and its older string form
+        stored: { $secret: "member-state" },          // a stored storage-state secret
+        onDisk: ".playtest-env/member.json",          // a path the runner already has
+        weird: { cookies: [{ name: "sid" }] },        // a shape this form doesn't edit
+      },
+    },
+  });
+  assert.deepEqual(rows.map((r) => [r.name, r.kind, r.ref]), [
+    ["member", "session", "sso/member"],
+    ["legacy", "session", "sso/admin"],
+    ["stored", "secret", "member-state"],
+    ["onDisk", "path", ".playtest-env/member.json"],
+    ["weird", "custom", ""],
+  ]);
+  // Stored order is presentation order — a re-render must not shuffle rows a
+  // person is typing into.
+  assert.deepEqual(rows.map((r) => r.name), ["member", "legacy", "stored", "onDisk", "weird"]);
+  // Nothing declared, and nothing to misread as a declaration.
+  for (const cfg of [null, {}, { auth: {} }, { auth: { identities: null } }, { auth: { identities: [] } }]) {
+    assert.deepEqual(identityRows(cfg), [], JSON.stringify(cfg));
+  }
+});
+
+test("identities: every row writes back what it read, and a custom one verbatim", () => {
+  const stored = {
+    member: { $session: "sso/member" },
+    stored: { $secret: "member-state" },
+    onDisk: ".playtest-env/member.json",
+    weird: { cookies: [{ name: "sid", value: "x" }] },
+  };
+  const rows = identityRows({ auth: { identities: stored } });
+  // Round trip: read the stored map, write it back untouched. The legacy string
+  // form is the ONE deliberate normalization — it means the same thing.
+  assert.deepEqual(Object.fromEntries(rows.map((r) => [r.name, identityValue(r)])), stored);
+  assert.deepEqual(identityValue({ name: "legacy", kind: "session", ref: "sso/admin", value: "$session:sso/admin" }), { $session: "sso/admin" });
+  // A shape the form cannot edit survives BECAUSE it is carried, not rebuilt.
+  const custom = rows.find((r) => r.name === "weird");
+  assert.equal(identityValue(custom!), stored.weird, "a custom row hands back the very object it was given");
+});
+
+test("identities: the form writes into the one document, never a fresh one", () => {
+  const doc = {
+    app: { storage_state: ".playtest-env/state.json" },
+    secret_env: { TOKEN: { $secret: "staging" } },
+    auth: { default: "member", identities: { member: { $secret: "old" } } },
+  };
+  const out = withIdentities(doc, [
+    { name: "member", kind: "session", ref: "sso/member", value: null },
+    { name: "admin", kind: "secret", ref: "admin-state", value: null },
+  ]);
+  // Keys no field knows about are carried, not re-derived — the same discipline
+  // the suite-defaults editor keeps with YAML.
+  assert.equal(out.app, doc.app, "an untouched branch is the same object");
+  assert.equal(out.secret_env, doc.secret_env);
+  assert.deepEqual(out.auth, {
+    default: "member",
+    identities: { member: { $session: "sso/member" }, admin: { $secret: "admin-state" } },
+  }, "auth.default belongs to the ring, not to the identity editor");
+  // …and the input document is not mutated under the caller.
+  assert.deepEqual(doc.auth.identities, { member: { $secret: "old" } });
+
+  // Removing the last identity removes the map; removing the last thing in
+  // `auth` removes `auth`, so an empty editor leaves no empty scaffolding for
+  // the overlay allowlist to complain about.
+  assert.deepEqual(withIdentities({ auth: { identities: { member: "x" } } }, []), {});
+  assert.deepEqual(withIdentities({ auth: { default: "member", identities: { member: "x" } } }, []), { auth: { default: "member" } });
+  assert.deepEqual(withIdentities(null, []), {});
+  assert.deepEqual(withIdentities(undefined, [{ name: "member", kind: "path", ref: "s.json", value: null }]),
+    { auth: { identities: { member: "s.json" } } });
+});
+
+test("identities: a row a story could not use is refused before the round trip", () => {
+  const ok = [{ name: "member", kind: "session" as const, ref: "sso/member", value: null }];
+  assert.equal(identityProblem([]), null);
+  assert.equal(identityProblem(ok), null);
+  // Unnamed: `auth:` selects BY NAME, so an unnamed row is unusable.
+  assert.match(String(identityProblem([{ name: "  ", kind: "secret", ref: "s", value: null }])), /Name every identity/);
+  // Two of a name: the refusal says which name is ambiguous.
+  assert.match(
+    String(identityProblem([...ok, { name: "member", kind: "secret", ref: "s", value: null }])),
+    /Two identities are both called “member”/,
+  );
+  // Named, but pointing at nothing — and the message names the row and the
+  // three things that would fix it.
+  const empty = String(identityProblem([{ name: "admin", kind: "session", ref: "  ", value: null }]));
+  assert.match(empty, /“admin” has nothing to sign in with/);
+  assert.match(empty, /provider identity, a secret, or a stored state file/);
+  // A custom row has no `ref` by construction, so the rule does not apply to it.
+  assert.equal(identityProblem([{ name: "weird", kind: "custom", ref: "", value: { cookies: [] } }]), null);
+});
+
+test("identities: the session picker offers only references this ring may actually use", () => {
+  const providers = [
+    { name: "sso", ring_id: null, enabled: true, identities: { member: {}, admin: {} } },
+    { name: "staging-only", ring_id: "r1", enabled: true, identities: { member: {} } },
+    { name: "prod-only", ring_id: "r2", enabled: true, identities: { member: {} } },
+    { name: "retired", ring_id: null, enabled: false, identities: { member: {} } },
+    { name: "no-identities", ring_id: null, enabled: true },
+  ];
+  // A bound provider is reachable only from its own ring, so offering another
+  // ring's would be offering a refusal.
+  assert.deepEqual(sessionRefOptions(providers, "r1"), ["sso/admin", "sso/member", "staging-only/member"]);
+  assert.deepEqual(sessionRefOptions(providers, "r2"), ["prod-only/member", "sso/admin", "sso/member"]);
+  // A ring that does not exist yet (the create form) sees the project-wide ones.
+  assert.deepEqual(sessionRefOptions(providers, null), ["sso/admin", "sso/member"]);
+  // Sorted, because the picker is read alphabetically, and never a disabled one.
+  assert.ok(!sessionRefOptions(providers, "r1").some((r) => r.startsWith("retired/")));
+  assert.deepEqual(sessionRefOptions([], "r1"), []);
 });
 
 test("launch: a ring option names the host it resolves to", () => {

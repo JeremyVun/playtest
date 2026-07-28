@@ -93,15 +93,17 @@ const FOCUSABLE =
  * keydown listener always gets removed — closing via a button used to leak it,
  * and a second stacked modal would then mis-close on the first Escape.
  *
- * @param {{ title: string, dismiss?: () => void, confirmDismiss?: () => boolean | Promise<boolean> }} opts
+ * @param {{ title: string, dismiss?: () => void, confirmDismiss?: () => boolean | Promise<boolean>,
+ *           onClose?: () => void }} opts
  *   `dismiss` runs on Escape and scrim click (the "no decision" exit); omit for
  *   a plain close. `confirmDismiss` gates that exit for the rare dialog whose
  *   content cannot be recovered by reopening it — a false answer leaves the
  *   dialog exactly where it was. Every other modal passes neither and keeps the
- *   plain contract: Escape closes.
+ *   plain contract: Escape closes. `onClose` runs on EVERY exit — it is where a
+ *   dialog that subscribed to something releases it.
  * @param {(close: () => void) => Node} build the dialog body
  */
-function openModal({ title, dismiss, confirmDismiss }: WebDynamic, build: WebDynamic) {
+function openModal({ title, dismiss, confirmDismiss, onClose }: WebDynamic, build: WebDynamic) {
   const root = document.getElementById("modal-root");
   // Whatever had focus opens the dialog and gets it back — losing your place in
   // a table because you opened and cancelled a dialog is a keyboard dead end.
@@ -110,6 +112,7 @@ function openModal({ title, dismiss, confirmDismiss }: WebDynamic, build: WebDyn
   const close = () => {
     if (closed) return;
     closed = true;
+    onClose?.();
     clear(root);
     document.removeEventListener("keydown", onKey, true);
     // The opener may have been re-rendered away by a repaint; only restore when

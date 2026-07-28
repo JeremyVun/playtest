@@ -15,6 +15,7 @@ import { visibleSections } from "../lib/settings-sections.js";
 import { modelField } from "../lib/model-select.js";
 import { humanize as words, categoryLabel } from "../lib/vocab.js";
 import { startCommand, oneShot, runnerLabelsText, runnerPresence, labelProblem, parseLabels } from "../lib/runners.js";
+import { RUNNER_GUIDE } from "../lib/rings.js";
 import { subscribeFeed } from "../lib/feed.js";
 import { ago } from "../lib/labels.js";
 
@@ -204,8 +205,14 @@ async function runnersTab(projectKey: WebDynamic, project: WebDynamic, slot: Web
     mount(slot, h("div.stack", {},
       h("section", {},
         h("h3.section-title", { style: "margin-top:0" }, "Runners"),
-        h("p.dim", { style: "font-size:12.5px;margin:-4px 0 12px" },
+        h("p.dim", { style: "font-size:12.5px;margin:-4px 0 8px" },
           "Machines that execute this project's runs. Register one here, start it with the command shown, then give a ring the same labels under Applications — a run is placed on a runner advertising every label its ring asks for."),
+        // What each machine can reach is that machine's own business, so this
+        // page holds no target inventory — just where a machine declares one.
+        h("p.faint", { style: "font-size:11.5px;margin:0 0 12px" },
+          "A runner that tests mobile builds also starts with ", h("span.mono", {}, "--config <file>"),
+          ", a file on its own disk naming the build, device and Appium server per application and ring — the format is in ",
+          h("span.mono", {}, RUNNER_GUIDE), "."),
         h("div", { style: "display:flex;justify-content:flex-end;margin-bottom:12px" }, add),
         body,
         rows.length && !here
@@ -305,6 +312,10 @@ function revealRunnerCredential(runner: WebDynamic, refresh: WebDynamic) {
       h("p.faint", { style: "font-size:11.5px;margin:6px 0 0" },
         "Pasted this way it also lands in your shell history. On a machine you share, put the credential in a file only you can read and start the runner with ",
         h("span.mono", {}, "--credential-file <path>"), " instead."),
+      h("p.faint", { style: "font-size:11.5px;margin:6px 0 0" },
+        "For mobile runs, add ", h("span.mono", {}, "--config <file>"),
+        " — a file on that machine naming the build it holds, the device and the Appium server, keyed by application and ring. The format is in ",
+        h("span.mono", {}, RUNNER_GUIDE), "."),
       h("p.faint", { style: "font-size:11.5px;margin:6px 0 0" },
         `Give a ring the ${(runner.labels || []).length ? `labels ${runnerLabelsText(runner.labels)}` : "runner labels you want"} under Applications to place its runs here.`),
       guard,

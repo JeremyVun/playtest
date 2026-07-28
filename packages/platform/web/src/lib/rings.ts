@@ -34,6 +34,27 @@ const DRIVER_WORDS: Record<string, { label: string; gist: string }> = {
 export const driverLabel = (driver: string): string => DRIVER_WORDS[driver]?.label ?? driver;
 export const driverGist = (driver: string): string => DRIVER_WORDS[driver]?.gist ?? "";
 
+/**
+ * Why a key can never change — one sentence, said wherever a key is presented as
+ * identity rather than as a field. Written once so the create form, the identity
+ * card and the edit dialog cannot drift into three different explanations of the
+ * same rule.
+ */
+export const KEY_IS_PERMANENT: Record<string, string> = {
+  application:
+    "Runner configuration binds this key and every run's evidence records it, so nothing can change it later. "
+    + "While nothing has used it, delete and recreate is the way to fix a typo.",
+  ring:
+    "A runner binds the pair application/ring, so neither key can change. "
+    + "While nothing has used it, delete and recreate is the way to fix a typo.",
+};
+
+/** The one sentence a mobile ring answers "where does this run?" with. */
+export const BUILD_FROM_RUNNER = "the claiming runner supplies the build";
+
+/** The operations guide, named where the console has to send someone to it. */
+export const RUNNER_GUIDE = "docs/guidance/hosted-runners.md";
+
 /** How an application reads in one line: `Todo Web · todo-web · web`. */
 export function applicationLine(application: { key?: string; driver?: string; platform?: string | null }): string {
   return [application?.key, application?.driver, application?.platform].filter(Boolean).join(" · ");
@@ -136,6 +157,104 @@ export function ringConfigProblem(config: unknown): string | null {
     }
   }
   return null;
+}
+
+// ---------- a ring's sign-in identities ----------
+
+/**
+ * One entry of `config.auth.identities` — the map a story selects from with
+ * `auth: member`.
+ *
+ * Three shapes are first-class because they are the three a person authors:
+ * a session an auth provider mints (`{"$session": "sso/member"}`), a stored
+ * storage-state secret (`{"$secret": "member-state"}`), and a plain path a
+ * runner already has. Anything else is `custom` and round-trips VERBATIM — the
+ * form shows what it is, and the overlay view is where it is edited. A form
+ * that silently rewrote a shape it did not understand would be worse than one
+ * that admits it.
+ */
+export interface IdentityRow {
+  name: string;
+  kind: "session" | "secret" | "path" | "custom";
+  /** The session reference, secret name, or path — empty for `custom`. */
+  ref: string;
+  /** What was stored, kept so a `custom` row survives a save untouched. */
+  value: unknown;
+}
+
+/** The identities a ring declares, in the order they are stored. */
+export function identityRows(config: unknown): IdentityRow[] {
+  const identities = (config as { auth?: { identities?: Record<string, unknown> } })?.auth?.identities;
+  if (!identities || typeof identities !== "object" || Array.isArray(identities)) return [];
+  return Object.entries(identities).map(([name, value]) => ({ name, ...classifyIdentity(value), value }));
+}
+
+function classifyIdentity(value: unknown): { kind: IdentityRow["kind"]; ref: string } {
+  if (typeof value === "string") {
+    return value.startsWith("$session:")
+      ? { kind: "session", ref: value.slice("$session:".length) }
+      : { kind: "path", ref: value };
+  }
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const obj = value as Record<string, unknown>;
+    if (typeof obj.$session === "string") return { kind: "session", ref: obj.$session };
+    if (typeof obj.$secret === "string") return { kind: "secret", ref: obj.$secret };
+  }
+  return { kind: "custom", ref: "" };
+}
+
+/** The stored value one row writes back. */
+export function identityValue(row: IdentityRow): unknown {
+  if (row.kind === "session") return { $session: row.ref };
+  if (row.kind === "secret") return { $secret: row.ref };
+  if (row.kind === "path") return row.ref;
+  return row.value;
+}
+
+/**
+ * The overlay document with `auth.identities` replaced by these rows — every
+ * other key, including `auth.default`, left exactly where it was. The form and
+ * the overlay view are two views of ONE document (the ring form's discipline),
+ * so this never builds a fresh object.
+ */
+export function withIdentities(config: unknown, rows: IdentityRow[]): Record<string, unknown> {
+  const doc: Record<string, unknown> = { ...(config as Record<string, unknown> ?? {}) };
+  const auth: Record<string, unknown> = { ...(doc.auth as Record<string, unknown> ?? {}) };
+  if (rows.length) auth.identities = Object.fromEntries(rows.map((r) => [r.name, identityValue(r)]));
+  else delete auth.identities;
+  if (Object.keys(auth).length) doc.auth = auth;
+  else delete doc.auth;
+  return doc;
+}
+
+/** Why these identity rows can't be saved — named, so the message says which. */
+export function identityProblem(rows: IdentityRow[]): string | null {
+  const seen = new Set<string>();
+  for (const row of rows) {
+    const name = String(row.name || "").trim();
+    if (!name) return "Name every identity — a story selects one by name with “auth: member”.";
+    if (seen.has(name)) return `Two identities are both called “${name}” — a story naming it could mean either.`;
+    seen.add(name);
+    if (row.kind !== "custom" && !String(row.ref || "").trim()) {
+      return `“${name}” has nothing to sign in with — pick a provider identity, a secret, or a stored state file.`;
+    }
+  }
+  return null;
+}
+
+/**
+ * The `provider/identity` references this ring may name, from the project's auth
+ * providers. A bound provider is reachable ONLY from its own ring, so offering
+ * another ring's provider here would be offering a refusal.
+ */
+export function sessionRefOptions(
+  providers: { name?: string; ring_id?: string | null; enabled?: boolean; identities?: Record<string, unknown> }[],
+  ringId: string | null | undefined,
+): string[] {
+  return providers
+    .filter((p) => p.enabled !== false && (!p.ring_id || p.ring_id === ringId))
+    .flatMap((p) => Object.keys(p.identities || {}).map((identity) => `${p.name}/${identity}`))
+    .sort();
 }
 
 // ---------- the launch dialog's ring picker ----------

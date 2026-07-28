@@ -5,16 +5,24 @@
 // separately, so the words "binding", "dispatch adapter" and "Appium" appear
 // nowhere on the first-run path.
 //
-// The page is one list: every application, its immutable key and driver, its
-// rings, and the suites bound to it. The identities a ring's stories sign in as
-// and the secrets those identities reference live underneath, folded away —
-// they belong to a ring's authorization, not to a project's settings.
+// Two surfaces, because they answer two questions. The INDEX answers "what does
+// this project test?" — one scannable row per application, its key, its rings
+// and what is bound to it. An APPLICATION PAGE answers "how is this one set
+// up?" — its identity, each ring in full, and the suites that launch against
+// it. Folding both into one page meant a project with three applications and
+// nine rings opened on a wall, and the ring detail that matters when you are
+// setting one up had nowhere to go.
+//
+// Project-wide authorization — the providers that mint sessions and the secrets
+// they reference — sits under the index, folded away: it belongs to the
+// applications that use it, not to a settings tab, and most projects never open
+// it.
 //
 // Reads are `viewer` (an editor picks an application at suite creation, and the
 // launch dialog is a viewer surface); every mutation is `developer`.
 import { api } from "../lib/api.js";
 import { h, mount } from "../lib/dom.js";
-import { link } from "../lib/router.js";
+import { link, navigate } from "../lib/router.js";
 import { renderFrame, page } from "../lib/shell.js";
 import { state, hasRole } from "../lib/state.js";
 import { toast, toastError, confirmModal, formModal, emptyState, errorState, formField } from "../lib/ui.js";
@@ -23,8 +31,11 @@ import { parseCookieList, formatCookieList } from "../lib/defaults-form.js";
 import { labelProblem, parseLabels, runnerLabelsText } from "../lib/runners.js";
 import {
   DRIVERS, PLATFORMS, driverLabel, driverGist, keyFromName, keyProblem,
-  ringUrlProblem, ringConfigProblem, hostOf,
+  ringUrlProblem, ringConfigProblem, hostOf, KEY_IS_PERMANENT, BUILD_FROM_RUNNER, RUNNER_GUIDE,
+  identityRows, withIdentities, identityProblem, sessionRefOptions,
 } from "../lib/rings.js";
+
+// ---------- the index ----------
 
 export async function applicationsPage(projectKey: WebDynamic) {
   const main = renderFrame({ projectKey, nav: "applications" });
@@ -51,20 +62,20 @@ export async function applicationsPage(projectKey: WebDynamic) {
   }
 
   const reload = () => applicationsPage(projectKey);
-  const suitesOf = (application: WebDynamic) =>
-    suites.filter((s: WebDynamic) => s.application_id === application.id);
-
   const authSlot = h("div");
   const secretSlot = h("div");
 
   mount(main, page({
     title: "Applications",
     sub: "one executable surface each — a web app, an HTTP API, or a mobile build — and the rings it is deployed to",
-    actions: canEdit ? [h("button.btn.primary", { onclick: () => applicationModal(projectKey, applications, null, reload) }, "+ New application")] : [],
+    actions: canEdit
+      ? [h("button.btn.primary", { onclick: () => applicationModal(projectKey, applications, null, reload) }, "+ New application")]
+      : [],
     body: h("div", {},
       applications.length
-        ? h("div", { style: "display:flex;flex-direction:column;gap:14px" },
-            ...applications.map((a: WebDynamic) => applicationCard(projectKey, a, suitesOf(a), canEdit, reload)))
+        ? h("div.app-list", {},
+            ...applications.map((a: WebDynamic) =>
+              applicationRow(projectKey, a, suites.filter((s: WebDynamic) => s.application_id === a.id))))
         : emptyState(
             "No application yet",
             canEdit
@@ -80,10 +91,10 @@ export async function applicationsPage(projectKey: WebDynamic) {
       // provider or a ring's `secret_env` references. Folded away — most
       // projects never open either.
       canEdit
-        ? h("details.advanced", { style: "margin-top:20px" },
-            h("summary", {}, "Sign-in identities"),
+        ? h("details.advanced", { style: "margin-top:22px" },
+            h("summary", {}, "Sign-in providers"),
             h("p.dim", { style: "font-size:12.5px;margin:8px 0 12px" },
-              "Providers mint short-lived sessions for the identities a ring references. A provider bound to a ring is reachable only from that ring; leave it unbound to share it across the project."),
+              "A provider mints the short-lived sessions a ring's identities point at. Bind one to a ring and only that ring may use it; leave it unbound to share it across the project."),
             authSlot)
         : null,
       canAdmin
@@ -100,94 +111,231 @@ export async function applicationsPage(projectKey: WebDynamic) {
   if (canAdmin) secretsPanel(projectKey, secretSlot);
 }
 
-/** One application: identity, its rings, and what is bound to it. */
-function applicationCard(projectKey: WebDynamic, application: WebDynamic, bound: WebDynamic, canEdit: WebDynamic, reload: WebDynamic) {
+/**
+ * One application on the index: what it is, where it is deployed, and what
+ * launches against it. The whole row is the link — an application's own page is
+ * where every control for it lives, so a row with its own buttons would be two
+ * places to do the same thing.
+ */
+function applicationRow(projectKey: WebDynamic, application: WebDynamic, bound: WebDynamic) {
   const rings = application.rings || [];
   const mobile = application.driver === "mobile";
-  return h("section.card.pad", {},
-    h("div", { style: "display:flex;align-items:center;gap:10px;flex-wrap:wrap" },
-      h("span.id", {}, application.name || application.key),
-      h("span.chip", {}, application.driver),
+  const a = link(`/p/${projectKey}/applications/${application.key}`, h("div.app-row", {},
+    h("div.app-row-head", {},
+      h("span.rowtitle", {}, application.name || application.key),
+      h("span.chip", {}, driverLabel(application.driver)),
       application.platform ? h("span.chip", {}, application.platform) : null,
-      h("div", { style: "flex:1" }),
-      canEdit
-        ? h("button.btn.btn-sm", { "aria-label": `Rename application ${application.key}`, onclick: () => applicationModal(projectKey, [], application, reload) }, "Rename")
-        : null,
-      canEdit
-        ? h("button.btn.btn-sm.danger", { "aria-label": `Delete application ${application.key}`, onclick: () => deleteApplication(application, reload) }, "Delete")
-        : null,
+      h("span.mono.faint", { style: "font-size:11.5px" }, application.key),
     ),
-    // The key is identity, said plainly: runner configuration and run evidence
-    // address this application by it, and nothing can change it afterwards.
-    h("div.dim", { style: "margin-top:6px;font-size:12px" },
-      "key ", h("span.mono", {}, application.key),
-      h("span.faint", {}, " — permanent; runner configuration and run evidence address it by this name"),
+    h("div.app-row-rings", {},
+      rings.length
+        ? rings.map((r: WebDynamic) => h("span.app-ring", {},
+            h("span.id", {}, r.key),
+            h("span.dim", {}, mobile ? BUILD_FROM_RUNNER : hostOf(r.base_url) || "no URL")))
+        : h("span.faint", {}, "no rings yet — nowhere to launch"),
     ),
-    bound.length
-      ? h("div.dim", { style: "margin-top:6px;font-size:12px" }, "suites: ",
-          ...bound.flatMap((s: WebDynamic, i: WebDynamic) => [
-            i ? h("span.faint", {}, ", ") : null,
-            link(`/p/${projectKey}/suites/${s.slug}`, s.name || s.slug),
-          ]))
-      : h("div.faint", { style: "margin-top:6px;font-size:12px" }, "no suites bound to it yet"),
+    h("div.app-row-suites.faint", {},
+      bound.length
+        ? `${bound.length} ${bound.length === 1 ? "suite" : "suites"} bound`
+        : "no suites bound yet"),
+  ));
+  a.className = "quiet-link";
+  return a;
+}
 
-    h("div", { style: "display:flex;align-items:baseline;gap:10px;margin:16px 0 8px" },
-      h("div.label", {}, "Rings"),
-      h("span.faint", { style: "font-size:11.5px" },
-        mobile
-          ? "The claiming runner supplies the build, the device and the Appium endpoint for a mobile ring — a ring holds only its logical policy."
-          : "A ring is one deployment: its URL, the runners that may take its work, and whether discovery studies are allowed there."),
-      h("div", { style: "flex:1" }),
-      canEdit ? h("button.btn.btn-sm", { onclick: () => ringModal(application, null, reload) }, "+ New ring") : null,
-    ),
-    rings.length
-      ? h("div", { style: "display:flex;flex-direction:column;gap:10px" },
-          ...rings.map((r: WebDynamic) => ringRow(application, r, canEdit, reload)))
-      : h("p.faint", { style: "font-size:12.5px;margin:2px 0 0" },
+// ---------- one application ----------
+
+export async function applicationPage(projectKey: WebDynamic, applicationKey: WebDynamic) {
+  const main = renderFrame({ projectKey, nav: "applications" });
+  const project = state.projectByKey.get(projectKey);
+  if (!project) return mount(main, page({ title: "Applications", body: emptyState("Not found", "No such project.") }));
+
+  const canEdit = hasRole(project.id, "developer");
+  const crumbs = [link(`/p/${projectKey}/applications`, "Applications"), " / ", applicationKey];
+  mount(main, page({ crumbs, title: applicationKey, body: h("div.dim", {}, "Loading…") }));
+
+  let applications: WebDynamic = [], suites: WebDynamic = [], providers: WebDynamic = [];
+  try {
+    [applications, suites, providers] = await Promise.all([
+      api.cached(`/projects/${projectKey}/applications?include=rings`).then((r: WebDynamic) => r.items || []),
+      api.cached(`/projects/${projectKey}/suites`, { ttl: 15_000 }).then((r: WebDynamic) => r.items || []).catch(() => []),
+      // Only a developer may read providers, and only a session reference needs
+      // them: without the list the identity picker degrades to a typed
+      // reference, which is what it stores anyway.
+      canEdit
+        ? api.cached(`/projects/${projectKey}/auth-providers`).then((r: WebDynamic) => r.items || []).catch(() => [])
+        : Promise.resolve([]),
+    ]);
+  } catch (err: WebDynamic) {
+    return mount(main, page({ crumbs, title: applicationKey, body: errorState(err, () => applicationPage(projectKey, applicationKey)) }));
+  }
+
+  const application = applications.find((a: WebDynamic) => a.key === applicationKey);
+  if (!application) {
+    return mount(main, page({
+      crumbs,
+      title: "Application not found",
+      body: emptyState(
+        "No application called that",
+        `Nothing in this project is keyed “${applicationKey}”. A key is permanent, so it was not renamed — it was deleted, or the link is truncated.`,
+        h("div.empty-actions", {}, link(`/p/${projectKey}/applications`, h("span.btn.primary", {}, "All applications"))),
+      ),
+    }));
+  }
+
+  const reload = () => applicationPage(projectKey, applicationKey);
+  const rings = application.rings || [];
+  const bound = suites.filter((s: WebDynamic) => s.application_id === application.id);
+  const mobile = application.driver === "mobile";
+
+  mount(main, page({
+    crumbs: [link(`/p/${projectKey}/applications`, "Applications"), " / ", application.name || application.key],
+    title: application.name || application.key,
+    sub: driverGist(application.driver),
+    actions: canEdit
+      ? [
+          h("button.btn", { onclick: () => applicationModal(projectKey, [], application, () => navigate(`/p/${projectKey}/applications/${application.key}`)) }, "Rename"),
+          h("button.btn.danger", { onclick: () => deleteApplication(projectKey, application) }, "Delete"),
+        ]
+      : [],
+    body: h("div", {},
+      identityCard(application),
+
+      h("div.section-head", {},
+        h("div.label", {}, "Rings"),
+        h("span.faint", {},
           mobile
-            ? "Nothing yet. A mobile ring names one deployment your runners hold a build for — “local”, “device-lab”."
-            : "Nothing yet. Add “local” with http://127.0.0.1:4173, or “staging” with its URL, and this application is launchable."),
-    mobile
-      ? h("p.faint", { style: "font-size:11.5px;margin:10px 0 0" },
-          "A mobile build's path, its device and its Appium endpoint are machine-local facts, read from the claiming runner's own configuration file and keyed by application and ring key. Nothing here stores or serves them.")
-      : null,
+            ? "One deployment each — its routing, its sign-ins, and the build a runner holds for it."
+            : "One deployment each — its URL, the runners that may take its work, and whether discovery studies are allowed there."),
+        canEdit ? h("button.btn.btn-sm", { onclick: () => ringModal(application, null, providers, reload) }, "+ New ring") : null,
+      ),
+      rings.length
+        ? h("div.stack", {}, ...rings.map((r: WebDynamic) => ringCard(application, r, canEdit, providers, reload)))
+        : emptyState(
+            "No rings yet",
+            mobile
+              ? "A mobile ring names one deployment your runners hold a build for — “local”, “device-lab”. Until one exists there is nowhere to launch."
+              : "Add “local” with http://127.0.0.1:4173, or “staging” with its URL, and this application is launchable. Until one exists there is nowhere to launch.",
+            canEdit
+              ? h("div.empty-actions", {}, h("button.btn.primary", { onclick: () => ringModal(application, null, providers, reload) }, "New ring"))
+              : null,
+          ),
+      mobile ? mobileBuildNote() : null,
+
+      h("div.section-head", {}, h("div.label", {}, "Suites"),
+        h("span.faint", {}, "the stories that launch against this application, bound at creation and never rebound")),
+      bound.length
+        ? h("div.card", {}, h("table.rows", {},
+            h("tbody", {}, ...bound.map((s: WebDynamic) => h("tr", {},
+              h("td", {}, link(`/p/${projectKey}/suites/${s.slug}`, h("span.rowtitle", {}, s.name || s.slug))),
+              h("td.dim", { style: "text-align:right" },
+                Number.isFinite(s.story_count) ? `${s.story_count} ${s.story_count === 1 ? "story" : "stories"}` : ""),
+            ))),
+          ))
+        : h("p.faint", { style: "font-size:12.5px;margin:2px 0 0" },
+            "Nothing is bound to it yet. A suite picks its application when it is created, under Suites."),
+    ),
+  }));
+}
+
+/**
+ * The application's identity, presented as identity rather than as fields: this
+ * is what a runner's configuration file binds and what every run's evidence
+ * records, so the page says the three permanent facts and then says why they are
+ * permanent — behind a disclosure, because the answer is only wanted once.
+ */
+function identityCard(application: WebDynamic) {
+  return h("div.card.pad.identity-card", {},
+    h("div.identity-grid", {},
+      identityFact("Key", h("span.mono", {}, application.key)),
+      identityFact("Surface", driverLabel(application.driver)),
+      application.platform ? identityFact("Platform", application.platform === "ios" ? "iOS" : "Android") : null,
+    ),
+    h("details.advanced", { style: "margin-top:12px" },
+      h("summary", {}, "Why can't these change?"),
+      h("p.dim", { style: "font-size:12.5px;margin:8px 0 0" }, KEY_IS_PERMANENT.application),
+      h("p.dim", { style: "font-size:12.5px;margin:6px 0 0" },
+        "The surface is permanent for a different reason: it decides the driver every story here runs under. A web app and its iOS build are two applications, not one with two modes."),
+    ),
   );
 }
 
-function ringRow(application: WebDynamic, ring: WebDynamic, canEdit: WebDynamic, reload: WebDynamic) {
+const identityFact = (k: WebDynamic, v: WebDynamic) =>
+  h("div", {}, h("div.k", {}, k), h("div.v.sm", {}, v));
+
+/** One ring, in full: where it points, how work reaches it, who it signs in as. */
+function ringCard(application: WebDynamic, ring: WebDynamic, canEdit: WebDynamic, providers: WebDynamic, reload: WebDynamic) {
   const mobile = application.driver === "mobile";
-  return h("div.card.pad", { style: "background:var(--bg2)" },
+  const identities = identityRows(ring.config);
+  return h("section.card.pad", {},
     h("div", { style: "display:flex;align-items:center;gap:10px;flex-wrap:wrap" },
       h("span.id", {}, ring.key),
       ring.name && ring.name !== ring.key ? h("span.dim", { style: "font-size:12px" }, ring.name) : null,
-      ring.discovery_allowed ? h("span.chip", {}, "discovery allowed") : null,
+      ring.discovery_allowed ? h("span.chip", { title: "Discovery studies may run here" }, "discovery allowed") : null,
       h("div", { style: "flex:1" }),
       canEdit
-        ? h("button.btn.btn-sm", { "aria-label": `Edit ring ${application.key}/${ring.key}`, onclick: () => ringModal(application, ring, reload) }, "Edit")
+        ? h("button.btn.btn-sm", { "aria-label": `Edit ring ${application.key}/${ring.key}`, onclick: () => ringModal(application, ring, providers, reload) }, "Edit")
         : null,
       canEdit
         ? h("button.btn.btn-sm.danger", { "aria-label": `Delete ring ${application.key}/${ring.key}`, onclick: () => deleteRing(application, ring, reload) }, "Delete")
         : null,
     ),
-    mobile
-      ? fieldLine("build", "supplied by the claiming runner")
-      : fieldLine("URL", ring.base_url || "—"),
-    Object.keys(ring.config?.app?.cookies || {}).length
-      ? fieldLine("cookies", formatCookieList(ring.config.app.cookies))
-      : null,
-    fieldLine("runner labels", runnerLabelsText(ring.runner_labels)),
-    fieldLine("identities", Object.keys(ring.config?.auth?.identities || {}).join(", ") || "—"),
-    fieldLine("secret references", secretRefSummary(ring.config) || "—"),
-    h("details.advanced", { style: "margin-top:8px" },
-      h("summary", {}, "Advanced — the logical overlay, as stored"),
-      h("pre.mono", { style: "margin-top:8px;background:var(--bg);padding:10px;border-radius:6px;overflow:auto;font-size:12px" },
+    h("div.ring-facts", {},
+      ringFact("Where", mobile
+        ? h("span.dim", {}, BUILD_FROM_RUNNER)
+        : ring.base_url
+          ? h("span.mono", {}, ring.base_url)
+          : h("span.faint", {}, "no URL — this ring can't be launched against"),
+        mobile
+          ? "A mobile ring holds no URL. Nothing here stores the build."
+          : "Read from the claiming runner's network position, so a loopback URL means that runner's own machine."),
+      ringFact("Runs on", h("span", {}, runnerLabelsText(ring.runner_labels)),
+        "A run goes to a runner advertising every one of these labels."),
+      ringFact("Signs in as", identities.length
+        ? h("span", {}, identities.map((i: WebDynamic) => i.name).join(", "))
+        : h("span.faint", {}, "signed out"),
+        identities.length
+          ? "A story picks one of these by name with “auth:”."
+          : "No identities declared, so every story here runs signed out."),
+      Object.keys(ring.config?.app?.cookies || {}).length
+        ? ringFact("Cookies", h("span.mono", {}, formatCookieList(ring.config.app.cookies)),
+            "Set before the first navigation on every web run against this ring.")
+        : null,
+      secretRefSummary(ring.config)
+        ? ringFact("Secret variables", h("span.mono", {}, secretRefSummary(ring.config)),
+            "Delivered to setup scripts and hooks; values never leave the platform.")
+        : null,
+    ),
+    h("details.advanced", { style: "margin-top:10px" },
+      h("summary", {}, "The logical overlay, as stored"),
+      h("p.faint", { style: "font-size:11.5px;margin:8px 0 6px" },
+        "What a run against this ring merges in as ", h("span.mono", {}, `app.envs.${ring.key}`), "."),
+      h("pre.mono", { style: "background:var(--bg);padding:10px;border-radius:6px;overflow:auto;font-size:12px" },
         JSON.stringify(maskSecretEnv(ring.config) ?? {}, null, 2)),
     ),
   );
 }
 
-const fieldLine = (k: WebDynamic, v: WebDynamic) =>
-  h("div.dim", { style: "margin-top:6px;font-size:12px" }, `${k}: `, h("span.mono", {}, v));
+const ringFact = (k: WebDynamic, v: WebDynamic, why: WebDynamic = null) =>
+  h("div.ring-fact", {}, h("div.k", {}, k), h("div", {}, v, why ? h("div.faint", { style: "font-size:11.5px;margin-top:2px" }, why) : null));
+
+/**
+ * The mobile answer to "where do I set the build?", on the page where the
+ * question is asked. Nothing here is a control, deliberately: the platform holds
+ * none of these facts, and a field for one would be a field that lies.
+ */
+const mobileBuildNote = () =>
+  h("div.card.pad", { style: "margin-top:14px" },
+    h("div.label", { style: "margin-bottom:6px" }, "Where the build comes from"),
+    h("p.dim", { style: "font-size:12.5px;margin:0 0 8px" },
+      "The build's path on disk, the Appium server that drives it and the device it targets are facts only a runner can know, so no ring holds them and nothing on this page can set them. "
+      + "The runner that claims a mobile run reads all three from a file on its own disk, keyed by these exact keys:"),
+    h("pre.mono", { style: "background:var(--bg2);padding:10px;border-radius:6px;overflow:auto;font-size:12px" },
+      "targets:\n  <application key>:\n    <ring key>:\n      platform: …\n      app: /path/to/your/build\n      backend: …"),
+    h("p.faint", { style: "font-size:11.5px;margin:8px 0 0" },
+      "Three lines per ring, then restart the runner. The full reference — managed or external Appium, devices, credentials — is ",
+      h("span.mono", {}, RUNNER_GUIDE), "."),
+  );
 
 /** A ring's secret_env references, never their values. */
 function secretRefSummary(config: WebDynamic) {
@@ -230,8 +378,7 @@ export function applicationModal(projectKey: WebDynamic, existing: WebDynamic[],
         ? h("div.field", {},
             h("div.field-label", {}, "Key"),
             h("div.dim", { style: "font-size:12.5px" }, h("span.mono", {}, application.key),
-              h("div.faint", { style: "font-size:11.5px;margin-top:2px" },
-                "A key is permanent — runner configuration binds it and run evidence records it. Delete and recreate to change one nothing has used.")))
+              h("div.faint", { style: "font-size:11.5px;margin-top:2px" }, KEY_IS_PERMANENT.application)))
         : formField("Key", key,
             "How runner configuration and run evidence address it, for good. Lowercase letters, digits and hyphens."),
       editing
@@ -282,7 +429,9 @@ export function applicationModal(projectKey: WebDynamic, existing: WebDynamic[],
         });
         close();
         toast("Application created", `${created.key} — add a ring to make it launchable`, "ok");
-        done();
+        // Land on the new application's own page: a ring is the next step, and
+        // this is where the control for it is.
+        navigate(`/p/${projectKey}/applications/${created.key}`);
       } catch (err: WebDynamic) { saveBtn.disabled = false; fail(String(err.message || err)); }
     }
 
@@ -294,7 +443,7 @@ export function applicationModal(projectKey: WebDynamic, existing: WebDynamic[],
   return close;
 }
 
-async function deleteApplication(application: WebDynamic, reload: WebDynamic) {
+async function deleteApplication(projectKey: WebDynamic, application: WebDynamic) {
   const ok = await confirmModal({
     title: `Delete ${application.key}?`,
     body: "Only possible while nothing points at it: no rings, no suites, no run groups. Nothing is removed on your behalf.",
@@ -307,7 +456,7 @@ async function deleteApplication(application: WebDynamic, reload: WebDynamic) {
   try { await api.del(`/applications/${application.id}`); }
   catch (err: WebDynamic) { return toastError(err); }
   toast("Application deleted", application.key, "ok");
-  reload();
+  navigate(`/p/${projectKey}/applications`);
 }
 
 // ---------- ring form ----------
@@ -318,9 +467,10 @@ async function deleteApplication(application: WebDynamic, reload: WebDynamic) {
  * The named fields and the overlay document are two views of ONE document, the
  * way the suite-defaults editor treats YAML: every field writes into the JSON,
  * the JSON is what saves, and a key no field knows about survives verbatim.
- * They therefore cannot disagree at save time.
+ * They therefore cannot disagree at save time — which is what lets the sign-in
+ * identities be a real editor rather than a paragraph of JSON to hand-write.
  */
-export function ringModal(application: WebDynamic, ring: WebDynamic, done: WebDynamic) {
+export function ringModal(application: WebDynamic, ring: WebDynamic, providers: WebDynamic, done: WebDynamic) {
   const editing = !!ring;
   const mobile = application.driver === "mobile";
   const close = formModal(editing ? `Edit ${application.key}/${ring.key}` : `New ring for ${application.key}`, () => {
@@ -333,12 +483,15 @@ export function ringModal(application: WebDynamic, ring: WebDynamic, done: WebDy
     });
     const labels = h("input", { type: "text", value: (ring?.runner_labels || []).join(", "), placeholder: "macos, ios-sim" });
     const disc = h("input", { type: "checkbox", checked: ring?.discovery_allowed || false });
-    const config = h("textarea.code", { style: "min-height:150px" },
-      JSON.stringify(maskSecretEnv(ring?.config) ?? { auth: { identities: {} }, secret_env: {} }, null, 2));
+    const config = h("textarea.code", { style: "min-height:130px" },
+      JSON.stringify(maskSecretEnv(ring?.config) ?? {}, null, 2));
+    const identitySlot = h("div.identity-rows");
     const jsonWarn = h("div.preview-warn", { style: "display:none;margin:-6px 0 10px" });
     const literalWarn = h("div.preview-warn", { style: "display:none;margin:-6px 0 10px" });
     const problem = h("div.preview-warn", { style: "display:none;margin:-6px 0 10px" });
     const saveBtn = h("button.btn.primary", { type: "submit" }, editing ? "Save" : "Create ring");
+    const refs = sessionRefOptions(providers || [], ring?.id ?? null);
+    let identities: WebDynamic = identityRows(ring?.config);
 
     config.addEventListener("input", () => {
       let parsed: WebDynamic = null;
@@ -346,9 +499,11 @@ export function ringModal(application: WebDynamic, ring: WebDynamic, done: WebDy
       jsonWarn.style.display = parsed ? "none" : "";
       jsonWarn.textContent = parsed ? "" : "This isn't valid JSON yet — the fields above can't write into it until it is.";
       if (!parsed) return;
-      // The document moved, so the field re-reads it. One direction each way, so
+      // The document moved, so the fields re-read it. One direction each way, so
       // neither view can drift from the other.
       cookies.value = formatCookieList(parsed?.app?.cookies);
+      identities = identityRows(parsed);
+      paintIdentities();
       const keys = literalSecretKeys(parsed);
       literalWarn.style.display = keys.length ? "" : "none";
       literalWarn.textContent = keys.length
@@ -356,15 +511,15 @@ export function ringModal(application: WebDynamic, ring: WebDynamic, done: WebDy
         : "";
     });
 
+    paintIdentities();
     return h("form", { onsubmit: submit },
       editing
         ? h("div.field", {},
             h("div.field-label", {}, "Key"),
             h("div.dim", { style: "font-size:12.5px" }, h("span.mono", {}, `${application.key}/${ring.key}`),
-              h("div.faint", { style: "font-size:11.5px;margin-top:2px" },
-                "A ring's key is permanent — runner configuration binds this exact pair.")))
+              h("div.faint", { style: "font-size:11.5px;margin-top:2px" }, KEY_IS_PERMANENT.ring)))
         : formField("Key", key,
-            "Lowercase letters, digits and hyphens — “local”, “staging”, “prod”. Every application may have its own."),
+            "Lowercase letters, digits and hyphens — “local”, “staging”, “prod”. Every application may have its own, and it can't be changed later."),
       formField("Name", name, "What it reads as in the launch dialog. Defaults to the key."),
       mobile
         ? h("p.dim", { style: "font-size:12.5px;margin:-4px 0 12px" },
@@ -376,17 +531,25 @@ export function ringModal(application: WebDynamic, ring: WebDynamic, done: WebDy
       mobile ? null : formField("Cookies", cookies,
         "Browser cookies set before the first navigation, on every web run against this ring — name=value pairs separated by semicolons."),
       h("label.check", { style: "margin:6px 0 4px" }, disc, "Allow discovery studies on this ring"),
-      h("div.faint", { style: "font-size:11.5px;margin:0 0 12px 24px" },
+      h("div.faint", { style: "font-size:11.5px;margin:0 0 14px 24px" },
         "Discovery agents really click buy, delete and submit. Leave this off for anything with real data behind it."),
-      h("details.advanced", { open: editing && hasOverlay(ring) ? true : undefined },
-        h("summary", {}, "Advanced — sign-in identities and secret references"),
+
+      // Identities are the one part of the overlay people author by hand, so
+      // they get controls. Everything else stays under Advanced.
+      h("div.field-label", {}, "Sign-in identities"),
+      h("div.faint", { style: "font-size:11.5px;margin:0 0 8px" },
+        "The names a story picks with ", h("span.mono", {}, "auth: member"), ". Each one points at a session a provider mints, or at a stored sign-in state. A story with no ", h("span.mono", {}, "auth:"), " runs signed out."),
+      identitySlot,
+
+      h("details.advanced", { style: "margin-top:14px" },
+        h("summary", {}, "Advanced — the overlay, as stored"),
         h("div", { style: "margin-top:10px" },
           formField("Logical overlay", config),
           jsonWarn,
           literalWarn,
           h("div.faint", { style: "font-size:11.5px;margin:-6px 0 10px" },
-            'The suite sees this as `app.envs.<ring key>`. Identities: {"auth": {"identities": {"member": {"$session": "sso/member"}}}}. '
-            + `Secrets: {"secret_env": {"TOKEN": {"$secret": "name"}}} — stored values show as ${MASK} and are kept unless you replace them. `
+            "The suite merges this in as ", h("span.mono", {}, `app.envs.${editing ? ring.key : "<ring key>"}`), ". "
+            + `Secret variables: {"secret_env": {"TOKEN": {"$secret": "name"}}} — stored values show as ${MASK} and are kept unless you replace them. `
             + "A build path, a device or an Appium endpoint cannot go here: the claiming runner resolves those."),
         ),
       ),
@@ -396,10 +559,81 @@ export function ringModal(application: WebDynamic, ring: WebDynamic, done: WebDy
         saveBtn),
     );
 
+    /** The identity rows, and the one control that adds another. */
+    function paintIdentities() {
+      mount(identitySlot,
+        ...identities.map((row: WebDynamic, i: WebDynamic) => identityRow(row, i)),
+        h("button.btn.btn-sm", {
+          type: "button", style: "margin-top:8px",
+          onclick: () => {
+            identities = [...identities, { name: "", kind: refs.length ? "session" : "secret", ref: "", value: null }];
+            flush();
+            paintIdentities();
+            // The row just added, never the first one: the cursor landing in an
+            // identity that already has a name renames it as you type.
+            const rows = identitySlot.querySelectorAll(".identity-row");
+            rows[rows.length - 1]?.querySelector("input")?.focus();
+          },
+        }, identities.length ? "+ Add identity" : "+ Add an identity"),
+      );
+    }
+
+    function identityRow(row: WebDynamic, i: WebDynamic) {
+      const nameIn = h("input", {
+        type: "text", value: row.name, placeholder: "member", "aria-label": `Identity ${i + 1} name`,
+        oninput: (e: WebDynamic) => { identities[i].name = e.target.value; flush(); },
+      });
+      // A custom shape the form cannot represent is SAID, never silently
+      // rewritten — the overlay view is where it is edited.
+      const value = row.kind === "custom"
+        ? h("div.dim", { style: "font-size:12px" }, "a shape this form doesn't edit — see the overlay below")
+        : h("div.identity-ref", {},
+            kindSelect(row, i),
+            refInput(row, i));
+      return h("div.identity-row", {},
+        nameIn,
+        value,
+        h("button.btn.btn-sm.danger", {
+          type: "button", "aria-label": `Remove identity ${row.name || i + 1}`,
+          onclick: () => { identities = identities.filter((_: WebDynamic, n: WebDynamic) => n !== i); flush(); paintIdentities(); },
+        }, "Remove"),
+      );
+    }
+
+    function kindSelect(row: WebDynamic, i: WebDynamic) {
+      return h("select", {
+        "aria-label": `Identity ${row.name || i + 1} source`,
+        onchange: (e: WebDynamic) => { identities[i] = { ...identities[i], kind: e.target.value, ref: "" }; flush(); paintIdentities(); },
+      },
+        h("option", { value: "session", selected: row.kind === "session" || undefined }, "Minted by a provider"),
+        h("option", { value: "secret", selected: row.kind === "secret" || undefined }, "A stored sign-in state"),
+        h("option", { value: "path", selected: row.kind === "path" || undefined }, "A file on the runner"));
+    }
+
+    function refInput(row: WebDynamic, i: WebDynamic) {
+      const set = (v: WebDynamic) => { identities[i].ref = v; flush(); };
+      if (row.kind === "session" && refs.length) {
+        return h("select", {
+          "aria-label": `Identity ${row.name || i + 1} session`,
+          onchange: (e: WebDynamic) => set(e.target.value),
+        },
+          h("option", { value: "" }, "Pick a provider identity…"),
+          ...refs.map((r: WebDynamic) => h("option", { value: r, selected: row.ref === r || undefined }, r)));
+      }
+      const placeholder = row.kind === "session" ? "provider/identity"
+        : row.kind === "secret" ? "the secret's name"
+        : ".playtest-env/member.json";
+      return h("input", {
+        type: "text", value: row.ref, placeholder,
+        "aria-label": `Identity ${row.name || i + 1} reference`,
+        oninput: (e: WebDynamic) => set(e.target.value),
+      });
+    }
+
     /** The named fields, written into the one document they are views of. */
     function flush() {
       let doc: WebDynamic;
-      try { doc = JSON.parse(config.value); } catch { return; }
+      try { doc = JSON.parse(config.value || "{}"); } catch { return; }
       let parsed;
       try { parsed = parseCookieList(cookies.value); }
       catch (err: WebDynamic) { return toast("Cookies don't parse", String(err.message || err), "err"); }
@@ -408,12 +642,17 @@ export function ringModal(application: WebDynamic, ring: WebDynamic, done: WebDy
       else delete app.cookies;
       if (Object.keys(app).length) doc.app = app;
       else delete doc.app;
+      // Only complete rows reach the document; a half-typed one would write an
+      // identity named "" on every keystroke.
+      doc = withIdentities(doc, identities.filter((r: WebDynamic) => String(r.name || "").trim()));
       config.value = JSON.stringify(doc, null, 2);
     }
 
     async function submit(e: WebDynamic) {
       e.preventDefault();
       problem.style.display = "none";
+      const identityBad = identityProblem(identities);
+      if (identityBad) return fail(identityBad);
       flush();
       let doc;
       try { doc = JSON.parse(config.value || "{}"); } catch { return fail("The overlay isn't valid JSON."); }
@@ -462,9 +701,6 @@ export function ringModal(application: WebDynamic, ring: WebDynamic, done: WebDy
   return close;
 }
 
-const hasOverlay = (ring: WebDynamic) =>
-  Object.keys(ring?.config?.auth?.identities || {}).length || Object.keys(ring?.config?.secret_env || {}).length;
-
 async function deleteRing(application: WebDynamic, ring: WebDynamic, reload: WebDynamic) {
   const ok = await confirmModal({
     title: `Delete ${application.key}/${ring.key}?`,
@@ -490,9 +726,9 @@ async function authProvidersPanel(projectKey: WebDynamic, applications: WebDynam
   const add = h("button.btn.primary", { onclick: () => authProviderModal(projectKey, applications, null, refresh) }, "+ New provider");
   const body = items.length
     ? h("div", { style: "display:flex;flex-direction:column;gap:12px" }, ...items.map((p: WebDynamic) => h("div.card.pad", {},
-        h("div", { style: "display:flex;align-items:center;gap:10px" },
+        h("div", { style: "display:flex;align-items:center;gap:10px;flex-wrap:wrap" },
           h("span.id", {}, p.name),
-          h("span.chip", {}, p.kind),
+          h("span.chip", {}, p.kind.replace(/_/g, " ")),
           h("span.chip", {}, p.ring_id ? ringName.get(p.ring_id) || "one ring" : "project-wide"),
           p.enabled ? null : h("span.chip", {}, "disabled"),
           h("div", { style: "flex:1" }),
@@ -501,10 +737,14 @@ async function authProvidersPanel(projectKey: WebDynamic, applications: WebDynam
           h("button.btn.btn-sm", { "aria-label": `Edit auth provider ${p.name}`, onclick: () => authProviderModal(projectKey, applications, p, refresh) }, "Edit"),
           h("button.btn.btn-sm.danger", { "aria-label": `Delete auth provider ${p.name}`, onclick: () => delProvider(p, refresh) }, "Delete"),
         ),
-        h("div.dim", { style: "margin-top:6px;font-size:12px" }, `ttl: ${p.ttl_minutes}m · identities: ${Object.keys(p.identities || {}).join(", ") || "—"}`),
-        h("pre.mono", { style: "margin-top:8px;background:var(--bg2);padding:10px;border-radius:6px;overflow:auto;font-size:12px" }, JSON.stringify(p.config, null, 2)),
+        h("div.dim", { style: "margin-top:6px;font-size:12px" },
+          `identities: ${Object.keys(p.identities || {}).join(", ") || "—"} · sessions last ${p.ttl_minutes}m`),
+        h("details.advanced", { style: "margin-top:8px" },
+          h("summary", {}, "Configuration, as stored"),
+          h("pre.mono", { style: "margin-top:8px;background:var(--bg2);padding:10px;border-radius:6px;overflow:auto;font-size:12px" },
+            JSON.stringify(p.config, null, 2))),
       )))
-    : emptyState("No auth providers", "A provider mints short-lived storage-state artifacts for app identities.");
+    : emptyState("No providers", "A provider mints short-lived sign-in states for the identities a ring names.");
   mount(slot, h("div", {}, h("div", { style: "display:flex;justify-content:flex-end;margin-bottom:12px" }, add), body));
 }
 
@@ -512,7 +752,7 @@ function authProviderModal(projectKey: WebDynamic, applications: WebDynamic, exi
   const close = formModal(existing ? `Edit ${existing.name}` : "New auth provider", () => {
     const name = h("input", { type: "text", value: existing?.name || "", placeholder: "sso" });
     const kind = h("select", {},
-      ...["token_endpoint", "storage_state_secret", "script"].map((k) => h("option", { value: k, selected: existing?.kind === k }, k)));
+      ...["token_endpoint", "storage_state_secret", "script"].map((k) => h("option", { value: k, selected: existing?.kind === k }, k.replace(/_/g, " "))));
     // A provider binds at most one ring. Unbound stays project-wide: every ring
     // may reference it, and its standalone mints ride the board with no labels.
     const ring = h("select", { "aria-label": "Ring" },
@@ -524,12 +764,12 @@ function authProviderModal(projectKey: WebDynamic, applications: WebDynamic, exi
     const ttl = h("input", { type: "number", min: "1", max: "1440", value: existing?.ttl_minutes || 60 });
     const enabled = h("input", { type: "checkbox", checked: existing?.enabled !== false });
     return h("form", { onsubmit: submit },
-      formField("Name", name),
+      formField("Name", name, "How a ring's identities refer to it: provider/identity."),
       formField("Kind", kind),
       formField("Ring", ring, "Bound: reachable only from that ring, and its mints carry the ring's routing labels. Project-wide: any ring may name it."),
       formField("Config JSON", config),
       formField("Identities JSON", identities),
-      formField("TTL minutes", ttl),
+      formField("TTL minutes", ttl, "How long a minted session is reused before it is minted again."),
       h("label.check", { style: "margin:6px 0 12px" }, enabled, "Enabled"),
       h("div.modal-actions", {}, h("button.btn.ghost", { type: "button", onclick: () => close() }, "Cancel"), h("button.btn.primary", { type: "submit" }, "Save")),
     );

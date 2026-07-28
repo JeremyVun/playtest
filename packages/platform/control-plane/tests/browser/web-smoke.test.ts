@@ -40,12 +40,14 @@ test("hosted web loads a project and follows the suite hot path", async () => {
 
       // Applications is a first-class section now, and it is where the ring a
       // suite launches against is managed — so the rail item has to resolve and
-      // the page has to render both halves of the pair.
+      // the page has to render both halves of the pair. The index is a scan, so
+      // a ring reads as its host; the full URL is on the application's own page
+      // (tests/browser/web-applications.test.ts).
       await page.getByRole("link", { name: "Applications", exact: true }).click();
       await page.waitForURL(`${base}/p/${project.key}/applications`);
       await page.getByRole("heading", { name: "Applications", exact: true }).waitFor();
       await page.getByText(application.key, { exact: true }).first().waitFor();
-      await page.getByText(ring.base_url, { exact: true }).first().waitFor();
+      await page.getByText(new URL(ring.base_url).host, { exact: true }).first().waitFor();
 
       // New suite asks for the application, because a suite runs against
       // exactly one and the binding is immutable.

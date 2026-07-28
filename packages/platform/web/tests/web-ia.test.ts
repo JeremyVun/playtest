@@ -84,6 +84,8 @@ test("redirects: surviving deep links are never redirected", () => {
     "/p/acme/findings/f1",                        // finding detail
     "/p/acme/review",                             // contextual batch view survives
     "/p/acme/personas",                           // project-wide persona list
+    "/p/acme/applications",                       // the section index
+    "/p/acme/applications/todo-web",              // one application's own page
     "/p/acme/settings",
     "/p/acme",
   ]) {

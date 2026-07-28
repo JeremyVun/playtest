@@ -1326,11 +1326,45 @@ pre.code { background: var(--bg2); border: 1px solid var(--line); border-radius:
 .runner-presence.busy .runner-dot { animation: live-pulse 1.8s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .runner-presence.busy .runner-dot { animation: none; } }
 
-/* The empty suite's "where does this app run?" card. Three binary sources need
-   three columns; the launch dialog's two-column mode grid is the same control. */
-.target-card-title { margin: 0; font-size: var(--fs-md); font-weight: var(--fw-semi); color: var(--ink); }
-.target-card .launch-modes { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.target-card .field { margin-bottom: 12px; }
-.target-card .preview-warn { margin-bottom: 10px; }
-.target-card .preview-warn:empty { display: none; }
-@media (max-width: 760px) { .target-card .launch-modes { grid-template-columns: 1fr; } }
+/* ---------- applications ---------- */
+/* The index: one card-row per application, the whole row the link — its page is
+   where the controls live, so the row itself holds none. */
+.app-list { display: flex; flex-direction: column; gap: 10px; }
+.app-row { display: flex; flex-direction: column; gap: 7px; padding: 13px 16px; background: var(--bg1); border: 1px solid var(--line); border-radius: var(--radius); }
+a.quiet-link:hover .app-row { border-color: var(--accent); }
+.app-row-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.app-row-head .rowtitle { font-weight: var(--fw-semi); color: var(--ink); }
+.app-row-head > .mono { margin-left: auto; }
+.app-row-rings { display: flex; column-gap: 18px; row-gap: 4px; flex-wrap: wrap; font-size: var(--fs-sm); }
+.app-ring { display: inline-flex; align-items: baseline; gap: 6px; }
+.app-ring .id { font-family: var(--mono); font-weight: var(--fw-semi); }
+.app-row-suites { font-size: var(--fs-xs); }
+
+/* The application page's identity card: permanent facts read as facts (the
+   tile k/v grammar), not as a form pretending they could change. */
+.identity-grid { display: flex; gap: 44px; flex-wrap: wrap; }
+.identity-grid .k { color: var(--faint); font-size: var(--fs-micro); letter-spacing: .06em; text-transform: uppercase; }
+.identity-grid .v { margin-top: 3px; font-size: var(--fs-md); font-weight: var(--fw-semi); }
+
+/* Section bars on the application page: label · gloss · the one control. Scoped
+   with :has because .section-head elsewhere stacks a title over a gloss. */
+.section-head:has(> .label) { display: flex; align-items: center; gap: 10px; margin: 22px 0 10px; }
+.section-head:has(> .label) > .faint { font-size: var(--fs-xs); flex: 1; min-width: 0; }
+
+/* A ring's facts: key column, value, one-line why underneath the value. */
+.ring-facts { display: grid; grid-template-columns: max-content 1fr; gap: 10px 18px; margin-top: 12px; font-size: var(--fs-sm); }
+.ring-fact { display: contents; }
+.ring-fact > .k { color: var(--faint); font-size: var(--fs-micro); letter-spacing: .06em; text-transform: uppercase; padding-top: 2px; }
+@media (max-width: 700px) {
+  .ring-facts { grid-template-columns: 1fr; gap: 2px 0; }
+  .ring-fact > .k { padding-top: 10px; }
+}
+
+/* The ring form's identity editor: name · source · reference · remove. */
+.identity-rows { display: flex; flex-direction: column; gap: 8px; }
+.identity-row { display: flex; gap: 8px; align-items: center; }
+.identity-row > input { width: 150px; flex: none; }
+.identity-row > .dim { flex: 1; }
+.identity-ref { display: flex; gap: 8px; flex: 1; min-width: 0; }
+.identity-ref > select:first-child { width: 200px; flex: none; }
+.identity-ref > :last-child { flex: 1; width: auto; min-width: 0; }

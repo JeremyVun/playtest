@@ -6,6 +6,13 @@ remain the baseline for that journey. Insights, plugins, and the standalone
 authoring assistant no longer exist, so findings about them are closed by
 deletion rather than by fix.
 
+Rounds 1–3 also predate applications and rings. The `change-environment-secret`
+story below is now `change-ring-secret.yaml`: environments were replaced by an
+application and its rings, which live in their own console section rather than
+under Settings, so that journey's route changed even though the task did not.
+Its scores remain the baseline for it. Findings about the environment editor are
+likewise closed by deletion.
+
 ## Round 3 (2026-07-09, after fix batches 3–4) — scores vs rounds 1–2
 
 Same stories, re-seeded before every batch; actor+grader are gpt-5.5 via the

@@ -138,9 +138,12 @@ test("ci: an OIDC token registers an ephemeral runner that can take work at once
       assert.ok(ttl > 0 && ttl <= 3_600_000, `expires within the default hour, got ${ttl}ms`);
 
       // Pipeline scaffolding is not fleet: Settings → Runners never shows it.
+      // (The site-scoped `local` peer runner dev auth registers is not this
+      // project's either, but it IS standing fleet, so it is listed.)
       const listed = await api.get(`/projects/${project.key}/runners`);
       assert.equal(listed.status, 200);
-      assert.deepEqual(listed.body.items, []);
+      assert.deepEqual(listed.body.items.filter((r: HostedDynamic) => r.scope === "project"), []);
+      assert.deepEqual(listed.body.items.map((r: HostedDynamic) => r.name), ["local"]);
 
       // The registration is flagged in audit with its verified provenance, so a
       // reviewer can see which build asked for a runner.
@@ -205,7 +208,8 @@ test("ci: a token from the wrong audience, repository, workflow or ref registers
       assert.equal(forged.status, 401);
 
       // Nothing above created a runner, ephemeral or otherwise.
-      assert.deepEqual((await api.get(`/projects/${project.key}/runners`)).body.items, []);
+      const items = (await api.get(`/projects/${project.key}/runners`)).body.items;
+      assert.deepEqual(items.filter((r: HostedDynamic) => r.scope === "project"), []);
     }, ciEnv(gh.url, { PLAYTEST_POOL_OIDC_WORKFLOW: "playtest.yml", PLAYTEST_POOL_OIDC_REF: "main" }));
   } finally {
     await gh.close();

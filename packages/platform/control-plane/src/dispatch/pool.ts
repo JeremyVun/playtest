@@ -133,9 +133,14 @@ export class ClaimBoard {
     // registration is invisible in Settings and cannot be restarted, so naming
     // one here would send a reader after a machine that no longer exists — the
     // same standing `isExpired` gives poll, claim and exchange.
+    // Site-scoped runners (null project) serve this project too, so they are
+    // counted and named here: telling someone "this project has none
+    // registered" while a shared machine is standing right there sends them to
+    // register a runner they do not need.
     const { rows: runners } = await this.db.query(
       `SELECT name, labels FROM runners
-        WHERE project_id = $1 AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > $2)`,
+        WHERE (project_id = $1 OR project_id IS NULL)
+          AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > $2)`,
       [row.project_id, new Date()],
     );
     const wanted: string[] = row.labels || [];
@@ -153,7 +158,7 @@ export class ClaimBoard {
       return (
         `no runner with ${missing.length === 1 ? "the label" : "the labels"} ${named} has checked in for ` +
         `${minutes} minute${minutes === 1 ? "" : "s"} — ${runners.length} runner${runners.length === 1 ? " is" : "s are"} ` +
-        `registered in this project (${runners.map((r: DbRow) => `"${r.name}": ${(r.labels || []).join(", ") || "no labels"}`).join("; ")}). ` +
+        `available to this project (${runners.map((r: DbRow) => `"${r.name}": ${(r.labels || []).join(", ") || "no labels"}`).join("; ")}). ` +
         `Give this ring's runner labels to a running runner, or start one advertising them.`
       );
     }

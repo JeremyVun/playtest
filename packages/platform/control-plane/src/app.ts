@@ -17,6 +17,7 @@ import { reconcileDispatches, RECONCILE_LEASE } from "./dispatch/reconciler.ts";
 import { beatHeartbeat } from "./ops.ts";
 import { withLease } from "./leases.ts";
 import { recomputeFindingKeys } from "./findings/intake.ts";
+import { ensureLocalPeerRunner } from "./dev-runner.ts";
 import type { AppContext } from "./types.ts";
 import type { ControlPlaneConfig } from "./config.ts";
 
@@ -60,6 +61,21 @@ export async function createApp(
       burst: config.rateLimit.writeBurst,
     }),
   };
+  // The dev peer runner: one site-scoped `local` runner and its credential file,
+  // ensured before anything can launch, so `npm run hosted` needs no runner
+  // ceremony at all (src/dev-runner.ts). It is a REGISTRATION, not a process —
+  // the control plane still starts nothing and connects to nothing.
+  if (config.auth.mode === "dev") {
+    const local = await ensureLocalPeerRunner(ctx);
+    log.info({
+      msg: local.created
+        ? `registered the local peer runner "${local.name}" — credential at ${local.credentialFile}`
+        : local.rotated
+          ? `re-issued the local peer runner's credential — ${local.credentialFile}`
+          : `local peer runner "${local.name}" is registered — credential at ${local.credentialFile}`,
+    });
+  }
+
   const server = createServer(ctx);
   let retentionTimer: HostedDynamic = null;
   // Dispatch reconciler: the liveness safety net — an unclaimed board entry or

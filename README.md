@@ -69,14 +69,16 @@ npm run hosted
 ```
 
 This builds both Vite applications, starts the control-plane API and web host,
-and enables local dispatch. Runner-agent processes start automatically when
-jobs are launched; the web and runner workspaces are not separate services to
-start manually.
+and starts **one peer runner** beside them. There is a single placement model:
+a launch posts to a claim board, and a runner polls, claims, and executes it.
+Local development uses the same path CI and a fleet do — the control plane
+starts nothing in response to a launch and never connects to a runner. The web
+and runner workspaces are not separate services to start manually.
 
 A remotely hosted control plane cannot reach an app on your `localhost`, a build
 on your disk, or a device simulator. For those, run a **self-hosted runner** on
 the machine that already has them: register it under Settings → Runners, start it
-with the one command shown, and label an environment for it —
+with the one command shown, and give a ring its labels —
 [`docs/guidance/hosted-runners.md`](docs/guidance/hosted-runners.md) is the walkthrough.
 
 ## Quickstart
@@ -583,9 +585,9 @@ completed viewer under the hosted console's `/viewer/` path. `npm run test:brows
 runs the explicit core, viewer, and hosted-console Playwright suites;
 install its browser once with `npx playwright install chromium`. `npm run test:all` runs
 both tiers. The example app runs with
-`PORT=4173 node examples/todo-app/server.js`. Hosted control plane (not in the published package):
-`npm run hosted` starts the API, static web platform, and on-demand local runners
-on http://127.0.0.1:4177 — no database service;
+`PORT=4173 node examples/ledger-api/server.js`. Hosted control plane (not in the published package):
+`npm run hosted` starts the API, the static web platform, and one peer runner
+polling the claim board, on http://127.0.0.1:4177 — no database service;
 metadata is one SQLite file under `PLAYTEST_DATA_DIR` (default `.playtest-data`), and
 `npm run hosted:migrate` applies migrations without starting the server. That
 launcher, unlike the CLI, sources a gitignored repo-root `.env` so a local server

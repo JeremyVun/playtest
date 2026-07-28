@@ -104,14 +104,14 @@ export const SURFACES = [
   },
   {
     id: "suite-launch-modal-envs",
-    title: "Launch dialog — choosing an environment",
+    title: "Launch dialog — choosing a ring",
     path: (d) => `/p/${d.projectKey}/suites/${d.suiteSlug}`,
     act: async (page) => {
       await clickText("Run")(page);
-      await page.locator(".modal .field", { hasText: "Environment" }).locator(".select-btn").click();
+      await page.locator(".modal .field", { hasText: "Ring" }).locator(".select-btn").click();
       await page.waitForTimeout(200);
     },
-    note: "Every option names the host it points at. Which are this suite's own?",
+    note: "Every option names the host it points at (key · host, discovery if allowed).",
   },
   {
     id: "suite-launch-modal-agent",
@@ -129,7 +129,7 @@ export const SURFACES = [
     path: (d) => `/p/${d.projectKey}/suites/${d.suiteSlug}`,
     act: async (page) => {
       await clickText("Run")(page);
-      await page.locator(".modal .field", { hasText: "Environment" }).locator(".select-btn").click();
+      await page.locator(".modal .field", { hasText: "Ring" }).locator(".select-btn").click();
       await clickText("production")(page);
       await page.waitForTimeout(500);
     },
@@ -152,7 +152,7 @@ export const SURFACES = [
     path: (d) => `/p/${d.projectKey}/suites/${d.suiteSlug}/stories/add-todo`,
     act: async (page) => {
       await clickText("Run")(page);
-      await page.locator(".modal .field", { hasText: "Environment" }).locator(".select-btn").click();
+      await page.locator(".modal .field", { hasText: "Ring" }).locator(".select-btn").click();
       await clickText("production")(page);
       await page.waitForTimeout(500);
     },
@@ -162,38 +162,10 @@ export const SURFACES = [
     id: "suite-settings",
     title: "Suite settings",
     path: (d) => `/p/${d.projectKey}/suites/${d.suiteSlug}/settings`,
-    note: "Test targets: does each row say where it points and who owns it?",
-  },
-  {
-    id: "suite-settings-own-envs",
-    title: "Suite settings — this suite's own environments",
-    path: (d) => `/p/${d.projectKey}/suites/${d.suiteSlug}/settings`,
-    // The console scrolls inside its shell, not the window, so a wheel event on
-    // the page moves nothing: walk up to whatever actually scrolls.
-    act: async (page) => {
-      await page.evaluate(() => {
-        const heading = [...document.querySelectorAll(".env-group span")]
-          .find((el) => el.textContent.trim() === "This suite only");
-        for (let el = heading?.parentElement; el; el = el.parentElement) {
-          if (el.scrollHeight > el.clientHeight + 4) {
-            el.scrollTop = el.scrollHeight;
-            return;
-          }
-        }
-      });
-      await page.waitForTimeout(250);
-    },
-    note: "A suite-owned environment can be taken away here; a shared one cannot.",
-  },
-  {
-    id: "suite-settings-add-target",
-    title: "Suite settings — add an environment",
-    path: (d) => `/p/${d.projectKey}/suites/${d.suiteSlug}/settings`,
-    act: async (page) => {
-      await page.getByRole("button", { name: "Add environment" }).click();
-      await page.waitForTimeout(200);
-    },
-    note: "A suite-owned environment carries no credentials. Is that said before it's created?",
+    // Rings are read-only here now — a suite belongs to one application and
+    // launches only against that application's rings; adding or taking one away
+    // happens on the Applications page (captured separately below).
+    note: "Rings: read-only, owned by the suite's application. Does the Manage link reach them?",
   },
   {
     id: "story-new",
@@ -421,11 +393,14 @@ export const SURFACES = [
   },
 
   // --- settings -----------------------------------------------------------
+  // Test targets moved out of Settings entirely: an application owns its
+  // rings, and the rail links to it directly (redirects.ts sends the old
+  // /settings/test-targets path here now).
   {
-    id: "settings-test-targets",
-    title: "Settings — Test targets",
-    path: (d) => `/p/${d.projectKey}/settings/test-targets`,
-    note: "Environments, auth identities, secrets. The densest form in the app.",
+    id: "applications",
+    title: "Applications",
+    path: (d) => `/p/${d.projectKey}/applications`,
+    note: "Applications, their rings, auth identities, secrets. The densest form in the app.",
   },
   {
     id: "settings-team",

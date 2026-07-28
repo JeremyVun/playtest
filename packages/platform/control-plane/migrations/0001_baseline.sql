@@ -338,8 +338,10 @@ CREATE TABLE executors (
 CREATE INDEX executors_group_idx ON executors(run_group_id);
 
 -- A self-hosted runner's identity. Labels ROUTE work; they never authorize it.
--- `project_id` is nullable to make room for site-scoped runners (R2); the
--- registration API is project-required until then.
+-- `project_id` is NULL for a SITE-SCOPED runner: a machine a site operator has
+-- deliberately trusted with every project's suites and secrets, polling one
+-- board across all of them. Project scope stays the default and the only scope
+-- a project developer can create.
 CREATE TABLE runners (
   id              TEXT PRIMARY KEY,
   project_id      TEXT REFERENCES projects(id) ON DELETE CASCADE,
@@ -360,6 +362,11 @@ CREATE INDEX runners_project_idx ON runners(project_id);
 CREATE INDEX runners_ephemeral_idx ON runners(project_id, expires_at) WHERE ephemeral = 1;
 -- A revoked runner's name is free to reuse; a live one's is not.
 CREATE UNIQUE INDEX runners_live_name_idx ON runners(project_id, name) WHERE revoked_at IS NULL;
+-- …and the index above cannot do that job for site runners: SQLite treats NULLs
+-- as distinct, so every site runner's (NULL, name) pair is unique by definition.
+-- A partial index over the site rows is what actually keeps `local` singular.
+CREATE UNIQUE INDEX runners_live_site_name_idx ON runners(name)
+  WHERE project_id IS NULL AND revoked_at IS NULL;
 
 -- The dispatch ledger. Under pull-based placement a `requested` row plus its
 -- labels snapshot IS the claim-board entry.

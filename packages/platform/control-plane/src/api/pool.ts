@@ -210,10 +210,15 @@ export async function pollClaims(ctx: HostedDynamic) {
       // no label this job wants may be missing from what the runner advertises.
       // json_each over the stored arrays keeps the match in the same read that
       // orders the board, so a poll is one query however long the board is.
+      //
+      // `$1 IS NULL` is the site-scoped runner: one board across every project,
+      // ordered by age exactly as a project board is. Its credential still
+      // resolves to one row and its bearer is still scoped per claim; what
+      // changes here is only which offers it may see.
       `SELECT d.id, d.kind, d.ref_id, d.attempt, d.labels, d.target, d.requested_at, d.claimed_at,
               d.project_id, p.key AS project_key
          FROM dispatches d JOIN projects p ON p.id = d.project_id
-        WHERE d.project_id = $1
+        WHERE ($1 IS NULL OR d.project_id = $1)
           AND d.kind IN ('group','mint')
           AND d.status = 'requested'
           AND d.claimed_at IS NULL
@@ -224,14 +229,18 @@ export async function pollClaims(ctx: HostedDynamic) {
                  WHERE want.value NOT IN (SELECT value FROM json_each($2)))
         ORDER BY d.requested_at, d.id
         LIMIT ${OFFER_PAGE}`,
-      [runner.project_id, labels, skip],
+      [runner.project_id ?? null, labels, skip],
     );
     return rows;
   };
 
   let rows = await load();
   const wait = waitSeconds(ctx.query.get("wait"));
-  if (!rows.length && wait > 0) rows = await holdUntil(ctx, runner.project_id, wait, load);
+  // Long-poll wakes are keyed per project, and a site runner is watching all of
+  // them. Rather than build a multi-project waker, its idle hold falls through
+  // to the rescan `holdUntil` already runs every second — an accepted, bounded
+  // MVP latency (docs/contracts/hosted.md, "Site-scoped runners").
+  if (!rows.length && wait > 0) rows = await holdUntil(ctx, runner.project_id ?? null, wait, load);
   return {
     runner: runnerView(runner, labels),
     offers: await Promise.all(rows.map((d: HostedDynamic) => offerView(ctx, d))),
@@ -318,12 +327,15 @@ export async function claimDispatch(ctx: HostedDynamic) {
   const dispatchId = ctx.params.dispatch;
 
   const claimed = await ctx.db.withTx(async (tx: HostedDynamic) => {
-    const { rows } = await tx.query(`SELECT * FROM dispatches WHERE id = $1 AND project_id = $2`, [
-      dispatchId,
-      runner.project_id,
-    ]);
+    const { rows } = await tx.query(
+      // A site-scoped runner's board is every project's, so its lookup is not
+      // narrowed — but the mutating UPDATE below still restates the whole scope
+      // precondition, so scope is never decided by this read alone.
+      `SELECT * FROM dispatches WHERE id = $1 AND ($2 IS NULL OR project_id = $2)`,
+      [dispatchId, runner.project_id ?? null],
+    );
     const dispatch = rows[0];
-    if (!dispatch) throw notFound(`no dispatch "${dispatchId}" on this project's claim board`);
+    if (!dispatch) throw notFound(`no dispatch "${dispatchId}" on this runner's claim board`);
     if (!labelsMatch(dispatch.labels || [], runner.labels || [])) {
       throw conflict(
         `dispatch "${dispatchId}" needs the labels ${(dispatch.labels || []).map((l: string) => `"${l}"`).join(", ")}, ` +
@@ -346,7 +358,14 @@ export async function claimDispatch(ctx: HostedDynamic) {
           AND claimed_at IS NULL
           AND canceled_at IS NULL
           AND kind IN ('group','mint')
-          AND project_id = (SELECT project_id FROM runners WHERE id = $2 AND revoked_at IS NULL)
+          -- The runner is still live AND still in scope for this project: its
+          -- own project, or every project when it is site-scoped. Restated here
+          -- rather than trusted from the read above, so a revocation landing
+          -- mid-claim loses the race rather than slipping through it.
+          AND EXISTS (
+                SELECT 1 FROM runners r
+                 WHERE r.id = $2 AND r.revoked_at IS NULL
+                   AND (r.project_id IS NULL OR r.project_id = dispatches.project_id))
           AND NOT EXISTS (
                 SELECT 1 FROM dispatches held
                  WHERE held.runner_id = $2 AND held.status IN ('requested','scheduled','running'))
@@ -371,12 +390,22 @@ export async function claimDispatch(ctx: HostedDynamic) {
     }
     // The fleet moved: this runner is busy now, and the console's Runners
     // section links the claim to the run it is executing.
-    await emitRunnerStatus(tx, runner, {
-      state: "claimed",
-      dispatch_id: row.id,
-      kind: row.kind,
-      run_group_id: row.kind === "group" ? row.ref_id : null,
-    });
+    //
+    // A claim belongs to ONE project even when the runner serves all of them,
+    // so this event is addressed to that project and no other — the payload
+    // names a dispatch and a run group, and no other tenant's feed may carry
+    // them (docs/contracts/hosted.md, "Site-scoped runners").
+    await emitRunnerStatus(
+      tx,
+      runner,
+      {
+        state: "claimed",
+        dispatch_id: row.id,
+        kind: row.kind,
+        run_group_id: row.kind === "group" ? row.ref_id : null,
+      },
+      { projectId: row.project_id },
+    );
     await audit(tx, {
       actor: { system: "runner" },
       action: "runner.claimed",
@@ -418,11 +447,11 @@ export async function heartbeatClaim(ctx: HostedDynamic) {
   const { rows } = await ctx.db.query(
     `SELECT d.*, g.status AS group_status FROM dispatches d
        LEFT JOIN run_groups g ON d.kind = 'group' AND g.id = d.ref_id
-      WHERE d.id = $1 AND d.project_id = $2`,
-    [ctx.params.dispatch, runner.project_id],
+      WHERE d.id = $1 AND ($2 IS NULL OR d.project_id = $2)`,
+    [ctx.params.dispatch, runner.project_id ?? null],
   );
   const dispatch = rows[0];
-  if (!dispatch) throw notFound(`no dispatch "${ctx.params.dispatch}" on this project's claim board`);
+  if (!dispatch) throw notFound(`no dispatch "${ctx.params.dispatch}" on this runner's claim board`);
   if (dispatch.runner_id !== runner.id) {
     throw forbidden(`dispatch "${dispatch.id}" is not claimed by runner "${runner.name}"`);
   }
@@ -451,12 +480,17 @@ function claimLost(ctx: HostedDynamic, before: HostedDynamic, runner: HostedDyna
   );
 }
 
-/** Who the presenting credential is, and what it advertises right now. */
+/**
+ * Who the presenting credential is, and what it advertises right now. `scope`
+ * is what the agent's startup banner says out loud: a machine every project's
+ * work can land on should say so on the terminal it was started from.
+ */
 const runnerView = (runner: HostedDynamic, labels: string[]) => ({
   id: runner.id,
   name: runner.name,
   labels,
-  project_id: runner.project_id,
+  scope: runner.project_id == null ? "site" : "project",
+  project_id: runner.project_id ?? null,
   project_key: runner.project_key ?? null,
 });
 

@@ -540,11 +540,14 @@ claims work. **No inbound connection to a runner exists.**
 
 - The **runner credential** proves identity. It is minted once at registration,
   shown once, stored as a hash like an API token, and is the only long-lived
-  secret on the runner's machine. It scopes the runner to exactly one project.
+  secret on the runner's machine. It scopes the runner to exactly one project —
+  or, for a site-scoped runner, to every project (see "Site-scoped runners").
+  Credential hashes are globally unique, so a presented value resolves to
+  exactly one row whatever its scope.
 - **Labels** route work. They are not secrets, confer no authority, and appear
   freely in ring settings and console UI. A runner may re-advertise its
-  labels at check-in; that changes which of its project's jobs match it, never
-  which project it can reach. A label is spelled with letters, digits, `.`, `_`
+  labels at check-in; that changes which of the jobs in its scope match it, never
+  what its scope is. A label is spelled with letters, digits, `.`, `_`
   and `-` only (at most 32 labels, 64 characters each), enforced at one
   validator for every surface that accepts one — runner registration, an
   a ring's `runner_labels`, a per-launch pin, ephemeral CI registration and
@@ -553,10 +556,14 @@ claims work. **No inbound connection to a runner exists.**
   become two) and unquoted inside the start command the console hands over.
   Anything outside it is `400`, naming the label and the allowed characters.
 
-Registration is project-scoped: `POST /api/v1/projects/:p/runners`
+Registration is project-scoped by default: `POST /api/v1/projects/:p/runners`
 (`developer`) returns the runner plus its one-time credential, `GET` the same
 path (`viewer`) lists name, labels, last-seen and current claim, and
-`DELETE …/:r` (`developer`) revokes. Revocation is a timestamp, not a delete:
+`DELETE …/:r` (`developer`) revokes. The list also carries applicable
+site-scoped runners, read-only and per-viewer redacted — the shape is under
+"Site-scoped runners" below — and `DELETE` on one of those is `403`, naming the
+site route: a machine serving every project is not one project's to retire.
+Revocation is a timestamp, not a delete:
 the row and its history remain, future check-ins, claims and exchanges are
 refused, and a group already exchanged finishes under its already-issued scoped
 bearer — including its heartbeats, which the claim board keeps answering for the
@@ -620,10 +627,10 @@ three runner-credential-authenticated routes are:
 
 1. `GET /runner/pool/claims?wait=true[&labels=…][&skip=…]` — check in and
    long-poll. The answer is a **bounded page** (8) of the oldest unclaimed
-   dispatches in the runner's project whose label set is a subset of the
+   dispatches in the runner's scope whose label set is a subset of the
    runner's, of kind `group` **or** `mint` (session minting places through the
    same path and must be served), oldest first. An empty job label set matches
-   any runner in the project. Held reads follow the event feed's discipline:
+   any runner in scope. Held reads follow the event feed's discipline:
    post-commit wake, bounded rescan, correctness from the durable row. The poll
    only offers; two runners woken by one signal both see it. A runner that
    already holds a claim is offered nothing (`offers: []`) and is handed that
@@ -637,8 +644,8 @@ three runner-credential-authenticated routes are:
    first entry it can.
 2. `POST /runner/pool/claims/:dispatch` — claim it. One `BEGIN IMMEDIATE`
    transaction restates the whole precondition in the mutating `WHERE` (still
-   `requested`, still unclaimed, not canceled, runner live and in this project,
-   labels still a subset), so exactly one concurrent runner wins and the loser
+   `requested`, still unclaimed, not canceled, runner live and in scope for this
+   dispatch's project, labels still a subset), so exactly one concurrent runner wins and the loser
    receives `409 conflict` and returns to polling. The winning claim stamps the
    runner, moves the dispatch to `scheduled`, flips the group to running, and
    emits the `run.status` provisioning event.
@@ -765,6 +772,109 @@ executor, and a run group states its placement: `placement` on
 and the `labels` that attempt was placed on with their `labels_source`
 (`launch` when the launch pinned them, `ring` otherwise).
 
+### Site-scoped runners
+
+Runner scope is a **trust** decision, not a capability one: a claiming runner
+receives suite files and secrets and executes suite hooks, so which projects may
+reach a machine is stated, never inferred. Project scope is the default and the
+only scope a project developer can grant. A **site-scoped runner** is one
+`runners` row with a null `project_id` — a machine a site operator deliberately
+trusted with every project's work. v1 site scope means "all projects";
+per-project grants are deferred.
+
+- **It is one board across every project.** The poll is not narrowed by project;
+  every offer names its own project on the envelope, which is the only way such
+  a runner can tell them apart. Long-poll wakes are keyed per project, so an
+  idle cross-project poll falls back to the held read's existing one-second
+  rescan rather than a multi-project waker — an accepted, bounded latency.
+- **Scope is not authority.** The exchanged bearer is scoped to the claimed
+  dispatch's run group or mint claim exactly like any other, so a site runner
+  executing project A's group cannot read project B's. One active claim,
+  globally: holding project A's group is what stops it taking project B's.
+- **Names are unique among live site runners**, enforced by a partial unique
+  index over `project_id IS NULL AND revoked_at IS NULL`. The project index
+  cannot do that job — SQLite treats every NULL project as distinct — and the
+  two namespaces are separate, so a project may name a runner `build-box` while
+  a site runner is also called `build-box`.
+- **Revocation is a site act with project-runner semantics**: future polls,
+  claims and exchanges are refused in every project at once, while a group
+  already exchanged finishes under the bearer it holds, heartbeats included.
+- **It counts as presence for every project it can serve.** The launch
+  preview's `placement.runner_online` and the unclaimed-timeout diagnostic both
+  include site runners; saying "this project has no runner registered" while a
+  shared machine is polling would send a reader to register one they do not
+  need.
+
+**Lifecycle API.** Three routes, above any project's URL space, gated to a
+**site-admin principal** and writing audit rows with no `project_id`:
+
+| Route | Meaning |
+|---|---|
+| `POST /api/v1/site/runners` `{name, labels?}` | Register; `201` with the one-time `credential`. A live duplicate name is `409`. |
+| `GET /api/v1/site/runners` | List, each with its claim and that claim's `claim_project_key` — the site operator is the one reader who sees claims unredacted. |
+| `DELETE /api/v1/site/runners/:r` | Revoke. Idempotent: revoking twice is `204`. |
+
+The site-admin principal is the `PLAYTEST_AUTH=dev` admin bypass and nothing
+else. A project `admin` is deliberately insufficient — a site runner would
+receive OTHER projects' secrets — and site-scoped API tokens remain reserved for
+a later ops flow, so a non-dev deployment answers `403` naming that and simply
+has no site runners. Console CRUD, per-project grants, and production
+site-admin provisioning are the deferred runner-trust follow-up.
+
+**The projection is tenant-shaped.** `GET /api/v1/projects/:p/runners` lists a
+project's own runners and every live site runner, each carrying:
+
+```jsonc
+{
+  "id": "…", "project_id": null,      // null for a site runner
+  "scope": "site" | "project",
+  "managed_here": false,               // a project cannot revoke a site runner
+  "name": "local", "labels": [], "ephemeral": false,
+  "created_at": "…Z", "last_seen_at": "…Z", "revoked_at": null, "expires_at": null,
+  "claim": {
+    "foreign": true,                   // the claim belongs to another project
+    "dispatch_id": null, "kind": null, "run_group_id": null, "mint_claim_id": null,
+    "claimed_at": "…Z", "heartbeat_at": "…Z"
+  }
+}
+```
+
+A claim belonging to another project reads as busy and nothing more: `foreign`
+is true and every identifier is null, while `claimed_at`/`heartbeat_at` remain
+because they describe the machine's liveness, not the other tenant's work. The
+keys do not change shape between the two cases, so no reader needs a branch and
+no branch can forget to redact one. Revoked site runners are omitted from a
+project's list entirely — a project can neither act on one nor learn from it.
+
+**Events.** A `platform_events` row requires a project, so site-runner presence
+and registry edges (`registered`, `revoked`, `online`) fan out **one event per
+project** at emit time; they are rare and edge-triggered, so the cost is
+bounded. A `claimed` event is addressed to the claimed dispatch's project ALONE,
+because its payload names a dispatch and a run group. Every `runner.status`
+payload carries `scope`.
+
+### The dev peer runner
+
+Under `PLAYTEST_AUTH=dev` the control plane ensures, at boot, one site-scoped
+runner named `local` and writes its credential to
+`$PLAYTEST_DATA_DIR/local-runner.credential` with mode `0600`. This is a
+registration, not a process: the control plane still starts nothing and connects
+to nothing. `scripts/hosted-server.sh` starts `runner-agent pool` against that
+credential file beside the server, restarts it if it stops, and stops it when
+the server stops; the agent's existing backoff covers boot order, and the
+credential file is written whole through a rename so a concurrent reader never
+sees half a value.
+
+The ensure is **idempotent**: a second boot reuses the same runner row and the
+same credential. Only a hash is stored, so a credential file that no longer
+matches its row cannot be recovered — boot re-issues one on the same row, which
+keeps the runner's identity and history and kills the old value. The script also
+seeds `$PLAYTEST_DATA_DIR/runner.yaml` when absent: a comment-only placeholder
+for the machine-local facts hosted mobile will need. Nothing reads it yet.
+
+The result is that `npm run hosted` gives launch-to-verdict web and API runs with
+zero runner ceremony, over exactly the placement path CI and a fleet use.
+
 ### The pool runner process
 
 `runner-agent pool --server <url> [--labels a,b] [--isolation process|container]
@@ -778,9 +888,11 @@ complete → poll again.
   so it cannot be read out of a process list. Offering it as an argument is
   refused with the remedy.
 - **The first check-in does not hold**, so a misconfigured runner is diagnosable
-  at once: startup output states the runner name, project, server, labels,
-  isolation, work directory, and that it is waiting for work. Later check-ins
-  long-poll.
+  at once: startup output states the runner name, its scope (its project, or
+  "every project on this deployment"), server, labels, isolation, work
+  directory, and that it is waiting for work. The poll answer's `runner` object
+  carries `{id, name, labels, scope, project_id, project_key}` and is where that
+  scope comes from. Later check-ins long-poll.
 - **A refused credential stops the process** with one actionable line (401/403 —
   unknown, or revoked). Any other failure to reach the control plane is retried
   with exponential backoff and jitter, reported once per outage rather than once

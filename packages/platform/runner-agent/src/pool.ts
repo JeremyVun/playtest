@@ -91,6 +91,8 @@ interface RunnerIdentity {
   id: string;
   name: string;
   labels: string[];
+  /** `"site"` when this credential serves every project on the deployment. */
+  scope?: string | null;
   project_key: string | null;
 }
 
@@ -399,11 +401,17 @@ export function backoffDelayMs(
  * at a glance, so this states who the control plane thinks this runner is,
  * which project it can take work from, what it advertises, and what isolation
  * its evidence will carry — then says, in words, that it is waiting.
+ *
+ * Scope is said out loud rather than inferred from a missing project name: a
+ * machine every project's suites and secrets can land on is a deliberate grant,
+ * and the terminal it was started from is where that should be visible.
  */
 export function startupLines(opts: PoolOptions, runner: RunnerIdentity | null): string[] {
   const name = runner?.name ? `"${runner.name}"` : "(unnamed)";
-  const project = runner?.project_key ? ` — project ${runner.project_key}` : "";
-  const labels = opts.labels.length ? opts.labels.join(", ") : "none — takes any job in this project";
+  const site = runner?.scope === "site";
+  const project = site ? " — every project on this deployment" : runner?.project_key ? ` — project ${runner.project_key}` : "";
+  const anyJob = site ? "none — takes any job on this deployment" : "none — takes any job in this project";
+  const labels = opts.labels.length ? opts.labels.join(", ") : anyJob;
   return [
     `Playtest runner ${name}${project}`,
     `  server     ${opts.server}`,

@@ -14,6 +14,7 @@ import * as personasApi from "./api/personas.ts";
 import * as secrets from "./api/secrets.ts";
 import * as tokens from "./api/tokens.ts";
 import * as runners from "./api/runners.ts";
+import * as siteRunners from "./api/site-runners.ts";
 import * as pool from "./api/pool.ts";
 import * as auditApi from "./api/audit.ts";
 import * as authRoutes from "./api/auth-routes.ts";
@@ -108,6 +109,11 @@ export function buildRouter() {
   r.get(`${v}/projects/:p/runners`, runners.listRunners);
   r.post(`${v}/projects/:p/runners`, runners.createRunner);
   r.del(`${v}/projects/:p/runners/:r`, runners.deleteRunner);
+  // Site-scoped runners serve every project, so their lifecycle sits ABOVE any
+  // project's URL space and answers only the site-admin principal.
+  r.get(`${v}/site/runners`, siteRunners.listSiteRunners);
+  r.post(`${v}/site/runners`, siteRunners.createSiteRunner);
+  r.del(`${v}/site/runners/:r`, siteRunners.deleteSiteRunner);
 
   // --- runs / event feed ---
   r.post(`${v}/projects/:p/run-groups/preview`, runs.previewGroup);

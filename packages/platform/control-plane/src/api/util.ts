@@ -29,6 +29,30 @@ export function guard(ctx: HostedDynamic, projectId: HostedDynamic, minRole: Hos
   return requireRole(ctx.principal, projectId, minRole);
 }
 
+/**
+ * Guard the SITE-ADMIN principal — the authority above every project, which
+ * today exists in exactly one place: the `PLAYTEST_AUTH=dev` admin bypass.
+ *
+ * Roles are per-project by construction, so "admin of a project" is deliberately
+ * not enough: a site-scoped runner receives every project's suite files and
+ * secrets, and granting one is a decision no single project's admin may make.
+ * Site-scoped API tokens are reserved for a later ops flow and cannot be minted
+ * yet (`api/tokens.ts`), so rather than pretend that authority exists, a non-dev
+ * deployment refuses here and simply has no site runners until the runner-trust
+ * follow-up provisions it.
+ */
+export function requireSiteAdmin(ctx: HostedDynamic) {
+  const principal = requireAuth(ctx);
+  if (principal.isDevAdmin) return principal;
+  throw new AppError(
+    "forbidden",
+    `this action needs a site administrator — an authority above any single project, because a site-scoped ` +
+      `runner receives every project's suite files and secrets. This deployment provisions none: site-scoped ` +
+      `API tokens are reserved for a later ops flow, so site runners exist only under PLAYTEST_AUTH=dev. ` +
+      `Register a project-scoped runner under Settings → Runners instead.`,
+  );
+}
+
 // --- field validators (surface as friendly bad_request, never a raw type error) ---
 
 export function stringField(body: HostedDynamic, name: HostedDynamic, { required = false, max = 4096, pattern = null, patternHint = "" }: HostedDynamic = {}) {

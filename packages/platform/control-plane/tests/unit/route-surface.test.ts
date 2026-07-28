@@ -43,6 +43,11 @@ test("the supported replacements remain routed", () => {
     ["POST", "/api/v1/run-groups/g1/synthesize-findings"],
     ["GET", "/api/v1/projects/acme/findings"],
     ["POST", "/api/v1/findings/f1/accept"],
+    // Site-scoped runners live ABOVE any project's URL space, because the grant
+    // they represent is not a project's to make.
+    ["GET", "/api/v1/site/runners"],
+    ["POST", "/api/v1/site/runners"],
+    ["DELETE", "/api/v1/site/runners/r1"],
   ] as const) {
     assert.equal(has(method, path), true, `${method} ${path} must be routed`);
   }

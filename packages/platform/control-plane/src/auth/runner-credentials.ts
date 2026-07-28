@@ -43,8 +43,12 @@ export async function runnerIdentity(db: Db, plaintext: unknown): Promise<DbRow>
     );
   }
   const { rows } = await db.query(
+    // LEFT JOIN, because a SITE-SCOPED runner has no project: its `project_id`
+    // is null by design and an inner join would silently make its credential
+    // unknown. Credential hashes are globally unique, so a presented value
+    // still resolves to exactly one row whatever its scope.
     `SELECT r.*, p.key AS project_key FROM runners r
-       JOIN projects p ON p.id = r.project_id
+       LEFT JOIN projects p ON p.id = r.project_id
       WHERE r.credential_hash = $1`,
     [hashToken(plaintext)],
   );
@@ -81,6 +85,17 @@ export async function runnerForCredential(db: Db, plaintext: unknown): Promise<D
     );
   }
   return runner;
+}
+
+/**
+ * Is this a SITE-SCOPED runner — one row with no project, trusted by a site
+ * operator with every project's work? The distinction is a trust decision, not a
+ * capability one: a claiming runner receives suite files and secrets, so which
+ * projects may reach this machine has to be explicit. Project scope is the
+ * default and the only scope a project developer can create.
+ */
+export function isSiteRunner(runner: { project_id?: string | null }): boolean {
+  return runner.project_id == null;
 }
 
 /** Has this (ephemeral) registration passed its expiry? Standing runners never do. */

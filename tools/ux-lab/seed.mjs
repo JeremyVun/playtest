@@ -30,6 +30,11 @@ import { intakeFinding } from "../../packages/platform/control-plane/src/finding
 const DAY = 24 * 60 * 60 * 1000;
 const HOUR = 60 * 60 * 1000;
 
+// The one label every launch in this seed carries (the "staging" ring's own
+// `runner_labels`): a fresh registered runner advertising it can claim and
+// exchange for anything launched here.
+const RUNNER_LABELS = ["self-hosted", "playtest"];
+
 const say = (...a) => console.log("  ", ...a);
 
 // ---------------------------------------------------------------------------
@@ -104,20 +109,66 @@ const failCheck = (spec, detail) => ({ pass: false, kind: "assert", spec, label:
 // Launch + runner protocol (the public path)
 // ---------------------------------------------------------------------------
 
-/** Launch a group through the public API; the stub dispatch accepts it. */
-async function launch(api, { projectKey, suiteId, envId, ids, note }) {
+/** Launch a group through the public API; it lands on the runner claim board. */
+async function launch(api, { projectKey, suiteId, ringId, ids, note }) {
   const res = await api.post(`/projects/${projectKey}/run-groups`, {
     suite_id: suiteId,
-    environment_id: envId,
+    ring_id: ringId,
     selection: { ids, mode: "auto" },
     note,
   });
   return res.run_group?.id || res.id;
 }
 
-/** Exchange a runner token and read the group spec (run_id ↔ db_id pairs). */
-async function attachRunner(api, groupId) {
-  const { token } = await api.post("/runner/exchange", { run_group_id: groupId, isolation: "process" });
+/**
+ * Register a fresh, throwaway self-hosted runner and mint its credential. The
+ * claim board is the only placement model now, so this stands in for "a
+ * `runner-agent pool` process happened to be listening": one registration per
+ * group this seed drives, since a runner holds one active claim at a time and
+ * several groups below are deliberately left in flight forever.
+ */
+async function registerRunner(api, projectKey, labels = RUNNER_LABELS) {
+  const runner = await api.post(
+    `/projects/${projectKey}/runners`,
+    { name: `ux-lab-${crypto.randomBytes(4).toString("hex")}`, labels },
+    { expect: [200, 201] },
+  );
+  return runner.credential;
+}
+
+/**
+ * Poll a runner's claim board for the offer naming `groupId`, claim it, and
+ * exchange the credential for the group's bearer token — the same three calls
+ * `runner-agent pool` makes (docs/contracts/hosted.md, "Runner pool").
+ */
+async function claimAndExchange(api, credential, groupId) {
+  const auth = { authorization: `Bearer ${credential}` };
+  const deadline = Date.now() + 15_000;
+  let offer = null;
+  while (!offer) {
+    const res = await fetch(`${api.base}/api/v1/runner/pool/claims?wait=3`, { headers: auth });
+    const data = await res.json();
+    offer = (data.offers || []).find((o) => o.run_group_id === groupId);
+    if (!offer && Date.now() > deadline) throw new Error(`no board offer ever appeared for run group ${groupId}`);
+  }
+  const claimed = await fetch(`${api.base}/api/v1/runner/pool/claims/${offer.dispatch_id}`, {
+    method: "POST",
+    headers: auth,
+  });
+  if (!claimed.ok) throw new Error(`claim ${offer.dispatch_id} → ${claimed.status}: ${await claimed.text()}`);
+  const exchanged = await fetch(`${api.base}/api/v1/runner/exchange`, {
+    method: "POST",
+    headers: { ...auth, "content-type": "application/json" },
+    body: JSON.stringify({ dispatch_id: offer.dispatch_id, isolation: "process" }),
+  }).then((r) => r.json());
+  return exchanged.token;
+}
+
+/** Register a fresh runner, claim + exchange for `groupId`, and read the group
+ * spec (run_id ↔ db_id pairs). */
+async function attachRunner(api, projectKey, groupId) {
+  const credential = await registerRunner(api, projectKey);
+  const token = await claimAndExchange(api, credential, groupId);
   const auth = { headers: { authorization: `Bearer ${token}` } };
   const spec = await fetch(`${api.base}/api/v1/runner/groups/${groupId}`, auth).then((r) => r.json());
   return { token, cases: spec.cases || [] };
@@ -141,8 +192,8 @@ async function runnerCall(api, token, method, p, { body, raw, contentType } = {}
  * Report a whole group as a real executor would. `plan[caseId]` describes the
  * verdict; anything the plan omits reports as a plain pass.
  */
-async function reportGroup(api, groupId, plan, fixtures) {
-  const { token, cases } = await attachRunner(api, groupId);
+async function reportGroup(api, projectKey, groupId, plan, fixtures) {
+  const { token, cases } = await attachRunner(api, projectKey, groupId);
   for (const c of cases) {
     const p = plan[c.case_id] || plan["*"] || { status: "pass", score: 90 };
     await runnerCall(api, token, "POST", `/runner/groups/${groupId}/cases/${c.run_id}/start`, { body: {} });
@@ -205,9 +256,9 @@ async function reportGroup(api, groupId, plan, fixtures) {
  * The returned handle can `seal()` the run mid-capture, which is how the seal
  * transition gets photographed rather than described.
  */
-async function openLiveRun(api, { projectKey, suiteId, envId, ids, note, fixtures, staged = 2, progress = null }) {
-  const groupId = await launch(api, { projectKey, suiteId, envId, ids, note });
-  const { token, cases } = await attachRunner(api, groupId);
+async function openLiveRun(api, { projectKey, suiteId, ringId, ids, note, fixtures, staged = 2, progress = null }) {
+  const groupId = await launch(api, { projectKey, suiteId, ringId, ids, note });
+  const { token, cases } = await attachRunner(api, projectKey, groupId);
   const c = cases[0];
   const fixtureDir = fixtures[0];
   await runnerCall(api, token, "POST", `/runner/groups/${groupId}/cases/${c.run_id}/start`, { body: {} });
@@ -354,47 +405,42 @@ export async function seed({ api, db, store }) {
   await api.post("/projects", { key: out.emptyProjectKey, name: "Acme Checkout" }, { expect: [200, 201] });
   say("projects: todo-app (rich) + acme-checkout (empty, first-run state)");
 
-  // --- 2. Suites -----------------------------------------------------------
-  const suite = await api.post(`/projects/${out.projectKey}/suites`, { slug: "todos", name: "Todo journeys" }, { expect: [200, 201] });
-  out.suiteId = suite.id;
-  out.suiteSlug = suite.slug;
-  const tar = writeTar(loadSuiteDir(path.join(REPO_ROOT, "tests/fixtures/todos")));
-  await api.raw("POST", `/suites/${suite.id}/import`, undefined, { raw: tar, contentType: "application/x-tar", expect: [200, 201] });
-  await api.post(
-    `/suites/${suite.id}/commit`,
-    {
-      changes: [{ path: "stories/export-study.yaml", content: DISCOVERY_STORY }, ...Object.entries(PERSONAS).map(([p, content]) => ({ path: p, content }))],
-      note: "add the export discovery study",
-    },
+  // --- 2. Test targets: application, rings, secret, auth provider, token ---
+  // Applications and rings (docs/contracts/hosted.md, "Applications and
+  // rings") replace the old project-wide environments: one application per
+  // executable surface, owning the rings it may launch against. A suite binds
+  // to exactly one application at creation, so the application has to exist
+  // first.
+  const app = await api.post(
+    `/projects/${out.projectKey}/applications`,
+    { key: "todo-web", name: "Todo web app", driver: "web" },
     { expect: [200, 201] },
   );
-  // A second suite with no stories: the empty-suite state.
-  const empty = await api.post(`/projects/${out.projectKey}/suites`, { slug: "onboarding", name: "Onboarding" }, { expect: [200, 201] });
-  out.emptySuiteSlug = empty.slug;
-  say("suites: todos (4 stories, 2 personas) + onboarding (empty)");
-
-  // --- 3. Test targets: environments, secret, auth provider, API token -----
+  out.applicationId = app.id;
   const staging = await api.post(
-    `/projects/${out.projectKey}/environments`,
+    `/applications/${app.id}/rings`,
     {
+      key: "staging",
       name: "staging",
+      base_url: "http://127.0.0.1:4173",
       discovery_allowed: true,
-      runner_labels: ["self-hosted", "playtest"],
-      config: { app: { base_url: "http://127.0.0.1:4173" }, secret_env: { SEED_TOKEN: "staging-seed-token" } },
+      runner_labels: RUNNER_LABELS,
+      config: { secret_env: { SEED_TOKEN: "staging-seed-token" } },
     },
     { expect: [200, 201] },
   );
-  out.envId = staging.id;
+  out.ringId = staging.id;
   await api.post(
-    `/projects/${out.projectKey}/environments`,
+    `/applications/${app.id}/rings`,
     {
+      key: "production",
       name: "production",
+      base_url: "https://todos.example.com",
       discovery_allowed: false,
       // Labels are letters, digits, ".", "_" and "-" only (the pool's own rule,
       // tightened when self-hosted runners landed); "pool:prod" is refused now.
       runner_labels: ["self-hosted", "playtest", "pool-prod"],
       config: {
-        app: { base_url: "https://todos.example.com" },
         auth: { default: "member", identities: { member: { $session: "sso/member" } } },
         secret_env: {},
       },
@@ -418,40 +464,28 @@ export async function seed({ api, db, store }) {
     { expect: [200, 201] },
   );
   await api.post(`/projects/${out.projectKey}/tokens`, { role: "editor", name: "ci-pipeline" }, { expect: [200, 201] }).catch(() => {});
+  say("test targets: 1 application (2 rings: staging, production), 1 secret, 1 auth provider, 1 API token");
 
-  // A target only the todos suite can launch against — the shape Suite settings
-  // adds: no credentials, a URL that lives in the suite's own playtest.yaml, and
-  // invisible from every other suite's launch dialog.
-  await api.post(
-    `/projects/${out.projectKey}/environments`,
-    { name: "preview", suite_id: suite.id, discovery_allowed: true },
-    { expect: [200, 201] },
-  );
+  // --- 3. Suites -------------------------------------------------------------
+  // With exactly one application in the project, suite creation takes it —
+  // no application_id to look up.
+  const suite = await api.post(`/projects/${out.projectKey}/suites`, { slug: "todos", name: "Todo journeys" }, { expect: [200, 201] });
+  out.suiteId = suite.id;
+  out.suiteSlug = suite.slug;
+  const tar = writeTar(loadSuiteDir(path.join(REPO_ROOT, "tests/fixtures/todos")));
+  await api.raw("POST", `/suites/${suite.id}/import`, undefined, { raw: tar, contentType: "application/x-tar", expect: [200, 201] });
   await api.post(
     `/suites/${suite.id}/commit`,
     {
-      changes: [{
-        path: "playtest.yaml",
-        content: [
-          "# Test-owned todo suite. Its compose file builds the sibling todo-app fixture;",
-          "# reset.sh makes repeated external-mode runs deterministic.",
-          "app:",
-          "  compose: ./docker-compose.yml",
-          "  base_url: http://app:4173",
-          "  init: ./reset.sh",
-          "  envs:",
-          "    staging:",
-          "      base_url: http://127.0.0.1:4173",
-          "    preview:",
-          "      base_url: https://todos-pr-482.preview.example.com",
-          "",
-        ].join("\n"),
-      }],
-      note: "point the suite at staging and its preview deploy",
+      changes: [{ path: "stories/export-study.yaml", content: DISCOVERY_STORY }, ...Object.entries(PERSONAS).map(([p, content]) => ({ path: p, content }))],
+      note: "add the export discovery study",
     },
     { expect: [200, 201] },
   );
-  say("test targets: 3 environments (one suite-owned), 1 secret, 1 auth provider, 1 API token");
+  // A second suite with no stories: the empty-suite state.
+  const empty = await api.post(`/projects/${out.projectKey}/suites`, { slug: "onboarding", name: "Onboarding" }, { expect: [200, 201] });
+  out.emptySuiteSlug = empty.slug;
+  say("suites: todos (4 stories, 2 personas) + onboarding (empty)");
 
   // --- 3b. Project personas ------------------------------------------------
   // Two of them, of very different lengths: the page has to hold a one-liner
@@ -521,8 +555,8 @@ export async function seed({ api, db, store }) {
 
   out.groups = [];
   for (const g of groups) {
-    const groupId = await launch(api, { projectKey: out.projectKey, suiteId: suite.id, envId: staging.id, ids: g.ids, note: g.note });
-    await reportGroup(api, groupId, g.plan, fixtures);
+    const groupId = await launch(api, { projectKey: out.projectKey, suiteId: suite.id, ringId: staging.id, ids: g.ids, note: g.note });
+    await reportGroup(api, out.projectKey, groupId, g.plan, fixtures);
     await backdate(db, groupId, g.when);
     out.groups.push({ id: groupId, note: g.note });
     say(`run group "${g.note}" (${g.ids.length} stories) → ${groupId}`);
@@ -534,8 +568,8 @@ export async function seed({ api, db, store }) {
   // Kept out of out.groups so the surfaces that index into that list keep
   // pointing at the runs they were written about.
   {
-    const soloId = await launch(api, { projectKey: out.projectKey, suiteId: suite.id, envId: staging.id, ids: ["add-todo"] });
-    await reportGroup(api, soloId, { "add-todo": { status: "pass", score: 91 } }, fixtures);
+    const soloId = await launch(api, { projectKey: out.projectKey, suiteId: suite.id, ringId: staging.id, ids: ["add-todo"] });
+    await reportGroup(api, out.projectKey, soloId, { "add-todo": { status: "pass", score: 91 } }, fixtures);
     await backdate(db, soloId, now - 1 * HOUR);
     say(`un-noted solo run (1 story) → ${soloId}`);
   }
@@ -546,12 +580,12 @@ export async function seed({ api, db, store }) {
     const liveId = await launch(api, {
       projectKey: out.projectKey,
       suiteId: suite.id,
-      envId: staging.id,
+      ringId: staging.id,
       // No note, deliberately: this group exercises the default title a launch
       // gets when nobody wrote one ("one-off run").
       ids: ["add-todo", "complete-todo", "clear-completed"],
     });
-    const { token, cases } = await attachRunner(api, liveId);
+    const { token, cases } = await attachRunner(api, out.projectKey, liveId);
     await runnerCall(api, token, "POST", `/runner/groups/${liveId}/cases/${cases[0].run_id}/start`, { body: {} });
     // A live-progress snapshot, as the executor would post it: the runs index
     // renders this as the story's CLI-style live line (chip word, step N/M,
@@ -576,13 +610,14 @@ export async function seed({ api, db, store }) {
     const groupId = await launch(api, {
       projectKey: out.projectKey,
       suiteId: suite.id,
-      envId: staging.id,
+      ringId: staging.id,
       // Discovery cases are one per persona; the selection takes the expanded ids.
       ids: ["export-study@curious-newcomer", "export-study@power-user"],
       note: "export discovery study",
     });
     await reportGroup(
       api,
+      out.projectKey,
       groupId,
       {
         "*": {
@@ -640,9 +675,9 @@ export async function seed({ api, db, store }) {
   for (const b of BUSY) {
     try {
       const id = await launch(api, {
-        projectKey: out.projectKey, suiteId: suite.id, envId: staging.id, ids: b.ids, note: b.note,
+        projectKey: out.projectKey, suiteId: suite.id, ringId: staging.id, ids: b.ids, note: b.note,
       });
-      const { token, cases } = await attachRunner(api, id);
+      const { token, cases } = await attachRunner(api, out.projectKey, id);
       for (const [i, p] of b.started.entries()) {
         await runnerCall(api, token, "POST", `/runner/groups/${id}/cases/${cases[i].run_id}/start`, { body: {} });
         await runnerCall(api, token, "POST", `/runner/groups/${id}/cases/${cases[i].run_id}/progress`, {
@@ -667,14 +702,14 @@ export async function seed({ api, db, store }) {
   // where the verdict lands — one per theme, since sealing is a one-way door.
   try {
     const streaming = await openLiveRun(api, {
-      projectKey: out.projectKey, suiteId: suite.id, envId: staging.id,
+      projectKey: out.projectKey, suiteId: suite.id, ringId: staging.id,
       ids: ["add-todo"], note: "watching a live run", fixtures,
     });
     out.liveRun = { group: streaming.groupId, id: streaming.runDbId };
     const sealable = [];
     for (const n of [1, 2]) {
       sealable.push(await openLiveRun(api, {
-        projectKey: out.projectKey, suiteId: suite.id, envId: staging.id,
+        projectKey: out.projectKey, suiteId: suite.id, ringId: staging.id,
         ids: ["add-todo"], note: `live run about to finish (${n})`, fixtures,
         progress: 'clicked "Add" after typing "walk the dog"',
       }));

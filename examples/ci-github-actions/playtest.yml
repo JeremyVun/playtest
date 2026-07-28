@@ -43,7 +43,7 @@ env:
   PLAYTEST_SERVER: ${{ vars.PLAYTEST_SERVER }}           # https://playtest.example.com
   PLAYTEST_PROJECT: ${{ vars.PLAYTEST_PROJECT }}         # project key
   PLAYTEST_SUITE: ${{ vars.PLAYTEST_SUITE }}             # suite id
-  PLAYTEST_ENVIRONMENT: ${{ vars.PLAYTEST_ENVIRONMENT }} # environment id
+  PLAYTEST_RING: ${{ vars.PLAYTEST_RING }}               # ring id
   # The one label this pipeline run answers to.
   PLAYTEST_LABEL: ci-run-${{ github.run_id }}
 
@@ -111,7 +111,7 @@ jobs:
       - name: Start the runner
         run: |
           set -euo pipefail
-          node "$RUNNER_TEMP/playtest/packages/platform/runner-agent/src/exec-group.ts" pool \
+          node "$RUNNER_TEMP/playtest/packages/platform/runner-agent/src/cli.ts" pool \
             --server "$PLAYTEST_SERVER" \
             --labels "$PLAYTEST_LABEL" \
             --credential-file "$RUNNER_TEMP/playtest-runner-credential" \
@@ -127,9 +127,9 @@ jobs:
           exit 1
 
       # `runner_labels` pins THIS launch to THIS pipeline's runner, overriding
-      # whatever labels the environment normally carries. One shared CI
-      # environment therefore serves every pull request without any of them
-      # being able to run against another's build.
+      # whatever labels the ring normally carries. One shared CI ring therefore
+      # serves every pull request without any of them being able to run against
+      # another's build.
       - name: Launch the suite and wait for the verdict
         env:
           # A project API token with the `editor` role. This one IS a repository
@@ -143,10 +143,10 @@ jobs:
             -H "content-type: application/json" \
             -d "$(jq -nc \
                   --arg suite "$PLAYTEST_SUITE" \
-                  --arg environment "$PLAYTEST_ENVIRONMENT" \
+                  --arg ring "$PLAYTEST_RING" \
                   --arg label "$PLAYTEST_LABEL" \
                   --arg note "PR ${{ github.event.pull_request.number }} — ${{ github.sha }}" \
-                  '{suite_id: $suite, environment_id: $environment, runner_labels: [$label], note: $note}')" \
+                  '{suite_id: $suite, ring_id: $ring, runner_labels: [$label], note: $note}')" \
             | jq -r .run_group.id)
           echo "run group: $PLAYTEST_SERVER/projects/$PLAYTEST_PROJECT/runs/$group"
 

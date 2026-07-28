@@ -41,11 +41,12 @@ Two things make it sound:
 ## What you need
 
 **On the deployment** (an operator sets these once, and they are the whole
-authorization story for registration):
+authorization story for registration). There is no placement mode to select:
+the claim board is the only one, so a runner that polls is all a deployment
+needs.
 
 | Variable | Meaning |
 |---|---|
-| `PLAYTEST_DISPATCH=pool` | Place runs on self-hosted runners. |
 | `PLAYTEST_POOL_OIDC_REPOSITORY` | The repository whose workflows may register runners, e.g. `acme/storefront`. Until it is set, the registration route answers `503`. |
 | `PLAYTEST_POOL_OIDC_WORKFLOW` | Optional: narrow it to one workflow file, e.g. `playtest.yml`. |
 | `PLAYTEST_POOL_OIDC_REF` | Optional: narrow it to one branch. |
@@ -58,7 +59,7 @@ authorization story for registration):
 | `PLAYTEST_SERVER` | variable | `https://playtest.example.com` |
 | `PLAYTEST_PROJECT` | variable | project key |
 | `PLAYTEST_SUITE` | variable | suite id |
-| `PLAYTEST_ENVIRONMENT` | variable | environment id |
+| `PLAYTEST_RING` | variable | ring id (Applications → your application → your ring) |
 | `PLAYTEST_API_TOKEN` | secret | a project API token with the `editor` role |
 
 `PLAYTEST_API_TOKEN` is a real secret and there is no way around it: OIDC
@@ -76,9 +77,10 @@ Two blocks are marked in the file:
   and pin the ref you run in production. Registry distribution is descoped, so
   the agent comes from a repository checkout.
 
-The environment this launches against should describe your CI target
-(`http://127.0.0.1:3000` or whatever your app listens on). Its own runner labels
-do not matter here — the launch pins its own.
+The ring this launches against holds your CI target's URL
+(`http://127.0.0.1:3000` or whatever your app listens on) — evaluated from the
+claiming runner's network position, which in this job is the job's own machine.
+The ring's own runner labels do not matter here: the launch pins its own.
 
 ## Reading a failure
 

@@ -27,15 +27,24 @@ Useful flags for `shoot`:
 `tools/ux-lab/.data`, wiped on every start. It never touches your own
 `.playtest-data` or port 4177.
 
-Dispatch is stubbed: the real GitHub client refuses to launch without a GitHub
-App, and `PLAYTEST_DISPATCH=local` would spawn a browser-and-model run per
-story. `StubDispatch` accepts the launch and reports a workflow id, and
-`seed.mjs` then drives the **public runner protocol** — exchange → start →
-upload bundle → report → complete — exactly as a GitHub Actions executor would.
-That is what makes the server compute real baselines, candidate diffs, findings,
-events, and group summaries rather than hand-forged rows. Run bundles are
-genuine committed trajectories from `studies/viewer-self-test/fixtures`; only
-the small `manifest.json` is patched per run.
+Placement has one model now: a launch lands on the project's runner claim
+board, and only a registered, credentialed runner that polls the board can
+claim and exchange for it — there is no `PLAYTEST_DISPATCH` variable and
+nothing accepts a launch automatically. `seed.mjs` registers a fresh throwaway
+runner per group it needs claimed, then drives the **public runner protocol**
+— poll → claim → exchange → start → upload bundle → report → complete —
+exactly as a real `runner-agent pool` process would. That is what makes the
+server compute real baselines, candidate diffs, findings, events, and group
+summaries rather than hand-forged rows. Run bundles are genuine committed
+trajectories from `studies/viewer-self-test/fixtures`; only the small
+`manifest.json` is patched per run.
+
+The lab deliberately never starts a `runner-agent pool` process of its own.
+Every run group `seed.mjs` needs *finished* it claims and reports through by
+hand, one throwaway runner at a time; a launch made through the console
+instead (clicking Run in the seeded browser) has no runner left listening for
+it and simply stays queued on the board. That is expected, not a bug — it is
+the same thing an unstaffed self-hosted project would show a person.
 
 Three things have no public path and are written directly, marked `SEAM` in
 `seed.mjs`: backdating rows so trends read like a real week, and bug-candidate
@@ -44,10 +53,12 @@ intake (which normally arrives from model synthesis).
 ## What gets seeded
 
 - `todo-app` — the rich project. A suite with four stories (one of them a
-  two-persona discovery study) plus an empty second suite; two environments, a
-  secret, an auth provider, an API token; six run groups spanning pass, fail,
-  infra, changed-awaiting-review, explored, and one still in flight; two
-  findings (one accepted, one promoted by hand); two unassigned bug candidates.
+  two-persona discovery study) plus an empty second suite; one application
+  owning two rings (`staging`, `production`), a secret, an auth provider, an
+  API token; run groups spanning pass, fail, infra, changed-awaiting-review,
+  explored, and several still in flight (queued, claimed-and-running, and
+  streaming); two findings (one accepted, one promoted by hand); two
+  unassigned bug candidates.
 - `acme-checkout` — an empty project, so the first-run screens are always in
   the capture set.
 

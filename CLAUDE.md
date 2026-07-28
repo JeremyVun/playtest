@@ -70,7 +70,7 @@ and true cross-package behavior.
 npm install
 npm link --workspace=@playtest/cli    # optional: expose `playtest` on PATH
 node packages/cli/src/cli.ts --help   # run the CLI without linking
-PORT=4173 node examples/todo-app/server.js
+PORT=4173 node examples/ledger-api/server.js   # a target to point a suite at
 ```
 
 `npm install` runs `npm run build:web`, producing a self-contained viewer build
@@ -105,9 +105,14 @@ npm run hosted:migrate                # optional; the server migrates on boot
 ```
 
 `npm run hosted` is the sole local startup command. It builds both Vite
-applications, starts the control plane that serves the API and web UI, and uses
-local dispatch so the control plane spawns runner-agent jobs on demand. Do not
-start the web or runner-agent workspaces as separate services.
+applications, starts the control plane that serves the API and web UI, and
+supervises one peer `runner-agent pool` process beside it. There is one
+placement model: a launch posts to the claim board and that runner claims it,
+exactly as a CI or fleet runner would. The control plane starts no process in
+response to a launch and never connects to a runner. Under `PLAYTEST_AUTH=dev`
+it registers a site-scoped runner named `local` at boot and writes its
+credential `0600` under the data root, so local runs need no runner setup. Do
+not start the web or runner-agent workspaces as separate services.
 
 The CLI does not load `.env`. Never read any `.env` file without the user's
 explicit permission.

@@ -292,8 +292,12 @@ export async function previewRunGroup(ctx: HostedDynamic, { project, suite, appl
 async function labelMatchingRunnerOnline(ctx: HostedDynamic, projectId: HostedDynamic, labels: string[]) {
   const windowMs = checkInWindowMs(ctx.config.dispatch.pool);
   const { rows } = await ctx.db.query(
+    // Site-scoped runners (null project) can claim this project's work too, so
+    // a preview that ignored them would say "nothing here can take this" about
+    // the very runner `npm run hosted` has polling.
     `SELECT labels FROM runners
-      WHERE project_id = $1 AND revoked_at IS NULL AND last_seen_at IS NOT NULL AND last_seen_at > $2`,
+      WHERE (project_id = $1 OR project_id IS NULL)
+        AND revoked_at IS NULL AND last_seen_at IS NOT NULL AND last_seen_at > $2`,
     [projectId, new Date(Date.now() - windowMs)],
   );
   return rows.some((r: HostedDynamic) => labelsMatch(labels, r.labels || []));

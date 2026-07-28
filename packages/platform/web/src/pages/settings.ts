@@ -148,7 +148,7 @@ async function runnersTab(projectKey: WebDynamic, project: WebDynamic, slot: Web
     // Nothing moved ⇒ nothing repaints: a rebuild costs focus and any menu the
     // person had open, and this paints itself every 15 seconds.
     const sig = JSON.stringify(rows.map(({ r, presence }: WebDynamic) =>
-      [r.id, presence.state, r.labels, r.claim?.run_group_id ?? null, r.last_seen_at]));
+      [r.id, presence.state, r.labels, r.claim?.run_group_id ?? null, r.claim?.foreign ?? null, r.last_seen_at]));
     if (!first && sig === ctl.sig) return;
     ctl.sig = sig;
 
@@ -161,9 +161,13 @@ async function runnersTab(projectKey: WebDynamic, project: WebDynamic, slot: Web
             h("div", { style: "display:flex;align-items:center;gap:10px;flex-wrap:wrap" },
               h("span.id", {}, r.name),
               presenceChip(presence),
+              // A machine the site operator shares with every project. It is
+              // listed because this project's runs really do land on it, and it
+              // is read-only because retiring it is not this project's call.
+              r.scope === "site" ? h("span.chip", { title: "Shared across every project on this deployment — administered by the site operator" }, "shared") : null,
               h("div", { style: "flex:1" }),
               // Every row repeats one verb, so the accessible name carries the runner.
-              r.revoked_at
+              r.revoked_at || r.managed_here === false
                 ? null
                 : h("button.btn.btn-sm.danger", {
                     "aria-label": `Revoke runner ${r.name}`,
@@ -182,9 +186,13 @@ async function runnersTab(projectKey: WebDynamic, project: WebDynamic, slot: Web
                   "running: ",
                   link(`/p/${projectKey}/runs/${r.claim.run_group_id}`, "this run"),
                   r.claim.claimed_at ? h("span.faint", {}, ` · claimed ${ago(r.claim.claimed_at)}`) : null)
-              : r.claim
-                ? fieldLine("running", "minting an auth session")
-                : null,
+              // A shared runner's other tenant is none of this project's
+              // business: it is busy, and that is the whole of what is said.
+              : r.claim?.foreign
+                ? fieldLine("running", `busy in another project${r.claim.claimed_at ? ` · since ${ago(r.claim.claimed_at)}` : ""}`)
+                : r.claim
+                  ? fieldLine("running", "minting an auth session")
+                  : null,
             r.revoked_at ? fieldLine("revoked", new Date(r.revoked_at).toLocaleString()) : null,
           )))
       : emptyState(

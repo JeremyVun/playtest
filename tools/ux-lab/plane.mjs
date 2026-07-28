@@ -4,39 +4,22 @@
 // integration harness: `createApp` + `listen`) against a throwaway data root, so
 // a UX pass never touches the developer's own `.playtest-data` or port 4177.
 //
-// Dispatch is stubbed. The real GitHub client would refuse to launch and the
-// `PLAYTEST_DISPATCH=local` client would spawn a real browser + model run, so
-// neither can seed a run history offline. `StubDispatch` accepts the launch and
-// reports a workflow id; the seed then drives the *public* runner protocol
-// (exchange → start → upload → report → complete) exactly as a GitHub Actions
-// executor would, which is what makes the server compute real candidates,
-// findings, events, and group summaries instead of hand-forged rows.
+// Placement has one model now: a launch lands on the project's runner claim
+// board, and a runner (registered through the public API, credentialed, and
+// polling) claims and exchanges for it. There is no dispatch stub to install —
+// `seed.mjs` registers a real (if throwaway) runner per group it needs claimed,
+// then drives the *public* runner protocol (poll → claim → exchange → start →
+// upload → report → complete) exactly as `runner-agent pool` would, which is
+// what makes the server compute real candidates, findings, events, and group
+// summaries instead of hand-forged rows. The lab deliberately never starts a
+// `runner-agent pool` process of its own, so a launch made through the console
+// (rather than by `seed.mjs`) stays queued on the board — see the README.
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const CP = path.join(REPO_ROOT, "packages/platform/control-plane/src");
-
-/** Accepts every dispatch and never spawns anything. */
-export class StubDispatch {
-  enabled = true;
-  dispatches = [];
-  async dispatchWorkflow(req) {
-    this.dispatches.push(req);
-    const n = this.dispatches.length;
-    return { workflow_run_id: `ux-lab-${n}`, workflow_run_url: `https://github.invalid/runs/${n}` };
-  }
-  async getRunStatus(id) {
-    return { id, status: "in_progress", conclusion: null, url: `https://github.invalid/runs/${id}` };
-  }
-  async cancelRun() {
-    return { ok: true };
-  }
-  findDispatchRun() {
-    return null;
-  }
-}
 
 /** A tiny API client over /api/v1 that throws with the server's message. */
 export function makeClient(base) {
@@ -103,14 +86,15 @@ export async function startPlane({
     // The lab holds every in-flight state at once — four busy groups plus the
     // open runs the live surfaces need — which is more than one project may
     // really dispatch concurrently. The cap is a deployment policy, and nothing
-    // it guards (a real executor) exists here.
+    // it guards (a real fleet with its own limits) exists here.
     PLAYTEST_DISPATCH_MAX_ACTIVE_PER_PROJECT: "12",
-    // No reconciler: the stub's dispatches would be declared dead mid-capture.
+    // No reconciler: the seeded runners never heartbeat again once seed.mjs
+    // moves on, and a reconciliation pass would declare their claims dead
+    // mid-capture.
     PLAYTEST_RECONCILE_INTERVAL_S: "0",
   });
 
-  const github = new StubDispatch();
-  const app = await createApp(config, { github });
+  const app = await createApp(config);
   const addr = await app.listen(port, "127.0.0.1");
   const base = `http://127.0.0.1:${addr.port}`;
   return {
@@ -118,7 +102,6 @@ export async function startPlane({
     app,
     db: app.db,
     store: app.store,
-    github,
     dataDir,
     api: makeClient(base),
     stop: () => app.close(),

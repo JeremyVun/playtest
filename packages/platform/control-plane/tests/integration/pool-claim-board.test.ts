@@ -54,9 +54,13 @@ test("pool: register, poll, race one winner, exchange, execute, report, complete
     // The plaintext is never readable again.
     const listed = await api.get(`/projects/${project.key}/runners`);
     assert.equal(listed.status, 200);
-    assert.equal(listed.body.items.length, 2);
-    assert.equal("credential" in listed.body.items[0], false);
-    assert.deepEqual(listed.body.items.map((r: HostedDynamic) => r.name).sort(), ["adas-laptop", "spare-mini"]);
+    // Under dev auth the deployment also has the site-scoped `local` peer
+    // runner, which every project's list carries read-only; this project's OWN
+    // fleet is the two just registered.
+    const own = listed.body.items.filter((r: HostedDynamic) => r.scope === "project");
+    assert.equal(own.length, 2);
+    assert.equal("credential" in own[0], false);
+    assert.deepEqual(own.map((r: HostedDynamic) => r.name).sort(), ["adas-laptop", "spare-mini"]);
     // A duplicate name is a friendly conflict, never a raw constraint error.
     const dup = await api.post(`/projects/${project.key}/runners`, { name: "adas-laptop" });
     assert.equal(dup.status, 409);
@@ -347,8 +351,9 @@ test("pool: a revoked runner's name is free again, and two live runners may not 
     assert.notEqual(again.credential, first.credential);
     // History keeps both, so a run placed on the old row still reads.
     const listed = await api.get(`/projects/${project.key}/runners`);
-    assert.deepEqual(listed.body.items.map((r: HostedDynamic) => r.name), ["adas-laptop", "adas-laptop"]);
-    assert.equal(listed.body.items.filter((r: HostedDynamic) => r.revoked_at).length, 1);
+    const own = listed.body.items.filter((r: HostedDynamic) => r.scope === "project");
+    assert.deepEqual(own.map((r: HostedDynamic) => r.name), ["adas-laptop", "adas-laptop"]);
+    assert.equal(own.filter((r: HostedDynamic) => r.revoked_at).length, 1);
   });
 });
 

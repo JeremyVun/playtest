@@ -1,23 +1,31 @@
 #!/usr/bin/env bash
-# Local boot for the hosted control plane and packaged web console. One command,
-# no prerequisites beyond
+# Local boot for the hosted control plane, the packaged web console, and one
+# peer runner. One command, no prerequisites beyond
 # `npm install`: no database service, no container, no cloud.
 #
 #   scripts/hosted-server.sh            # API + console on http://127.0.0.1:4177
 #   scripts/hosted-server.sh migrate    # apply SQL migrations and exit
 #   npm run hosted                      # the same thing through npm
 #
+# There is ONE placement model, so local development does not get a private one:
+# a launch posts to the claim board and a runner claims it, here exactly as on a
+# build box or in CI. This script therefore supervises `runner-agent pool` beside
+# the server, against the site-scoped `local` runner the control plane registers
+# under dev auth. The server never starts it per job and never connects to it —
+# the agent dials out, like every other runner.
+#
 # What it does for you, in order:
 #   1. checks Node is new enough for node:sqlite,
 #   2. installs missing dependencies and emits browser JavaScript,
 #   3. loads the repo-root .env (gitignored) without letting it clobber anything
 #      you set on the command line,
-#   4. keeps one durable data root and one local KMS key,
+#   4. keeps one durable data root, one local KMS key, and one runner config file,
 #   5. takes port 4177 back from a Playtest server left running by an earlier
 #      session (and refuses to touch anything that is not one),
 #   6. prints what is switched on — including whether the model gateway is
 #      configured, which is the difference between "Help me draft" working and
-#      answering 503 not_configured.
+#      answering 503 not_configured,
+#   7. starts the control plane and the peer runner, and stops both together.
 #
 # Everything is an override: `PORT=4188 scripts/hosted-server.sh` wins over .env,
 # which wins over the defaults here. PLAYTEST_DATA_DIR is the single storage
@@ -78,6 +86,10 @@ fi
 # ---- 4. settings -----------------------------------------------------------
 DATA_DIR="${PLAYTEST_DATA_DIR:-$REPO/.playtest-data}"
 KMS_FILE="${PLAYTEST_KMS_FILE:-$DATA_DIR/kms.b64}"
+# Written by the control plane at boot (src/dev-runner.ts), read by the agent.
+RUNNER_CRED_FILE="$DATA_DIR/local-runner.credential"
+RUNNER_CONFIG_FILE="$DATA_DIR/runner.yaml"
+RUNNER_WORK_DIR="$DATA_DIR/runner-work"
 
 export PLAYTEST_DATA_DIR="$DATA_DIR"
 export PLAYTEST_AUTH="${PLAYTEST_AUTH:-dev}"
@@ -95,6 +107,30 @@ if [ -z "${PLAYTEST_KMS_KEY:-}" ]; then
   fi
   PLAYTEST_KMS_KEY="$(cat "$KMS_FILE")"
   export PLAYTEST_KMS_KEY
+fi
+
+# The peer runner's config file. Seeded COMMENTED-OUT and left alone forever
+# after: a web or API ring needs nothing in here, because its URL is evaluated
+# from this machine's own network position and travels with the job. What only
+# this machine can know — a mobile build's path, its Appium backend, its device —
+# is what the file is for, and that schema lands with mobile support.
+if [ ! -f "$RUNNER_CONFIG_FILE" ]; then
+  cat > "$RUNNER_CONFIG_FILE" <<'RUNNER_CONFIG'
+# Playtest runner configuration — this machine's own facts, never uploaded.
+#
+# Nothing here is needed for web or API runs: a ring carries its own URL, and
+# this runner evaluates it from where it is standing, so "http://127.0.0.1:4173"
+# means a server on THIS machine.
+#
+# What belongs here is what no platform record may hold: where a mobile build
+# lives on this disk, which Appium backend runs it, and which device it targets,
+# keyed by the application and ring keys you see in the console. That schema
+# arrives with hosted mobile support; until then this file is deliberately
+# empty, and the runner does not read it.
+#
+# See docs/guidance/hosted-runners.md.
+RUNNER_CONFIG
+  echo "hosted-server: seeded a runner config file → $RUNNER_CONFIG_FILE" >&2
 fi
 
 # ---- 5. the port -----------------------------------------------------------
@@ -147,7 +183,12 @@ if [ "$cmd" = "serve" ]; then
     echo "  env file          $env_note"
     echo "  data root         $DATA_DIR"
     echo "  auth              $PLAYTEST_AUTH"
-    echo "  launches          claimed by a polling runner (runner-agent pool)"
+    if [ "$PLAYTEST_AUTH" = dev ]; then
+      echo "  placement         the claim board — a peer runner starts beside the server"
+      echo "  runner config     $RUNNER_CONFIG_FILE"
+    else
+      echo "  placement         the claim board — register a runner and start runner-agent pool"
+    fi
     if [ -n "${PLAYTEST_LLM_BASE_URL:-}" ]; then
       if [ -n "${PLAYTEST_LLM_API_KEY:-}" ]; then
         echo "  model gateway     $PLAYTEST_LLM_BASE_URL (key set)"
@@ -164,7 +205,66 @@ if [ "$cmd" = "serve" ]; then
 fi
 
 cd "$REPO/packages/platform/control-plane"
-if [ "$cmd" = "serve" ]; then
-  exec node src/index.ts
+if [ "$cmd" != "serve" ]; then
+  exec node src/index.ts "$@"
 fi
-exec node src/index.ts "$@"
+
+# ---- 7. the two processes --------------------------------------------------
+# The control plane and one peer runner, started together and stopped together.
+# Only under dev auth: site scope is a trust grant, and the credential the agent
+# below reads is one the control plane only mints when the dev admin bypass has
+# already handed the same reader admin over every project.
+node src/index.ts &
+SERVER_PID=$!
+RUNNER_PID=""
+
+stop_all() {
+  trap - INT TERM EXIT
+  if [ -n "$RUNNER_PID" ]; then kill "$RUNNER_PID" 2>/dev/null || true; fi
+  kill "$SERVER_PID" 2>/dev/null || true
+  wait "$SERVER_PID" 2>/dev/null || true
+  if [ -n "$RUNNER_PID" ]; then wait "$RUNNER_PID" 2>/dev/null || true; fi
+}
+trap 'stop_all; exit 0' INT TERM
+trap stop_all EXIT
+
+if [ "$PLAYTEST_AUTH" = dev ]; then
+  mkdir -p "$RUNNER_WORK_DIR"
+  (
+    # The agent's own backoff covers a control plane that is not listening yet,
+    # but not a credential that does not exist yet — reading one is a startup
+    # error by design, so the file is what this waits for. The server writes it
+    # before it listens, so on every boot after the first this returns at once.
+    child=""
+    trap 'if [ -n "${child:-}" ]; then kill "$child" 2>/dev/null || true; fi; exit 0' INT TERM
+    tries=0
+    while [ ! -s "$RUNNER_CRED_FILE" ] && [ "$tries" -lt 120 ]; do
+      kill -0 "$SERVER_PID" 2>/dev/null || exit 0
+      sleep 0.5
+      tries=$((tries + 1))
+    done
+    if [ ! -s "$RUNNER_CRED_FILE" ]; then
+      echo "hosted-server: the control plane never wrote $RUNNER_CRED_FILE, so no runner started — launches will sit unclaimed." >&2
+      exit 0
+    fi
+    while kill -0 "$SERVER_PID" 2>/dev/null; do
+      node "$REPO/packages/platform/runner-agent/src/cli.ts" pool \
+        --server "http://$HOST:$PORT" \
+        --credential-file "$RUNNER_CRED_FILE" \
+        --work-dir "$RUNNER_WORK_DIR" &
+      child=$!
+      wait "$child" 2>/dev/null || true
+      child=""
+      kill -0 "$SERVER_PID" 2>/dev/null || exit 0
+      echo "hosted-server: the local runner stopped — restarting it in 2s" >&2
+      sleep 2
+    done
+  ) &
+  RUNNER_PID=$!
+fi
+
+# The server is the process this script IS: when it exits, so does everything.
+status=0
+wait "$SERVER_PID" || status=$?
+stop_all
+exit "$status"

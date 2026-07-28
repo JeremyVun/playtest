@@ -1,22 +1,33 @@
 # Self-hosted runners
 
 A **runner** is the machine your suites actually execute on. Playtest's hosted
-control plane stores suites, snapshots, runs, and findings; it does not touch
-your app. That is what makes a self-hosted runner useful: it runs where the
-target already is — your laptop, a build box, a CI job — so a suite can reach an
-app on `localhost`, an iOS Simulator or Android emulator, a device, or anything
-behind your firewall.
+control plane stores suites, snapshots, runs, and findings; it never touches your
+app. That is what makes a self-hosted runner useful: it runs where the target
+already is — your laptop, a build box, a CI job — so a suite can reach an app on
+`localhost` or anything behind your firewall.
 
 Everything the runner does is **outbound**. It dials the control plane over
-HTTPS, advertises labels, and asks for work. Nothing ever connects to it, and
-you never open a port, publish a tunnel, or hand out a database credential.
+HTTPS, advertises labels, and asks for work. Nothing ever connects to it, and you
+never open a port, publish a tunnel, or hand out a database credential.
 
-This page is the whole walkthrough: register, start, label, launch — once for a
-mobile suite whose app binary is a file on your disk, once for an API suite that
-resolves to `http://127.0.0.1:…` on that same machine.
+There is exactly **one placement model**, and it is this one. A launch writes a
+board entry and stops; a runner claims it. Your laptop, a CI job, and a fleet
+machine all arrive the same way, which means the thing you debug locally is the
+thing that runs in CI.
 
-Deployments select pull-based placement with `PLAYTEST_DISPATCH=pool`. The
-contract for the claim board, credentials, labels, and loss handling lives in
+```text
+launch ──▶ claim board          runner
+             (a dispatch row)     │
+                    ▲             │ 1. poll   — long-poll for offers
+                    └─────────────┤ 2. claim  — exactly one runner wins
+                                  │ 3. exchange — credential ⇄ scoped bearer
+                                  ▼ 4. execute, report, complete
+```
+
+Claiming assigns work; **exchanging** authorizes it. A registration credential on
+its own cannot read a suite, a secret, or a snapshot — it can only take a job off
+the board and trade that claim for a short-lived bearer scoped to that one job.
+The contract for the board, credentials, labels, and loss handling is
 [`contracts/hosted.md`](../contracts/hosted.md#runner-pool).
 
 ## 1. Register the runner
@@ -26,22 +37,20 @@ In the console: **Settings → Runners → Register runner**.
 - **Name** — how this machine appears in run history (`adas-laptop`). Unique
   among the project's live runners; revoking one frees its name again.
 - **Labels** — what this machine can do (`macos, ios-sim`). Labels are routing,
-  not authority: an environment asking for `ios-sim` places its runs on a runner
-  advertising `ios-sim`. Leave blank and this runner accepts any of the
-  project's runs. A label is spelled with letters, digits, `.`, `_` and `-` —
-  the field is comma separated, so a comma inside a label would be two labels,
-  and the start command below is pasted straight into a shell.
+  not authority: a ring asking for `ios-sim` places its runs on a runner
+  advertising `ios-sim`. Leave blank and this runner accepts any of the project's
+  runs. A label is spelled with letters, digits, `.`, `_` and `-` — the field is
+  comma separated, so a comma inside a label would be two labels, and the start
+  command below is pasted straight into a shell.
 
 Registering mints a credential and shows it **once**, with the exact command to
-start the runner. Playtest stores only a hash of the credential and cannot show
-it again; if you lose it, revoke that runner and register it again under the
-same name.
+start the runner. Playtest stores only a hash and cannot show it again; if you
+lose it, revoke that runner and register it again under the same name.
 
-The section is only there on a deployment that runs `PLAYTEST_DISPATCH=pool` —
-elsewhere there is no claim board for a runner to poll. Once a runner exists,
-its row says whether it is here right now (online, running a job with a link to
-that run, offline with how long the silence has been, or never started), kept
-current by the event feed rather than by a page that reloads itself.
+A registered runner's row says whether it is here right now — online, running a
+job with a link to that run, offline with how long the silence has been, or never
+started — kept current by the event feed rather than by a page that reloads
+itself.
 
 ## 2. Start it on that machine
 
@@ -65,7 +74,8 @@ umask 077 && printf 'ptr_…' > ~/.playtest/runner-credential
 ```
 
 `npm link --workspace=@playtest/runner-agent` puts `runner-agent` on your PATH if
-you prefer the bare command.
+you prefer the bare command. `pool` is the only mode there is: the agent is a
+long-lived process, and nothing ever starts it per job.
 
 The runner states what it is before it does anything:
 
@@ -75,7 +85,7 @@ Playtest runner "adas-laptop" — project acme
   labels     macos, ios-sim
   isolation  process — cases run directly on this machine
   work dir   /tmp/playtest-runner
-waiting for work — launch a run against an environment whose runner labels this runner advertises
+waiting for work — launch a run against a ring whose runner labels this runner advertises
 ```
 
 If that banner names the wrong project, the wrong labels, or never appears, stop
@@ -97,87 +107,90 @@ and exits. Restarting a runner that was mid-group resumes the same group.
 
 A credential passed as an argument is refused, not accepted quietly.
 
-## 3. Point an environment at it
+## 3. Route work to it with ring labels
 
-An **environment** is the deployment ring a run happens in: its credentials, its
-runner pool, and whether discovery is allowed. Under **Settings → Test targets →
-New environment**, set **Runner labels** to the labels that should route work to
-this machine (`macos, ios-sim`) — the same alphabet the runner's own labels use.
-A run is placed on a runner advertising *every* label its environment asks for;
-an environment with no labels runs anywhere in the project.
+A **ring** is one deployment of one application — its URL, its authorization, and
+its placement. Under **Applications → (your application) → (your ring)**, set
+**Runner labels** to the labels that should route work here (`macos, ios-sim`),
+using the same alphabet the runner's own labels use. A run is placed on a runner
+advertising *every* label its ring asks for; a ring with no labels runs anywhere
+in the project.
 
-## 4. Mobile: an app binary on your own disk
+A web or API ring also carries a **base URL, evaluated from the claiming
+runner's network position**. `http://127.0.0.1:4173` therefore means "on the
+runner's own machine" — start the service there, point the ring at it, and
+launch. The control plane never resolves that address; the runner does, because
+it is the one making the request. Nothing about that URL lives on the runner.
 
-Build the app as you normally would and note the absolute path of the
-`.app`/`.apk`. In the console it is three fields: **Settings → Test targets →
-Edit → Mobile device** takes the platform, that path, and the Appium server. A
-brand-new suite is asked the same question on its own page — "where does this
-app run?" offers the three sources and can create the environment for you.
+## 4. Local development: the peer runner
 
-The fields write this, which the **Advanced → Config JSON** disclosure shows
-and still accepts directly (they are two views of one document):
+`npm run hosted` starts the control plane, the console, **and one runner beside
+them**. It is not a special mode: it registers, polls, claims, and exchanges like
+every other runner on this page. Killing the difference between "how local
+placement works" and "how real placement works" is the point.
 
-```json
-{
-  "app": {
-    "platform": "ios",
-    "app": "/Users/ada/build/Todos.app",
-    "device": "iPhone 16",
-    "appium_url": "http://127.0.0.1:4723"
-  }
-}
-```
+What it does for you, under `PLAYTEST_AUTH=dev` only:
 
-That path is read **on the runner**, so it is your own file — nothing is
-uploaded, and no size cap applies. Start Appium on that machine, then launch the
-suite from the console against this environment: the run executes on your own
-simulator and the trajectory lands in the console like any hosted run.
+- the control plane ensures one **site-scoped** runner named `local` at boot and
+  writes its credential to `$PLAYTEST_DATA_DIR/local-runner.credential`, mode
+  `0600`. It is idempotent — a second boot reuses the same runner;
+- `scripts/hosted-server.sh` starts `runner-agent pool` against that credential
+  file, restarts it if it stops, and stops it when the server stops. The agent's
+  own backoff covers the boot order;
+- it seeds `$PLAYTEST_DATA_DIR/runner.yaml`, a commented placeholder for the
+  machine-local facts a mobile run will need. Nothing reads it yet (see
+  [Mobile](#7-mobile-coming-with-runner-configuration)).
 
-The suite's own app path (Suite settings → **App binary**) means something
-narrower: a small fixture app committed inside the suite. Real builds are far
-past the suite upload caps, which is why the environment is the usual answer.
+A first web run locally is therefore: create an application, create a ring
+`local` with `http://127.0.0.1:4173`, launch. No runner file is touched and no
+credential is copied anywhere.
 
-### Or upload the build to the environment
+If a launch sits unclaimed, check that the agent is up: the server's own log
+names the credential file it wrote, and the agent prints its banner on the same
+terminal.
 
-A runner that is not the machine that produced the build — a cloud runner, a
-device farm, a colleague's laptop — gets the binary from the environment
-instead. **Settings → Test targets → Edit → Mobile device → Upload a build**
-does it from the console, states the deployment's size cap before you pick a
-file, and replaces or removes what is stored. The same thing over the API:
+## 5. Site-scoped runners
 
-```sh
-# an iOS .app is a directory, so zip it first (zip -y keeps symlinks and modes)
-cd /Users/ada/build && zip -q -r -y /tmp/Todos.app.zip Todos.app
+Runner scope is a **trust** decision, not a capability one. A claiming runner
+receives suite files and secrets and executes suite hooks, so which projects may
+reach a machine has to be explicit. Project scope is the default and the only
+scope a project developer can grant.
 
-curl -X PUT \
-  -H "Authorization: Bearer $PLAYTEST_TOKEN" \
-  --data-binary @/tmp/Todos.app.zip \
-  "$PLAYTEST_SERVER/api/v1/environments/$ENV_ID/app-artifact?filename=Todos.app.zip"
-```
+A **site-scoped** runner is one registration with no project: it polls one board
+across every project on the deployment and claims under exactly the same rules.
+It is a deliberate site-operator grant, never a default, and it exists so a
+single-operator deployment — a laptop running `npm run hosted`, above — does not
+have to re-register a runner per project.
 
-Leave `app` out of the environment's config JSON when you do; the ring still
-names `platform`, `device` and `appium_url`. A launch pins the upload's hash, so
-pushing a new build never changes a run already in flight, and the runner
-verifies and unpacks it into its own workspace before the run starts. Uploads
-are capped by the deployment (`PLAYTEST_APP_ARTIFACT_MAX_MB`, 512 MiB by
-default), and what an archive unpacks to is capped on the runner
-(`PLAYTEST_RUNNER_MAX_UNPACKED_MB`, 4096 by default). `DELETE` on the same URL
-clears it. In the console, uploading and removing a build apply immediately —
-they are not part of the form's Save.
+What stays true whatever the scope:
 
-The launch preview says which of the three sources — the suite's
-`app.envs.<name>.app`, the environment (artifact or path), the suite's
-top-level `app` — actually supplies the binary, and a launch whose binary is a
-suite path the snapshot does not hold is refused before anything runs.
+- the exchanged bearer is scoped to the **claimed dispatch's** project, like any
+  other. A site runner executing project A's group cannot read project B's;
+- one active claim, globally. Holding project A's group is what stops it taking
+  project B's;
+- revocation refuses future polls, claims and exchanges in every project at once,
+  while a group already exchanged finishes under the bearer it holds;
+- a project's Runners page lists applicable site runners **read-only**. A project
+  developer cannot revoke one, and a claim belonging to another project shows
+  only as busy — never that project's run or dispatch identifiers.
 
-## 5. Local API: a target on `127.0.0.1`
+The lifecycle is three routes, gated to a **site administrator** — an authority
+above any single project, which today exists only as the `PLAYTEST_AUTH=dev`
+admin bypass:
 
-Start the service on the runner's machine and set the environment's fallback
-URL — or the suite's own URL for this environment — to `http://127.0.0.1:4180`.
-Launch from the console. The control plane never resolves that address; the
-runner does, because it is the one making the request.
+| Route | Meaning |
+|---|---|
+| `POST /api/v1/site/runners` `{name, labels?}` | Register; returns the one-time credential. |
+| `GET /api/v1/site/runners` | List, with what each is working on. |
+| `DELETE /api/v1/site/runners/:id` | Revoke. |
 
-The same is true for a web suite pointed at a `localhost` dev server.
+A production deployment provisions no site administrator yet, so it has no site
+runners: register project-scoped runners there. Console CRUD, per-project grants,
+and production site-admin provisioning are the runner-trust follow-up.
+
+Site runners poll across projects on the board's one-second rescan rather than
+its per-project wake, so an idle cross-project poll can take up to a second
+longer to notice new work. That is an accepted, bounded cost.
 
 ## 6. CI: a runner that lives for one pipeline run
 
@@ -213,26 +226,26 @@ env:
   PLAYTEST_LABEL: ci-run-${{ github.run_id }}
 ```
 
-That label is unique to one pipeline run. The job's runner advertises it, and
-the job's launch pins it:
+That label is unique to one pipeline run. The job's runner advertises it, and the
+job's launch pins it:
 
 ```jsonc
-{ "suite_id": "…", "environment_id": "…", "runner_labels": ["ci-run-1234567"] }
+{ "suite_id": "…", "ring_id": "…", "runner_labels": ["ci-run-1234567"] }
 ```
 
-`runner_labels` on a launch overrides the environment's labels for that run
-group only, so one shared CI environment serves every pull request.
+`runner_labels` on a launch overrides the ring's labels for that run group only,
+so one shared CI ring serves every pull request.
 
 **Without it, concurrent pull requests test each other's builds.** Two jobs
 running at once, both advertising a shared label like `ci`, are two runners
 eligible for both jobs. The board hands each job to whichever runner asks first,
-so PR #41's suite can execute on PR #42's machine — against #42's build, on
-#42's `localhost`. Nothing errors. The run is green, and it is green about the
-wrong code. A per-run label makes each job's work claimable by exactly one
-runner: its own.
+so PR #41's suite can execute on PR #42's machine — against #42's build, on #42's
+`localhost`. Nothing errors. The run is green, and it is green about the wrong
+code. A per-run label makes each job's work claimable by exactly one runner: its
+own.
 
 The pin travels with the group, so a retry of that run is placed the same way
-even if the environment changed since.
+even if the ring changed since.
 
 ### What the deployment has to allow
 
@@ -253,32 +266,62 @@ One secret remains a secret: launching a run needs a project API token with the
 `editor` role, because OIDC registers a runner — it does not authorize starting
 work. Scope that token to the one project the pipeline gates.
 
-## 7. When it does not work
+## 7. Mobile: coming with runner configuration
+
+Hosted mobile runs are being rebuilt around a runner-side configuration file.
+The reason is the boundary this whole page is about: a mobile build's path on
+disk, the Appium server that drives it, and the device it targets are facts only
+the runner can know, and no platform record should ever hold them. A ring for a
+mobile application therefore carries no URL, no binary, and no device — the
+claiming runner supplies all three.
+
+Until that lands, a mobile launch is refused at the console with a message saying
+so, and the seeded `runner.yaml` is a placeholder. The runner will read its
+bindings from that file, keyed by the immutable application and ring keys you see
+in the console, and will start and supervise Appium itself.
+
+## 8. Revoking a runner
+
+**Settings → Runners → Revoke** for a project runner;
+`DELETE /api/v1/site/runners/:id` for a site one. Either way revocation is a
+timestamp, not a delete: the row and its history stay, so a run placed on that
+machine still reads.
+
+From that moment its future polls, claims and exchanges are refused. A group it
+had **already exchanged** keeps running under the short-lived bearer it holds,
+heartbeats included — revoking never kills work you are waiting on.
+
+## 9. When it does not work
 
 | What you see | What it means |
 |---|---|
-| The run sits in `queued`, then fails naming labels | Nothing that advertises those labels checked in. Compare the environment's runner labels with the runner's banner. |
-| `no runner has checked in … this project has none registered` | The deployment places runs on self-hosted runners and this project has none. Register one. |
+| The run sits in `queued`, then fails naming labels | Nothing that advertises those labels checked in. Compare the ring's runner labels with the runner's banner. |
+| `no runner has checked in … this project has none registered` | Nothing is polling for this project. Register and start one — or, locally, check that `npm run hosted` still has its peer runner up. |
 | `runner "…" claimed this run and stopped checking in` | The runner process died, slept, or lost the network mid-group. The story is reported as an infrastructure failure and the remainder is placed once more. |
-| `this runner credential is not registered` | The credential was revoked or belongs to another deployment. Register the runner again. |
+| `this runner credential is not registered` | The credential was revoked, or belongs to another deployment or another data root. Register the runner again. |
 | The runner is quiet after `waiting for work` | That is the steady state. It prints when it claims something. |
-| A CI registration answers `503 not_configured` | The deployment has not named the repository allowed to register runners (`PLAYTEST_POOL_OIDC_REPOSITORY`), or it does not run pool placement at all. |
+| `skipping run group …: this runner has no configuration binding …` | The offer needs a machine-local binding this runner does not hold. Another runner can claim it; the offer is untouched. |
+| A CI registration answers `503 not_configured` | The deployment has not named the repository allowed to register runners (`PLAYTEST_POOL_OIDC_REPOSITORY`). |
 | `registered for one CI job and that registration expired` | The ephemeral credential outlived its window (`PLAYTEST_POOL_OIDC_TTL_S`). Register again from the job that needs it; a group already running is unaffected. |
+| `this action needs a site administrator` | Site-scoped runners exist only under `PLAYTEST_AUTH=dev` today. Register a project-scoped runner instead. |
 
 ## Security notes
 
 - The credential proves identity and nothing else. Claiming assigns work;
   exchanging authorizes it. A credential alone cannot read a snapshot or post a
-  report, and it is scoped to one project.
-- Labels are untrusted routing input. A runner can only ever reach jobs in the
-  project its credential is registered to.
-- Revoking a runner refuses its future check-ins and claims immediately; a group
-  already in flight finishes under the short-lived token it was already issued,
-  heartbeats included, so revoking never kills work you are waiting on.
-- An ephemeral CI registration is a smaller blast radius again: it is minted
-  from a signed GitHub token rather than a stored secret, it expires with the
-  job, and it never appears in the standing runner list. Its verified
-  provenance — repository, workflow, ref, commit, run — is recorded beside it.
+  report, and the bearer it exchanges for opens exactly one run group or mint.
+- Labels are untrusted routing input. They route and never authorize: a runner
+  can only ever reach the jobs its credential's scope already allows.
+- Site scope is a deliberate grant, never a default, because a site runner
+  receives every project's suite files and secrets. It is administered above the
+  projects, and no project developer can create or revoke one.
+- Revoking a runner refuses its future check-ins, claims and exchanges
+  immediately; a group already in flight finishes under the token it was already
+  issued.
+- An ephemeral CI registration is a smaller blast radius again: it is minted from
+  a signed GitHub token rather than a stored secret, it expires with the job, and
+  it never appears in the standing runner list. Its verified provenance —
+  repository, workflow, ref, commit, run — is recorded beside it.
 - Isolation is stated, not laundered. A persistent shared machine running
   `--isolation process` is visible as such on the runs it produced, so a reviewer
   can see what produced the evidence. Use `--isolation container` for a runner

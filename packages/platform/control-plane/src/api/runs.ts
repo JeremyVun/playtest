@@ -333,9 +333,9 @@ export async function cancelGroup(ctx: HostedDynamic) {
       ORDER BY attempt DESC`,
     [group.id],
   );
-  for (const d of rows) {
-    if (d.workflow_run_id) await ctx.github.cancelRun(d.workflow_run_id);
-  }
+  // Nothing can be called: the mark on the claim IS the channel, and the runner
+  // observes it at its next heartbeat.
+  for (const d of rows) await ctx.board.cancelDispatch(d.id);
   await ctx.db.withTx(async (tx: HostedDynamic) => {
     await tx.query(`UPDATE run_groups SET status = 'canceled', updated_at = now() WHERE id = $1`, [group.id]);
     await tx.query(

@@ -1,42 +1,21 @@
-// R0: the runner registry and the claim board, driven end to end by a SCRIPTED
-// claimer — the real runner agent grows its pool mode in R1, and none of this
-// needs it. Every request below is the claimer dialling out, because the control
+// The runner registry and the claim board, driven end to end by a SCRIPTED
+// claimer. Every request below is the claimer dialling out, because the control
 // plane never connects to a runner.
 //
 // Covered here: register → poll → a claim race two runners enter and one wins →
 // exchange → the existing executor protocol → report → complete; a revoked
-// credential refused at poll, claim and exchange; label subset matching; a
-// `mint` claim on the same board; the unclaimed timeout failing a group with an
-// actionable message; a heartbeat-stale claim reconciling to infra failure with
-// bounded re-dispatch; and cancellation observed at the heartbeat.
+// credential refused at poll, claim and exchange; label subset matching; the
+// bounded offer page and its `skip` list (starvation past the page cap, an
+// all-incompatible page holding the long-poll, and skip expiry); a `mint` claim
+// on the same board; the unclaimed timeout failing a group with an actionable
+// message; a heartbeat-stale claim reconciling to infra failure with bounded
+// re-dispatch; and cancellation observed at the heartbeat.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { withApp, createTarget, loadSuiteDir, REPO_ROOT } from "./helpers.ts";
+import { claimer } from "./exec-helpers.ts";
 import { writeTar } from "../../src/suites/tar.ts";
 import { reconcileDispatches } from "../../src/dispatch/reconciler.ts";
-
-const POOL = { PLAYTEST_DISPATCH: "pool" };
-
-/** A scripted self-hosted runner: nothing but its credential and fetch. */
-function claimer(base: HostedDynamic, credential: HostedDynamic) {
-  const call = async (method: HostedDynamic, path: HostedDynamic, body?: HostedDynamic) => {
-    const res = await fetch(`${base}/api/v1${path}`, {
-      method,
-      headers: {
-        authorization: `Bearer ${credential}`,
-        ...(body === undefined ? {} : { "content-type": "application/json" }),
-      },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
-    return { status: res.status, body: await res.json().catch(() => null) };
-  };
-  return {
-    poll: (query = "") => call("GET", `/runner/pool/claims${query}`),
-    claim: (dispatchId: HostedDynamic) => call("POST", `/runner/pool/claims/${dispatchId}`, {}),
-    heartbeat: (dispatchId: HostedDynamic) => call("POST", `/runner/pool/claims/${dispatchId}/heartbeat`, {}),
-    exchange: (body: HostedDynamic) => call("POST", `/runner/exchange`, body),
-  };
-}
 
 /** A project with the todos suite committed and one labelled ring. */
 async function setUp(api: HostedDynamic, { key, labels = ["macos"] }: HostedDynamic) {
@@ -89,7 +68,7 @@ test("pool: register, poll, race one winner, exchange, execute, report, complete
     // Nothing on the board yet: a held read returns an empty offer, promptly.
     const idle = await one.poll("?wait=1");
     assert.equal(idle.status, 200);
-    assert.equal(idle.body.claim, null);
+    assert.deepEqual(idle.body.offers, []);
 
     const launched = await launch(api, { project, suite, ring });
     assert.equal(launched.status, 200, JSON.stringify(launched.body));
@@ -101,12 +80,26 @@ test("pool: register, poll, race one winner, exchange, execute, report, complete
     assert.equal((await api.get(`/run-groups/${groupId}`)).body.status, "queued");
 
     const offered = await one.poll("?wait=true");
-    assert.equal(offered.body.claim.kind, "group");
-    assert.equal(offered.body.claim.run_group_id, groupId);
-    assert.deepEqual(offered.body.claim.labels, ["macos"]);
-    const dispatchId = offered.body.claim.dispatch_id;
+    assert.equal(offered.body.offers.length, 1);
+    const [entry] = offered.body.offers;
+    assert.equal(entry.kind, "group");
+    assert.equal(entry.run_group_id, groupId);
+    assert.deepEqual(entry.labels, ["macos"]);
+    // Every offer names its project on the envelope and carries the attempt's
+    // non-secret target block — the contractual shape (gate 9).
+    assert.equal(entry.project_id, project.id);
+    assert.equal(entry.project_key, project.key);
+    assert.deepEqual(Object.keys(entry.target).sort(), [
+      "application_id", "application_key", "base_url", "driver", "platform", "ring_id", "ring_key",
+    ]);
+    assert.equal(entry.target.application_key, "todos");
+    assert.equal(entry.target.ring_key, "laptop");
+    assert.equal(entry.target.driver, "web");
+    assert.equal(entry.target.platform, null);
+    assert.equal(entry.target.base_url, "http://127.0.0.1:9");
+    const dispatchId = entry.dispatch_id;
     // Both runners are eligible and both see the same offer.
-    assert.equal((await two.poll()).body.claim.dispatch_id, dispatchId);
+    assert.equal((await two.poll()).body.offers[0].dispatch_id, dispatchId);
 
     const [a, b] = await Promise.all([one.claim(dispatchId), two.claim(dispatchId)]);
     const winners: HostedDynamic[] = [a, b].filter((r) => r.status === 200);
@@ -130,7 +123,7 @@ test("pool: register, poll, race one winner, exchange, execute, report, complete
       "the claim emits the provisioning event",
     );
     // The loser goes back to polling and finds nothing left to take.
-    assert.equal((await loser.poll()).body.claim, null);
+    assert.deepEqual((await loser.poll()).body.offers, []);
 
     // Claiming assigns; it grants nothing. Only the exchange authorizes.
     const exchanged = await winner.exchange({ dispatch_id: dispatchId, isolation: "process" });
@@ -193,7 +186,7 @@ test("pool: register, poll, race one winner, exchange, execute, report, complete
     for (const expected of ["runner.registered", "runner.claimed", "run_group.completed"]) {
       assert.ok(actions.includes(expected), `${expected} is audited (${actions.join(",")})`);
     }
-  }, POOL);
+  });
 });
 
 test("pool: a re-exchange does not orphan the earlier bearer mid-group", async () => {
@@ -203,7 +196,7 @@ test("pool: a re-exchange does not orphan the earlier bearer mid-group", async (
     const one = claimer(base, runner.credential);
     const launched = await launch(api, { project, suite, ring });
     const groupId = launched.body.run_group.id;
-    const dispatchId = (await one.poll()).body.claim.dispatch_id;
+    const dispatchId = (await one.poll()).body.offers[0].dispatch_id;
     assert.equal((await one.claim(dispatchId)).status, 200);
 
     // A crash-resumed runner exchanges again for the claim it already holds.
@@ -223,7 +216,7 @@ test("pool: a re-exchange does not orphan the earlier bearer mid-group", async (
       const body = await spec.json();
       assert.equal(body.ring.key, ring.key, "the spec carries the attempt's ring snapshot");
     }
-  }, POOL);
+  });
 });
 
 test("pool: a revoked credential is refused at poll, claim, and exchange", async () => {
@@ -235,7 +228,7 @@ test("pool: a revoked credential is refused at poll, claim, and exchange", async
     const keeper = claimer(base, live.credential);
 
     const groupId = (await launch(api, { project, suite, ring })).body.run_group.id;
-    const dispatchId = (await keeper.poll()).body.claim.dispatch_id;
+    const dispatchId = (await keeper.poll()).body.offers[0].dispatch_id;
 
     assert.equal((await api.del(`/projects/${project.key}/runners/${runner.id}`)).status, 204);
     // Revoking twice is a no-op, not an error.
@@ -261,7 +254,7 @@ test("pool: a revoked credential is refused at poll, claim, and exchange", async
     // A revoked runner stays listed with its revocation, so history reads.
     const listed = await api.get(`/projects/${project.key}/runners`);
     assert.ok(listed.body.items.find((r: HostedDynamic) => r.id === runner.id).revoked_at);
-  }, POOL);
+  });
 });
 
 test("pool: revoking mid-group refuses new work and lets the group already exchanged finish", async () => {
@@ -271,7 +264,7 @@ test("pool: revoking mid-group refuses new work and lets the group already excha
     const runner = claimer(base, registered.credential);
 
     const groupId = (await launch(api, { project, suite, ring })).body.run_group.id;
-    const dispatchId = (await runner.poll()).body.claim.dispatch_id;
+    const dispatchId = (await runner.poll()).body.offers[0].dispatch_id;
     assert.equal((await runner.claim(dispatchId)).status, 200);
     const exchanged = await runner.exchange({ dispatch_id: dispatchId, isolation: "process" });
     assert.equal(exchanged.status, 200, JSON.stringify(exchanged.body));
@@ -332,7 +325,7 @@ test("pool: revoking mid-group refuses new work and lets the group already excha
     const final = await api.get(`/run-groups/${groupId}`);
     assert.equal(final.body.status, "done", "the contract's promise: a group already exchanged finishes");
     assert.equal(final.body.runs[0].status, "pass");
-  }, POOL);
+  });
 });
 
 test("pool: a revoked runner's name is free again, and two live runners may not share one", async () => {
@@ -356,7 +349,7 @@ test("pool: a revoked runner's name is free again, and two live runners may not 
     const listed = await api.get(`/projects/${project.key}/runners`);
     assert.deepEqual(listed.body.items.map((r: HostedDynamic) => r.name), ["adas-laptop", "adas-laptop"]);
     assert.equal(listed.body.items.filter((r: HostedDynamic) => r.revoked_at).length, 1);
-  }, POOL);
+  });
 });
 
 test("pool: a label outside the safe charset is refused where it is written", async () => {
@@ -387,7 +380,7 @@ test("pool: a label outside the safe charset is refused where it is written", as
     const smuggled = await runner.poll("?labels=ios%20sim");
     assert.equal(smuggled.status, 400, JSON.stringify(smuggled.body));
     assert.match(smuggled.body.error.message, /may use only letters, digits/);
-  }, POOL);
+  });
 });
 
 test("pool: label matching is subset semantics, oldest first, project-scoped", async () => {
@@ -411,38 +404,38 @@ test("pool: label matching is subset semantics, oldest first, project-scoped", a
 
     const labelled = (await launch(api, { project, suite, ring })).body.run_group.id;
     // The partial runner advertises a subset of what the job needs: no offer.
-    assert.equal((await partial.poll()).body.claim, null);
-    assert.equal((await outsider.poll()).body.claim, null);
+    assert.deepEqual((await partial.poll()).body.offers, []);
+    assert.deepEqual((await outsider.poll()).body.offers, []);
     const offer = await full.poll();
-    assert.equal(offer.body.claim.run_group_id, labelled);
+    assert.equal(offer.body.offers[0].run_group_id, labelled);
 
     // An unlabelled job matches any runner in the project, and the board is
     // served oldest first — the labelled group was launched first.
     const unlabelled = (await launch(api, { project, suite, ring: anyRing })).body.run_group.id;
-    assert.equal((await partial.poll()).body.claim.run_group_id, unlabelled);
-    assert.equal((await full.poll()).body.claim.run_group_id, labelled, "oldest eligible entry first");
+    assert.equal((await partial.poll()).body.offers[0].run_group_id, unlabelled);
+    assert.equal((await full.poll()).body.offers[0].run_group_id, labelled, "oldest eligible entry first");
 
     // Labels are advertised at check-in and confer no authority: re-advertising
     // moves which jobs a runner matches, never which project it can reach.
     const readvertised = await partial.poll("?labels=macos,ios-sim");
-    assert.equal(readvertised.body.claim.run_group_id, labelled);
+    assert.equal(readvertised.body.offers[0].run_group_id, labelled);
     assert.deepEqual(readvertised.body.runner.labels, ["macos", "ios-sim"]);
-    assert.equal((await outsider.poll("?labels=macos,ios-sim")).body.claim, null);
+    assert.deepEqual((await outsider.poll("?labels=macos,ios-sim")).body.offers, []);
 
     // One runner takes one group at a time: while it holds a claim the board
     // offers it nothing and hands back what it is already executing, which is
     // also how an agent restarted mid-group finds its work again.
-    const labelledDispatch = readvertised.body.claim.dispatch_id;
+    const labelledDispatch = readvertised.body.offers[0].dispatch_id;
     assert.equal((await full.claim(labelledDispatch)).status, 200);
     const busy = await full.poll();
-    assert.equal(busy.body.claim, null);
+    assert.deepEqual(busy.body.offers, []);
     assert.equal(busy.body.current.run_group_id, labelled);
-    const greedy = await full.claim((await partial.poll()).body.claim.dispatch_id);
+    const greedy = await full.claim((await partial.poll()).body.offers[0].dispatch_id);
     assert.equal(greedy.status, 409);
     assert.match(greedy.body.error.message, /one group at a time/);
     // Re-claiming what it already holds is idempotent, not a lost race.
     assert.equal((await full.claim(labelledDispatch)).status, 200);
-  }, POOL);
+  });
 });
 
 test("pool: a mint dispatch is served on the same board and exchanges to a mint token", async () => {
@@ -468,11 +461,17 @@ test("pool: a mint dispatch is served on the same board and exchanges to a mint 
     assert.equal(minted.status, 202, JSON.stringify(minted.body));
 
     const offer = await runner.poll("?wait=true");
-    assert.equal(offer.body.claim.kind, "mint", "session minting places through the same board");
-    assert.equal(offer.body.claim.mint_claim_id, minted.body.mint.claim_id);
-    assert.equal(offer.body.claim.run_group_id, null);
+    const entry = offer.body.offers[0];
+    assert.equal(entry.kind, "mint", "session minting places through the same board");
+    assert.equal(entry.mint_claim_id, minted.body.mint.claim_id);
+    assert.equal(entry.run_group_id, null);
+    // A project-wide provider mints with empty labels and a null target — and
+    // its project is still named on the envelope.
+    assert.deepEqual(entry.labels, []);
+    assert.equal(entry.target, null);
+    assert.equal(entry.project_key, project.key);
 
-    const dispatchId = offer.body.claim.dispatch_id;
+    const dispatchId = entry.dispatch_id;
     assert.equal((await runner.claim(dispatchId)).status, 200);
     const exchanged = await runner.exchange({ dispatch_id: dispatchId, isolation: "process" });
     assert.equal(exchanged.status, 200, JSON.stringify(exchanged.body));
@@ -486,7 +485,7 @@ test("pool: a mint dispatch is served on the same board and exchanges to a mint 
       headers: { authorization: `Bearer ${exchanged.body.token}` },
     });
     assert.equal(wrongScope.status, 403, "a mint token is not a group token");
-  }, POOL);
+  });
 });
 
 test("pool: a job nothing claims fails the group with the labels named, and is not re-posted", async () => {
@@ -511,7 +510,7 @@ test("pool: a job nothing claims fails the group with the labels named, and is n
     assert.equal(dispatches.rows.length, 1, "no second attempt");
     assert.equal(dispatches.rows[0].status, "reconciled_dead");
     assert.match(dispatches.rows[0].error, /jeremys-mac/);
-  }, { ...POOL, PLAYTEST_POOL_CLAIM_TIMEOUT_S: "0" });
+  }, { PLAYTEST_POOL_CLAIM_TIMEOUT_S: "0" });
 });
 
 test("pool: a claim that stops heartbeating is a dead executor, with one bounded re-dispatch", async () => {
@@ -519,7 +518,7 @@ test("pool: a claim that stops heartbeating is a dead executor, with one bounded
     const { project, suite, ring } = await setUp(api, { key: "pool6", labels: ["macos"] });
     const runner = claimer(base, (await register(api, project, { name: "adas-laptop", labels: ["macos"] })).credential);
     const groupId = (await launch(api, { project, suite, ring })).body.run_group.id;
-    const first = (await runner.poll()).body.claim.dispatch_id;
+    const first = (await runner.poll()).body.offers[0].dispatch_id;
     assert.equal((await runner.claim(first)).status, 200);
 
     // The heartbeat window is zero in this deployment, so the claim reads as
@@ -534,7 +533,7 @@ test("pool: a claim that stops heartbeating is a dead executor, with one bounded
     assert.equal(dispatches.rows[1].status, "requested");
     assert.deepEqual(dispatches.rows[1].labels, ["macos"], "the re-posted entry carries the same routing");
     // The board offers the second attempt to the same fleet.
-    assert.equal((await runner.poll()).body.claim.dispatch_id, dispatches.rows[1].id);
+    assert.equal((await runner.poll()).body.offers[0].dispatch_id, dispatches.rows[1].id);
 
     // Bounded: a second death fails the group instead of looping forever.
     assert.equal((await runner.claim(dispatches.rows[1].id)).status, 200);
@@ -543,7 +542,7 @@ test("pool: a claim that stops heartbeating is a dead executor, with one bounded
     const group = await api.get(`/run-groups/${groupId}`);
     assert.equal(group.body.status, "done");
     assert.equal(group.body.runs[0].status, "infra");
-  }, { ...POOL, PLAYTEST_POOL_HEARTBEAT_TIMEOUT_S: "0" });
+  }, { PLAYTEST_POOL_HEARTBEAT_TIMEOUT_S: "0" });
 });
 
 test("pool: cancellation reaches the runner at its next heartbeat", async () => {
@@ -551,7 +550,7 @@ test("pool: cancellation reaches the runner at its next heartbeat", async () => 
     const { project, suite, ring } = await setUp(api, { key: "pool7", labels: ["macos"] });
     const runner = claimer(base, (await register(api, project, { name: "adas-laptop", labels: ["macos"] })).credential);
     const groupId = (await launch(api, { project, suite, ring })).body.run_group.id;
-    const dispatchId = (await runner.poll()).body.claim.dispatch_id;
+    const dispatchId = (await runner.poll()).body.offers[0].dispatch_id;
     assert.equal((await runner.claim(dispatchId)).status, 200);
     assert.equal((await runner.heartbeat(dispatchId)).body.canceled, false);
 
@@ -564,5 +563,120 @@ test("pool: cancellation reaches the runner at its next heartbeat", async () => 
     assert.equal(beat.status, 200);
     assert.equal(beat.body.canceled, true, "the runner learns to tear down on its own next beat");
     assert.equal((await api.get(`/run-groups/${groupId}`)).body.status, "canceled");
-  }, POOL);
+  });
+});
+
+// ---------------------------------------------------------- the offer page
+
+/**
+ * Post `n` extra board entries directly, oldest first, so a page cap can be
+ * exceeded without launching more suites than this fixture has. They are real
+ * `requested` rows with real labels — the board reads nothing else.
+ */
+async function fillBoard(app: HostedDynamic, project: HostedDynamic, n: number, { labels = [] }: HostedDynamic = {}) {
+  const ids: string[] = [];
+  const base = Date.now() - 60_000;
+  for (let i = 0; i < n; i++) {
+    const id = `filler-${String(i).padStart(3, "0")}`;
+    await app.db.query(
+      `INSERT INTO dispatches (id, project_id, kind, ref_id, attempt, status, labels, requested_at)
+         VALUES ($1, $2, 'mint', $3, 1, 'requested', $4, $5)`,
+      [id, project.id, `claim-${i}`, labels, new Date(base + i)],
+    );
+    ids.push(id);
+  }
+  return ids;
+}
+
+test("pool: the poll answers a bounded page, oldest first", async () => {
+  await withApp(async ({ api, base, app }: HostedDynamic) => {
+    const { project } = await setUp(api, { key: "page1", labels: [] });
+    const filler = await fillBoard(app, project, 12);
+    const runner = claimer(base, (await register(api, project, { name: "adas-laptop" })).credential);
+
+    const page = (await runner.poll()).body.offers;
+    // Small and fixed — the page exists to keep one unclaimable entry off the
+    // head of the board, not to become pagination.
+    assert.equal(page.length, 8, `a bounded page, not the whole board: ${page.length}`);
+    assert.deepEqual(page.map((o: HostedDynamic) => o.dispatch_id), filler.slice(0, 8), "oldest first");
+  });
+});
+
+test("pool: one unclaimable offer never starves a newer one, proven past the page cap", async () => {
+  await withApp(async ({ api, base, app }: HostedDynamic) => {
+    const { project, suite, ring } = await setUp(api, { key: "page2", labels: ["macos"] });
+    // More entries this runner will not take than one page can hold, all older
+    // than the group it CAN take: without the skip list the newer work would
+    // never appear on any page it is offered. (The launch goes first so the
+    // fillers do not count against this project's active-dispatch ceiling.)
+    const launched = await launch(api, { project, suite, ring });
+    assert.equal(launched.status, 200, JSON.stringify(launched.body));
+    const groupId = launched.body.run_group.id;
+    const filler = await fillBoard(app, project, 12);
+    const runner = claimer(base, (await register(api, project, { name: "adas-laptop", labels: ["macos"] })).credential);
+
+    const first = (await runner.poll()).body.offers;
+    assert.equal(first.length, 8);
+    assert.equal(first.some((o: HostedDynamic) => o.run_group_id === groupId), false,
+      "the newer compatible group is behind a full page of older entries");
+
+    // The runner names what it cannot take; the board excludes them.
+    let skip = first.map((o: HostedDynamic) => o.dispatch_id);
+    const second = (await runner.poll(`?skip=${skip.join(",")}`)).body.offers;
+    skip = [...skip, ...second.filter((o: HostedDynamic) => o.run_group_id !== groupId).map((o: HostedDynamic) => o.dispatch_id)];
+    const reachable = second.some((o: HostedDynamic) => o.run_group_id === groupId)
+      ? second
+      : (await runner.poll(`?skip=${skip.join(",")}`)).body.offers;
+    const wanted = reachable.find((o: HostedDynamic) => o.run_group_id === groupId);
+    assert.ok(wanted, `the newer compatible offer is reachable past the page cap: ${JSON.stringify(reachable.map((o: HostedDynamic) => o.dispatch_id))}`);
+    assert.equal((await runner.claim(wanted.dispatch_id)).status, 200);
+    // And the skipped entries are untouched: another runner takes them.
+    const other = claimer(base, (await register(api, project, { name: "spare-mini", labels: ["macos"] })).credential);
+    assert.equal((await other.poll()).body.offers[0].dispatch_id, filler[0]);
+  });
+});
+
+test("pool: an all-incompatible page HOLDS the long-poll instead of hot-looping", async () => {
+  await withApp(async ({ api, base, app }: HostedDynamic) => {
+    const { project } = await setUp(api, { key: "page3", labels: [] });
+    const filler = await fillBoard(app, project, 3);
+    const runner = claimer(base, (await register(api, project, { name: "adas-laptop" })).credential);
+
+    // Skipping everything on the board is not "nothing matched your labels" —
+    // the query comes back empty, and the hold is what keeps the agent from
+    // re-polling immediately in a tight loop against the database.
+    const started = Date.now();
+    const held = await runner.poll(`?wait=2&skip=${filler.join(",")}`);
+    assert.equal(held.status, 200);
+    assert.deepEqual(held.body.offers, []);
+    assert.ok(Date.now() - started >= 1_800, `the poll was held, not answered at once (${Date.now() - started}ms)`);
+
+    // The same poll without the skips answers immediately.
+    const immediate = Date.now();
+    assert.equal((await runner.poll("?wait=2")).body.offers.length, 3);
+    assert.ok(Date.now() - immediate < 1_000, "an offerable page never waits");
+  });
+});
+
+test("pool: a still-pending offer is claimed after skip expiry, and the skip list is bounded", async () => {
+  await withApp(async ({ api, base, app }: HostedDynamic) => {
+    const { project } = await setUp(api, { key: "page4", labels: [] });
+    const [pending] = await fillBoard(app, project, 1);
+    const runner = claimer(base, (await register(api, project, { name: "adas-laptop" })).credential);
+
+    // The agent skipped it once — an external backend was down, say. Skips are
+    // session-local and expire when a long-poll comes back empty, so the very
+    // next poll without them is offered the same still-pending entry, and it is
+    // claimable: nothing about the advertisement was ever mutated.
+    assert.deepEqual((await runner.poll(`?skip=${pending}`)).body.offers, []);
+    assert.equal((await runner.poll()).body.offers[0].dispatch_id, pending);
+    assert.equal((await runner.claim(pending)).status, 200);
+
+    // The list is bounded: past the cap the agent is expected to back off, not
+    // to keep naming more, and the server says so rather than doing the work.
+    const tooMany = Array.from({ length: 65 }, (_, i) => `d-${i}`).join(",");
+    const refused = await runner.poll(`?skip=${tooMany}`);
+    assert.equal(refused.status, 400);
+    assert.match(refused.body.error.message, /at most 64/);
+  });
 });

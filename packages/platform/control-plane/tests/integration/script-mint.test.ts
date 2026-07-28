@@ -7,6 +7,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { withApp, createTarget, loadSuiteDir, REPO_ROOT } from "./helpers.ts";
 import { writeTar } from "../../src/suites/tar.ts";
+import { claimAndExchange, claimer, registerRunner } from "./exec-helpers.ts";
 
 /** The ring's routing labels: a provider bound to it mints on those runners. */
 const RING_LABELS = ["staging-box"];
@@ -15,7 +16,7 @@ async function setupFixture(api: HostedDynamic, { projectKey = "scriptmint" } = 
   const project = (await api.post("/projects", { key: projectKey, name: "Script Mint" })).body;
   // The application and its ring come first: a suite binds to an application at
   // creation, and the ring owns both the URL and the logical auth overlay.
-  const { ring } = await createTarget(api, project, {
+  const { ring, application } = await createTarget(api, project, {
     key: "todos",
     name: "Todos",
     ringKey: "staging",
@@ -44,7 +45,7 @@ async function setupFixture(api: HostedDynamic, { projectKey = "scriptmint" } = 
     // are reachable from that ring and nowhere else.
     ring_id: ring.id,
   })).body;
-  return { projectKey, suite, ring, provider };
+  return { project, projectKey, suite, ring, application, provider };
 }
 
 async function launchGroup(api: HostedDynamic, projectKey: HostedDynamic, { suiteId, ringId }: HostedDynamic) {
@@ -57,15 +58,17 @@ async function launchGroup(api: HostedDynamic, projectKey: HostedDynamic, { suit
   return launched.body.run_group.id;
 }
 
-async function exchange(base: HostedDynamic, groupId: HostedDynamic) {
-  const res = await fetch(`${base}/api/v1/runner/exchange`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ github_oidc_token: "mock", run_group_id: groupId, isolation: "process" }),
-  });
-  const body = await res.json();
-  assert.equal(res.status, 200, JSON.stringify(body));
-  return body;
+/**
+ * Two executor bearers for one group, the way a real runner produces them: it
+ * claims the dispatch on the board once, then exchanges twice (which is what a
+ * crash-resumed executor does). Each exchange registers its own executor, which
+ * is what these single-flight session tests race against each other.
+ */
+async function twoExecutors(api: HostedDynamic, base: HostedDynamic, projectKey: HostedDynamic, groupId: HostedDynamic) {
+  const first = await claimAndExchange(api, base, { project: { key: projectKey }, groupId, labels: RING_LABELS });
+  const second = await first.agent.exchange({ dispatch_id: first.dispatchId, isolation: "process" });
+  assert.equal(second.status, 200, JSON.stringify(second.body));
+  return [{ token: first.token, executor_id: first.executorId }, second.body];
 }
 
 function runnerHeaders(token: HostedDynamic) {
@@ -93,16 +96,14 @@ async function fulfill(base: HostedDynamic, token: HostedDynamic, claimId: Hoste
 }
 
 test("script claim hands one mint grant and fulfill caches the session", async () => {
-  const github = new MockGitHub();
   await withApp(async ({ api, base }: HostedDynamic) => {
     const { projectKey, provider, suite, ring } = await setupFixture(api);
     const groupId = await launchGroup(api, projectKey, { suiteId: suite.id, ringId: ring.id });
 
     // Two executors on one group, each claiming through the bearer it just
     // exchanged for — the order a real pair of jobs takes.
-    const exA = await exchange(base, groupId);
+    const [exA, exB] = await twoExecutors(api, base, projectKey, groupId);
     const claimedA = await claim(base, exA.token, ["sso/member"]);
-    const exB = await exchange(base, groupId);
 
     assert.equal(claimedA.status, 200, JSON.stringify(claimedA.body));
     const refA = claimedA.body.sessions["sso/member"];
@@ -144,18 +145,16 @@ test("script claim hands one mint grant and fulfill caches the session", async (
     assert.ok(actions.includes("session.mint_granted"));
     assert.ok(actions.includes("session.minted"));
     assert.ok(actions.includes("session.delivered"));
-  }, {}, { github });
+  });
 });
 
 test("failed mint deletes the claim so the next claimer takes over", async () => {
-  const github = new MockGitHub();
   await withApp(async ({ api, base }: HostedDynamic) => {
     const { projectKey, suite, ring } = await setupFixture(api, { projectKey: "scriptmintfail" });
     const groupId = await launchGroup(api, projectKey, { suiteId: suite.id, ringId: ring.id });
 
-    const exA = await exchange(base, groupId);
+    const [exA, exB] = await twoExecutors(api, base, projectKey, groupId);
     const claimedA = await claim(base, exA.token, ["sso/member"]);
-    const exB = await exchange(base, groupId);
     const grantA = claimedA.body.sessions["sso/member"].mint;
     assert.ok(grantA);
 
@@ -181,18 +180,16 @@ test("failed mint deletes the claim so the next claimer takes over", async () =>
     );
     assert.ok(staleFulfill.body.error?.code, "envelope carries an error code");
     assert.equal(staleFulfill.body.error.code, "not_found");
-  }, {}, { github });
+  });
 });
 
 test("fulfill is executor-scoped and single-shot", async () => {
-  const github = new MockGitHub();
   await withApp(async ({ api, base }: HostedDynamic) => {
     const { projectKey, suite, ring } = await setupFixture(api, { projectKey: "scriptmintscope" });
     const groupId = await launchGroup(api, projectKey, { suiteId: suite.id, ringId: ring.id });
 
-    const exA = await exchange(base, groupId);
+    const [exA, exB] = await twoExecutors(api, base, projectKey, groupId);
     const claimedA = await claim(base, exA.token, ["sso/member"]);
-    const exB = await exchange(base, groupId);
     const grantA = claimedA.body.sessions["sso/member"].mint;
     assert.ok(grantA);
 
@@ -212,18 +209,16 @@ test("fulfill is executor-scoped and single-shot", async () => {
     });
     assert.equal(again.status, 409);
     assert.equal(again.body.error.code, "conflict");
-  }, {}, { github });
+  });
 });
 
 test("claim wait-hold returns as soon as the winner fulfills", async () => {
-  const github = new MockGitHub();
   await withApp(async ({ api, base }: HostedDynamic) => {
     const { suite, ring, projectKey } = await setupFixture(api, { projectKey: "scriptmintwait" });
     const groupId = await launchGroup(api, projectKey, { suiteId: suite.id, ringId: ring.id });
 
-    const exA = await exchange(base, groupId);
+    const [exA, exB] = await twoExecutors(api, base, projectKey, groupId);
     const claimedA = await claim(base, exA.token, ["sso/member"]);
-    const exB = await exchange(base, groupId);
     const grantA = claimedA.body.sessions["sso/member"].mint;
     assert.ok(grantA);
 
@@ -243,11 +238,10 @@ test("claim wait-hold returns as soon as the winner fulfills", async () => {
     assert.ok(!refB.pending, "wait-hold returns the session once fulfilled");
     assert.equal(refB.storage_state.cookies[0].value, "delivered-late");
     assert.ok(elapsed < 10_000, `expected the wait to return promptly, took ${elapsed}ms`);
-  }, {}, { github });
+  });
 });
 
 test("codeless script provider degrades to a per-ref claim error", async () => {
-  const github = new MockGitHub();
   await withApp(async ({ api, base }: HostedDynamic) => {
     const projectKey = "scriptmintcodeless";
     const project = (await api.post("/projects", { key: projectKey, name: "Codeless" })).body;
@@ -274,7 +268,7 @@ test("codeless script provider degrades to a per-ref claim error", async () => {
       ring_id: ring.id,
     });
     const groupId = await launchGroup(api, projectKey, { suiteId: suite.id, ringId: ring.id });
-    const ex = await exchange(base, groupId);
+    const [ex] = await twoExecutors(api, base, projectKey, groupId);
     const claimed = await claim(base, ex.token, ["sso/member"]);
     // Degrades per-ref (§3a): the claim answers 200 and the broken provider's
     // friendly message rides `{error}` on its ref — a 4xx/5xx here killed the
@@ -284,37 +278,53 @@ test("codeless script provider degrades to a per-ref claim error", async () => {
     assert.ok(ref?.error, JSON.stringify(claimed.body));
     assert.match(ref.error, /sso/);
     assert.match(ref.error, /no mint script code/);
-  }, {}, { github });
+  });
 });
 
-// Phase 7 replaced the Phase 2 not_implemented stub: a forced mint on a script
-// provider now dispatches a standalone `mint` workflow (202 + pending claim).
-// The full runner round-trip is pinned by phase7-mint-dispatch.test.ts; this
-// pins the API shape, the ledger row, and the routing a mint inherits from the
-// provider's binding, against the plain MockGitHub.
-test("force-mint on a script provider dispatches a standalone mint workflow, routed by its ring", async () => {
-  const github = new MockGitHub();
-  await withApp(async ({ api, app }: HostedDynamic) => {
-    const { projectKey, provider } = await setupFixture(api, { projectKey: "scriptmintforce" });
+// A forced mint on a script provider posts a standalone `mint` entry to the
+// claim board (202 + pending claim). The full runner round-trip is pinned by
+// phase7-mint-dispatch.test.ts; this pins the API shape, the ledger row, and
+// the routing and target a mint inherits from the provider's binding.
+test("force-mint on a script provider posts a mint to the board, routed and targeted by its ring", async () => {
+  await withApp(async ({ api, base, app }: HostedDynamic) => {
+    const { project, projectKey, provider, ring, application } = await setupFixture(api, { projectKey: "scriptmintforce" });
     const res = await api.post(`/auth-providers/${provider.id}/mint`, {});
     assert.equal(res.status, 202, JSON.stringify(res.body));
     assert.equal(res.body.mint.pending, true);
     assert.ok(res.body.mint.claim_id);
-    assert.equal(github.dispatches.at(-1).kind, "mint");
-    assert.equal(github.dispatches.at(-1).refId, res.body.mint.claim_id);
     const dispatches = await api.get(`/projects/${projectKey}/dispatches`);
     const row: HostedDynamic = dispatches.body.items.find((d: HostedDynamic) => d.id === res.body.mint.dispatch_id);
-    assert.equal(row.status, "scheduled", JSON.stringify(row));
+    // Placement started nothing: the requested row IS the board entry.
+    assert.equal(row.status, "requested", JSON.stringify(row));
 
     // A ring-bound provider mints on the ring's own runners: the mint's board
     // entry carries the ring's labels, so credentials only ever land on a
     // machine that ring already trusts with them.
-    assert.deepEqual(github.dispatches.at(-1).labels, RING_LABELS);
-    const bound = await app.db.query(`SELECT labels FROM dispatches WHERE id = $1`, [res.body.mint.dispatch_id]);
+    const bound = await app.db.query(`SELECT labels, target FROM dispatches WHERE id = $1`, [res.body.mint.dispatch_id]);
     assert.deepEqual(bound.rows[0].labels, RING_LABELS);
+    assert.equal(bound.rows[0].target.ring_key, ring.key);
+    assert.equal(bound.rows[0].target.application_key, application.key);
+
+    // And the offer a runner reads names the project on the envelope and
+    // carries that ring as its target block.
+    const runner = claimer(base, (await registerRunner(api, project, { labels: RING_LABELS })).credential);
+    const offered = await runner.poll();
+    const offer = offered.body.offers.find((o: HostedDynamic) => o.mint_claim_id === res.body.mint.claim_id);
+    assert.ok(offer, JSON.stringify(offered.body));
+    assert.equal(offer.project_key, projectKey);
+    assert.deepEqual(offer.target, {
+      application_id: application.id,
+      application_key: application.key,
+      ring_id: ring.id,
+      ring_key: ring.key,
+      driver: "web",
+      platform: null,
+      base_url: "http://127.0.0.1:9",
+    });
 
     // A project-wide provider (null `ring_id`) has no ring to inherit from and
-    // keeps the empty-label mint any runner in the project may take.
+    // keeps the empty-label, null-target mint any runner in the project takes —
+    // with its project still named on the envelope.
     const anywhere = (await api.post(`/projects/${projectKey}/auth-providers`, {
       name: "sso-anywhere",
       kind: "script",
@@ -326,23 +336,12 @@ test("force-mint on a script provider dispatches a standalone mint workflow, rou
     assert.equal(anywhere.ring_id, null);
     const wide = await api.post(`/auth-providers/${anywhere.id}/mint`, {});
     assert.equal(wide.status, 202, JSON.stringify(wide.body));
-    assert.deepEqual(github.dispatches.at(-1).labels, []);
-    const wideRow = await app.db.query(`SELECT labels FROM dispatches WHERE id = $1`, [wide.body.mint.dispatch_id]);
+    const wideRow = await app.db.query(`SELECT labels, target FROM dispatches WHERE id = $1`, [wide.body.mint.dispatch_id]);
     assert.deepEqual(wideRow.rows[0].labels, []);
-  }, {}, { github });
+    assert.equal(wideRow.rows[0].target, null);
+    const wideOffer = (await runner.poll()).body.offers.find((o: HostedDynamic) => o.mint_claim_id === wide.body.mint.claim_id);
+    assert.ok(wideOffer, "an unlabelled mint is offered to any runner in the project");
+    assert.equal(wideOffer.project_key, projectKey);
+    assert.equal(wideOffer.target, null);
+  });
 });
-
-class MockGitHub {
-  enabled = true;
-  dispatches: HostedDynamic[] = [];
-  async dispatchWorkflow(req: HostedDynamic) {
-    this.dispatches.push(req);
-    return { workflow_run_id: "wr-1", workflow_run_url: "https://gha.invalid/1" };
-  }
-  async getRunStatus(id: HostedDynamic) {
-    return { id, status: "completed", conclusion: "failure", url: `https://gha.invalid/${id}` };
-  }
-  async cancelRun() {
-    return { ok: true };
-  }
-}

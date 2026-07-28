@@ -50,16 +50,13 @@ SQLite is the system of record for hosted metadata. The object store holds
 content-addressed suite blobs, run bundles, clips, and reports. Filesystem
 object storage is the currently supported implementation.
 
-`PLAYTEST_DISPATCH` selects one placement adapter for the deployment, and an
-unrecognized value fails startup rather than silently meaning GitHub. GitHub
-dispatch (the default) uses one workflow per run group or standalone mint and
-binds executors through GitHub OIDC. `PLAYTEST_DISPATCH=local` starts the real
-runner agent as a child process for local development and exercises the same
-executor protocol. `PLAYTEST_DISPATCH=pool` places work on self-hosted runners
-that claim it outbound (see "Runner pool"). All three implement one adapter
-interface, so run-group lifecycle, the dispatch ledger, and the reconciler do
-not vary by adapter. Dispatch is placement; it is not the system of record or an
-artifact store. One deployment cannot mix adapters.
+**There is one placement model, and no variable selects it.** Work is placed on
+the runner claim board (see "Runner pool"): a launch writes a `requested`
+dispatch row with its labels and target snapshots, and that row IS the board
+entry. The control plane starts no process and opens no connection to a runner
+in response to a launch — local, CI, and fleet runners all arrive the same way,
+by polling outbound, claiming, and exchanging. Placement is not the system of
+record and not an artifact store.
 
 ## Storage, deployment topology, and transactions
 
@@ -175,17 +172,15 @@ and `capabilities.auto_dedupe`, whether that gateway plus the
 console uses them to present those affordances as unavailable-and-why instead of
 offering a control the server cannot answer; the routes still enforce roles.
 
-Two more describe placement, for the same reason:
+One more describes placement:
 
-- `capabilities.pool_dispatch` — whether this deployment places runs on
-  self-hosted runners (`PLAYTEST_DISPATCH=pool`). Under any other adapter there
-  is no claim board to serve, so every pool-only console surface — the Runners
-  section, runner-label fields, the launch dialog's placement line — is absent
-  rather than present and then explained away, and the pool routes keep their
-  `503 not_configured` discipline.
 - `capabilities.runner_check_in_window_s` — how long since a runner's last
   check-in still counts as present (§ Runner pool). Published so a console's
   presence and the reconciler's patience are one number, not two.
+
+There is deliberately no capability describing WHETHER this deployment places
+runs on self-hosted runners. It always does, so the Runners section, runner
+labels, and the launch dialog's placement line are always present.
 
 Project roles are cumulative:
 
@@ -296,8 +291,8 @@ A launch:
 3. pins the suite snapshot and current baselines;
 4. creates a run group plus one run row per selected case, recording
    `application_id` and `ring_id`;
-5. creates a dispatch ledger entry carrying this attempt's target snapshot;
-6. asks the configured placement adapter to start the runner agent.
+5. creates a dispatch ledger entry carrying this attempt's labels and target
+   snapshots — which IS its claim-board entry. Nothing is started.
 
 The launch request names `suite_id` and `ring_id`. Suite, ring and application
 are re-checked to agree INSIDE the launch transaction, so a stale client cannot
@@ -339,8 +334,9 @@ It must not reinterpret or enrich core manifest fields in place. Bundle
 integrity is checked against the reported size and SHA-256 before the run can
 be considered complete.
 
-Cancellation stops new case starts and asks the placement adapter to terminate
-the active executor. A dead executor cannot strand a group indefinitely: the
+Cancellation stops new case starts and marks the claim canceled; nothing can
+call a runner, so the runner learns at its next heartbeat and runs the teardown
+a SIGTERM triggers. A dead executor cannot strand a group indefinitely: the
 reconciler marks unreported work as infrastructure failure and may dispatch a
 bounded remainder. Retries never duplicate an already accepted case report.
 
@@ -398,13 +394,14 @@ The runner authenticates and then uses only HTTP:
 Runner routes are under `/api/v1`; the abbreviated paths above identify the
 protocol rather than a second namespace.
 
-An exchange binds one executor to one active dispatch. In GitHub mode, the
-signed OIDC token must match the configured issuer, audience, repository,
-workflow, ref, and workflow run. In pool mode the runner presents its
-registration credential plus the dispatch it claimed. Local development uses an
-explicitly enabled insecure exchange. The returned bearer is short-lived and
-scoped to exactly one run group or mint claim; group and mint tokens are not
-interchangeable.
+An exchange binds one executor to one active dispatch, and there is exactly one
+way to obtain it: the runner presents its registration credential plus the
+dispatch it CLAIMED on the board. A credential alone resolves no dispatch, so it
+can never fetch a snapshot, a blob, a session grant, or post a report, and a
+runner that did not win a claim cannot exchange for it. There is no development
+shortcut past this boundary — no insecure exchange, under any auth mode. The
+returned bearer is short-lived and scoped to exactly one run group or mint
+claim; group and mint tokens are not interchangeable.
 
 The group spec includes only the selected cases, pinned snapshot, baseline
 references, this attempt's `ring` (`key`, `base_url`, the logical `config`
@@ -534,12 +531,10 @@ sealed artifacts.
 
 ## Runner pool
 
-Under `PLAYTEST_DISPATCH=pool` the control plane never starts or contacts an
-executor. A self-hosted runner — long-lived on a developer machine, or ephemeral
-inside a CI job — authenticates outbound, advertises labels, and claims work.
-**No inbound connection to a runner exists.** The pool is
-a third implementation of the placement-adapter interface: dispatch rows, the
-reconciler, and run-group lifecycle are the same ones every other adapter uses.
+The claim board is how ALL work is placed. The control plane never starts or
+contacts an executor. A self-hosted runner — long-lived on a developer machine,
+or ephemeral inside a CI job — authenticates outbound, advertises labels, and
+claims work. **No inbound connection to a runner exists.**
 
 **Identity is not routing.** Two things stay separate:
 
@@ -576,19 +571,17 @@ join a project's pool: a CI job presents its GitHub Actions OIDC token instead o
 a credential it was given in advance, and receives one that expires with the job.
 No long-lived runner secret lands in repository settings.
 
-- The token is judged by the **same verifier** the GitHub-dispatch exchange uses
-  (issuer, audience, repository, workflow file, ref, expiry, signature against
-  the issuer's JWKS). The pins are their own deployment variables
-  (`PLAYTEST_POOL_OIDC_REPOSITORY`, `…_WORKFLOW`, `…_REF`, `…_AUDIENCE`) because
-  a pool deployment configures no GitHub App at all, so inheriting a null
-  repository pin would accept a token from any repository on GitHub.
+- The token is judged against the deployment's own pins — issuer, audience,
+  repository, workflow file, ref, expiry, signature against the issuer's JWKS.
+  This is the ONLY place the platform trusts a GitHub identity, so every pin is
+  its own variable (`PLAYTEST_POOL_OIDC_REPOSITORY`, `…_WORKFLOW`, `…_REF`,
+  `…_AUDIENCE`, `…_ISSUER`) rather than inherited from anywhere.
 - **The route is closed until a repository is pinned.** Without
   `PLAYTEST_POOL_OIDC_REPOSITORY` it answers `503 not_configured` naming the
-  variable, and so does a deployment not running `PLAYTEST_DISPATCH=pool`.
-  Half-configuration is a `ServerConfigError` at boot: a workflow or ref pin
-  without a repository pin, or any of these variables outside pool placement.
-  The pin is deployment-wide, so a deployment hosting projects for mutually
-  untrusting teams leaves it unset until per-project pins exist.
+  variable. Half-configuration is a `ServerConfigError` at boot: a workflow or
+  ref pin without a repository pin. The pin is deployment-wide, so a deployment
+  hosting projects for mutually untrusting teams leaves it unset until
+  per-project pins exist.
 - The registration is **ephemeral**: `expires_at` is `now + PLAYTEST_POOL_OIDC_TTL_S`
   (default 3600, floor 60, ceiling 21600 — GitHub's own per-job limit, because a
   credential outliving its job is a credential nobody is watching). An expired
@@ -619,28 +612,36 @@ label, wait for the verdict — is written out in
 two concurrent pull requests sharing one label would claim each other's jobs and
 report green against the wrong build.
 
-**The claim board.** A `requested` dispatch row plus its labels snapshot IS the
-board entry; posting to the board performs no network call and writes no new
-entity. The labels snapshot is written in the same transaction as the ledger
-row, so an entry is never readable before its routing is durable. The three
-runner-credential-authenticated routes are:
+**The claim board.** A `requested` dispatch row plus its labels and target
+snapshots IS the board entry; posting to the board performs no network call and
+writes no new entity. Both snapshots are written in the same transaction as the
+ledger row, so an entry is never readable before what places it is durable. The
+three runner-credential-authenticated routes are:
 
-1. `GET /runner/pool/claims?wait=true[&labels=…]` — check in and long-poll. The
-   answer is the oldest unclaimed dispatch in the runner's project whose label
-   set is a subset of the runner's, of kind `group` **or** `mint` (session
-   minting places through the same path and must be served). An empty job label
-   set matches any runner in the project. Held reads follow the event feed's
-   discipline: post-commit wake, bounded rescan, correctness from the durable
-   row. The poll only offers; two runners woken by one signal both see it. A
-   runner that already holds a claim is offered nothing and is handed that claim
-   back instead, which is how an agent restarted mid-group finds its work.
+1. `GET /runner/pool/claims?wait=true[&labels=…][&skip=…]` — check in and
+   long-poll. The answer is a **bounded page** (8) of the oldest unclaimed
+   dispatches in the runner's project whose label set is a subset of the
+   runner's, of kind `group` **or** `mint` (session minting places through the
+   same path and must be served), oldest first. An empty job label set matches
+   any runner in the project. Held reads follow the event feed's discipline:
+   post-commit wake, bounded rescan, correctness from the durable row. The poll
+   only offers; two runners woken by one signal both see it. A runner that
+   already holds a claim is offered nothing (`offers: []`) and is handed that
+   claim back as `current` instead, which is how an agent restarted mid-group
+   finds its work.
+
+   A page rather than one offer, because compatibility is not all server-side:
+   labels are, but "does this runner hold a binding for `todo-ios/local`?" is a
+   fact only the runner knows. With a single-offer board one unclaimable job at
+   the head would starve every newer job for every runner. The runner claims the
+   first entry it can.
 2. `POST /runner/pool/claims/:dispatch` — claim it. One `BEGIN IMMEDIATE`
    transaction restates the whole precondition in the mutating `WHERE` (still
    `requested`, still unclaimed, not canceled, runner live and in this project,
    labels still a subset), so exactly one concurrent runner wins and the loser
    receives `409 conflict` and returns to polling. The winning claim stamps the
-   runner, moves the dispatch to `scheduled`, and emits the same `run.status`
-   provisioning event GitHub dispatch emits.
+   runner, moves the dispatch to `scheduled`, flips the group to running, and
+   emits the `run.status` provisioning event.
 3. `POST /runner/pool/claims/:dispatch/heartbeat` — coarse group-level liveness
    between claim and completion, on the order of tens of seconds. Case-level
    telemetry remains the progress route. Only the claim holder may heartbeat it,
@@ -673,31 +674,71 @@ A runner that simply keeps polling emits nothing, and a runner going quiet
 emits nothing either, because both are derivable: whether a runner counts as
 present is arithmetic on `last_seen_at` against
 `capabilities.runner_check_in_window_s` from `GET /api/v1/me` — the same
-silence at which the pool adapter itself stops believing in a claim, floored so
+silence at which the board itself stops believing in a claim, floored so
 an idle runner may miss two of its 25-second polls. Publishing that number is
 what keeps a console's presence dot and the reconciler's patience the same
 fact. A console therefore refetches the runner list when a `runner.status` (or
 a `run.status`, which is how a claim ENDS) event lands, and re-reads the clock
 in between without asking the server anything.
 
+**The offer.** Every entry on the page — and `current` — has this shape, and it
+is contractual: no platform-managed record may carry a runner-resolved physical
+fact, so the target block holds exactly these seven fields and nothing else.
+
+```json
+{
+  "dispatch_id": "…", "kind": "group" | "mint", "ref_id": "…",
+  "run_group_id": "…" | null, "mint_claim_id": "…" | null,
+  "attempt": 1, "labels": [], "requested_at": "…Z", "claimed_at": null,
+  "project_id": "…", "project_key": "acme",
+  "target": {
+    "application_id": "app_…", "application_key": "todo-web",
+    "ring_id": "ring_…",       "ring_key": "local",
+    "driver": "web" | "api" | "mobile", "platform": "ios" | "android" | null,
+    "base_url": "http://127.0.0.1:4173" | null
+  } | null
+}
+```
+
+The project rides the ENVELOPE, not the target, because a runner needs it on
+every offer — including a project-wide mint, which has no target at all.
+`target` is the attempt's own snapshot, so a ring edited between poll, claim and
+exchange cannot make the offer and the group spec disagree. It is null for a
+mint whose auth provider is project-wide (null `ring_id`); a ring-bound
+provider's mint carries the ring's labels and its target block, exactly as a run
+group does. No suite files and no secrets travel before the claim, and mint
+compatibility is labels only — no binding is required to claim one.
+
+**`skip` is how a runner declines locally.** A runner that can take nothing on a
+page re-polls naming those dispatch ids in `skip` (comma-separated, at most 64 —
+more is `400`, because past that many unclaimable offers the runner should back
+off rather than keep asking). The server excludes them, which means the
+long-poll **holds when nothing else remains** instead of returning the same page
+for the agent to re-poll against in a tight loop. The list is session-local,
+never persisted, and carries no reason: the advertisement itself is never
+mutated, so a capable runner claims those entries unaffected. The agent clears
+its list whenever a long-poll comes back empty, so an incompatibility that was
+transient is reconsidered without restarting it.
+
 Delivery order is oldest-first per project; v1 makes no stronger fairness
-promise. One runner executes one group at a time: holding an active claim is
-part of the claim precondition, so a runner cannot take a second job and starve
-the fleet, while re-claiming the job it already holds is idempotent.
+promise, and beyond the skip cap the residual delay of newer work is accepted —
+ring `runner_labels` remain the primary routing tool. One runner executes one
+group at a time: holding an active claim is part of the claim precondition, so a
+runner cannot take a second job and starve the fleet, while re-claiming the job
+it already holds is idempotent.
 
 **Claiming assigns, exchanging authorizes.** A credential alone resolves no
 dispatch, so it can never fetch a snapshot, a blob, a session grant, or post a
-report. After winning a claim the runner enters the unchanged protocol at
+report. After winning a claim the runner enters the protocol at
 `POST /runner/exchange` with its credential and `dispatch_id`, and receives the
-same short-lived bearer scoped to that one run group or mint claim. A runner
-that did not claim a dispatch cannot exchange for it. Because that boundary is
-the pool's whole security model, `PLAYTEST_DISPATCH=pool` refuses to boot with
-`PLAYTEST_RUNNER_INSECURE_EXCHANGE=1` (`ServerConfigError`), and pool mode
-disables the development insecure exchange even under `PLAYTEST_AUTH=dev`.
+short-lived bearer scoped to that one run group or mint claim. A runner that did
+not claim a dispatch cannot exchange for it. That boundary is the whole security
+model, and it has no development bypass: there is no insecure exchange to
+enable, under any auth mode.
 
-**Liveness and loss.** The adapter reports claim and heartbeat state as run
-status, which is what lets the existing reconciler treat a dead self-hosted
-runner exactly like a vanished GitHub workflow. It has two loss shapes:
+**Liveness and loss.** The board reports claim and heartbeat state as run
+status, which is what the reconciler reads to tell a slow runner from a gone
+one. It has two loss shapes:
 
 - **Claimed but heartbeat-stale** beyond `PLAYTEST_POOL_HEARTBEAT_TIMEOUT_S`
   (default 120) is a dead executor: unreported work becomes infrastructure
@@ -720,18 +761,17 @@ what it used, so a reviewer can see what produced the evidence. The runner sends
 its real mode on the exchange (`isolation`), the control plane records it on the
 executor, and a run group states its placement: `placement` on
 `GET /api/v1/run-groups/:id` carries the newest attempt's `dispatch_id`,
-`attempt`, the `isolation` its executor reported, the `runner` that claimed it
-(`null` for adapters that place work without a registered runner), and the
-`labels` that attempt was placed on with their `labels_source`
+`attempt`, the `isolation` its executor reported, the `runner` that claimed it,
+and the `labels` that attempt was placed on with their `labels_source`
 (`launch` when the launch pinned them, `ring` otherwise).
 
 ### The pool runner process
 
 `runner-agent pool --server <url> [--labels a,b] [--isolation process|container]
-[--work-dir <dir>] [--credential-file <path>]` is the long-lived agent, beside
-the existing per-group `exec` and `mint` entries. Its loop is check in →
-long-poll → claim → exchange → execute through the unchanged group or mint
-executor → complete → poll again.
+[--work-dir <dir>] [--credential-file <path>]` is the long-lived agent, and the
+package's ONLY entry point (`docs/contracts/interfaces.md`). Its loop is check
+in → long-poll → claim → exchange → execute through the group or mint executor →
+complete → poll again.
 
 - **The credential never rides argv.** It arrives in `PLAYTEST_RUNNER_CREDENTIAL`
   or in a file named by `--credential-file` / `PLAYTEST_RUNNER_CREDENTIAL_FILE`,
@@ -747,6 +787,13 @@ executor → complete → poll again.
   per attempt. A lost claim race (`409`) is not an error and is not backed off.
 - **One group at a time**, and a runner restarted mid-group resumes the claim the
   board still says it holds instead of abandoning it.
+- **It claims the first offer on the page it can execute.** Anything it cannot —
+  a driver it does not run, or (with runner configuration) a mobile target it
+  holds no binding for — is skipped LOCALLY: one deduplicated, actionable reason
+  in its own log, the dispatch ids named in the next poll's `skip` list, and
+  nothing else sent. It clears that list whenever a long-poll comes back empty,
+  and past the skip cap it backs off explicitly rather than re-polling in a
+  tight loop.
 - **Cancellation and shutdown share one path.** A `canceled` heartbeat aborts the
   group exactly as `SIGTERM` does: stop starting cases, stop what is in flight,
   report what exists, post a best-effort completion. `SIGTERM` while idle exits
@@ -1901,9 +1948,10 @@ author stories, run them, inspect evidence, make a human decision.
   see the suites bound to each. No URL, binary, device, or Appium control exists
   anywhere for mobile: a mobile ring's page states that the claiming runner
   supplies the build and links the runner operations guide.
-- Settings defines five sections: **Runners** (`developer` **and**
-  `capabilities.pool_dispatch`: register a self-hosted runner, list what each
-  advertises, whether it is here right now and what it is executing, revoke),
+- Settings defines five sections: **Runners** (`developer`: register a
+  self-hosted runner, list what each advertises, whether it is here right now
+  and what it is executing, revoke — always present, because the claim board is
+  the one placement model),
   **Runs** (project concurrency), **Models**
   (project model and finding-dedupe policy), **Team**
   (members, roles, and permanent project deletion for admins), and **Audit**.

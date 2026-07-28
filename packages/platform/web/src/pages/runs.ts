@@ -1297,9 +1297,7 @@ export function launchModal(projectKey: WebDynamic, suites: WebDynamic = null, p
         const [{ items }, recent, fleet] = await Promise.all([
           api.cached(`/projects/${projectKey}/applications?include=rings`),
           api.get(`/projects/${projectKey}/run-groups?limit=50`).catch(() => ({ items: [] })),
-          state.me?.capabilities?.pool_dispatch === true
-            ? api.cached(`/projects/${projectKey}/runners`, { ttl: 15_000 }).catch(() => ({ items: [] }))
-            : Promise.resolve({ items: [] }),
+          api.cached(`/projects/${projectKey}/runners`, { ttl: 15_000 }).catch(() => ({ items: [] })),
         ]);
         rings = (items || []).flatMap((a: WebDynamic) =>
           (a.rings || []).map((r: WebDynamic) => ({ ...r, application: a })));
@@ -1403,7 +1401,7 @@ export function launchModal(projectKey: WebDynamic, suites: WebDynamic = null, p
       // them is actually checked in. All of it from what this dialog already
       // holds — the preview and the runner list — never a new poll.
       const placement = p.placement || null;
-      const readiness = placement && state.me?.capabilities?.pool_dispatch === true
+      const readiness = placement
         ? placementReadiness({
             labels: placement.runner_labels || [],
             runners,

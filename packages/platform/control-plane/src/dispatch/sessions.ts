@@ -2,6 +2,7 @@ import { ulid } from "../ulid.ts";
 import { AppError, badRequest, conflict, forbidden, notFound } from "../errors.ts";
 import { encryptSecret, decryptSecret } from "../crypto/secrets.ts";
 import { audit } from "../audit.ts";
+import { targetSnapshot } from "./dispatcher.ts";
 
 // A script mint grant expires after this long; past it the claim is abandoned
 // and the next claimer takes over the mint (single-flight with takeover, §3a).
@@ -166,14 +167,6 @@ export async function forceMintSession(ctx: HostedDynamic, { providerId, identit
  * of double-dispatching (the button is safe to mash).
  */
 async function grantStandaloneMint(ctx: HostedDynamic, tx: HostedDynamic, { provider, identity, actor }: HostedDynamic) {
-  if (!ctx.github?.enabled) {
-    throw new AppError(
-      "config_error",
-      `script auth provider "${provider.name}" mints on a runner via a workflow dispatch, ` +
-        `and GitHub dispatch is not configured on this control plane (GITHUB_APP_ID …) — ` +
-        `launch a run needing this identity instead`,
-    );
-  }
   if (!provider.code || !String(provider.code).trim()) {
     throw badRequest(`script auth provider "${provider.name}" has no mint script code`);
   }
@@ -208,20 +201,42 @@ async function grantStandaloneMint(ctx: HostedDynamic, tx: HostedDynamic, { prov
     `SELECT COALESCE(MAX(attempt), 0) + 1 AS attempt FROM dispatches WHERE kind = 'mint' AND ref_id = $1`,
     [claimId],
   );
-  // A ring-bound provider mints on the ring's own runners; a project-wide one
-  // (null `ring_id`) keeps the empty-label mint any runner in the project takes.
+  // A ring-bound provider mints on the ring's own runners and carries that
+  // ring's target snapshot, exactly as a run group's offer does; a project-wide
+  // one (null `ring_id`) keeps the empty-label mint any runner in the project
+  // takes, with a null target — its project is still named on the envelope.
   let labels: HostedDynamic[] = [];
+  let target: HostedDynamic = null;
   if (provider.ring_id) {
-    const ring = await tx.query(`SELECT runner_labels FROM rings WHERE id = $1`, [provider.ring_id]);
-    labels = ring.rows[0]?.runner_labels || [];
+    const bound = await tx.query(
+      `SELECT r.*, a.key AS application_key, a.driver AS application_driver,
+              a.platform AS application_platform
+         FROM rings r JOIN applications a ON a.id = r.application_id
+        WHERE r.id = $1`,
+      [provider.ring_id],
+    );
+    const ring = bound.rows[0];
+    if (ring) {
+      labels = ring.runner_labels || [];
+      target = targetSnapshot(
+        {
+          id: ring.application_id,
+          key: ring.application_key,
+          driver: ring.application_driver,
+          platform: ring.application_platform ?? null,
+        },
+        ring,
+        labels,
+      );
+    }
   }
-  // The labels snapshot is written WITH the ledger row: under pull-based
-  // placement this row is the claim-board entry, and a mint is served on the
-  // same board as a run group.
+  // The labels and target snapshots are written WITH the ledger row: this row
+  // IS the claim-board entry, and a mint is served on the same board as a run
+  // group.
   await tx.query(
-    `INSERT INTO dispatches (id, project_id, kind, ref_id, attempt, status, labels)
-       VALUES ($1, $2, 'mint', $3, $4, 'requested', $5)`,
-    [dispatchId, provider.project_id, claimId, attempt.rows[0].attempt, labels],
+    `INSERT INTO dispatches (id, project_id, kind, ref_id, attempt, status, labels, target)
+       VALUES ($1, $2, 'mint', $3, $4, 'requested', $5, $6)`,
+    [dispatchId, provider.project_id, claimId, attempt.rows[0].attempt, labels, target],
   );
   await audit(tx, {
     actor,
@@ -234,26 +249,18 @@ async function grantStandaloneMint(ctx: HostedDynamic, tx: HostedDynamic, { prov
   return { claimId, dispatchId, projectId: provider.project_id, attempt: attempt.rows[0].attempt, labels };
 }
 
-/** Post-tx half: send the workflow_dispatch and mark the ledger row scheduled. */
+/** Post-tx half: post the mint to the claim board (dispatch/pool.ts). Nothing
+ * is started — the row stays `requested` until a runner claims it. */
 async function sendStandaloneMint(ctx: HostedDynamic, mint: HostedDynamic) {
   if (mint.alreadyPending) {
     return { pending: true, claim_id: mint.claimId, dispatch_id: mint.dispatchId };
   }
-  const result = await ctx.github.dispatchWorkflow({
+  await ctx.board.postDispatch({
     dispatchId: mint.dispatchId,
     kind: "mint",
     refId: mint.claimId,
     labels: mint.labels,
-    attempt: mint.attempt,
   });
-  // Pull-based placement posts to the board instead of starting a workflow, so
-  // the row stays `requested` until a runner claims it (dispatch/pool.ts).
-  await ctx.db.query(
-    result.claim_pending
-      ? `UPDATE dispatches SET workflow_run_id = $2 WHERE id = $1`
-      : `UPDATE dispatches SET status = 'scheduled', workflow_run_id = $2, workflow_run_url = $3 WHERE id = $1`,
-    [mint.dispatchId, result.workflow_run_id ?? null, result.workflow_run_url ?? null],
-  );
   return { pending: true, claim_id: mint.claimId, dispatch_id: mint.dispatchId };
 }
 

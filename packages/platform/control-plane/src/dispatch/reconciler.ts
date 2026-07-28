@@ -27,30 +27,25 @@ export async function reconcileDispatches(ctx: HostedDynamic, { limit = 50 } = {
 }
 
 async function reconcileOne(ctx: HostedDynamic, dispatch: HostedDynamic) {
-  // GitHub's workflow_dispatch returns 204 with no run id, so a fresh dispatch has
-  // workflow_run_id NULL until either the executor's OIDC exchange backfills it or
-  // this correlation pass finds the run by the dispatch id embedded in its run name.
-  if (!dispatch.workflow_run_id) return await correlateOne(ctx, dispatch);
-  const status = await ctx.github.getRunStatus(dispatch.workflow_run_id);
-  if (!status) return { dispatch_id: dispatch.id, action: "waiting_for_workflow_id" };
+  // The board entry, read by dispatch id: unclaimed and still inside its claim
+  // window is `queued`, claimed and heartbeating is `in_progress`, and anything
+  // else is a loss the board explains itself.
+  const status = await ctx.board.dispatchStatus(dispatch.id);
+  if (!status) return { dispatch_id: dispatch.id, action: "unknown_dispatch" };
   if (status.status === "queued") return { dispatch_id: dispatch.id, action: "queued" };
   if (status.status === "in_progress") {
-    await ctx.db.query(`UPDATE dispatches SET status = 'running', workflow_run_url = COALESCE($2, workflow_run_url) WHERE id = $1`, [
-      dispatch.id,
-      status.url,
-    ]);
+    await ctx.db.query(`UPDATE dispatches SET status = 'running' WHERE id = $1`, [dispatch.id]);
     return { dispatch_id: dispatch.id, action: "running" };
   }
   if (status.status !== "completed") return { dispatch_id: dispatch.id, action: status.status || "unknown" };
 
-  // A placement adapter may explain the loss itself and say whether re-placing
-  // the remainder can help. Pull-based placement has a loss shape GitHub does
-  // not — nothing ever picked the work up — and re-posting to a board no runner
-  // is watching would only fail again, so the pool answers `redispatch: false`
-  // with a message naming the labels nothing checked in to serve.
+  // The board says whether re-placing the remainder can help. Pull-based
+  // placement has a loss shape a pushed job does not — nothing ever picked the
+  // work up — and re-posting to a board no runner is watching would only fail
+  // again, so it answers `redispatch: false` with a message naming the labels
+  // nothing checked in to serve.
   return await markDead(ctx, dispatch, {
-    url: status.url,
-    reason: status.reason || `workflow concluded without group completion (${status.conclusion || "unknown"})`,
+    reason: status.reason || `the executor concluded without completing this group (${status.conclusion || "unknown"})`,
     redispatch: status.redispatch !== false,
   });
 }
@@ -61,8 +56,8 @@ async function reconcileOne(ctx: HostedDynamic, dispatch: HostedDynamic) {
  * Mark it reconciled_dead, fail in-flight cases as infra, and re-dispatch the
  * queued remainder once (bounded). Returns the reconcile action result.
  */
-async function markDead(ctx: HostedDynamic, dispatch: HostedDynamic, { url, reason, redispatch = true }: HostedDynamic) {
-  if (dispatch.kind === "mint") return await markMintDead(ctx, dispatch, { url, reason });
+async function markDead(ctx: HostedDynamic, dispatch: HostedDynamic, { reason, redispatch = true }: HostedDynamic) {
+  if (dispatch.kind === "mint") return await markMintDead(ctx, dispatch, { reason });
   const group = await getGroup(ctx, dispatch.ref_id);
   const completed = await ctx.db.query(
     `SELECT 1 FROM run_groups WHERE id = $1 AND status IN ('done','canceled')`,
@@ -93,7 +88,7 @@ async function markDead(ctx: HostedDynamic, dispatch: HostedDynamic, { url, reas
       await tx.query(
         `UPDATE runs SET status = 'infra', finished_at = now(), error = $2, progress = NULL, updated_at = now()
           WHERE id = $1`,
-        [run.id, `runner died: ${url || dispatch.workflow_run_url || dispatch.workflow_run_id || dispatch.id}`],
+        [run.id, `runner died: ${dispatch.id}`],
       );
       await appendRunEvent(tx, {
         runDbId: run.id,
@@ -123,13 +118,13 @@ async function markDead(ctx: HostedDynamic, dispatch: HostedDynamic, { url, reas
       entityType: "dispatch",
       entityId: dispatch.id,
       projectId: group.project_id,
-      detail: { workflow_run_id: dispatch.workflow_run_id, workflow_run_url: url, reason, redispatch: shouldRedispatch },
+      detail: { reason, redispatch: shouldRedispatch },
     });
     await emitPlatformEvent(tx, {
       projectId: group.project_id,
       type: "dispatch.dead",
       entity: { dispatch_id: dispatch.id, run_group_id: group.id },
-      payload: { workflow_run_url: url, redispatch: shouldRedispatch },
+      payload: { redispatch: shouldRedispatch },
     });
     if (!shouldRedispatch) {
       const pending = await tx.query(
@@ -169,7 +164,7 @@ async function markDead(ctx: HostedDynamic, dispatch: HostedDynamic, { url, reas
  * afresh) and mark the dispatch reconciled_dead. No re-dispatch: a forced
  * refresh is a human action, not a run the platform owes a completion.
  */
-async function markMintDead(ctx: HostedDynamic, dispatch: HostedDynamic, { url, reason }: HostedDynamic) {
+async function markMintDead(ctx: HostedDynamic, dispatch: HostedDynamic, { reason }: HostedDynamic) {
   let action = "dead";
   await ctx.db.withTx(async (tx: HostedDynamic) => {
     const { rows } = await tx.query(`SELECT * FROM session_claims WHERE id = $1`, [dispatch.ref_id]);
@@ -200,40 +195,10 @@ async function markMintDead(ctx: HostedDynamic, dispatch: HostedDynamic, { url, 
       entityType: "dispatch",
       entityId: dispatch.id,
       projectId: dispatch.project_id,
-      detail: { kind: "mint", claim_id: dispatch.ref_id, workflow_run_id: dispatch.workflow_run_id, workflow_run_url: url, reason },
+      detail: { kind: "mint", claim_id: dispatch.ref_id, reason },
     });
   });
   return { dispatch_id: dispatch.id, action };
-}
-
-/**
- * Correlate an uncorrelated dispatch (workflow_run_id NULL). Found ⇒ backfill and
- * let the next cycle read its status. Not found ⇒ wait until the correlation
- * deadline, then — only when no executor ever exchanged — declare it dead exactly
- * like a concluded-without-complete workflow (cases → infra, bounded re-dispatch).
- * An exchanged executor keeps its dispatch alive regardless: `complete` concludes it.
- */
-async function correlateOne(ctx: HostedDynamic, dispatch: HostedDynamic) {
-  const found = ctx.github.findDispatchRun
-    ? await ctx.github.findDispatchRun(dispatch.id, { since: dispatch.requested_at })
-    : null;
-  if (found) {
-    await ctx.db.query(
-      `UPDATE dispatches SET workflow_run_id = $2, workflow_run_url = COALESCE($3, workflow_run_url)
-        WHERE id = $1 AND workflow_run_id IS NULL`,
-      [dispatch.id, found.id, found.url],
-    );
-    return { dispatch_id: dispatch.id, action: "correlated", workflow_run_id: found.id };
-  }
-  if (dispatch.executor_id) return { dispatch_id: dispatch.id, action: "running_uncorrelated" };
-  const age = Date.now() - new Date(dispatch.requested_at).getTime();
-  if (age < ctx.config.dispatch.correlateDeadlineMs) {
-    return { dispatch_id: dispatch.id, action: "awaiting_correlation" };
-  }
-  return await markDead(ctx, dispatch, {
-    url: dispatch.workflow_run_url,
-    reason: "no workflow run appeared for this dispatch before the correlation deadline",
-  });
 }
 
 async function getGroup(ctx: HostedDynamic, id: HostedDynamic) {

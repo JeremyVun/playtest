@@ -10,24 +10,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { withApp, createTarget, loadSuiteDir, REPO_ROOT } from "./helpers.ts";
 import { writeTar } from "../../src/suites/tar.ts";
+import { claimAndExchange } from "./exec-helpers.ts";
 
-class MockGitHub {
-  enabled = true;
-  dispatches: HostedDynamic[] = [];
-  async dispatchWorkflow(req: HostedDynamic) {
-    this.dispatches.push(req);
-    return { workflow_run_id: `wr-${this.dispatches.length}`, workflow_run_url: `https://gha.invalid/${this.dispatches.length}` };
-  }
-  async getRunStatus(id: HostedDynamic) {
-    return { id, status: "completed", conclusion: "success", url: `https://gha.invalid/${id}` };
-  }
-  async cancelRun() {
-    return { ok: true };
-  }
-}
+const LABELS = ["self-hosted", "playtest"];
 
 test("runs index: per-run stats, story rows, and the needs-attention filter", async () => {
-  const github = new MockGitHub();
   await withApp(async ({ api, base, app }: HostedDynamic) => {
     const project = (await api.post("/projects", { key: "runsidx", name: "Runs index" })).body;
     const { application, ring } = await createTarget(api, project, {
@@ -52,12 +39,7 @@ test("runs index: per-run stats, story rows, and the needs-attention filter", as
       });
       assert.equal(launched.status, 200, JSON.stringify(launched.body));
       const groupId = launched.body.run_group.id;
-      const exchanged = await fetch(`${base}/api/v1/runner/exchange`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ github_oidc_token: "mock", run_group_id: groupId, isolation: "process" }),
-      }).then((r) => r.json());
-      const headers = { authorization: `Bearer ${exchanged.token}`, "content-type": "application/json" };
+      const { headers } = await claimAndExchange(api, base, { project, groupId, labels: LABELS });
       const spec = await fetch(`${base}/api/v1/runner/groups/${groupId}`, { headers }).then((r) => r.json());
       assert.equal(spec.cases.length, 3, "the fixture suite has three stories");
       for (const c of spec.cases) {
@@ -70,7 +52,7 @@ test("runs index: per-run stats, story rows, and the needs-attention filter", as
         if (outcome.status !== "infra") {
           bundle = (await fetch(`${base}/api/v1/runner/runs/${c.db_id}/bundle`, {
             method: "PUT",
-            headers: { authorization: `Bearer ${exchanged.token}`, "content-type": "application/vnd.playtest.run-bundle" },
+            headers: { authorization: headers.authorization, "content-type": "application/vnd.playtest.run-bundle" },
             body: Buffer.from(`bundle for ${c.case_id}`),
           }).then((r) => r.json())).artifact;
         }
@@ -205,8 +187,8 @@ test("runs index: per-run stats, story rows, and the needs-attention filter", as
     // must not repeat the same row for every retry the reconciler made.
     const requestedAt = new Date();
     for (const [attempt, url, age] of [
-      [8, "https://gha.invalid/dead-old", 1000],
-      [9, "https://gha.invalid/dead-new", 0],
+      [8, "https://runner.invalid/dead-old", 1000],
+      [9, "https://runner.invalid/dead-new", 0],
     ] as const) {
       await app.db.query(
         `INSERT INTO dispatches
@@ -228,7 +210,7 @@ test("runs index: per-run stats, story rows, and the needs-attention filter", as
     const infraAttention = deadOverview.body.attention.filter((item: HostedDynamic) => item.kind === "infra");
     assert.equal(infraAttention.length, 1, "one run group produces one infrastructure attention row");
     assert.equal(infraAttention[0].run_group_id, mixed);
-    assert.equal(infraAttention[0].workflow_run_url, "https://gha.invalid/dead-new",
+    assert.equal(infraAttention[0].workflow_run_url, "https://runner.invalid/dead-new",
       "the row keeps the newest dispatch attempt");
     assert.equal(infraAttention[0].note, "runner stopped before the run finished");
 
@@ -239,12 +221,7 @@ test("runs index: per-run stats, story rows, and the needs-attention filter", as
       suite_id: suite.id, ring_id: ring.id, selection: { mode: "auto" }, note: "abandoned",
     });
     const abandonedId = launched.body.run_group.id;
-    const exchanged = await fetch(`${base}/api/v1/runner/exchange`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ github_oidc_token: "mock", run_group_id: abandonedId, isolation: "process" }),
-    }).then((r) => r.json());
-    const headers = { authorization: `Bearer ${exchanged.token}`, "content-type": "application/json" };
+    const { headers } = await claimAndExchange(api, base, { project, groupId: abandonedId, labels: LABELS });
     const spec = await fetch(`${base}/api/v1/runner/groups/${abandonedId}`, { headers }).then((r) => r.json());
     const first: HostedDynamic = spec.cases[0];
     assert.equal((await fetch(`${base}/api/v1/runner/groups/${abandonedId}/cases/${first.run_id}/start`, {
@@ -252,7 +229,7 @@ test("runs index: per-run stats, story rows, and the needs-attention filter", as
     })).status, 200);
     const abandonedBundle = (await fetch(`${base}/api/v1/runner/runs/${first.db_id}/bundle`, {
       method: "PUT",
-      headers: { authorization: `Bearer ${exchanged.token}`, "content-type": "application/vnd.playtest.run-bundle" },
+      headers: { authorization: headers.authorization, "content-type": "application/vnd.playtest.run-bundle" },
       body: Buffer.from(`bundle for ${first.case_id}`),
     }).then((r) => r.json())).artifact;
     const reported = await fetch(`${base}/api/v1/runner/groups/${abandonedId}/cases/${first.run_id}/report`, {
@@ -281,11 +258,10 @@ test("runs index: per-run stats, story rows, and the needs-attention filter", as
     const otherSuite = (await api.post(`/projects/${project.key}/suites`, { slug: "empty", name: "Empty" })).body;
     const none = await api.get(`/projects/${project.key}/run-groups?suite=${otherSuite.id}&include=runs`);
     assert.deepEqual(none.body.items, []);
-  }, {}, { github });
+  });
 });
 
 test("runs index: a run in flight reports progress, not a duration", async () => {
-  const github = new MockGitHub();
   await withApp(async ({ api, base }: HostedDynamic) => {
     const project = (await api.post("/projects", { key: "runsflight", name: "In flight" })).body;
     const { ring } = await createTarget(api, project, {
@@ -312,12 +288,7 @@ test("runs index: a run in flight reports progress, not a duration", async () =>
     assert.equal(queued.stats.duration_ms, null);
     assert.equal(queued.stats.started_at, null);
 
-    const exchanged = await fetch(`${base}/api/v1/runner/exchange`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ github_oidc_token: "mock", run_group_id: groupId, isolation: "process" }),
-    }).then((r) => r.json());
-    const headers = { authorization: `Bearer ${exchanged.token}`, "content-type": "application/json" };
+    const { headers } = await claimAndExchange(api, base, { project, groupId, labels: LABELS });
     const spec = await fetch(`${base}/api/v1/runner/groups/${groupId}`, { headers }).then((r) => r.json());
     const [first, second] = spec.cases;
     for (const c of [first, second]) {
@@ -325,7 +296,7 @@ test("runs index: a run in flight reports progress, not a duration", async () =>
     }
     const bundle = (await fetch(`${base}/api/v1/runner/runs/${first.db_id}/bundle`, {
       method: "PUT",
-      headers: { authorization: `Bearer ${exchanged.token}`, "content-type": "application/vnd.playtest.run-bundle" },
+      headers: { authorization: headers.authorization, "content-type": "application/vnd.playtest.run-bundle" },
       body: Buffer.from("bundle"),
     }).then((r) => r.json())).artifact;
     await fetch(`${base}/api/v1/runner/groups/${groupId}/cases/${first.run_id}/report`, {
@@ -391,7 +362,7 @@ test("runs index: a run in flight reports progress, not a duration", async () =>
     // The report clears the snapshot — the manifest is the finished truth.
     const bundle2 = (await fetch(`${base}/api/v1/runner/runs/${second.db_id}/bundle`, {
       method: "PUT",
-      headers: { authorization: `Bearer ${exchanged.token}`, "content-type": "application/vnd.playtest.run-bundle" },
+      headers: { authorization: headers.authorization, "content-type": "application/vnd.playtest.run-bundle" },
       body: Buffer.from("bundle 2"),
     }).then((r) => r.json())).artifact;
     await fetch(`${base}/api/v1/runner/groups/${groupId}/cases/${second.run_id}/report`, {
@@ -406,5 +377,5 @@ test("runs index: a run in flight reports progress, not a duration", async () =>
     const reported = (await api.get(`/projects/${project.key}/run-groups?include=runs`)).body.items[0];
     assert.equal(reported.runs.find((r: HostedDynamic) => r.case_id === second.case_id).progress, null,
       "the case report clears the live snapshot");
-  }, {}, { github });
+  });
 });

@@ -8,6 +8,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { withApp, createTarget } from "./helpers.ts";
+import { claimAndExchange } from "./exec-helpers.ts";
 
 const JOURNEY_CASE = [
   "description: Add a todo.",
@@ -31,14 +32,6 @@ async function seedSuite(api: HostedDynamic, project: HostedDynamic, slug: Hoste
   assert.equal(seed.status, 200, JSON.stringify(seed.body));
   return suite;
 }
-
-// A stubbed GitHub so a launch can actually create a run group; the dispatch
-// itself is somebody else's test.
-const GITHUB_STUB = {
-  enabled: true,
-  dispatchWorkflow: async () => ({ workflow_run_id: "wr-1", workflow_run_url: "https://gha.invalid/1" }),
-  cancelRun: async () => ({ ok: true }),
-};
 
 test("models: the catalog names the shipped tiers and the engine defaults", async () => {
   await withApp(async ({ api }: HostedDynamic) => {
@@ -138,19 +131,10 @@ test("models: the runner spec carries the project's policy for the workspace to 
     assert.equal(launched.status, 200, JSON.stringify(launched.body));
     const groupId = launched.body.run_group.id;
 
-    // Dev-auth insecure exchange (the local dispatch path).
-    const exchanged = await fetch(`${base}/api/v1/runner/exchange`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ run_group_id: groupId, isolation: "process" }),
-    }).then((r) => r.json());
-    assert.ok(exchanged.token, JSON.stringify(exchanged));
-
-    const spec = await fetch(`${base}/api/v1/runner/groups/${groupId}`, {
-      headers: { authorization: `Bearer ${exchanged.token}` },
-    }).then((r) => r.json());
+    const { headers } = await claimAndExchange(api, base, { project, groupId });
+    const spec = await fetch(`${base}/api/v1/runner/groups/${groupId}`, { headers }).then((r) => r.json());
     assert.deepEqual(spec.project.models, { actor_model: "sonnet", grader_model: "gpt5_5" });
-  }, {}, { github: GITHUB_STUB });
+  });
 });
 
 test("models: consolidation_model is a project policy over a terra deployment default", async () => {

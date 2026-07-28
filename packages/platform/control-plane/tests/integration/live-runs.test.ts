@@ -16,27 +16,9 @@ import { writeTar } from "../../src/suites/tar.ts";
 import { runRetentionCycle } from "../../src/retention/worker.ts";
 import { ulid } from "../../src/ulid.ts";
 import { REPO_ROOT, createTarget, loadSuiteDir, withApp } from "./helpers.ts";
+import { claimAndExchange } from "./exec-helpers.ts";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-
-/** Placement is not what these tests are about: dispatch is accepted and dropped. */
-class MockGitHub {
-  enabled = true;
-  n = 0;
-  async dispatchWorkflow() {
-    this.n += 1;
-    return { workflow_run_id: `wr-${this.n}`, workflow_run_url: `https://gha.invalid/${this.n}` };
-  }
-  async getRunStatus(id: HostedDynamic) {
-    return { id, status: "completed", conclusion: "success", url: `https://gha.invalid/${id}` };
-  }
-  async cancelRun() {
-    return { ok: true };
-  }
-  findDispatchRun() {
-    return null;
-  }
-}
 
 /** A placeholder manifest shaped like the one the engine writes at case start:
  *  terminal-looking status from the first instant, by design. */
@@ -72,16 +54,12 @@ async function launch(api: HostedDynamic, base: HostedDynamic, key: string) {
   });
   assert.equal(launched.status, 200, JSON.stringify(launched.body));
   const groupId = launched.body.run_group.id;
-  const exchanged = await fetch(`${base}/api/v1/runner/exchange`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ github_oidc_token: "mock", run_group_id: groupId, isolation: "process" }),
-  }).then((r) => r.json());
-  const runner = liveClient(base, exchanged.token, groupId);
+  const { token } = await claimAndExchange(api, base, { project, groupId, labels: ["self-hosted", "playtest"] });
+  const runner = liveClient(base, token, groupId);
   const spec = await fetch(`${base}/api/v1/runner/groups/${groupId}`, {
-    headers: { authorization: `Bearer ${exchanged.token}` },
+    headers: { authorization: `Bearer ${token}` },
   }).then((r) => r.json());
-  return { project, suite, application, ring, groupId, token: exchanged.token, runner, spec };
+  return { project, suite, application, ring, groupId, token, runner, spec };
 }
 
 /** The live half of the runner protocol, as a runner would speak it. */
@@ -375,7 +353,7 @@ test("open → acked staged ingest → pre-bundle serving → live paging and st
       assert.equal(sealedEntry.status, "pass");
       assert.equal("open" in sealedEntry, false, "a sealed entry carries no open key at all");
       assert.equal((await api.get(`/projects/${project.key}/view/history.json?case=${run.case_id}`)).body.length, 1);
-    }, {}, { github: new MockGitHub() });
+    });
   } finally {
     await fsp.rm(tmp, { recursive: true, force: true });
   }
@@ -426,7 +404,7 @@ test("a terminal report without a bundle keeps staging; GC collects it after the
     assert.deepEqual(swept.batches, []);
     assert.equal(fs.existsSync(path.join(storeRoot, key)), false, "objects go with their rows");
     assert.equal((await fetch(viewUrl(base, project, run, "trajectory.jsonl"))).status, 404);
-  }, {}, { github: new MockGitHub() });
+  });
 });
 
 test("stale pending reservations are reaped and refunded; an owned reservation survives the orphan sweep", async () => {
@@ -471,7 +449,7 @@ test("stale pending reservations are reaped and refunded; an owned reservation s
     const served = await fetch(viewUrl(base, project, { run_id: target.run_id, case_id: target.case_id }, "steps/001.png"));
     assert.equal(served.status, 200);
     assert.equal(await served.text(), "ready bytes");
-  }, {}, { github: new MockGitHub() });
+  });
 });
 
 test("live ingest refuses budget exhaustion and oversized lines, and every route is behind the runner token", async () => {
@@ -540,7 +518,6 @@ test("live ingest refuses budget exhaustion and oversized lines, and every route
       assert.equal(Number(charged.rows[0].bytes), 2 * chunk.length);
     },
     { PLAYTEST_LIVE_BUDGET_MB: "1" },
-    { github: new MockGitHub() },
   );
 });
 
@@ -561,5 +538,5 @@ test("a single line over the line cap is refused with its own reason, and stops 
       lines: 1,
       appended: 1,
     });
-  }, {}, { github: new MockGitHub() });
+  });
 });

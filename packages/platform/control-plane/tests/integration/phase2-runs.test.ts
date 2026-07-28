@@ -2,9 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { withApp, createTarget, loadSuiteDir, REPO_ROOT } from "./helpers.ts";
 import { writeTar } from "../../src/suites/tar.ts";
+import { claimAndExchange } from "./exec-helpers.ts";
 
-test("phase2: launch + runner protocol with mock GitHub and auth broker", async () => {
-  const github = new MockGitHub();
+test("phase2: launch, claim, exchange, and the runner protocol with an auth broker", async () => {
   await withApp(async ({ api, base }: HostedDynamic) => {
     const project = (await api.post("/projects", { key: "phase2", name: "Phase 2" })).body;
     const { ring } = await createTarget(api, project, {
@@ -39,16 +39,15 @@ test("phase2: launch + runner protocol with mock GitHub and auth broker", async 
       selection: { ids: ["add-todo"], mode: "auto", max_steps: 77, timeout_ms: 360_000 },
     });
     assert.equal(launched.status, 200);
-    assert.equal(github.dispatches.length, 1);
     const groupId = launched.body.run_group.id;
 
-    const exchanged = await fetch(`${base}/api/v1/runner/exchange`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ github_oidc_token: "mock", run_group_id: groupId, isolation: "process" }),
-    }).then((r) => r.json());
-    assert.ok(exchanged.token);
-    const runnerHeaders = { authorization: `Bearer ${exchanged.token}`, "content-type": "application/json" };
+    // The one arrival: a registered runner takes the offer off the board,
+    // claims it, and exchanges its credential for the group-scoped bearer.
+    const { headers: runnerHeaders } = await claimAndExchange(api, base, {
+      project,
+      groupId,
+      labels: ["self-hosted", "playtest"],
+    });
     const spec = await fetch(`${base}/api/v1/runner/groups/${groupId}`, { headers: runnerHeaders }).then((r) => r.json());
     assert.deepEqual(spec.sessions.needed, ["sso/member"]);
     assert.equal(spec.cases.length, 1);
@@ -68,7 +67,7 @@ test("phase2: launch + runner protocol with mock GitHub and auth broker", async 
     })).status, 200);
     const upload = await fetch(`${base}/api/v1/runner/runs/${run.db_id}/bundle`, {
       method: "PUT",
-      headers: { authorization: `Bearer ${exchanged.token}`, "content-type": "application/vnd.playtest.run-bundle" },
+      headers: { authorization: runnerHeaders.authorization, "content-type": "application/vnd.playtest.run-bundle" },
       body: Buffer.from("fake bundle"),
     }).then((r) => r.json());
     assert.equal(upload.artifact.size, 11);
@@ -104,20 +103,5 @@ test("phase2: launch + runner protocol with mock GitHub and auth broker", async 
     assert.equal(health.body.graded_count_7d, 1);
     const feed = await api.get("/projects/phase2/events/feed?after=00000000000000000000000000&types=run.status");
     assert.ok(feed.body.items.some((e: HostedDynamic) => e.entity.run_group_id === groupId));
-  }, {}, { github });
+  });
 });
-
-class MockGitHub {
-  enabled = true;
-  dispatches: HostedDynamic[] = [];
-  async dispatchWorkflow(req: HostedDynamic) {
-    this.dispatches.push(req);
-    return { workflow_run_id: `wr-${this.dispatches.length}`, workflow_run_url: `https://gha.invalid/${this.dispatches.length}` };
-  }
-  async getRunStatus(id: HostedDynamic) {
-    return { id, status: "completed", conclusion: "failure", url: `https://gha.invalid/${id}` };
-  }
-  async cancelRun() {
-    return { ok: true };
-  }
-}

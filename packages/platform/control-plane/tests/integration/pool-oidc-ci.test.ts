@@ -64,8 +64,7 @@ const ciToken = (
 
 /** The deployment side of the CI recipe: pool placement with the repository pinned. */
 const ciEnv = (issuerUrl: string, over: HostedDynamic = {}) => ({
-  PLAYTEST_DISPATCH: "pool",
-  GITHUB_OIDC_ISSUER: issuerUrl,
+  PLAYTEST_POOL_OIDC_ISSUER: issuerUrl,
   PLAYTEST_POOL_OIDC_REPOSITORY: "acme/storefront",
   ...over,
 });
@@ -163,10 +162,10 @@ test("ci: an OIDC token registers an ephemeral runner that can take work at once
       });
       assert.equal(launched.status, 200, JSON.stringify(launched.body));
       const offer = await ci.poll();
-      assert.equal(offer.body.claim.labels[0], label);
-      const claimed = await ci.claim(offer.body.claim.dispatch_id);
+      assert.equal(offer.body.offers[0].labels[0], label);
+      const claimed = await ci.claim(offer.body.offers[0].dispatch_id);
       assert.equal(claimed.status, 200, JSON.stringify(claimed.body));
-      const exchanged = await ci.exchange({ dispatch_id: offer.body.claim.dispatch_id, isolation: "process" });
+      const exchanged = await ci.exchange({ dispatch_id: offer.body.offers[0].dispatch_id, isolation: "process" });
       assert.equal(exchanged.status, 200, JSON.stringify(exchanged.body));
       assert.ok(exchanged.body.token.startsWith("pr_"));
 
@@ -216,8 +215,8 @@ test("ci: a token from the wrong audience, repository, workflow or ref registers
 test("ci: registration stays closed until the deployment names the repository", async () => {
   const gh = await issuer();
   try {
-    // Pool placement, but no repository pin: an unpinned check would accept a
-    // token from any repository on GitHub, so the route refuses to serve.
+    // No repository pin: an unpinned check would accept a token from any
+    // repository on GitHub, so the route refuses to serve.
     await withApp(async ({ api, base }: HostedDynamic) => {
       const { project } = await setUp(api, { key: "ci3" });
       const res = await registerOidc(base, {
@@ -228,19 +227,7 @@ test("ci: registration stays closed until the deployment names the repository", 
       assert.equal(res.status, 503);
       assert.equal(res.body.error.code, "not_configured");
       assert.match(res.body.error.message, /PLAYTEST_POOL_OIDC_REPOSITORY/);
-    }, { PLAYTEST_DISPATCH: "pool", GITHUB_OIDC_ISSUER: gh.url });
-
-    // And a deployment that does not run pool placement has no board to join.
-    await withApp(async ({ api, base }: HostedDynamic) => {
-      const { project } = await setUp(api, { key: "ci4" });
-      const res = await registerOidc(base, {
-        github_oidc_token: ciToken(gh.sign),
-        project: project.key,
-        labels: ["x"],
-      });
-      assert.equal(res.status, 503);
-      assert.match(res.body.error.message, /PLAYTEST_DISPATCH=pool/);
-    }, { GITHUB_OIDC_ISSUER: gh.url });
+    }, { PLAYTEST_POOL_OIDC_ISSUER: gh.url });
   } finally {
     await gh.close();
   }
@@ -266,7 +253,7 @@ test("ci: an expired ephemeral credential is refused at poll, claim and exchange
         selection: { ids: ["add-todo"] },
         runner_labels: [label],
       });
-      const dispatchId = (await ci.poll()).body.claim.dispatch_id;
+      const dispatchId = (await ci.poll()).body.offers[0].dispatch_id;
       assert.ok(dispatchId);
 
       // The job it registered for is over.
@@ -313,7 +300,7 @@ test("ci: a registration that expires mid-group does not interrupt the group it 
         runner_labels: [label],
       });
       const groupId = launched.body.run_group.id;
-      const dispatchId = (await ci.poll()).body.claim.dispatch_id;
+      const dispatchId = (await ci.poll()).body.offers[0].dispatch_id;
       assert.equal((await ci.claim(dispatchId)).status, 200);
       const exchanged = await ci.exchange({ dispatch_id: dispatchId, isolation: "process" });
       assert.equal(exchanged.status, 200, JSON.stringify(exchanged.body));
@@ -449,7 +436,7 @@ test("launch: pinned labels override the ring's, are recorded, and survive a ret
       labels: ["staging-box"],
     })).body;
     const wrong = runner(base, standing.credential);
-    assert.equal((await wrong.poll()).body.claim, null, "a job pinned elsewhere is not even offered");
+    assert.deepEqual((await wrong.poll()).body.offers, [], "a job pinned elsewhere is not even offered");
     const dispatchId = group.body.placement.dispatch_id;
     const refused = await wrong.claim(dispatchId);
     assert.equal(refused.status, 409);
@@ -461,7 +448,7 @@ test("launch: pinned labels override the ring's, are recorded, and survive a ret
       labels: ["ci-run-42"],
     })).body;
     const mine = runner(base, ci.credential);
-    assert.equal((await mine.poll()).body.claim.dispatch_id, dispatchId);
+    assert.equal((await mine.poll()).body.offers[0].dispatch_id, dispatchId);
 
     // A retry of a pinned group is placed the same way, even after the ring's
     // own labels move on.
@@ -475,7 +462,7 @@ test("launch: pinned labels override the ring's, are recorded, and survive a ret
     const retried = await api.post(`/run-groups/${groupId}/retry`, {});
     assert.equal(retried.status, 200, JSON.stringify(retried.body));
     assert.deepEqual(retried.body.run_group.placement.labels, ["ci-run-42"]);
-  }, { PLAYTEST_DISPATCH: "pool" });
+  });
 });
 
 test("launch: pinning is a launch decision — a viewer cannot make it, and nonsense is refused", async () => {
@@ -523,5 +510,5 @@ test("launch: pinning is a launch decision — a viewer cannot make it, and nons
     const group = await api.get(`/run-groups/${anywhere.body.run_group.id}`);
     assert.deepEqual(group.body.placement.labels, []);
     assert.equal(group.body.placement.labels_source, "launch");
-  }, { PLAYTEST_DISPATCH: "pool" });
+  });
 });

@@ -18,13 +18,23 @@ test("config: no upload ceiling for application bytes — the platform holds non
   assert.equal(cfg.uploads, undefined);
 });
 
-test("config: local dispatch is dev-auth only, named", () => {
-  assert.equal(loadConfig({ ...base, PLAYTEST_AUTH: "dev", PLAYTEST_DISPATCH: "local" }).dispatch.local, true);
-  assert.equal(loadConfig({ ...base, PLAYTEST_AUTH: "dev" }).dispatch.local, false);
-  assert.throws(
-    () => loadConfig({ ...base, OIDC_ISSUER: "https://idp", OIDC_CLIENT_ID: "id", OIDC_CLIENT_SECRET: "sec", PLAYTEST_DISPATCH: "local" }),
-    (e) => e instanceof ServerConfigError && /PLAYTEST_DISPATCH=local/.test(e.message) && /PLAYTEST_AUTH=dev/.test(e.message),
-  );
+test("config: there is one placement model, and no variable selects it", () => {
+  // The claim board is unconditional: every runner — local, CI, fleet — arrives
+  // by polling it. There is no adapter to choose, so a retired PLAYTEST_DISPATCH
+  // left in an old .env changes nothing rather than failing boot.
+  const cfg: HostedDynamic = loadConfig({ ...base, PLAYTEST_AUTH: "dev", PLAYTEST_DISPATCH: "github" });
+  assert.equal(cfg.dispatch.local, undefined);
+  assert.equal(cfg.dispatch.github, undefined);
+  assert.equal(cfg.dispatch.pool.claimTimeoutMs, 600_000);
+  assert.equal(cfg.dispatch.pool.heartbeatTimeoutMs, 120_000);
+});
+
+test("config: the development insecure runner exchange does not exist", () => {
+  // Deleted whole, including the dev-auth auto-enable: claiming assigns and
+  // exchanging authorizes, and a runner credential is the only way in.
+  const cfg: HostedDynamic = loadConfig({ ...base, PLAYTEST_AUTH: "dev", PLAYTEST_RUNNER_INSECURE_EXCHANGE: "1" });
+  assert.equal(cfg.dispatch.allowInsecureRunnerExchange, undefined);
+  assert.equal("allowInsecureRunnerExchange" in cfg.dispatch, false);
 });
 
 test("config: the data root holds the database and the default object store", () => {

@@ -85,7 +85,7 @@ async function queueWaitStats(ctx: AppContext, projectId: string) {
 }
 
 async function reconcilerStatus(ctx: AppContext) {
-  const configured = ctx.config.reconcile.intervalMs > 0 && !!ctx.github?.enabled;
+  const configured = ctx.config.reconcile.intervalMs > 0;
   const { rows } = await ctx.db.query(
     `SELECT (now() - beat_at) / 1000.0 AS lag_s, beat_at, detail
        FROM service_heartbeats WHERE name = 'reconciler'`,

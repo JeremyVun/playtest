@@ -8,11 +8,11 @@
 //        ▲                                                          │
 //        └──────────────── complete ◀───────────────────────────────┘
 //
-// and execution is the EXISTING group/mint executor, unchanged: after the claim
-// the agent enters `POST /runner/exchange` exactly as a GitHub-dispatched job
-// would, presenting its registration credential instead of an OIDC token.
+// and execution is the group/mint executor in this package: after the claim the
+// agent enters `POST /runner/exchange` presenting its registration credential
+// and the dispatch it won.
 //
-// Three rules this file exists to keep:
+// Four rules this file exists to keep:
 //
 //   1. The credential never touches argv. It arrives in the environment or in a
 //      file, so it cannot land in `ps`, in a shell's process table, or in a CI
@@ -23,6 +23,11 @@
 //   3. Loss is loud but never fatal by accident. A server that is down is
 //      retried with backoff and jitter; a revoked or unknown credential is a
 //      configuration error that stops the process with one actionable line.
+//   4. An offer this runner cannot execute is skipped LOCALLY and nothing else.
+//      The board serves a bounded page and the agent claims the first entry it
+//      can; the ones it cannot go into the next poll's `skip` list, so the
+//      server holds instead of handing back the same page, and another runner
+//      claims them unaffected. The reason is logged here, once, and never sent.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -37,6 +42,13 @@ const BACKOFF_BASE_MS = 1_000;
 const BACKOFF_MAX_MS = 30_000;
 /** Used only if a claim answer omits `heartbeat_interval_s`. */
 const HEARTBEAT_FALLBACK_S = 20;
+/**
+ * How many incompatible dispatch ids one session may carry in its `skip` list.
+ * The server refuses more than this on a poll, and it is the point at which
+ * this loop backs off explicitly instead of asking again immediately: past that
+ * many unclaimable offers the honest answer is "nothing here is for me".
+ */
+const SKIP_CAP = 64;
 
 export interface PoolOptions {
   server: string;
@@ -47,13 +59,32 @@ export interface PoolOptions {
   pollWaitS: number;
 }
 
-interface ClaimOffer {
+/**
+ * One entry of the board's offer page. The project rides the envelope (a mint
+ * for a project-wide provider has no target at all), and `target` carries the
+ * non-secret facts this runner decides compatibility from. Contractual shape:
+ * docs/contracts/hosted.md, "The claim board".
+ */
+export interface ClaimOffer {
   dispatch_id: string;
   kind: string;
   ref_id: string;
   run_group_id: string | null;
   mint_claim_id: string | null;
   labels: string[];
+  project_id?: string;
+  project_key?: string | null;
+  target?: OfferTarget | null;
+}
+
+export interface OfferTarget {
+  application_id: string | null;
+  application_key: string | null;
+  ring_id: string | null;
+  ring_key: string | null;
+  driver: string | null;
+  platform: string | null;
+  base_url: string | null;
 }
 
 interface RunnerIdentity {
@@ -66,6 +97,13 @@ interface RunnerIdentity {
 export interface PoolDeps {
   execGroupImpl?: typeof execGroup;
   execMintImpl?: typeof execMint;
+  /**
+   * Can this runner execute this offer? Returns null when it can, or ONE
+   * actionable sentence saying why not. Labels are the server's filter; this is
+   * the half only the machine knows (which drivers it can run, and — with
+   * runner configuration — which application/ring bindings it holds).
+   */
+  compatibility?: (offer: ClaimOffer) => string | null;
   log?: (line: string) => void;
   sleep?: (ms: number) => Promise<void>;
   random?: () => number;
@@ -83,6 +121,7 @@ export async function runPool(opts: PoolOptions, deps: PoolDeps = {}): Promise<{
   const {
     execGroupImpl = execGroup,
     execMintImpl = execMint,
+    compatibility = (offer: ClaimOffer) => defaultCompatibility(offer, opts),
     log = (line: string) => process.stdout.write(`${line}\n`),
     sleep = defaultSleep,
     random = Math.random,
@@ -95,9 +134,8 @@ export async function runPool(opts: PoolOptions, deps: PoolDeps = {}): Promise<{
   let busy = false;
   let executed = 0;
   // SIGTERM while idle has nothing to tear down, so it exits at once. SIGTERM
-  // mid-group is the local adapter's shape: exec-group's own handler stops
-  // starting cases, stops containers, reports what it has and posts a
-  // best-effort `complete` — this loop just stops asking for more work.
+  // mid-group stops starting cases, stops containers, reports what exists and
+  // posts a best-effort `complete` — this loop just stops asking for more work.
   const onSignal = () => {
     if (stopping) return;
     stopping = true;
@@ -110,6 +148,12 @@ export async function runPool(opts: PoolOptions, deps: PoolDeps = {}): Promise<{
   let announced = false;
   let failures = 0;
   let polls = 0;
+  // Session-local, in-memory, never persisted: the offers this runner has
+  // already decided it cannot take, and the reasons it has already said out
+  // loud. Both are cleared together when a long-poll comes back empty.
+  let skip: string[] = [];
+  const reported = new Set<string>();
+  let idleBackoff = 0;
   try {
     while (!stopping && executed < maxIterations && polls < maxPolls) {
       let answer;
@@ -119,7 +163,9 @@ export async function runPool(opts: PoolOptions, deps: PoolDeps = {}): Promise<{
         // command must see what this runner is within a second, not after the
         // first 25-second poll returns. Every later check-in long-polls.
         const wait = announced ? opts.pollWaitS : 0;
-        answer = await api.json("GET", `/runner/pool/claims?wait=${wait}&labels=${encodeURIComponent(opts.labels.join(","))}`);
+        const query = new URLSearchParams({ wait: String(wait), labels: opts.labels.join(",") });
+        if (skip.length) query.set("skip", skip.join(","));
+        answer = await api.json("GET", `/runner/pool/claims?${query}`);
         if (failures) log("reconnected to the control plane");
         failures = 0;
       } catch (e) {
@@ -140,10 +186,60 @@ export async function runPool(opts: PoolOptions, deps: PoolDeps = {}): Promise<{
       // `current` is the claim this runner already holds: a crash-resume, and
       // the board's answer to a runner that asks for work while it has some.
       const resumed: ClaimOffer | null = answer.current ?? null;
-      const offer: ClaimOffer | null = resumed ?? answer.claim ?? null;
-      if (!offer) continue;
-
+      const page: ClaimOffer[] = resumed ? [] : (answer.offers ?? []);
+      let offer = resumed;
       let intervalS = HEARTBEAT_FALLBACK_S;
+
+      if (!offer) {
+        if (!page.length) {
+          // Nothing on the board, or the hold expired with only skipped entries
+          // left. Either way this session's skips have had their window, so
+          // clear them: an incompatibility that was transient — a backend back
+          // online, a platform driver installed — is reconsidered without
+          // restarting the agent.
+          if (skip.length) {
+            skip = [];
+            reported.clear();
+            idleBackoff = 0;
+          }
+          continue;
+        }
+        // Judge the whole page, not just up to the first taker: an offer this
+        // runner cannot execute is named in the next poll's `skip` list either
+        // way, so the server holds instead of handing back the same entries.
+        const judged = page.map((o) => [o, compatibility(o)] as const);
+        const takeable = judged.find(([, reason]) => !reason)?.[0] ?? null;
+        // Say each distinct reason once per session, not once per poll, and send
+        // nothing but the ids: the advertisement is never mutated, so a capable
+        // runner claims these unaffected.
+        for (const [o, reason] of judged) {
+          if (reason && !reported.has(reason)) {
+            reported.add(reason);
+            log(`skipping ${describe(o)}: ${reason}`);
+          }
+        }
+        const fresh = judged
+          .filter(([, reason]) => reason)
+          .map(([o]) => o.dispatch_id)
+          .filter((id) => !skip.includes(id));
+        if (skip.length + fresh.length <= SKIP_CAP) {
+          skip = [...skip, ...fresh];
+          idleBackoff = 0;
+        } else if (!takeable) {
+          // Past the cap the next poll would name more than the board accepts,
+          // and re-polling with the same list returns the same page. Back off
+          // explicitly rather than re-entering a tight loop.
+          const delay = backoffDelayMs(++idleBackoff, { random });
+          if (idleBackoff === 1) {
+            log(`nothing on the board is for this runner (${skip.length} offers skipped) — backing off`);
+          }
+          await sleep(delay);
+          continue;
+        }
+        if (!takeable) continue;
+        offer = takeable;
+      }
+
       if (resumed) {
         log(`resuming ${describe(offer)} — this runner still holds its claim`);
       } else {
@@ -180,6 +276,29 @@ export async function runPool(opts: PoolOptions, deps: PoolDeps = {}): Promise<{
     process.removeListener("SIGINT", onSignal);
   }
   return { executed };
+}
+
+/**
+ * What this runner can execute without any local configuration: web and API
+ * groups, and every mint (mint compatibility is labels only — no binding is
+ * required to claim one). A mobile group needs a binding in the runner's own
+ * configuration file naming the offered application and ring, which is the
+ * machine-local fact no platform record may hold.
+ */
+export function defaultCompatibility(offer: ClaimOffer, opts: PoolOptions): string | null {
+  if (offer.kind !== "group") return null;
+  const driver = offer.target?.driver ?? null;
+  if (driver === "web" || driver === "api") return null;
+  if (driver === "mobile") {
+    const bound = `${offer.target?.application_key ?? "?"}/${offer.target?.ring_key ?? "?"}`;
+    return (
+      `this runner has no configuration binding for the mobile target "${bound}" — a mobile build, its ` +
+      `Appium backend and its device are machine-local facts, declared in the runner's own config file ` +
+      `(--config). Another runner that binds "${bound}" can take this.`
+    );
+  }
+  void opts;
+  return `this runner cannot execute the "${driver ?? "unknown"}" driver`;
 }
 
 /**

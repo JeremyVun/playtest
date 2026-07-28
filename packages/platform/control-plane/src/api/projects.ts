@@ -50,12 +50,6 @@ export async function me(ctx: HostedDynamic) {
     // Verification itself needs the gateway (`llm`); without one the keyless
     // tier degrades to graded-pass suggestions whatever the mode says.
     auto_resolve_mode: ctx.config.autoResolve.mode,
-    // Does this deployment place runs on self-hosted runners at all? Under any
-    // other adapter the whole pool — registration, presence, placement labels —
-    // is machinery nobody here can use, and the routes that serve it answer
-    // `503 not_configured`. Offering the setup anyway would turn a deployment
-    // choice into what looks like a broken feature, so the console asks first.
-    pool_dispatch: pool.enabled,
     // How long since a runner's last check-in still counts as online, derived
     // server-side (dispatch/pool.ts) so the console's presence dot and the
     // reconciler's patience are the same number.

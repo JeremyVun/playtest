@@ -185,13 +185,10 @@ test("settings: exactly five sections, and targets are not one of them", () => {
 test("settings: role disclosure — developer sees runners; runs/models/team/audit are admin", () => {
   const rank: WebDynamic = { viewer: 0, editor: 1, reviewer: 2, developer: 3, admin: 4 };
   const has = (role: WebDynamic) => (min: WebDynamic) => rank[role] >= rank[min];
-  // Two gates, not one: the role, and what this DEPLOYMENT can do. Runners
-  // exists only where runs are placed on a self-hosted pool.
-  const pooled = { pool_dispatch: true };
-  assert.deepEqual(visibleSections(has("editor"), pooled).map((s: WebDynamic) => s.id), []);
-  assert.deepEqual(visibleSections(has("developer"), pooled).map((s: WebDynamic) => s.id), ["runners"]);
-  assert.deepEqual(visibleSections(has("admin"), pooled).map((s: WebDynamic) => s.id), ["runners", "runs", "models", "team", "audit"]);
-  assert.deepEqual(visibleSections(has("admin"), {}).map((s: WebDynamic) => s.id), ["runs", "models", "team", "audit"]);
+  // Runners is always here: every run is placed on a runner that claims it.
+  assert.deepEqual(visibleSections(has("editor")).map((s: WebDynamic) => s.id), []);
+  assert.deepEqual(visibleSections(has("developer")).map((s: WebDynamic) => s.id), ["runners"]);
+  assert.deepEqual(visibleSections(has("admin")).map((s: WebDynamic) => s.id), ["runners", "runs", "models", "team", "audit"]);
 });
 
 test("secret masking: literal values are masked; references stay readable", () => {

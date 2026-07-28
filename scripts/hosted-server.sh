@@ -57,11 +57,11 @@ fi
 (cd "$REPO" && npm run build:web)
 
 # ---- 3. .env ---------------------------------------------------------------
-# Sourced, not hand-parsed, so quoted and multi-line values (a GitHub App private
-# key) survive intact. Anything already exported by the caller is re-applied
-# afterwards, so an inline override on the command line still beats the file.
+# Sourced, not hand-parsed, so quoted and multi-line values survive intact.
+# Anything already exported by the caller is re-applied afterwards, so an inline
+# override on the command line still beats the file.
 if [ -f "$ENV_FILE" ]; then
-  pre_set="$(export -p | grep -E '^(declare -x|export) (PLAYTEST_|PORT=|HOST=|PUBLIC_URL=|LOG_LEVEL=|OBJECT_STORE_|GITHUB_)' || true)"
+  pre_set="$(export -p | grep -E '^(declare -x|export) (PLAYTEST_|PORT=|HOST=|PUBLIC_URL=|LOG_LEVEL=|OBJECT_STORE_)' || true)"
   set -a +u
   # shellcheck disable=SC1090
   . "$ENV_FILE" || {
@@ -83,14 +83,6 @@ export PLAYTEST_DATA_DIR="$DATA_DIR"
 export PLAYTEST_AUTH="${PLAYTEST_AUTH:-dev}"
 export PORT="${PORT:-4177}"
 export HOST="${HOST:-127.0.0.1}"
-
-# Launches execute on this machine: the server spawns the real runner-agent
-# instead of dispatching a GitHub workflow that a local checkout has no
-# credentials for, so "▶ Run" in the console does something. The control plane
-# refuses this outside dev auth, so only default it there.
-if [ "$PLAYTEST_AUTH" = "dev" ]; then
-  export PLAYTEST_DISPATCH="${PLAYTEST_DISPATCH:-local}"
-fi
 
 mkdir -p "$DATA_DIR"
 # The KMS key encrypts stored secrets, so it has to be the SAME key next boot or
@@ -155,7 +147,7 @@ if [ "$cmd" = "serve" ]; then
     echo "  env file          $env_note"
     echo "  data root         $DATA_DIR"
     echo "  auth              $PLAYTEST_AUTH"
-    echo "  launches          ${PLAYTEST_DISPATCH:-github dispatch}"
+    echo "  launches          claimed by a polling runner (runner-agent pool)"
     if [ -n "${PLAYTEST_LLM_BASE_URL:-}" ]; then
       if [ -n "${PLAYTEST_LLM_API_KEY:-}" ]; then
         echo "  model gateway     $PLAYTEST_LLM_BASE_URL (key set)"

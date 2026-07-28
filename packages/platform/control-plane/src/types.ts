@@ -3,6 +3,7 @@ import type { Db } from "./db.ts";
 import type { ControlPlaneConfig } from "./config.ts";
 import type { FeedWaker } from "./events/feed.ts";
 import type { WriteRateLimiter } from "./rate-limit.ts";
+import type { ClaimBoard } from "./dispatch/pool.ts";
 
 export type DynamicJson = Record<string, any>; // SAFETY: Route-specific validation narrows untyped JSON request and model response objects.
 export type LogFields = Record<string, unknown>;
@@ -38,14 +39,6 @@ export interface ObjectStore {
   list(prefix?: string): Promise<string[]>;
 }
 
-export interface DispatchClient {
-  readonly enabled: boolean;
-  dispatchWorkflow(input: DynamicJson): Promise<DynamicJson>;
-  findDispatchRun(dispatchId: string, options?: DynamicJson): Promise<DynamicJson | null>;
-  getRunStatus(workflowRunId: string): Promise<DynamicJson | null>;
-  cancelRun(workflowRunId: string): Promise<DynamicJson | null>;
-}
-
 export interface AppContext {
   db: Db;
   store: ObjectStore;
@@ -53,7 +46,8 @@ export interface AppContext {
   log: Logger;
   devUserId: string | null;
   feedWaker: FeedWaker;
-  github: DispatchClient;
+  /** The one placement model: the runner claim board (`dispatch/pool.ts`). */
+  board: ClaimBoard;
   runnerTokenKey: Buffer;
   writeLimiter: WriteRateLimiter;
 }

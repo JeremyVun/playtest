@@ -1,10 +1,10 @@
-// R4: what the console reads to stay honest without polling anything.
+// What the console reads to stay honest without polling anything.
 //
 // Three server behaviours the hosted web UI depends on, none of which the
 // browser can compensate for:
 //
-//   1. `/me` capabilities say whether this deployment places runs on a runner
-//      pool at all, so the console offers runner setup only where it exists;
+//   1. `/me` capabilities publish the presence window, so the console's dot and
+//      the reconciler's patience are one number rather than two;
 //   2. `runner.status` rides the event feed on the EDGES of presence — a runner
 //      arriving, coming back, taking a claim, being revoked — and stays silent
 //      while a fleet idles, which is what lets a Runners section repaint off
@@ -15,8 +15,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { withApp, createTarget, loadSuiteDir, REPO_ROOT } from "./helpers.ts";
 import { writeTar } from "../../src/suites/tar.ts";
-
-const POOL = { PLAYTEST_DISPATCH: "pool" };
 
 /** A scripted self-hosted runner: nothing but its credential and fetch. */
 function claimer(base: HostedDynamic, credential: HostedDynamic) {
@@ -42,31 +40,24 @@ const feedSince = async (api: HostedDynamic, key: HostedDynamic, cursor: HostedD
 
 const tail = async (api: HostedDynamic, key: HostedDynamic) => (await api.get(`/projects/${key}/events/feed`)).body.cursor;
 
-test("me: capabilities say whether this deployment has a runner pool at all", async () => {
+test("me: capabilities publish the presence window, and no placement choice", async () => {
   await withApp(async ({ api }: HostedDynamic) => {
     const me = (await api.get("/me")).body;
-    assert.equal(me.capabilities.pool_dispatch, false,
-      "the default deployment places runs itself — runner setup would be a dead end");
-    // Stated whatever the adapter, because the console words its presence dot
-    // from this number, not from its own guess.
-    assert.ok(me.capabilities.runner_check_in_window_s >= 75);
+    // There is one placement model, so there is nothing to ask about: the
+    // Runners section is always the honest surface.
+    assert.equal("pool_dispatch" in me.capabilities, false);
+    // The window the console calls a runner offline at is the server's own
+    // patience, never a browser-side constant that can drift from it.
+    assert.equal(me.capabilities.runner_check_in_window_s, 120);
     // The platform holds no application bytes, so there is no upload cap to state.
     assert.equal("app_artifact_max_mb" in me.capabilities, false);
   });
 
   await withApp(async ({ api }: HostedDynamic) => {
-    const me = (await api.get("/me")).body;
-    assert.equal(me.capabilities.pool_dispatch, true);
-    // The window the console calls a runner offline at is the server's own
-    // patience, never a browser-side constant that can drift from it.
-    assert.equal(me.capabilities.runner_check_in_window_s, 120);
-  }, POOL);
-
-  await withApp(async ({ api }: HostedDynamic) => {
     const caps = (await api.get("/me")).body.capabilities;
     assert.equal(caps.runner_check_in_window_s, 75,
       "a tight heartbeat never drops the floor: an IDLE runner still polls every 25s");
-  }, { ...POOL, PLAYTEST_POOL_HEARTBEAT_TIMEOUT_S: "30" });
+  }, { PLAYTEST_POOL_HEARTBEAT_TIMEOUT_S: "30" });
 });
 
 test("runner.status: presence rides the feed on its edges, and idles silently", async () => {
@@ -111,7 +102,7 @@ test("runner.status: presence rides the feed on its edges, and idles silently", 
     assert.equal((await api.del(`/projects/${project.key}/runners/${runner.id}`)).status, 204);
     events = await feedSince(api, project.key, cursor);
     assert.deepEqual(events.events.map((e: HostedDynamic) => e.payload.state), ["revoked"]);
-  }, POOL);
+  });
 });
 
 test("runner.status: a claim says which run group the runner is executing", async () => {
@@ -129,7 +120,7 @@ test("runner.status: a claim says which run group the runner is executing", asyn
 
     const agent = claimer(base, runner.credential);
     const cursor = await tail(api, project.key);
-    const offer = (await agent.poll("?labels=macos")).body.claim;
+    const [offer] = (await agent.poll("?labels=macos")).body.offers;
     assert.equal((await agent.claim(offer.dispatch_id)).status, 200);
 
     const events = (await feedSince(api, project.key, cursor)).events;
@@ -139,7 +130,7 @@ test("runner.status: a claim says which run group the runner is executing", asyn
     // And the same fact is readable without the feed, for a console arriving late.
     const listed = (await api.get(`/projects/${project.key}/runners`)).body.items[0];
     assert.equal(listed.claim.run_group_id, group.id);
-  }, POOL);
+  });
 });
 
 test("run groups: ?wait=true holds for a verdict instead of answering at once", async () => {
@@ -170,5 +161,5 @@ test("run groups: ?wait=true holds for a verdict instead of answering at once", 
     assert.equal(settled.body.status, "canceled");
     assert.ok(Date.now() - after < 2_000, "a settled group answers immediately, hold or no hold");
     assert.ok(Array.isArray(settled.body.runs), "the held answer is the same run-group projection");
-  }, POOL);
+  });
 });

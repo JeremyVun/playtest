@@ -4,21 +4,19 @@
 // L1 proved the platform side against a hand-written runner; the unit tests
 // beside the uploader prove its queue against a fake control plane. This is the
 // join: a whole control plane on a temporary SQLite data root, the REAL
-// runner-agent executing a real case as a child process over real HTTP, and a
-// client following the hosted live endpoint the entire time — so what the viewer
-// would see mid-run is asserted against what the sealed bundle finally carries.
+// `runner-agent pool` process claiming the launch off the board and executing a
+// real case over real HTTP, and a client following the hosted live endpoint the
+// entire time — so what the viewer would see mid-run is asserted against what
+// the sealed bundle finally carries.
 //
 // Offline like every integration test here: the target is a loopback fixture and
 // the model is the scripted gateway. The gateway answers on a delay so the case
 // takes long enough to actually be watched — a journey that finishes in
 // milliseconds proves nothing about streaming.
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { withApp, createTarget, loadSuiteDir, REPO_ROOT } from "./helpers.ts";
-import { SpawningGitHub, sleep, waitForGroupDone } from "./exec-helpers.ts";
+import { registerRunner, sleep, startPoolAgent, waitForGroupDone } from "./exec-helpers.ts";
 import { writeTar } from "../../src/suites/tar.ts";
 import { startInvariantApi } from "../../../../../tests/fixtures/invariant-api/server.ts";
 import { startScriptedModel } from "../../../../../tests/support/scripted-model.ts";
@@ -92,17 +90,17 @@ async function followLive(api: HostedDynamic, projectKey: string, runPath: strin
 }
 
 test("a hosted case streams into the live endpoint while it executes, then seals byte-identically", async () => {
-  const workRoot = fs.mkdtempSync(path.join(os.tmpdir(), "live-e2e-"));
   const target = await startInvariantApi({ prefix: "L" });
   // ~1 s per model turn: six turns, so the case spans several uploader ticks
   // instead of finishing inside one.
   const model = await startScriptedModel(journey("L"), { delayMs: 1000 });
-  const github = new SpawningGitHub({ llmUrl: model.baseUrl, workRoot });
+  let agent: HostedDynamic = null;
   try {
     await withApp(
       async ({ api, base, app }: HostedDynamic) => {
-        github.serverBase = base;
         const { project, suite, ring } = await setUp(api, { key: "livee2e", baseUrl: target.url });
+        const registered = await registerRunner(api, project, { name: "adas-laptop", labels: ["self-hosted", "playtest"] });
+        agent = startPoolAgent(base, registered.credential, { llmUrl: model.baseUrl, labels: "self-hosted,playtest" });
         const launched = await api.post(`/projects/${project.key}/run-groups`, {
           suite_id: suite.id,
           ring_id: ring.id,
@@ -134,7 +132,7 @@ test("a hosted case streams into the live endpoint while it executes, then seals
           `the client saw the run's evidence while it executed (${followed.observed.length} lines over ${followed.polls} polls)`,
         );
 
-        const done = await waitForGroupDone(api, groupId, { execs: github.execs });
+        const done = await waitForGroupDone(api, groupId, { agent });
         assert.equal(done.runs.length, 1);
         assert.equal(done.runs[0].status, "pass", `the journey passed: ${done.runs[0].error ?? "no error"}`);
         assert.ok(done.runs[0].artifact?.key, "and sealed through the ordinary bundle PUT");
@@ -172,14 +170,15 @@ test("a hosted case streams into the live endpoint while it executes, then seals
 
         const afterSeal = await api.get(`/projects/${project.key}/view/run/${runPath}/live?after=0&wait=0`);
         assert.equal(afterSeal.body.open, false, "and the live endpoint answers the terminal shape from then on");
+
+        // Stop the agent before the control plane: its long-poll is a live
+        // request, and closing the server under it would just wait out the hold.
+        await agent.stop();
       },
-      {},
-      { github },
     );
   } finally {
-    await Promise.all(github.execs.map((e: HostedDynamic) => e.promise));
+    if (agent) await agent.stop();
     await target.close();
     await model.close();
-    fs.rmSync(workRoot, { recursive: true, force: true });
   }
 });

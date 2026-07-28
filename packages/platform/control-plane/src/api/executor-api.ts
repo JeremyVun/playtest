@@ -2,8 +2,7 @@ import { BundleProvider } from "@playtest/core/artifacts";
 import { HttpResult, readJsonBody, readRawBody } from "../http.ts";
 import { badRequest, forbidden, notFound, unauthenticated } from "../errors.ts";
 import { issueRunnerToken, requireRunner } from "../auth/runner-tokens.ts";
-import { presentedRunnerCredential, requireRunnerCredential } from "../auth/runner-credentials.ts";
-import { verifyGithubOidc } from "../auth/github-oidc.ts";
+import { requireRunnerCredential } from "../auth/runner-credentials.ts";
 import { ulid } from "../ulid.ts";
 import { audit } from "../audit.ts";
 import { decryptSecret } from "../crypto/secrets.ts";
@@ -670,75 +669,30 @@ export async function complete(ctx: HostedDynamic) {
   return { ok: true, redispatched: dispatchMore };
 }
 
+/**
+ * Claiming assigns; exchanging authorizes. There is exactly ONE way in: a
+ * self-hosted runner presents its registration credential plus the dispatch it
+ * CLAIMED on the board. The credential alone resolves no dispatch, so it can
+ * never fetch a snapshot, a blob, a session grant, or post a report.
+ */
 async function resolveExchangeDispatch(ctx: HostedDynamic, body: HostedDynamic) {
-  // Pull-based placement: a self-hosted runner presents its registration
-  // credential plus the dispatch it CLAIMED. Claiming assigned the work;
-  // exchanging authorizes it — the credential alone resolves no dispatch, so it
-  // can never fetch a snapshot or post a report. Checked first so a pooled
-  // runner is never quietly handed the development exchange instead.
-  if (presentedRunnerCredential(ctx.req)) {
-    const runner = await requireRunnerCredential(ctx);
-    if (!body.dispatch_id) {
-      throw badRequest(`"dispatch_id" is required: exchange the claim this runner won on the pool board`);
-    }
-    const { rows } = await ctx.db.query(
-      `SELECT * FROM dispatches
-        WHERE id = $1 AND runner_id = $2 AND canceled_at IS NULL
-          AND status IN ('requested','scheduled','running')`,
-      [String(body.dispatch_id), runner.id],
-    );
-    if (!rows[0]) {
-      throw forbidden(
-        `runner "${runner.name}" does not hold an active claim on dispatch "${body.dispatch_id}" — ` +
-          `claim it first with POST /api/v1/runner/pool/claims/${body.dispatch_id}`,
-      );
-    }
-    return rows[0];
+  const runner = await requireRunnerCredential(ctx);
+  if (!body.dispatch_id) {
+    throw badRequest(`"dispatch_id" is required: exchange the claim this runner won on the pool board`);
   }
-  if (ctx.config.dispatch.allowInsecureRunnerExchange && (body.run_group_id || body.mint_claim_id)) {
-    const [kind, refId] = body.mint_claim_id ? ["mint", body.mint_claim_id] : ["group", body.run_group_id];
-    const { rows } = await ctx.db.query(
-      `SELECT * FROM dispatches
-        WHERE kind = $1 AND ref_id = $2 AND status IN ('requested','scheduled','running')
-        ORDER BY attempt DESC LIMIT 1`,
-      [kind, refId],
-    );
-    if (!rows[0]) throw notFound(`no active ${kind} dispatch for "${refId}"`);
-    return rows[0];
-  }
-  const claims = await verifyGithubOidc(ctx.config.dispatch.github, body.github_oidc_token);
-  const workflowRunId = String(claims.run_id || "");
-  if (!workflowRunId) throw unauthenticated("GitHub OIDC token has no run_id claim");
   const { rows } = await ctx.db.query(
     `SELECT * FROM dispatches
-      WHERE workflow_run_id = $1 AND status IN ('requested','scheduled','running')
-      ORDER BY requested_at DESC LIMIT 1`,
-    [workflowRunId],
+      WHERE id = $1 AND runner_id = $2 AND canceled_at IS NULL
+        AND status IN ('requested','scheduled','running')`,
+    [String(body.dispatch_id), runner.id],
   );
-  if (rows[0]) return rows[0];
-
-  // Deterministic 204-dispatch correlation: GitHub's workflow_dispatch response
-  // carries no run id, so a fresh dispatch row has workflow_run_id NULL until the
-  // reconciler's run-name scan finds it. The executor got the dispatch id as a
-  // workflow input and presents it here; the *verified* OIDC token supplies the
-  // run id, which we backfill onto the ledger row (first exchange wins — the
-  // NULL guard makes a replayed dispatch_id lose).
-  if (body.dispatch_id) {
-    const { rows: byDispatch } = await ctx.db.query(
-      `UPDATE dispatches
-          SET workflow_run_id = $2,
-              workflow_run_url = COALESCE(workflow_run_url, $3)
-        WHERE id = $1 AND status IN ('requested','scheduled','running') AND workflow_run_id IS NULL
-        RETURNING *`,
-      [
-        String(body.dispatch_id),
-        workflowRunId,
-        claims.repository ? `https://github.com/${claims.repository}/actions/runs/${workflowRunId}` : null,
-      ],
+  if (!rows[0]) {
+    throw forbidden(
+      `runner "${runner.name}" does not hold an active claim on dispatch "${body.dispatch_id}" — ` +
+        `claim it first with POST /api/v1/runner/pool/claims/${body.dispatch_id}`,
     );
-    if (byDispatch[0]) return byDispatch[0];
   }
-  throw unauthenticated(`no active dispatch matches GitHub workflow run ${workflowRunId}`);
+  return rows[0];
 }
 
 async function resolvedSecrets(ctx: HostedDynamic, projectId: HostedDynamic, ringConfig: HostedDynamic) {

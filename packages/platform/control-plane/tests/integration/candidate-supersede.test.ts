@@ -7,9 +7,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { withApp, createTarget } from "./helpers.ts";
 import { ulid } from "../../src/ulid.ts";
+import { claimAndExchange } from "./exec-helpers.ts";
 
 test("a clean pass supersedes the story's pending candidates, and only that story's", async () => {
-  const github = new MockGitHub();
   await withApp(async ({ app, api, base }: HostedDynamic) => {
     const project = (await api.post("/projects", { key: "supersede", name: "Supersede" })).body;
     const { application, ring } = await createTarget(api, project, {
@@ -44,12 +44,11 @@ test("a clean pass supersedes the story's pending candidates, and only that stor
     let health = await api.get(`/projects/${project.key}/health`);
     assert.equal(health.body.attention.filter((a: HostedDynamic) => a.kind === "changed").length, 2);
 
-    const exchanged = await fetch(`${base}/api/v1/runner/exchange`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ github_oidc_token: "mock", run_group_id: groupId, isolation: "process" }),
-    }).then((r) => r.json());
-    const runnerHeaders = { authorization: `Bearer ${exchanged.token}`, "content-type": "application/json" };
+    const { headers: runnerHeaders } = await claimAndExchange(api, base, {
+      project,
+      groupId,
+      labels: ["self-hosted", "playtest"],
+    });
     const spec = await fetch(`${base}/api/v1/runner/groups/${groupId}`, { headers: runnerHeaders }).then((r) => r.json());
     const run: HostedDynamic = spec.cases[0];
     await fetch(`${base}/api/v1/runner/groups/${groupId}/cases/${run.run_id}/start`, {
@@ -57,7 +56,7 @@ test("a clean pass supersedes the story's pending candidates, and only that stor
     });
     const upload = await fetch(`${base}/api/v1/runner/runs/${run.db_id}/bundle`, {
       method: "PUT",
-      headers: { authorization: `Bearer ${exchanged.token}`, "content-type": "application/vnd.playtest.run-bundle" },
+      headers: { authorization: runnerHeaders.authorization, "content-type": "application/vnd.playtest.run-bundle" },
       body: Buffer.from("fake bundle"),
     }).then((r) => r.json());
     // A clean pass: no heal, no change, no baseline or candidate written.
@@ -97,7 +96,7 @@ test("a clean pass supersedes the story's pending candidates, and only that stor
     const event = feed.body.items.find((e: HostedDynamic) => e.type === "candidate.superseded");
     assert.ok(event, "candidate.superseded fired so review badges re-count");
     assert.deepEqual(event.payload.candidate_ids, [stale]);
-  }, {}, { github });
+  });
 });
 
 async function seedCandidate(app: HostedDynamic, { project, suite, application, ring, snapshot, storyId }: HostedDynamic) {
@@ -124,20 +123,3 @@ async function seedCandidate(app: HostedDynamic, { project, suite, application, 
   return id;
 }
 
-class MockGitHub {
-  enabled = true;
-  dispatches: HostedDynamic[] = [];
-  async dispatchWorkflow(req: HostedDynamic) {
-    this.dispatches.push(req);
-    return { workflow_run_id: `wr-${this.dispatches.length}`, workflow_run_url: `https://gha.invalid/${this.dispatches.length}` };
-  }
-  async getRunStatus(id: HostedDynamic) {
-    return { id, status: "completed", conclusion: "failure", url: `https://gha.invalid/${id}` };
-  }
-  async cancelRun() {
-    return { ok: true };
-  }
-  findDispatchRun() {
-    return null;
-  }
-}

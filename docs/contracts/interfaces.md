@@ -524,6 +524,39 @@ Legacy runs with non-null `video_started_at` clip from `video.webm` using
 envelope wall-clock offsets. `--out` is always a directory and produces
 case-ID-based filenames.
 
+## Runner agent CLI
+
+`@playtest/runner-agent` ships one executable, `runner-agent`, and it has ONE
+mode. There is one placement model — the claim board
+([Hosted contracts](hosted.md#runner-pool)) — so there is one arrival:
+
+```text
+runner-agent pool --server <url> [--labels a,b] [--isolation process|container]
+                  [--work-dir <dir>] [--credential-file <path>]
+```
+
+`pool` is accepted as a leading word so the start command the console hands over
+reads as a verb; omitting it runs the same thing. There are no per-job
+entry points: nothing spawns this process for one run group or one session mint,
+and the control plane neither starts it nor connects to it. The group and mint
+executors remain internal modules the pool loop calls after winning a claim.
+
+- The registration credential **never rides argv**. It comes from
+  `PLAYTEST_RUNNER_CREDENTIAL`, or from a file named by `--credential-file` /
+  `PLAYTEST_RUNNER_CREDENTIAL_FILE`. Offering `--credential` or `--token` is
+  refused with the remedy rather than accepted, so the secret cannot be read out
+  of a process list or a CI log of the command line.
+- Other defaults come from the environment: `PLAYTEST_SERVER_URL` /
+  `PLAYTEST_HOSTED_URL`, `PLAYTEST_RUNNER_LABELS`, `PLAYTEST_RUNNER_ISOLATION`,
+  `PLAYTEST_RUNNER_WORKDIR`. A flag missing its value, an unknown flag, and an
+  isolation outside `process|container` are all startup errors naming the
+  problem.
+- Exit behavior: a refused credential (401/403) or a refused request (400) stops
+  the process with one actionable line, never a stack and never a retry loop.
+  Anything else that fails to reach the control plane is retried with
+  exponential backoff and jitter. A failed run group never takes the process
+  down.
+
 ## Reporting API
 
 Reporters implement:

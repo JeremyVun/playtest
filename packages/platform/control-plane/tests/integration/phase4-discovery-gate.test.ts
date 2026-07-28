@@ -239,7 +239,6 @@ test("launch preview: a healed replay does not inflate the next clean replay est
 });
 
 test("discovery gate: launching discovery cases against a non-discovery_allowed ring is a 400 naming it, and creates NOTHING", async () => {
-  const github = { enabled: true, dispatchWorkflow: async () => ({}), cancelRun: async () => {} };
   await withApp(
     async ({ api, app }: HostedDynamic) => {
       // discovery_allowed defaults false on the ring
@@ -264,12 +263,10 @@ test("discovery gate: launching discovery cases against a non-discovery_allowed 
       assert.equal(dispatches.rows[0].n, 0, "a blocked launch must create no dispatches row");
     },
     {},
-    { github },
   );
 });
 
 test("discovery gate: a mixed selection (journey + discovery) is ALSO blocked when the ring disallows discovery", async () => {
-  const github = { enabled: true, dispatchWorkflow: async () => ({}), cancelRun: async () => {} };
   await withApp(
     async ({ api, app }: HostedDynamic) => {
       const { ring, suite } = await seedSuiteWithFanOut(api, { ringKey: "prod" });
@@ -284,12 +281,10 @@ test("discovery gate: a mixed selection (journey + discovery) is ALSO blocked wh
       assert.equal(groups.rows[0].n, 0);
     },
     {},
-    { github },
   );
 });
 
 test("discovery gate: a discovery_allowed ring lets the launch through, planning mode 'explore' for the discovery runs", async () => {
-  const github = { enabled: true, dispatchWorkflow: async () => ({}), cancelRun: async () => {} };
   await withApp(
     async ({ api }: HostedDynamic) => {
       const { ring, suite } = await seedSuiteWithFanOut(api, { ringKey: "staging", discoveryAllowed: true });
@@ -308,6 +303,5 @@ test("discovery gate: a discovery_allowed ring lets the launch through, planning
       );
     },
     {},
-    { github },
   );
 });

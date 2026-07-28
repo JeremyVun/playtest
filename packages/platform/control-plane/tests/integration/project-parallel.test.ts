@@ -2,12 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { withApp, createTarget } from "./helpers.ts";
-
-const GITHUB_STUB = {
-  enabled: true,
-  dispatchWorkflow: async () => ({ workflow_run_id: "wr-parallel", workflow_run_url: "https://gha.invalid/parallel" }),
-  cancelRun: async () => ({ ok: true }),
-};
+import { claimAndExchange } from "./exec-helpers.ts";
 
 const CASE = [
   "description: Add a todo.",
@@ -57,15 +52,9 @@ test("parallel: project settings validate, persist, and reach the runner", async
     assert.equal(launched.status, 200, JSON.stringify(launched.body));
 
     const groupId = launched.body.run_group.id;
-    const exchange = await fetch(`${base}/api/v1/runner/exchange`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ run_group_id: groupId, isolation: "process" }),
-    }).then((r) => r.json());
-    const spec = await fetch(`${base}/api/v1/runner/groups/${groupId}`, {
-      headers: { authorization: `Bearer ${exchange.token}` },
-    }).then((r) => r.json());
+    const { headers } = await claimAndExchange(api, base, { project, groupId });
+    const spec = await fetch(`${base}/api/v1/runner/groups/${groupId}`, { headers }).then((r) => r.json());
     assert.deepEqual(spec.parallel, { total: 6, record: 2 });
     assert.deepEqual(spec.project.parallel, { total: 6, record: 2 });
-  }, {}, { github: GITHUB_STUB });
+  });
 });

@@ -1,4 +1,4 @@
-// R2 unit coverage: the configuration that opens ephemeral CI registration (and
+// Unit coverage: the configuration that opens ephemeral CI registration (and
 // the half-configured states that must never boot), expiry as a first-class
 // refusal beside revocation, shared label validation, and which labels place a
 // group when a launch pins them. Hermetic: node:sqlite on a temp file, no
@@ -21,7 +21,7 @@ import {
 import { ulid } from "../../src/ulid.ts";
 
 const base = { PLAYTEST_DATA_DIR: "/tmp/playtest-pool-oidc-config-test", PLAYTEST_AUTH: "dev" };
-const pool = { ...base, PLAYTEST_DISPATCH: "pool" };
+const pool = { ...base };
 const roots: string[] = [];
 after(() => {
   for (const dir of roots) fs.rmSync(dir, { recursive: true, force: true });
@@ -31,8 +31,8 @@ after(() => {
 
 test("config: ephemeral CI registration is off until a repository is pinned", () => {
   const cfg: HostedDynamic = loadConfig({ ...pool });
-  // The pins default to GitHub's real issuer and the same audience the dispatch
-  // exchange uses, but `repository` is null, which is what keeps the route shut:
+  // The pins default to GitHub's real issuer and audience, but `repository` is
+  // null, which is what keeps the route shut:
   // an unpinned repository check would accept a token from anyone on GitHub.
   assert.equal(cfg.dispatch.pool.oidc.repository, null);
   assert.equal(cfg.dispatch.pool.oidc.oidcIssuer, "https://token.actions.githubusercontent.com");
@@ -76,14 +76,6 @@ test("config: a workflow or ref pin without a repository pin is a boot error", (
       `${JSON.stringify(half)} must not boot`,
     );
   }
-});
-
-test("config: CI registration pins outside pool placement fail boot rather than doing nothing", () => {
-  assert.throws(
-    () => loadConfig({ ...base, PLAYTEST_POOL_OIDC_REPOSITORY: "acme/storefront" }),
-    (e: HostedDynamic) =>
-      e instanceof ServerConfigError && /PLAYTEST_DISPATCH=pool/.test(e.message) && /github/.test(e.message),
-  );
 });
 
 test("config: the ephemeral credential's lifetime is bounded by GitHub's own job ceiling", () => {

@@ -1,9 +1,10 @@
-#!/usr/bin/env node
+// The group executor. It is INTERNAL machinery, not an entry point: the pool
+// loop (`pool.ts`) is the one arrival, and it calls `execGroup` directly after
+// winning a claim on the board.
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { ApiClient } from "./api-client.ts";
 import { materializeWorkspace } from "./workspace.ts";
 import { CONTAINER_WS, runCaseIsolated, stopActiveContainers } from "./case-runner.ts";
@@ -16,64 +17,14 @@ import { resolveBudget, schedulePool, willRecord } from "@playtest/core/run";
 import { writeBundle, baselinePaths } from "@playtest/core/artifacts";
 import { progressFold } from "@playtest/core/reporting";
 
-if (invokedDirectly()) {
-  execFromCli().catch((e) => {
-    console.error(firstLine(e));
-    process.exit(2);
-  });
-}
-
-/**
- * Was this module started as a program, rather than imported? `argv[1]` is
- * whatever the shell typed, which for the installed executable is npm's
- * `node_modules/.bin/runner-agent` SYMLINK while `import.meta.url` is its
- * target — comparing them raw makes a real launch look like an import and the
- * process exits silently having done nothing.
- */
-function invokedDirectly(): boolean {
-  const entry = process.argv[1];
-  if (!entry) return false;
-  const self = fileURLToPath(import.meta.url);
-  if (entry === self) return true;
-  try {
-    return fs.realpathSync(entry) === fs.realpathSync(self);
-  } catch {
-    return false;
-  }
-}
-
-export async function execFromCli(argv: string[] = process.argv.slice(2), env: NodeJS.ProcessEnv = process.env): Promise<RunnerDynamic> {
-  if (argv[0] === "mint") {
-    const { execMint, parseMintArgs } = await import("./exec-mint.ts");
-    const result = await execMint(parseMintArgs(argv.slice(1), env));
-    if (result.exitCode) process.exitCode = result.exitCode;
-    return result;
-  }
-  // The long-lived self-hosted runner: it claims its own work instead of being
-  // spawned per group, and never exits with a group's verdict (pool.ts).
-  if (argv[0] === "pool") {
-    const { runPool, parsePoolArgs } = await import("./pool.ts");
-    return await runPool(parsePoolArgs(argv.slice(1), env));
-  }
-  const opts = parseArgs(argv, env);
-  const result = await execGroup(opts);
-  if (result.exitCode) process.exitCode = result.exitCode;
-  return result;
-}
-
 export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
-  // A pooled runner presents its registration credential on the exchange and
-  // names the dispatch it CLAIMED; every other placement presents an OIDC token
-  // (or the dev-only insecure grant) and names the group. Either way the answer
-  // is the same short-lived bearer scoped to this one run group, and the
+  // Claiming assigned the work; exchanging authorizes it. The runner presents
+  // its registration credential and names the dispatch it CLAIMED on the board,
+  // and receives a short-lived bearer scoped to this one run group. The
   // isolation reported here is what the run records as producing its evidence.
   const bootstrap = new ApiClient(opts.server, opts.credential || null);
   const exchange = await bootstrap.json("POST", "/runner/exchange", {
-    ...(opts.credential ? {} : { github_oidc_token: opts.oidcToken || "local-dev", run_group_id: opts.group }),
-    // GitHub's dispatch API returns 204 with no run id; presenting the dispatch
-    // id (a workflow input) lets the control plane bind this verified exchange
-    // to its ledger row and backfill workflow_run_id from the OIDC claims.
-    dispatch_id: opts.dispatchId || undefined,
+    dispatch_id: opts.dispatchId,
     isolation: opts.isolation,
     versions: await versions(opts),
   });
@@ -85,10 +36,10 @@ export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
   // The catch below posts errors through the redactor; it must exist before the
   // claim/materialize steps that could throw (secrets arrive with the claims).
   let redactor = (s: RunnerDynamic): string => String(s);
-  // GHA cancel delivers SIGTERM/SIGINT (§3): stop starting cases, `docker stop`
-  // whatever is in flight, report what we have, post a best-effort complete.
-  // A pooled runner learns of a cancel on its heartbeat instead — nothing can
-  // dial in to signal it — and aborts `opts.signal` to run this same path.
+  // SIGTERM/SIGINT: stop starting cases, `docker stop` whatever is in flight,
+  // report what we have, post a best-effort complete. A cancel arrives on the
+  // runner's heartbeat instead — nothing can dial in to signal it — and aborts
+  // `opts.signal` to run this same path.
   let canceled = false;
   const onSignal = () => {
     canceled = true;
@@ -422,41 +373,6 @@ async function versions(opts: RunnerDynamic): Promise<RunnerDynamic> {
     isolation: opts.isolation,
     job_image: process.env.PLAYTEST_JOB_IMAGE || null,
   };
-}
-
-function parseArgs(argv: string[], env: NodeJS.ProcessEnv): RunnerDynamic {
-  const opts: RunnerDynamic = {
-    server: env.PLAYTEST_SERVER_URL || env.PLAYTEST_HOSTED_URL || "http://127.0.0.1:4177",
-    group: env.PLAYTEST_RUN_GROUP || null,
-    dispatchId: env.PLAYTEST_DISPATCH_ID || null,
-    oidcToken: env.ACTIONS_ID_TOKEN || env.PLAYTEST_GITHUB_OIDC_TOKEN || null,
-    isolation: env.PLAYTEST_RUNNER_ISOLATION || "process",
-    workDir: env.PLAYTEST_RUNNER_WORKDIR || path.join(os.tmpdir(), "playtest-runner"),
-  };
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    if (a === "--server") opts.server = argv[++i];
-    else if (a === "--group") opts.group = argv[++i];
-    else if (a === "--dispatch") opts.dispatchId = argv[++i];
-    else if (a === "--oidc-token") opts.oidcToken = argv[++i];
-    else if (a === "--isolation") opts.isolation = argv[++i];
-    else if (a === "--work-dir") opts.workDir = argv[++i];
-    else if (a === "exec") {
-      /* accepted for `runner-agent exec --group ...` */
-    } else if (a === "--help" || a === "-h") {
-      process.stdout.write(
-        "usage: runner-agent exec --group <id> [--server <url>] [--isolation process|container]\n" +
-          "       runner-agent mint --claim <id> [--server <url>]\n" +
-          "       runner-agent pool --server <url> [--labels a,b]   (long-lived self-hosted runner)\n",
-      );
-      process.exit(0);
-    } else {
-      throw new Error(`unknown argument: ${a}`);
-    }
-  }
-  if (!opts.group) throw new Error("--group is required");
-  if (!["process", "container"].includes(opts.isolation)) throw new Error("--isolation must be process or container");
-  return opts;
 }
 
 function firstLine(e: RunnerDynamic): string {

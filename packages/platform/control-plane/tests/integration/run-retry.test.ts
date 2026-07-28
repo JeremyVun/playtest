@@ -3,26 +3,7 @@ import assert from "node:assert/strict";
 import { withApp, createTarget, loadSuiteDir, REPO_ROOT } from "./helpers.ts";
 import { writeTar } from "../../src/suites/tar.ts";
 
-class MockDispatch {
-  enabled = true;
-  dispatches: HostedDynamic[] = [];
-
-  async dispatchWorkflow(req: HostedDynamic) {
-    this.dispatches.push(req);
-    const n = this.dispatches.length;
-    return {
-      workflow_run_id: `wr-${n}`,
-      workflow_run_url: `https://runner.invalid/${n}`,
-    };
-  }
-
-  async cancelRun() {
-    return { ok: true };
-  }
-}
-
 test("retry resets never-started stories inside one run group and double-clicks conflict", async () => {
-  const dispatch = new MockDispatch();
   await withApp(async ({ api, app }: HostedDynamic) => {
     const project = (await api.post("/projects", { key: "retry", name: "Retry" })).body;
     const { ring } = await createTarget(api, project, {
@@ -84,7 +65,9 @@ test("retry resets never-started stories inside one run group and double-clicks 
     assert.equal(retried.status, 200, JSON.stringify(retried.body));
     assert.equal(retried.body.run_group.id, groupId, "retry keeps the original run group");
     assert.equal(retried.body.retried, neverStarted.length);
-    assert.equal(retried.body.run_group.status, "running");
+    // The retry posts a new board entry; the group is queued again until a
+    // runner claims it, exactly as the first attempt was.
+    assert.equal(retried.body.run_group.status, "queued");
     assert.deepEqual(
       retried.body.run_group.runs.map((r: HostedDynamic) => [r.id, r.status]),
       before.rows.map((r: HostedDynamic) => [
@@ -102,10 +85,11 @@ test("retry resets never-started stories inside one run group and double-clicks 
       `SELECT attempt, status FROM dispatches WHERE kind = 'group' AND ref_id = $1 ORDER BY attempt`,
       [groupId],
     );
+    // The retry posts exactly one new board entry, and it stays `requested`
+    // until a runner claims it — placement starts nothing.
     assert.deepEqual(attempts.rows.map((r: HostedDynamic) => [r.attempt, r.status]), [
       [1, "reconciled_dead"],
-      [2, "scheduled"],
+      [2, "requested"],
     ]);
-    assert.equal(dispatch.dispatches.length, 2, "the retry creates exactly one placement attempt");
-  }, {}, { github: dispatch });
+  });
 });

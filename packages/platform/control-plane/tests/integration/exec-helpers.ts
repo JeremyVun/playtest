@@ -1,12 +1,18 @@
-// Shared machinery for real-executor protocol tests. Keep this file free of
+// Shared machinery for real-runner protocol tests. Keep this file free of
 // `test(...)` calls; it is pure setup/teardown support.
 //
-// A stub GitHub dispatch client whose `dispatchWorkflow` spawns the REAL group
-// executor (`packages/platform/runner-agent/src/exec-group.ts exec`) as a child process,
-// talking to the control plane over real HTTP exactly as a GitHub Actions job
-// would, driving real Chromium against an
-// in-process todo app + OpenAI-compatible test endpoint.
+// There is one placement model, so there is one way in here too: a REAL runner
+// registered through the public API, which either
+//
+//   * runs as a scripted claimer (`claimer`, `claimAndExchange`) — poll, claim,
+//     exchange, then drive the executor protocol by hand, or
+//   * runs as the real agent process (`startPoolAgent`), which does all of that
+//     and executes for real.
+//
+// Nothing here fakes an exchange: every bearer below was issued for a dispatch
+// a registered runner actually claimed on the board.
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import http from "node:http";
 import { spawn } from "node:child_process";
@@ -17,7 +23,7 @@ import { REPO_ROOT as HELPERS_REPO_ROOT, createTarget, loadSuiteDir } from "./he
 
 export const REPO_ROOT = HELPERS_REPO_ROOT;
 export const FIXTURE_DIR = path.join(REPO_ROOT, "packages/platform/control-plane/tests/fixtures/hosted-todos");
-export const EXEC_GROUP_CLI = workspaceBin("packages/platform/runner-agent", "runner-agent");
+export const RUNNER_AGENT_CLI = workspaceBin("packages/platform/runner-agent", "runner-agent");
 export const CLI_BIN = workspaceBin("packages/cli", "playtest");
 export const GROUP_TIMEOUT_MS = 150_000;
 
@@ -90,75 +96,133 @@ export function startAuthStub(): Promise<HostedDynamic> {
   });
 }
 
+/** A scripted self-hosted runner: nothing but its credential and fetch. */
+export function claimer(base: HostedDynamic, credential: HostedDynamic) {
+  const call = async (method: HostedDynamic, path: HostedDynamic, body?: HostedDynamic) => {
+    const res = await fetch(`${base}/api/v1${path}`, {
+      method,
+      headers: {
+        authorization: `Bearer ${credential}`,
+        ...(body === undefined ? {} : { "content-type": "application/json" }),
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    return { status: res.status, body: await res.json().catch(() => null) };
+  };
+  return {
+    credential,
+    poll: (query = "") => call("GET", `/runner/pool/claims${query}`),
+    claim: (dispatchId: HostedDynamic) => call("POST", `/runner/pool/claims/${dispatchId}`, {}),
+    heartbeat: (dispatchId: HostedDynamic) => call("POST", `/runner/pool/claims/${dispatchId}/heartbeat`, {}),
+    exchange: (body: HostedDynamic) => call("POST", `/runner/exchange`, body),
+  };
+}
+
+/** Register a standing runner and return the row plus its one-time credential. */
+export async function registerRunner(api: HostedDynamic, project: HostedDynamic, body: HostedDynamic = {}) {
+  const res = await api.post(`/projects/${project.key}/runners`, { name: `runner-${Math.random().toString(36).slice(2, 8)}`, ...body });
+  assert.equal(res.status, 201, JSON.stringify(res.body));
+  return res.body;
+}
+
 /**
- * A stub GitHub dispatch client whose `dispatchWorkflow` spawns the REAL group
- * executor as a child process. `spawnNext` lets a test simulate a dispatch
- * whose workflow never produced a runner without spawning a process for it.
+ * The real arrival, scripted: register a runner, take the offer for `dispatchId`
+ * (or the one naming `groupId` / `mintClaimId`) off the board, claim it, and
+ * exchange the credential for the group- or mint-scoped bearer.
+ *
+ * This is what every protocol test uses instead of asking the server for a
+ * token it never claimed anything for.
  */
-export class SpawningGitHub {
-  enabled = true;
-  dispatches: HostedDynamic[] = [];
-  execs: HostedDynamic[] = [];
-  serverBase: HostedDynamic = null;
-  spawnNext = true;
-  declare llmUrl: HostedDynamic;
-  declare workRoot: HostedDynamic;
+export async function claimAndExchange(
+  api: HostedDynamic,
+  base: HostedDynamic,
+  { project, groupId = null, mintClaimId = null, labels = [], isolation = "process", runner = null }: HostedDynamic,
+) {
+  const registered = runner ?? (await registerRunner(api, project, { labels }));
+  const agent = claimer(base, registered.credential);
+  const offered = await agent.poll("?wait=5");
+  assert.equal(offered.status, 200, JSON.stringify(offered.body));
+  const offer = (offered.body.offers || []).find((o: HostedDynamic) =>
+    groupId ? o.run_group_id === groupId : mintClaimId ? o.mint_claim_id === mintClaimId : true,
+  );
+  assert.ok(offer, `no board offer for ${groupId ?? mintClaimId}: ${JSON.stringify(offered.body)}`);
+  const claimed = await agent.claim(offer.dispatch_id);
+  assert.equal(claimed.status, 200, JSON.stringify(claimed.body));
+  const exchanged = await agent.exchange({ dispatch_id: offer.dispatch_id, isolation });
+  assert.equal(exchanged.status, 200, JSON.stringify(exchanged.body));
+  return {
+    runner: registered,
+    agent,
+    offer,
+    dispatchId: offer.dispatch_id,
+    token: exchanged.body.token,
+    executorId: exchanged.body.executor_id,
+    headers: { authorization: `Bearer ${exchanged.body.token}`, "content-type": "application/json" },
+  };
+}
 
-  constructor({ llmUrl, workRoot }: HostedDynamic) {
-    this.llmUrl = llmUrl;
-    this.workRoot = workRoot;
-  }
+/**
+ * Start the REAL agent (`runner-agent pool`) as a separate process against this
+ * control plane. It polls the board, claims what it can execute, exchanges, and
+ * runs the group or mint executor — the same process a person starts on their
+ * own machine. The credential rides the environment, never argv.
+ */
+export function startPoolAgent(base: string, credential: string, { llmUrl = "http://127.0.0.1:1", labels = "", isolation = "process" }: HostedDynamic = {}) {
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "pool-agent-"));
+  const out = { stdout: "", stderr: "" };
+  const args = [RUNNER_AGENT_CLI, "pool", "--server", base, "--isolation", isolation, "--work-dir", workDir];
+  if (labels) args.push("--labels", labels);
+  const child = spawn(process.execPath, args, {
+    env: { ...childEnv(llmUrl), PLAYTEST_RUNNER_CREDENTIAL: credential },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  child.stdout.on("data", (d) => (out.stdout += d));
+  child.stderr.on("data", (d) => (out.stderr += d));
+  return {
+    child,
+    out,
+    workDir,
+    args: child.spawnargs,
+    stop: async () => {
+      if (child.exitCode == null) {
+        const exited = new Promise((r) => child.once("exit", r));
+        child.kill("SIGTERM");
+        await Promise.race([exited, sleep(5_000)]);
+        if (child.exitCode == null) child.kill("SIGKILL");
+      }
+      fs.rmSync(workDir, { recursive: true, force: true });
+    },
+  };
+}
 
-  async dispatchWorkflow(req: HostedDynamic) {
-    const label = `wr-${this.dispatches.length + 1}`;
-    this.dispatches.push(req);
-    if (this.spawnNext) this.execs.push(this.#spawn(req.refId, label, req.kind));
-    return { workflow_run_id: label, workflow_run_url: `https://gha.invalid/${label}` };
+/** Wait for `pred()` to answer truthy, failing with the agent's own output. */
+export async function untilAgent(pred: () => Promise<HostedDynamic>, what: string, agent: HostedDynamic, timeoutMs = GROUP_TIMEOUT_MS) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const value = await pred();
+    if (value) return value;
+    if (agent?.child?.exitCode != null) {
+      assert.fail(`the runner agent exited (code ${agent.child.exitCode}) before ${what}\nSTDOUT:\n${agent.out.stdout}\nSTDERR:\n${agent.out.stderr}`);
+    }
+    await sleep(250);
   }
-
-  async getRunStatus(id: HostedDynamic) {
-    return { id, status: "completed", conclusion: "failure", url: `https://gha.invalid/${id}` };
-  }
-
-  async cancelRun() {
-    return { ok: true };
-  }
-
-  findDispatchRun() {
-    return null;
-  }
-
-  #spawn(refId: HostedDynamic, label: HostedDynamic, kind = "group") {
-    if (!this.serverBase) throw new Error("SpawningGitHub.serverBase must be set before a dispatch can spawn");
-    const workDir = fs.mkdtempSync(path.join(this.workRoot, "exec-"));
-    const out = { stdout: "", stderr: "" };
-    // A `mint` dispatch runs the standalone mint command against its session
-    // claim (§3a forced refresh) — same binary, same protocol, no run group.
-    const args =
-      kind === "mint"
-        ? [EXEC_GROUP_CLI, "mint", "--claim", refId, "--server", this.serverBase, "--isolation", "process", "--work-dir", workDir]
-        : [EXEC_GROUP_CLI, "exec", "--group", refId, "--server", this.serverBase, "--isolation", "process", "--work-dir", workDir];
-    const child = spawn(process.execPath, args, { env: childEnv(this.llmUrl), stdio: ["ignore", "pipe", "pipe"] });
-    child.stdout.on("data", (d) => (out.stdout += d));
-    child.stderr.on("data", (d) => (out.stderr += d));
-    const promise = new Promise((resolve) => child.on("exit", (code) => resolve({ code, ...out })));
-    return { groupId: refId, label, workDir, child, promise, out };
-  }
+  assert.fail(`timed out waiting for ${what}\nSTDOUT:\n${agent?.out?.stdout}\nSTDERR:\n${agent?.out?.stderr}`);
 }
 
 /** Poll `GET /run-groups/:g` until `status === "done"`, bounded by `timeoutMs`.
- * On timeout, fails with every spawned executor's captured stdout/stderr. */
-export async function waitForGroupDone(api: HostedDynamic, groupId: HostedDynamic, { timeoutMs = GROUP_TIMEOUT_MS, execs = [] }: HostedDynamic = {}) {
+ * On timeout, fails with the runner agent's captured stdout/stderr. */
+export async function waitForGroupDone(api: HostedDynamic, groupId: HostedDynamic, { timeoutMs = GROUP_TIMEOUT_MS, agent = null }: HostedDynamic = {}) {
   const deadline = Date.now() + timeoutMs;
   let last: HostedDynamic = null;
   while (Date.now() < deadline) {
     last = await api.get(`/run-groups/${groupId}`);
     if (last.body?.status === "done") return last.body;
+    if (agent?.child?.exitCode != null) {
+      assert.fail(`the runner agent exited (code ${agent.child.exitCode}) before run group ${groupId} finished\nSTDOUT:\n${agent.out.stdout}\nSTDERR:\n${agent.out.stderr}`);
+    }
     await sleep(500);
   }
-  const debug = execs
-    .map((e: HostedDynamic) => `--- exec ${e.label} (group ${e.groupId}) ---\nSTDOUT:\n${e.out.stdout}\nSTDERR:\n${e.out.stderr}`)
-    .join("\n\n");
+  const debug = agent ? `STDOUT:\n${agent.out.stdout}\nSTDERR:\n${agent.out.stderr}` : "";
   assert.fail(
     `run group ${groupId} did not reach "done" within ${timeoutMs}ms (last status: ${JSON.stringify(last?.body?.status)})\n${debug}`,
   );

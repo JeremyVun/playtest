@@ -21,7 +21,6 @@ import { writeTar } from "../../src/suites/tar.ts";
 import { loadConfig, ServerConfigError } from "../../src/config.ts";
 import { createApp } from "../../src/app.ts";
 
-const POOL = { PLAYTEST_DISPATCH: "pool" };
 
 async function project(api: HostedDynamic, key: HostedDynamic) {
   const res = await api.post("/projects", { key, name: key });
@@ -210,7 +209,7 @@ test("launch: a suite may only launch against its own application's rings", asyn
       selection: { ids: ["add-todo"] },
     });
     assert.equal(ownRing.status, 200, JSON.stringify(ownRing.body));
-  }, POOL);
+  });
 });
 
 test("sessions: a ring cannot borrow an auth provider bound to another ring", async () => {
@@ -271,7 +270,7 @@ test("sessions: a ring cannot borrow an auth provider bound to another ring", as
       /bound to another ring/,
       `expected a ring-scope refusal, got ${JSON.stringify(claimed)}`,
     );
-  }, POOL);
+  });
 });
 
 // ------------------------------------------------------------------- gate 8
@@ -347,7 +346,7 @@ test("group spec: the ring target rides the dispatch snapshot, and authored phys
       headers: { authorization: `Bearer ${token}` },
     }).then((r) => r.json());
     assert.equal(again.ring.base_url, "http://ring.invalid:4173", "the attempt keeps the target it advertised");
-  }, POOL);
+  });
 });
 
 // -------------------------------------------------------------- R1 mobile dark
@@ -375,7 +374,7 @@ test("launch: a mobile application is refused with the reason, until runner bind
     assert.equal(launched.status, 400, JSON.stringify(launched.body));
     assert.match(launched.body.error.message, /mobile placement lands with runner bindings/);
     assert.match(launched.body.error.message, /its own configuration file/);
-  }, POOL);
+  });
 });
 
 // ------------------------------------------------------------------ gate 13
@@ -433,7 +432,7 @@ test("deletion: refused while referenced, naming the referrers; unreferenced del
     assert.equal((await api.del(`/rings/${ring.id}`)).status, 204);
     assert.equal((await api.del(`/applications/${application.id}`)).status, 204);
     assert.deepEqual((await api.get(`/projects/${p.key}/applications`)).body.items, []);
-  }, POOL);
+  });
 });
 
 // ------------------------------------------------------------------ gate 12
@@ -499,7 +498,7 @@ test("preview: the launch dialog is told the ring, the URL, the labels, and whet
     preview = (await api.post(`/projects/${p.key}/run-groups/preview`, { ...body, runner_labels: ["ci-42"] })).body;
     assert.deepEqual(preview.placement.runner_labels, ["ci-42"]);
     assert.equal(preview.placement.labels_source, "launch");
-  }, POOL);
+  });
 });
 
 /** Register a runner, claim the group's dispatch, exchange, return the bearer. */
@@ -511,9 +510,10 @@ async function claimAndExchange(api: HostedDynamic, base: HostedDynamic, p: Host
       headers: { authorization: `Bearer ${runner.credential}`, "content-type": "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body),
     }).then(async (r) => ({ status: r.status, body: await r.json().catch(() => null) }));
-  const offer = await call("GET", "/runner/pool/claims");
-  assert.equal(offer.body.claim?.run_group_id, groupId, JSON.stringify(offer.body));
-  const dispatchId = offer.body.claim.dispatch_id;
+  const offered = await call("GET", "/runner/pool/claims");
+  const offer = (offered.body.offers || []).find((o: HostedDynamic) => o.run_group_id === groupId);
+  assert.ok(offer, JSON.stringify(offered.body));
+  const dispatchId = offer.dispatch_id;
   assert.equal((await call("POST", `/runner/pool/claims/${dispatchId}`, {})).status, 200);
   const exchanged = await call("POST", "/runner/exchange", { dispatch_id: dispatchId, isolation: "process" });
   assert.equal(exchanged.status, 200, JSON.stringify(exchanged.body));

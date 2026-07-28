@@ -1,16 +1,15 @@
-// Phase 7: standalone `script`-provider mint dispatch (§3a forced refresh).
-// POST /auth-providers/:a/mint on a script provider dispatches a `mint`
-// workflow; a REAL runner-agent child process exchanges, fetches the grant
-// (root secrets resolved server-side), runs the mint script clean-room, and
-// fulfills the claim. Also pins: mash-safe pending reuse, reconciler takeover
-// of a dead mint workflow, and the failing-script path.
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
+// Standalone `script`-provider minting, end to end through the CLAIM BOARD
+// (design gate 11). `POST /auth-providers/:a/mint` posts a `mint` entry to the
+// board; the REAL `runner-agent pool` process — the same one a person starts on
+// their own machine — polls, claims it, exchanges its registration credential,
+// fetches the grant (root secrets resolved server-side), runs the mint script
+// clean-room, and fulfills the claim. Also pins: mash-safe pending reuse,
+// reconciler takeover of a mint nothing ever claimed, and the failing-script
+// path.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { withApp } from "./helpers.ts";
-import { SpawningGitHub, sleep } from "./exec-helpers.ts";
+import { registerRunner, startPoolAgent, untilAgent } from "./exec-helpers.ts";
 import { reconcileDispatches } from "../../src/dispatch/reconciler.ts";
 import { decryptSecret } from "../../src/crypto/secrets.ts";
 
@@ -49,24 +48,29 @@ async function setup(api: HostedDynamic, { key, code, name = "portal" }: HostedD
   return { project, provider };
 }
 
-test("forced mint on a script provider dispatches a runner that fulfills the session", async () => {
-  const workRoot = fs.mkdtempSync(path.join(os.tmpdir(), "pt-mint-"));
-  const github = new SpawningGitHub({ llmUrl: "http://127.0.0.1:1", workRoot });
+test("a forced mint rides the board: the real agent claims it and fulfills the session", async () => {
+  let agent: HostedDynamic = null;
   try {
     await withApp(
       async ({ base, app, api }: HostedDynamic) => {
-        github.serverBase = base;
         const { project, provider } = await setup(api, { key: "mint7", code: MINT_SCRIPT });
+        // The one arrival there is: a registered runner polling the board.
+        const registered = await registerRunner(api, project, { name: "adas-laptop" });
+        agent = startPoolAgent(base, registered.credential);
 
         const res = await api.post(`/auth-providers/${provider.id}/mint`, { identity: "admin" });
         assert.equal(res.status, 202, JSON.stringify(res.body));
         assert.equal(res.body.mint.pending, true);
         assert.ok(res.body.mint.claim_id);
         assert.ok(res.body.mint.dispatch_id);
-        assert.equal(github.dispatches.at(-1).kind, "mint");
 
-        const exec = await github.execs.at(-1).promise;
-        assert.equal(exec.code, 0, `mint executor failed:\n${exec.stdout}\n${exec.stderr}`);
+        await untilAgent(
+          async () =>
+            (await app.db.query(`SELECT status FROM dispatches WHERE id = $1`, [res.body.mint.dispatch_id])).rows[0]
+              ?.status === "concluded",
+          "the agent to claim and fulfill the mint",
+          agent,
+        );
 
         // The session artifact exists, carries the identity, and its decrypted
         // storage state proves config.secret_env was resolved into the script.
@@ -91,23 +95,24 @@ test("forced mint on a script provider dispatches a runner that fulfills the ses
         const actions = audit.body.items.map((a: HostedDynamic) => a.action);
         assert.ok(actions.includes("session.mint_dispatched"), actions.join(","));
         assert.ok(actions.includes("session.minted"), actions.join(","));
+        assert.ok(actions.includes("runner.claimed"), actions.join(","));
+        assert.match(agent.out.stdout, /claimed session mint/);
+
+        // Stop the agent before the control plane: its long-poll is a live
+        // request, and closing the server under it would just wait out the hold.
+        await agent.stop();
       },
-      {},
-      { github },
     );
   } finally {
-    fs.rmSync(workRoot, { recursive: true, force: true });
+    if (agent) await agent.stop();
   }
 });
 
-test("a pending mint is reused, a dead mint workflow is reconciled into takeover", async () => {
-  const workRoot = fs.mkdtempSync(path.join(os.tmpdir(), "pt-mint-"));
-  const github = new SpawningGitHub({ llmUrl: "http://127.0.0.1:1", workRoot });
-  github.spawnNext = false; // dispatch rows only; no executor ever arrives
-  try {
-    await withApp(
-      async ({ base, app, api }: HostedDynamic) => {
-        github.serverBase = base;
+test("a pending mint is reused, and one nothing ever claims is reconciled into takeover", async () => {
+  // No agent is started here: the board entry sits unclaimed, which is the
+  // shape the reconciler has to resolve.
+  await withApp(
+      async ({ app, api }: HostedDynamic) => {
         const { project, provider } = await setup(api, { key: "mint7b", code: MINT_SCRIPT });
 
         const first: HostedDynamic = await api.post(`/auth-providers/${provider.id}/mint`, { identity: "admin" });
@@ -117,10 +122,11 @@ test("a pending mint is reused, a dead mint workflow is reconciled into takeover
         assert.equal(second.status, 202);
         assert.equal(second.body.mint.claim_id, first.body.mint.claim_id);
         assert.equal(second.body.mint.dispatch_id, first.body.mint.dispatch_id);
-        assert.equal(github.dispatches.filter((d) => d.kind === "mint").length, 1);
+        const posted = await app.db.query(`SELECT COUNT(*) AS n FROM dispatches WHERE kind = 'mint'`);
+        assert.equal(posted.rows[0].n, 1, "mashing the button posts one board entry, not two");
 
-        // The stub reports the workflow completed without fulfilling: the
-        // reconciler abandons the claim and marks the dispatch dead.
+        // Nothing claimed it inside the claim window: the reconciler abandons
+        // the claim and marks the dispatch dead.
         const results = await reconcileDispatches(app.ctx);
         const mintResult = results.find((r) => r.dispatch_id === first.body.mint.dispatch_id);
         assert.equal(mintResult.action, "dead");
@@ -134,34 +140,30 @@ test("a pending mint is reused, a dead mint workflow is reconciled into takeover
         assert.equal(third.status, 202);
         assert.notEqual(third.body.mint.claim_id, first.body.mint.claim_id);
       },
-      {},
-      { github },
-    );
-  } finally {
-    fs.rmSync(workRoot, { recursive: true, force: true });
-  }
+      { PLAYTEST_POOL_CLAIM_TIMEOUT_S: "0" },
+  );
 });
 
 test("a failing mint script abandons the claim and concludes the dispatch with the error", async () => {
-  const workRoot = fs.mkdtempSync(path.join(os.tmpdir(), "pt-mint-"));
-  const github = new SpawningGitHub({ llmUrl: "http://127.0.0.1:1", workRoot });
+  let agent: HostedDynamic = null;
   try {
     await withApp(
       async ({ base, app, api }: HostedDynamic) => {
-        github.serverBase = base;
         const { project, provider } = await setup(api, { key: "mint7c", code: FAILING_SCRIPT, name: "flaky" });
+        const registered = await registerRunner(api, project, { name: "adas-laptop" });
+        agent = startPoolAgent(base, registered.credential);
 
         const res = await api.post(`/auth-providers/${provider.id}/mint`, { identity: "admin" });
         assert.equal(res.status, 202);
-        const exec = await github.execs.at(-1).promise;
-        assert.equal(exec.code, 1, `expected mint failure:\n${exec.stdout}\n${exec.stderr}`);
 
-        // Give the executor's final complete call a beat to land.
-        for (let i = 0; i < 20; i++) {
-          const d = await api.get(`/projects/${project.key}/dispatches`);
-          if (d.body.items.find((x: HostedDynamic) => x.kind === "mint")?.status === "concluded") break;
-          await sleep(250);
-        }
+        await untilAgent(
+          async () => {
+            const d = await api.get(`/projects/${project.key}/dispatches`);
+            return d.body.items.find((x: HostedDynamic) => x.kind === "mint")?.status === "concluded";
+          },
+          "the agent to report the failed mint",
+          agent,
+        );
         const dispatches = await api.get(`/projects/${project.key}/dispatches`);
         const mintRow = dispatches.body.items.find((d: HostedDynamic) => d.kind === "mint");
         assert.equal(mintRow.status, "concluded");
@@ -174,11 +176,10 @@ test("a failing mint script abandons the claim and concludes the dispatch with t
 
         const audit = await api.get(`/projects/${project.key}/audit?limit=50`);
         assert.ok(audit.body.items.some((a: HostedDynamic) => a.action === "session.mint_failed"));
+        await agent.stop();
       },
-      {},
-      { github },
     );
   } finally {
-    fs.rmSync(workRoot, { recursive: true, force: true });
+    if (agent) await agent.stop();
   }
 });

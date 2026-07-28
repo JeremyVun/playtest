@@ -8,9 +8,7 @@ import { makeLogger } from "./logging.ts";
 import { makeObjectStore } from "./store/object-store.ts";
 import { ensureUser } from "./auth/users.ts";
 import { makeRunnerTokenKey } from "./auth/runner-tokens.ts";
-import { GitHubDispatchClient } from "./dispatch/github.ts";
-import { LocalDispatchClient } from "./dispatch/local.ts";
-import { PoolDispatchClient } from "./dispatch/pool.ts";
+import { ClaimBoard } from "./dispatch/pool.ts";
 import { FeedWaker } from "./events/feed.ts";
 import { createServer } from "./server.ts";
 import { runRetentionCycle } from "./retention/worker.ts";
@@ -19,26 +17,12 @@ import { reconcileDispatches, RECONCILE_LEASE } from "./dispatch/reconciler.ts";
 import { beatHeartbeat } from "./ops.ts";
 import { withLease } from "./leases.ts";
 import { recomputeFindingKeys } from "./findings/intake.ts";
-import type { AppContext, DispatchClient, Logger } from "./types.ts";
+import type { AppContext } from "./types.ts";
 import type { ControlPlaneConfig } from "./config.ts";
-import type { Db } from "./db.ts";
-
-/**
- * The configured placement adapter (`PLAYTEST_DISPATCH`). All three implement
- * the same interface; only the pool places work without starting anything.
- */
-function makeDispatchClient(
-  config: ControlPlaneConfig,
-  { db, log }: { db: Db; log: Logger }
-): DispatchClient {
-  if (config.dispatch.pool.enabled) return new PoolDispatchClient(config, { db, log }) as DispatchClient;
-  if (config.dispatch.local) return new LocalDispatchClient(config, { log }) as DispatchClient;
-  return new GitHubDispatchClient(config) as DispatchClient;
-}
 
 export async function createApp(
   config: ControlPlaneConfig,
-  { migrate: runMigrations = true, github = null }: { migrate?: boolean; github?: DispatchClient | null } = {}
+  { migrate: runMigrations = true }: { migrate?: boolean } = {}
 ) {
   const log = makeLogger(config);
   const db = await connect(config);
@@ -69,7 +53,7 @@ export async function createApp(
     log,
     devUserId,
     feedWaker,
-    github: github || makeDispatchClient(config, { db, log }),
+    board: new ClaimBoard(config, { db, log }),
     runnerTokenKey: makeRunnerTokenKey(config),
     writeLimiter: new WriteRateLimiter({
       perMinute: config.rateLimit.writesPerMinute,
@@ -78,9 +62,9 @@ export async function createApp(
   };
   const server = createServer(ctx);
   let retentionTimer: HostedDynamic = null;
-  // Dispatch reconciler (Phase 7): the liveness safety net finally runs in the
-  // server, not just in tests. Skips quietly while GitHub dispatch is not
-  // configured; stamps a heartbeat each pass so /projects/:p/ops can show lag.
+  // Dispatch reconciler: the liveness safety net — an unclaimed board entry or
+  // a runner that stopped heartbeating. Stamps a heartbeat each pass so
+  // /projects/:p/ops can show lag.
   let reconcileTimer: HostedDynamic = null;
   if (config.reconcile.intervalMs > 0) {
     // The `reconcile` lease, not a boolean: it refuses an overlapping tick the
@@ -88,7 +72,6 @@ export async function createApp(
     // expires because nothing renews it). See src/leases.js.
     const leaseTtlMs = Math.max(60_000, config.reconcile.intervalMs * 4);
     const tick = async () => {
-      if (!ctx.github?.enabled) return;
       try {
         const held = await withLease(db, RECONCILE_LEASE, { ttlMs: leaseTtlMs, log }, async () => {
           await reconcileDispatches(ctx);

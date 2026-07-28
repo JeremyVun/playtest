@@ -1,18 +1,19 @@
-// Pool mode: the long-lived self-hosted runner's loop, argument handling, and
-// the two things a person only ever notices when they are wrong — the startup
-// banner and the message a refused credential produces.
+// The long-lived self-hosted runner's loop, argument handling, and the two
+// things a person only ever notices when they are wrong — the startup banner
+// and the message a refused credential produces.
 //
 // The board is a loopback stub here (the real claim board has its own
 // control-plane suite, and the two meet for real in the control plane's
 // pool-agent integration test); the executor is injected, so these tests pin
-// what the LOOP does: claim, resume, cancel, back off, refuse.
+// what the LOOP does: pick a claimable offer off the page, skip the ones it
+// cannot take, resume, cancel, back off, refuse.
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
-import { runPool, parsePoolArgs, backoffDelayMs, startupLines, resolveCredential } from "../../src/pool.ts";
+import { runPool, parsePoolArgs, backoffDelayMs, startupLines, resolveCredential, defaultCompatibility } from "../../src/pool.ts";
 
 const CREDENTIAL = "ptr_test-credential";
 
@@ -35,7 +36,7 @@ async function board(answers: LegacyTestValue[], { claimStatus = 200, heartbeat 
       if (url.pathname === "/api/v1/runner/pool/claims") {
         const answer = answers[Math.min(polls++, answers.length - 1)];
         if (answer.status) return reply(answer.status, answer.body);
-        return reply(200, { runner: { id: "rn1", name: "adas-laptop", labels: ["macos"], project_key: "acme" }, claim: null, current: null, ...answer });
+        return reply(200, { runner: { id: "rn1", name: "adas-laptop", labels: ["macos"], project_key: "acme" }, offers: [], current: null, ...answer });
       }
       if (req.method === "POST" && url.pathname.startsWith("/api/v1/runner/pool/claims/")) {
         if (claimStatus !== 200) return reply(claimStatus, { error: { code: "conflict", message: "already claimed by another runner" } });
@@ -63,9 +64,21 @@ const options = (server: string, extra: LegacyTestValue = {}) => ({
   ...extra,
 });
 
-const groupOffer = {
-  claim: { dispatch_id: "d1", kind: "group", ref_id: "g1", run_group_id: "g1", mint_claim_id: null, labels: ["macos"] },
-};
+/** One web-application group offer, the shape the board serves. */
+const offer = (over: LegacyTestValue = {}) => ({
+  dispatch_id: "d1",
+  kind: "group",
+  ref_id: "g1",
+  run_group_id: "g1",
+  mint_claim_id: null,
+  labels: ["macos"],
+  project_id: "p1",
+  project_key: "acme",
+  target: { application_id: "a1", application_key: "todo-web", ring_id: "r1", ring_key: "local", driver: "web", platform: null, base_url: "http://127.0.0.1:4173" },
+  ...over,
+});
+
+const groupOffer = { offers: [offer()] };
 
 test("pool: an offered group is claimed, executed through the group executor, and the loop goes back to the board", async () => {
   const stub = await board([groupOffer]);
@@ -103,7 +116,7 @@ test("pool: an offered group is claimed, executed through the group executor, an
 });
 
 test("pool: a runner restarted mid-group resumes the claim it still holds instead of taking new work", async () => {
-  const stub = await board([{ current: { dispatch_id: "d9", kind: "group", ref_id: "g9", run_group_id: "g9", mint_claim_id: null, labels: [] } }]);
+  const stub = await board([{ current: offer({ dispatch_id: "d9", ref_id: "g9", run_group_id: "g9", labels: [] }) }]);
   const calls: LegacyTestValue[] = [];
   const lines: string[] = [];
   try {
@@ -122,7 +135,7 @@ test("pool: a runner restarted mid-group resumes the claim it still holds instea
 });
 
 test("pool: a mint claim runs the mint path on the same board", async () => {
-  const stub = await board([{ claim: { dispatch_id: "d2", kind: "mint", ref_id: "m1", run_group_id: null, mint_claim_id: "m1", labels: [] } }]);
+  const stub = await board([{ offers: [offer({ dispatch_id: "d2", kind: "mint", ref_id: "m1", run_group_id: null, mint_claim_id: "m1", labels: [], target: null })] }]);
   const mints: LegacyTestValue[] = [];
   try {
     await runPool(options(stub.url), {
@@ -136,6 +149,106 @@ test("pool: a mint claim runs the mint path on the same board", async () => {
   }
   assert.equal(mints[0].claim, "m1");
   assert.equal(mints[0].credential, CREDENTIAL);
+});
+
+test("pool: the first offer this runner can execute is claimed, the rest of the page is left alone", async () => {
+  const mobile = offer({ dispatch_id: "d-ios", ref_id: "g-ios", run_group_id: "g-ios", target: { application_id: "a2", application_key: "todo-ios", ring_id: "r2", ring_key: "local", driver: "mobile", platform: "ios", base_url: null } });
+  const stub = await board([{ offers: [mobile, offer()] }]);
+  const calls: LegacyTestValue[] = [];
+  const lines: string[] = [];
+  try {
+    await runPool(options(stub.url), {
+      execGroupImpl: async (opts: LegacyTestValue) => { calls.push(opts); return { exitCode: 0 }; },
+      log: (line) => lines.push(line),
+      maxIterations: 1,
+    });
+  } finally {
+    await stub.close();
+  }
+  // Head-of-line blocking is what the page exists to prevent: an offer this
+  // machine has no binding for must not starve the newer one behind it.
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].group, "g1");
+  const claimed = stub.requests.filter((r: LegacyTestValue) => r.method === "POST" && r.path.startsWith("/api/v1/runner/pool/claims/"));
+  assert.deepEqual(claimed.map((r: LegacyTestValue) => r.path), ["/api/v1/runner/pool/claims/d1"],
+    "the incompatible offer is never claimed and never reported");
+  assert.match(lines.join("\n"), /skipping run group g-ios: this runner has no configuration binding for the mobile target "todo-ios\/local"/);
+});
+
+test("pool: an all-incompatible page is skipped by id on the next poll, and the reason is said once", async () => {
+  const mobile = { ...offer().target, application_key: "ios-a", driver: "mobile", platform: "ios", base_url: null };
+  const a = offer({ dispatch_id: "d-a", ref_id: "g-a", run_group_id: "g-a", target: mobile });
+  const b = offer({ dispatch_id: "d-b", ref_id: "g-b", run_group_id: "g-b", target: mobile });
+  // Two polls see the same unclaimable pair; the third comes back empty, which
+  // is what the server's hold produces once the skips exclude everything.
+  const stub = await board([{ offers: [a, b] }, { offers: [a, b] }, { offers: [] }]);
+  const lines: string[] = [];
+  try {
+    await runPool(options(stub.url), {
+      execGroupImpl: async () => assert.fail("nothing on this board is executable here"),
+      log: (line) => lines.push(line),
+      sleep: async () => {},
+      maxPolls: 4,
+    });
+  } finally {
+    await stub.close();
+  }
+  const polls = stub.requests.filter((r: LegacyTestValue) => r.path === "/api/v1/runner/pool/claims");
+  assert.equal(polls.length, 4);
+  assert.equal(polls[0].query.includes("skip="), false, "the first poll skips nothing");
+  assert.match(polls[1].query, /skip=d-a(%2C|,)d-b/, `the incompatible page is named on the next poll: ${polls[1].query}`);
+  assert.match(polls[2].query, /skip=d-a(%2C|,)d-b/, "and stays named while the board still holds them");
+  assert.equal(polls[3].query.includes("skip="), false,
+    "an empty long-poll answer expires the skips, so a transient incompatibility is reconsidered");
+  // One deduplicated reason: two offers sharing it over two polls, said once.
+  const skipped = lines.filter((l) => /^skipping /.test(l));
+  assert.equal(skipped.length, 1, `one reason, said once: ${JSON.stringify(skipped)}`);
+  assert.equal(stub.requests.some((r: LegacyTestValue) => r.method === "POST"), false,
+    "an incompatible offer is never claimed, and no reason is ever sent to the control plane");
+});
+
+test("pool: past the skip cap the runner backs off explicitly instead of looping", async () => {
+  // Every page is a fresh batch of offers this runner cannot execute, so the
+  // skip list fills; past the cap it must wait rather than re-poll immediately.
+  let n = 0;
+  const page = () =>
+    Array.from({ length: 8 }, () => {
+      n += 1;
+      return offer({ dispatch_id: `d-${n}`, ref_id: `g-${n}`, run_group_id: `g-${n}`, target: { ...offer().target, driver: "mobile", platform: "ios", base_url: null } });
+    });
+  const answers = Array.from({ length: 12 }, () => ({ offers: page() }));
+  const stub = await board(answers);
+  const slept: number[] = [];
+  const lines: string[] = [];
+  try {
+    await runPool(options(stub.url), {
+      execGroupImpl: async () => assert.fail("nothing here is executable"),
+      log: (line) => lines.push(line),
+      sleep: async (ms) => { slept.push(ms); },
+      random: () => 0.5,
+      maxPolls: 12,
+    });
+  } finally {
+    await stub.close();
+  }
+  assert.ok(slept.length >= 3, `the cap is reached and the loop backs off: ${JSON.stringify(slept)}`);
+  assert.ok(slept[0]! >= 750, "the first backoff is about a second");
+  assert.ok(slept.at(-1)! > slept[0]!, "and it grows rather than staying tight");
+  const complaints = lines.filter((l) => /backing off/.test(l));
+  assert.equal(complaints.length, 1, "said once, not once per poll");
+});
+
+test("pool: mint compatibility is labels only, and an unknown driver is refused by name", () => {
+  const opts = options("http://127.0.0.1:1") as LegacyTestValue;
+  assert.equal(defaultCompatibility(offer(), opts), null);
+  assert.equal(defaultCompatibility(offer({ target: { ...offer().target, driver: "api" } }), opts), null);
+  // A mint carries no target when its provider is project-wide, and needs none.
+  assert.equal(defaultCompatibility(offer({ kind: "mint", target: null }), opts), null);
+  assert.match(
+    defaultCompatibility(offer({ target: { ...offer().target, driver: "mobile", application_key: "todo-ios", ring_key: "local" } }), opts)!,
+    /no configuration binding for the mobile target "todo-ios\/local"/,
+  );
+  assert.match(defaultCompatibility(offer({ target: { ...offer().target, driver: "desktop" } }), opts)!, /cannot execute the "desktop" driver/);
 });
 
 test("pool: a lost claim race is not an error — the loser goes straight back to the board", async () => {

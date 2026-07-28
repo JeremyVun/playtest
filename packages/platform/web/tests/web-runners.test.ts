@@ -13,8 +13,6 @@ import {
 import { SETTINGS_SECTIONS, visibleSections } from "../src/lib/settings-sections.js";
 import { ago } from "../src/lib/labels.js";
 
-const POOLED = { pool_dispatch: true };
-
 test("runners: registering yields one pasteable command, and the credential never rides argv", () => {
   const command = startCommand({
     server: "https://playtest.example.com/",
@@ -186,17 +184,17 @@ test("runs: a placement failure is recognised, so the remedy can be the runner",
   assert.equal(poolPlacementCause(null), null);
 });
 
-test("runners: the section is a developer surface on a deployment that HAS a pool", () => {
+test("runners: the section is a developer surface, and it is always present", () => {
   const ids = SETTINGS_SECTIONS.map((s: WebDynamic) => s.id);
   assert.deepEqual(ids, ["runners", "runs", "models", "team", "audit"]);
   const runners = SETTINGS_SECTIONS.find((s: WebDynamic) => s.id === "runners");
   assert.equal(runners.min, "developer", "registering a runner is a developer act, like the ring it serves");
   assert.equal(runners.label, "Runners");
+  assert.equal(runners.requires, undefined, "the claim board is the one placement model — no capability gates it");
   // A viewer cannot register or revoke, so the section is not offered at all.
-  assert.equal(visibleSections((min: WebDynamic) => min === "viewer", POOLED).some((s: WebDynamic) => s.id === "runners"), false);
-  assert.equal(visibleSections(() => true, POOLED).some((s: WebDynamic) => s.id === "runners"), true);
-  // And under any other placement adapter there is no board to claim from, so
-  // the whole surface is absent rather than present and then explained away.
-  assert.equal(visibleSections(() => true, { pool_dispatch: false }).some((s: WebDynamic) => s.id === "runners"), false);
-  assert.equal(visibleSections(() => true).some((s: WebDynamic) => s.id === "runners"), false);
+  assert.equal(visibleSections((min: WebDynamic) => min === "viewer").some((s: WebDynamic) => s.id === "runners"), false);
+  // Nothing else places runs, so a deployment that reports no capabilities at
+  // all still shows Runners: without one, launches simply sit on the board.
+  assert.equal(visibleSections(() => true).some((s: WebDynamic) => s.id === "runners"), true);
+  assert.equal(visibleSections(() => true, {}).some((s: WebDynamic) => s.id === "runners"), true);
 });

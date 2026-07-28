@@ -42,6 +42,16 @@ import { checkInWindowMs } from "../dispatch/pool.ts";
 const MAX_WAIT_S = 25;
 
 /**
+ * How many offers one poll may carry. Small and fixed: the page exists to keep
+ * one unclaimable entry from blocking the head of the board, not to become
+ * pagination — there are no cursors and no board versions.
+ */
+const OFFER_PAGE = 8;
+
+/** How many dispatch ids one poll's `skip` list may name (see `skipIds`). */
+const MAX_SKIP_IDS = 64;
+
+/**
  * How many live ephemeral runners one verified workflow run may register. A
  * pipeline needs one; a handful of parallel jobs in the same run need a few. The
  * cap exists because an OIDC token is replayable for its own short lifetime, so
@@ -75,13 +85,6 @@ const MAX_EPHEMERAL_PER_RUN = 8;
  */
 export async function registerViaOidc(ctx: HostedDynamic) {
   const pool = ctx.config.dispatch.pool;
-  if (!pool.enabled) {
-    throw new AppError(
-      "not_configured",
-      `this deployment does not place runs on a self-hosted runner pool, so there is no board for a CI ` +
-        `runner to join — it needs PLAYTEST_DISPATCH=pool`,
-    );
-  }
   if (!pool.oidc.repository) {
     throw new AppError(
       "not_configured",
@@ -163,12 +166,26 @@ export async function registerViaOidc(ctx: HostedDynamic) {
 }
 
 /**
- * GET /runner/pool/claims?wait=true[&labels=a,b] — check in and long-poll.
+ * GET /runner/pool/claims?wait=true[&labels=a,b][&skip=d1,d2] — check in and
+ * long-poll.
  *
- * Answers with the oldest unclaimed dispatch (kind `group` OR `mint` — session
- * minting places through the same path and must be served) whose label set is a
- * subset of this runner's, scoped to the runner's own project. Empty job labels
- * match any runner in the project.
+ * Answers with a BOUNDED PAGE of the oldest unclaimed dispatches (kind `group`
+ * OR `mint` — session minting places through the same path and must be served)
+ * whose label set is a subset of this runner's, scoped to the runner's own
+ * project. Empty job labels match any runner in the project.
+ *
+ * A page rather than one offer because compatibility is not all server-side:
+ * labels are, but "does this runner hold a binding for todo-ios/local?" is a
+ * fact only the runner knows. With a single-offer board one unclaimable job at
+ * the head would starve every newer job for every runner, so the runner is
+ * handed a page and claims the first entry it can.
+ *
+ * `skip` is the other half of that: a bounded, session-local list of dispatch
+ * ids this runner has already decided it cannot take. They are excluded from
+ * the query — which means the long-poll HOLDS when nothing else remains, rather
+ * than returning an all-incompatible page the agent would immediately re-poll
+ * against. Nothing is persisted and no reason travels: the advertisement itself
+ * is never mutated, so a capable runner claims it unaffected.
  *
  * This route only OFFERS. Claiming is the POST below, so two runners waking on
  * the same signal both see the offer and exactly one of them wins the race.
@@ -176,6 +193,7 @@ export async function registerViaOidc(ctx: HostedDynamic) {
 export async function pollClaims(ctx: HostedDynamic) {
   const runner = await requireRunnerCredential(ctx);
   const labels = advertisedLabels(ctx, runner);
+  const skip = skipIds(ctx);
   await checkIn(ctx, runner, labels);
 
   // One runner executes one group at a time (v1). A runner that already holds a
@@ -183,7 +201,7 @@ export async function pollClaims(ctx: HostedDynamic) {
   // how an agent restarted mid-group finds what it was doing.
   const current = await activeClaim(ctx, runner.id);
   if (current) {
-    return { runner: runnerView(runner, labels), claim: null, current: offerView(current) };
+    return { runner: runnerView(runner, labels), offers: [], current: await offerView(ctx, current) };
   }
 
   const load = async () => {
@@ -192,19 +210,21 @@ export async function pollClaims(ctx: HostedDynamic) {
       // no label this job wants may be missing from what the runner advertises.
       // json_each over the stored arrays keeps the match in the same read that
       // orders the board, so a poll is one query however long the board is.
-      `SELECT d.id, d.kind, d.ref_id, d.attempt, d.labels, d.requested_at, d.project_id
-         FROM dispatches d
+      `SELECT d.id, d.kind, d.ref_id, d.attempt, d.labels, d.target, d.requested_at, d.claimed_at,
+              d.project_id, p.key AS project_key
+         FROM dispatches d JOIN projects p ON p.id = d.project_id
         WHERE d.project_id = $1
           AND d.kind IN ('group','mint')
           AND d.status = 'requested'
           AND d.claimed_at IS NULL
           AND d.canceled_at IS NULL
+          AND d.id NOT IN (SELECT value FROM json_each($3))
           AND NOT EXISTS (
                 SELECT 1 FROM json_each(COALESCE(d.labels, '[]')) want
                  WHERE want.value NOT IN (SELECT value FROM json_each($2)))
         ORDER BY d.requested_at, d.id
-        LIMIT 1`,
-      [runner.project_id, labels],
+        LIMIT ${OFFER_PAGE}`,
+      [runner.project_id, labels, skip],
     );
     return rows;
   };
@@ -212,8 +232,31 @@ export async function pollClaims(ctx: HostedDynamic) {
   let rows = await load();
   const wait = waitSeconds(ctx.query.get("wait"));
   if (!rows.length && wait > 0) rows = await holdUntil(ctx, runner.project_id, wait, load);
-  const offer = rows[0];
-  return { runner: runnerView(runner, labels), claim: offer ? offerView(offer) : null, current: null };
+  return {
+    runner: runnerView(runner, labels),
+    offers: await Promise.all(rows.map((d: HostedDynamic) => offerView(ctx, d))),
+    current: null,
+  };
+}
+
+/**
+ * The dispatch ids this poll must not be offered — the runner has already
+ * decided, locally, that it cannot take them. Bounded because the list is a
+ * query string on every poll and because an unbounded one would be a way to
+ * make the server do arbitrary work; past the cap the agent is expected to back
+ * off explicitly rather than keep naming more.
+ */
+function skipIds(ctx: HostedDynamic): string[] {
+  const raw = ctx.query.get("skip");
+  if (!raw) return [];
+  const ids = [...new Set(String(raw).split(",").map((s) => s.trim()).filter(Boolean))];
+  if (ids.length > MAX_SKIP_IDS) {
+    throw badRequest(
+      `"skip" names ${ids.length} dispatches, and a poll may skip at most ${MAX_SKIP_IDS} — a runner past ` +
+        `that many incompatible offers should back off rather than keep polling`,
+    );
+  }
+  return ids;
 }
 
 /**
@@ -347,7 +390,7 @@ export async function claimDispatch(ctx: HostedDynamic) {
 
   return {
     claimed: true,
-    ...offerView(claimed),
+    ...(await offerView(ctx, claimed)),
     // How often to check in: comfortably inside the window the reconciler
     // declares this runner gone, so a slow group is never mistaken for a dead one.
     heartbeat_interval_s: Math.max(5, Math.round(ctx.config.dispatch.pool.heartbeatTimeoutMs / 1000 / 4)),
@@ -417,18 +460,51 @@ const runnerView = (runner: HostedDynamic, labels: string[]) => ({
   project_key: runner.project_key ?? null,
 });
 
-/** The board entry a runner acts on: what to execute and how to exchange for it. */
-const offerView = (d: HostedDynamic) => ({
-  dispatch_id: d.id,
-  kind: d.kind,
-  ref_id: d.ref_id,
-  run_group_id: d.kind === "group" ? d.ref_id : null,
-  mint_claim_id: d.kind === "mint" ? d.ref_id : null,
-  attempt: d.attempt ?? null,
-  labels: d.labels || [],
-  requested_at: d.requested_at ?? null,
-  claimed_at: d.claimed_at ?? null,
-});
+/**
+ * The board entry a runner acts on: what to execute, how to exchange for it,
+ * and the non-secret facts it needs to decide LOCALLY whether it can take it.
+ *
+ * The project rides the ENVELOPE, not the target, because a runner needs it on
+ * every offer — including a project-wide mint, which has no target at all. The
+ * target block is the attempt's own snapshot, so a ring edited between poll,
+ * claim and exchange cannot make the offer and the group spec disagree. No
+ * suite files and no secrets before the claim, and no runner-resolved physical
+ * fact ever (no app path, no device, no Appium endpoint).
+ */
+async function offerView(ctx: HostedDynamic, d: HostedDynamic) {
+  const projectKey = d.project_key ?? (await projectKeyOf(ctx, d.project_id));
+  const t = d.target ?? null;
+  return {
+    dispatch_id: d.id,
+    kind: d.kind,
+    ref_id: d.ref_id,
+    run_group_id: d.kind === "group" ? d.ref_id : null,
+    mint_claim_id: d.kind === "mint" ? d.ref_id : null,
+    attempt: d.attempt ?? null,
+    labels: d.labels || [],
+    requested_at: d.requested_at ?? null,
+    claimed_at: d.claimed_at ?? null,
+    project_id: d.project_id,
+    project_key: projectKey,
+    // Null for a project-wide mint: there is no application or ring behind it.
+    target: t
+      ? {
+          application_id: t.application_id ?? null,
+          application_key: t.application_key ?? null,
+          ring_id: t.ring_id ?? null,
+          ring_key: t.ring_key ?? null,
+          driver: t.driver ?? null,
+          platform: t.platform ?? null,
+          base_url: t.base_url ?? null,
+        }
+      : null,
+  };
+}
+
+async function projectKeyOf(ctx: HostedDynamic, projectId: string) {
+  const { rows } = await ctx.db.query(`SELECT key FROM projects WHERE id = $1`, [projectId]);
+  return rows[0]?.key ?? null;
+}
 
 /** The runner's advertised labels for this check-in: `?labels=` when present. */
 function advertisedLabels(ctx: HostedDynamic, runner: HostedDynamic): string[] {

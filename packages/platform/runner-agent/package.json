@@ -2,13 +2,13 @@
   "name": "@playtest/runner-agent",
   "version": "0.1.0",
   "private": true,
-  "description": "Hosted Playtest group executor",
+  "description": "Playtest self-hosted runner agent",
   "type": "module",
   "bin": {
-    "runner-agent": "./src/exec-group.ts"
+    "runner-agent": "./src/cli.ts"
   },
   "scripts": {
-    "start": "node src/exec-group.ts",
+    "start": "node src/cli.ts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "node --import ../../../tests/support/hermetic.ts --test tests/unit/*.test.ts"
   },

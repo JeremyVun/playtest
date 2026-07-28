@@ -1,7 +1,7 @@
 import YAML from "yaml";
 import { ulid } from "../ulid.ts";
 import { audit, actorOf } from "../audit.ts";
-import { AppError, badRequest, conflict, notFound } from "../errors.ts";
+import { badRequest, conflict, notFound } from "../errors.ts";
 import { loadTreeFiles } from "../suites/snapshots.ts";
 import { resolveSnapshotCases } from "../suites/resolve.ts";
 import { newRunId } from "@playtest/core/artifacts";
@@ -53,11 +53,6 @@ export function targetSnapshot(application: HostedDynamic, ring: HostedDynamic, 
 
 export async function createRunGroup(ctx: HostedDynamic, { principal, project, suite, application, ring, selection, note = null, runnerLabels = null }: HostedDynamic) {
   selection = normalizeSelection(selection);
-  if (!ctx.github?.enabled) {
-    // A test/local mock sets ctx.github.enabled=true. Without that or real GitHub
-    // App config, launching would create a permanently queued group.
-    throw new AppError("config_error", "GitHub dispatch is not configured and no local dispatch mock is installed");
-  }
   requireDispatchableDriver(application);
   const active = await ctx.db.query(
     `SELECT COUNT(*) AS n FROM dispatches
@@ -178,14 +173,7 @@ export async function createRunGroup(ctx: HostedDynamic, { principal, project, s
     });
   });
 
-  await dispatchAttempt(ctx, {
-    dispatchId,
-    projectId: project.id,
-    kind: "group",
-    refId: groupId,
-    attempt: 1,
-    labels,
-  });
+  await dispatchAttempt(ctx, { dispatchId, kind: "group", refId: groupId, labels });
 
   return {
     run_group: await getRunGroupView(ctx, groupId),
@@ -299,10 +287,9 @@ export async function previewRunGroup(ctx: HostedDynamic, { project, suite, appl
 /**
  * Is a runner advertising these labels checked in right now? A preview that says
  * "nothing here can take this" beats a launch that sits queued until its
- * unclaimed timeout. Null when this deployment does not place on the pool.
+ * unclaimed timeout.
  */
 async function labelMatchingRunnerOnline(ctx: HostedDynamic, projectId: HostedDynamic, labels: string[]) {
-  if (!ctx.config.dispatch.pool?.enabled) return null;
   const windowMs = checkInWindowMs(ctx.config.dispatch.pool);
   const { rows } = await ctx.db.query(
     `SELECT labels FROM runners
@@ -394,33 +381,14 @@ async function runCostHistory(ctx: HostedDynamic, suiteId: HostedDynamic) {
   return { byStoryMode, byMode };
 }
 
-export async function dispatchAttempt(ctx: HostedDynamic, { dispatchId, projectId, kind, refId, attempt, labels }: HostedDynamic) {
-  const result = await ctx.github.dispatchWorkflow({ dispatchId, kind, refId, labels, attempt });
-  // Pull-based placement (dispatch/pool.ts): nothing was started, so the row
-  // stays `requested` — that IS the board entry, and the winning claim is what
-  // moves it to `scheduled`, flips the group to running, and emits the
-  // provisioning event below. Only the board's run id is stamped here, so the
-  // reconciler reads claim state instead of hunting for a workflow.
-  if (result.claim_pending) {
-    await ctx.db.query(`UPDATE dispatches SET workflow_run_id = $2 WHERE id = $1`, [
-      dispatchId,
-      result.workflow_run_id ?? null,
-    ]);
-    return;
-  }
-  await ctx.db.query(
-    `UPDATE dispatches
-        SET status = 'scheduled', workflow_run_id = $2, workflow_run_url = $3
-      WHERE id = $1`,
-    [dispatchId, result.workflow_run_id ?? null, result.workflow_run_url ?? null],
-  );
-  await ctx.db.query(`UPDATE run_groups SET status = 'running', updated_at = now() WHERE id = $1`, [refId]);
-  await emitPlatformEvent(ctx.db, {
-    projectId,
-    type: "run.status",
-    entity: { run_group_id: refId },
-    payload: { status: "provisioning", dispatch_id: dispatchId, workflow_run_url: result.workflow_run_url ?? null },
-  });
+/**
+ * Post an attempt to the claim board. Nothing is started and nothing is
+ * contacted: the `requested` ledger row plus its labels and target snapshots IS
+ * the board entry, and the winning CLAIM (`api/pool.ts`) is what moves it to
+ * `scheduled`, flips the group to running, and emits the provisioning event.
+ */
+export async function dispatchAttempt(ctx: HostedDynamic, { dispatchId, kind, refId, labels }: HostedDynamic) {
+  await ctx.board.postDispatch({ dispatchId, kind, refId, labels });
 }
 
 export async function dispatchContinuation(ctx: HostedDynamic, groupId: HostedDynamic) {
@@ -441,14 +409,7 @@ export async function dispatchContinuation(ctx: HostedDynamic, groupId: HostedDy
        VALUES ($1, $2, 'group', $3, $4, 'requested', $5, $6)`,
     [dispatchId, group.project_id, group.id, attempt, labels, targetSnapshot(application, ring, labels)],
   );
-  await dispatchAttempt(ctx, {
-    dispatchId,
-    projectId: group.project_id,
-    kind: "group",
-    refId: group.id,
-    attempt,
-    labels,
-  });
+  await dispatchAttempt(ctx, { dispatchId, kind: "group", refId: group.id, labels });
   return dispatchId;
 }
 

@@ -38,9 +38,6 @@ export class ServerConfigError extends Error {
  */
 const GRADER_TIER_MODEL = "sonnet";
 
-/** Placement adapters (`PLAYTEST_DISPATCH`); unset means GitHub workflow dispatch. */
-const DISPATCH_MODES = ["github", "local", "pool"];
-
 /** Decode a 32-byte key given as base64 or hex; null when unset. */
 function parseKmsKey(raw: string | undefined): Buffer | null {
   if (!raw) return null;
@@ -76,17 +73,6 @@ function resolveRetentionDays(env: NodeJS.ProcessEnv) {
  */
 export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
   const authMode = env.PLAYTEST_AUTH === "dev" ? "dev" : "oidc";
-
-  // Placement: which adapter starts (or, for the pool, does not start) runners.
-  // An unrecognized value is a boot error rather than a silent fall back to
-  // GitHub dispatch, which would look like "my runners never get work".
-  const dispatchMode = env.PLAYTEST_DISPATCH || "github";
-  if (!DISPATCH_MODES.includes(dispatchMode)) {
-    throw new ServerConfigError(
-      `PLAYTEST_DISPATCH must be one of ${DISPATCH_MODES.join(", ")} ` +
-        `(got ${JSON.stringify(env.PLAYTEST_DISPATCH)}); leave it unset for GitHub workflow dispatch`,
-    );
-  }
 
   // One data root holds the SQLite database and, by default, the object store,
   // so a deployment cannot accidentally split durable state across volumes
@@ -133,39 +119,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     },
     dispatch: {
       maxActivePerProject: Number(env.PLAYTEST_DISPATCH_MAX_ACTIVE_PER_PROJECT || 4),
-      // How long the reconciler waits for GitHub's 204 dispatch response to be
-      // correlated to a workflow run (run-name scan or executor exchange) before
-      // declaring the dispatch dead. Seconds; default 15 minutes.
-      correlateDeadlineMs: Number(env.PLAYTEST_DISPATCH_CORRELATE_DEADLINE_S || 900) * 1000,
-      github: {
-        enabled: !!(env.GITHUB_APP_ID && env.GITHUB_APP_PRIVATE_KEY && env.GITHUB_APP_INSTALLATION_ID && env.GITHUB_REPOSITORY && env.GITHUB_WORKFLOW_ID),
-        apiUrl: (env.GITHUB_API_URL || "https://api.github.com").replace(/\/$/, ""),
-        appId: env.GITHUB_APP_ID || null,
-        privateKey: (env.GITHUB_APP_PRIVATE_KEY || "").replace(/\\n/g, "\n") || null,
-        installationId: env.GITHUB_APP_INSTALLATION_ID || null,
-        repository: env.GITHUB_REPOSITORY || null,
-        workflowId: env.GITHUB_WORKFLOW_ID || "playtest-runner.yml",
-        ref: env.GITHUB_WORKFLOW_REF || "main",
-        oidcAudience: env.GITHUB_OIDC_AUDIENCE || "playtest",
-        oidcIssuer: env.GITHUB_OIDC_ISSUER || "https://token.actions.githubusercontent.com",
-      },
-      // Test/development escape hatch for the local dispatch mock. Production
-      // exchanges must validate a GitHub OIDC token against workflow_run_id.
-      // Pool placement never rides it: a pooled runner is off-premises by
-      // definition, so it always presents its own registration credential and
-      // the insecure exchange is forced off below whatever the auth mode.
-      allowInsecureRunnerExchange:
-        dispatchMode !== "pool" && (env.PLAYTEST_RUNNER_INSECURE_EXCHANGE === "1" || authMode === "dev"),
-      // PLAYTEST_DISPATCH=local runs launches through the in-process
-      // LocalDispatchClient (spawns the real runner-agent on this machine)
-      // instead of GitHub. Dev auth only: its exchange rides the insecure
-      // runner exchange, which production must never enable.
-      local: dispatchMode === "local",
-      // PLAYTEST_DISPATCH=pool places runs on self-hosted runners that claim
-      // work outbound (docs/contracts/hosted.md, "Runner pool"). The control
-      // plane starts nothing and connects to nothing.
+      // The claim board is the ONE placement model (docs/contracts/hosted.md,
+      // "Runner pool"): the control plane starts nothing and connects to
+      // nothing, and every runner — local, CI, or fleet — arrives by polling.
       pool: {
-        enabled: dispatchMode === "pool",
         // How long a job may sit unclaimed on the board before the group fails
         // with an error naming the labels nothing checked in to serve.
         claimTimeoutMs: num(env.PLAYTEST_POOL_CLAIM_TIMEOUT_S, 600) * 1000,
@@ -174,18 +131,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
         heartbeatTimeoutMs: num(env.PLAYTEST_POOL_HEARTBEAT_TIMEOUT_S, 120) * 1000,
         // Ephemeral CI registration (`POST /runner/pool/register-oidc`): a CI
         // job presents its GitHub OIDC token instead of a long-lived credential
-        // and gets a runner that expires with the job. The pins are the SAME
-        // discipline the GitHub-dispatch exchange applies, but they are their
-        // own variables, because the repository whose pipelines register runners
-        // is not necessarily the repository a deployment dispatches workflows
-        // into — and because a pool deployment configures no GITHUB_APP_* at
-        // all, so inheriting a null repository pin would accept a token from
-        // ANY repository on GitHub. The route refuses to serve without
-        // `repository` for exactly that reason (validated below, reported as
-        // `503 not_configured` at the route).
-        //
-        // Key names match `dispatch.github` so both callers hand the same shape
-        // to the one verifier (auth/github-oidc.ts).
+        // and gets a runner that expires with the job. This is the ONLY place
+        // the platform trusts a GitHub identity, so every pin is its own
+        // deployment variable — a missing repository pin would accept a token
+        // from ANY repository on GitHub, and the route refuses to serve without
+        // one for exactly that reason (reported as `503 not_configured`).
         oidc: {
           repository: env.PLAYTEST_POOL_OIDC_REPOSITORY || null,
           // Unset means "any workflow in the pinned repository". Pinning it
@@ -193,8 +143,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
           // repository with untrusted-fork or unrelated pipelines wants.
           workflowId: env.PLAYTEST_POOL_OIDC_WORKFLOW || null,
           ref: env.PLAYTEST_POOL_OIDC_REF || null,
-          oidcAudience: env.PLAYTEST_POOL_OIDC_AUDIENCE || env.GITHUB_OIDC_AUDIENCE || "playtest",
-          oidcIssuer: env.GITHUB_OIDC_ISSUER || "https://token.actions.githubusercontent.com",
+          oidcAudience: env.PLAYTEST_POOL_OIDC_AUDIENCE || "playtest",
+          oidcIssuer: env.PLAYTEST_POOL_OIDC_ISSUER || "https://token.actions.githubusercontent.com",
           // How long an ephemeral credential stays usable. It only has to
           // outlive the pipeline's own run group, and GitHub caps a job at six
           // hours, so an hour is a generous default and six hours is the
@@ -309,12 +259,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
         `(got ${JSON.stringify(env.PLAYTEST_DISPATCH_MAX_ACTIVE_PER_PROJECT)})`,
     );
   }
-  if (!Number.isFinite(config.dispatch.correlateDeadlineMs) || config.dispatch.correlateDeadlineMs < 60_000) {
-    throw new ServerConfigError(
-      `PLAYTEST_DISPATCH_CORRELATE_DEADLINE_S must be a number of seconds >= 60 ` +
-        `(got ${JSON.stringify(env.PLAYTEST_DISPATCH_CORRELATE_DEADLINE_S)})`,
-    );
-  }
   const liveBudgetMb = config.live.runBudgetBytes / (1024 * 1024);
   if (!Number.isInteger(liveBudgetMb) || liveBudgetMb < 1 || liveBudgetMb > 512) {
     throw new ServerConfigError(
@@ -403,48 +347,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     );
   }
 
-  if (config.dispatch.local && authMode !== "dev") {
-    throw new ServerConfigError(
-      `PLAYTEST_DISPATCH=local is a development mode and needs PLAYTEST_AUTH=dev; ` +
-        `production placement uses GitHub dispatch (GITHUB_APP_ID et al.)`,
-    );
-  }
-
-  // The pool's whole security model is that placement grants nothing and the
-  // exchange authorizes: a runner presents its registration credential bound to
-  // a dispatch it actually claimed. The insecure exchange would let anyone who
-  // learns a run-group id skip the board entirely and collect a scoped bearer,
-  // so the two must never be enabled together. Dev auth stays usable with the
-  // pool — it silently drops the insecure exchange rather than the placement —
-  // but asking for it out loud is a boot error, not a silently ignored variable.
-  if (config.dispatch.pool.enabled && env.PLAYTEST_RUNNER_INSECURE_EXCHANGE === "1") {
-    throw new ServerConfigError(
-      `PLAYTEST_DISPATCH=pool cannot run with PLAYTEST_RUNNER_INSECURE_EXCHANGE=1: pooled runners always ` +
-        `present their registration credential, and the insecure exchange would let an unauthenticated ` +
-        `caller take a run group's scoped token. Unset PLAYTEST_RUNNER_INSECURE_EXCHANGE, or use ` +
-        `PLAYTEST_DISPATCH=local for a single-machine development loop.`,
-    );
-  }
   // Ephemeral CI registration is opt-in, but a HALF-configured opt-in is the
   // dangerous state: a workflow or ref pin without a repository pin would accept
-  // that workflow name from any repository on GitHub, and pins set on a
-  // deployment that does not run pool placement do nothing at all while looking
-  // like they do. Both are boot errors rather than a surprise at 3 a.m.
+  // that workflow name from any repository on GitHub. That is a boot error
+  // rather than a surprise at 3 a.m.
   const poolOidc = config.dispatch.pool.oidc;
-  const poolOidcVars = [
-    ["PLAYTEST_POOL_OIDC_REPOSITORY", env.PLAYTEST_POOL_OIDC_REPOSITORY],
-    ["PLAYTEST_POOL_OIDC_WORKFLOW", env.PLAYTEST_POOL_OIDC_WORKFLOW],
-    ["PLAYTEST_POOL_OIDC_REF", env.PLAYTEST_POOL_OIDC_REF],
-    ["PLAYTEST_POOL_OIDC_AUDIENCE", env.PLAYTEST_POOL_OIDC_AUDIENCE],
-    ["PLAYTEST_POOL_OIDC_TTL_S", env.PLAYTEST_POOL_OIDC_TTL_S],
-  ].filter(([, value]) => value);
-  if (poolOidcVars.length && !config.dispatch.pool.enabled) {
-    throw new ServerConfigError(
-      `${poolOidcVars.map(([name]) => name).join(", ")} configure ephemeral CI runner registration, which ` +
-        `only exists under PLAYTEST_DISPATCH=pool (this deployment dispatches with "${dispatchMode}"). ` +
-        `Set PLAYTEST_DISPATCH=pool, or unset these variables.`,
-    );
-  }
   if ((poolOidc.workflowId || poolOidc.ref) && !poolOidc.repository) {
     throw new ServerConfigError(
       `PLAYTEST_POOL_OIDC_${poolOidc.workflowId ? "WORKFLOW" : "REF"} needs PLAYTEST_POOL_OIDC_REPOSITORY too: ` +

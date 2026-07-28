@@ -31,11 +31,11 @@ export function presentedRunnerCredential(req: { headers: Record<string, unknown
 }
 
 /**
- * Resolve a presented credential to its runner row. Unknown credentials are
- * `401`; a revoked one is `403` and says so, because "your runner was revoked"
- * is a different action from "your credential is wrong".
+ * Resolve a presented credential to the runner row it identifies — identity
+ * only, with no judgment about whether that runner may still take work. Unknown
+ * credentials are `401`.
  */
-export async function runnerForCredential(db: Db, plaintext: unknown): Promise<DbRow> {
+export async function runnerIdentity(db: Db, plaintext: unknown): Promise<DbRow> {
   if (typeof plaintext !== "string" || !plaintext.startsWith(RUNNER_CREDENTIAL_PREFIX)) {
     throw unauthenticated(
       "this route needs a runner credential — present the one-time value from " +
@@ -54,6 +54,16 @@ export async function runnerForCredential(db: Db, plaintext: unknown): Promise<D
   if (!runner || !tokenHashMatches(plaintext, runner.credential_hash)) {
     throw unauthenticated("this runner credential is not registered — register the runner again to get a new one");
   }
+  return runner;
+}
+
+/**
+ * Resolve a presented credential to a runner that may still take work. Unknown
+ * credentials are `401`; a revoked one is `403` and says so, because "your
+ * runner was revoked" is a different action from "your credential is wrong".
+ */
+export async function runnerForCredential(db: Db, plaintext: unknown): Promise<DbRow> {
+  const runner = await runnerIdentity(db, plaintext);
   if (runner.revoked_at) {
     throw forbidden(
       `runner "${runner.name}" was revoked and can no longer take work — ` +
@@ -84,14 +94,42 @@ export async function requireRunnerCredential(ctx: RequestContext): Promise<DbRo
   return await runnerForCredential(ctx.db, presentedRunnerCredential(ctx.req as never));
 }
 
+/**
+ * The runner behind this request, identified but not judged — for the ONE route
+ * where a revoked or expired credential must still be answered: heartbeating a
+ * claim it already holds.
+ *
+ * Revocation and expiry mean "no new work and no new scoped bearer", and the
+ * contract is explicit that a group already exchanged finishes under the bearer
+ * it was issued. Refusing its heartbeats would break exactly that promise twice
+ * over — the agent reads a 4xx as "this claim is not mine any more" and tears
+ * the run down, and `heartbeat_at` would go stale until the reconciler failed
+ * the group as a dead executor. So the heartbeat's authorization is the claim
+ * itself: the caller must hold the dispatch it is beating (checked by the
+ * route), which no revoked credential can newly acquire.
+ */
+export async function requireRunnerIdentity(ctx: RequestContext): Promise<DbRow> {
+  return await runnerIdentity(ctx.db, presentedRunnerCredential(ctx.req as never));
+}
+
 const MAX_LABELS = 32;
 const MAX_LABEL_LENGTH = 64;
 
 /**
- * Validate and de-duplicate a label list from a request body. One implementation
- * for every surface that accepts labels — runner registration, ephemeral CI
- * registration, and a per-launch pin — so a label a runner may advertise is
- * exactly a label a launch may ask for.
+ * The characters a label may be spelled with. Labels are pure routing tokens, so
+ * the alphabet can be the narrow one that survives every carrier they travel on:
+ * a comma-joined `--labels` argument (a comma inside a label would silently
+ * become two labels), a `?labels=` query, and the start command a person pastes
+ * into a shell straight out of the console.
+ */
+const LABEL_CHARSET = /^[A-Za-z0-9._-]+$/;
+const LABEL_CHARSET_HELP = 'letters, digits, ".", "_" and "-"';
+
+/**
+ * Validate and de-duplicate a label list. One implementation for every surface
+ * that accepts labels — runner registration, environment `runner_labels`, a
+ * per-launch pin, ephemeral CI registration, and check-in re-advertisement — so
+ * a label a runner may advertise is exactly a label a launch may ask for.
  */
 export function normalizeLabels(value: unknown, field = "labels"): string[] {
   const labels = value ?? [];
@@ -102,7 +140,12 @@ export function normalizeLabels(value: unknown, field = "labels"): string[] {
   if (labels.some((l: string) => l.length > MAX_LABEL_LENGTH)) {
     throw badRequest(`a label is at most ${MAX_LABEL_LENGTH} characters`);
   }
-  return [...new Set(labels.map((l: string) => l.trim()))];
+  const trimmed = labels.map((l: string) => l.trim());
+  const bad = trimmed.find((l) => !LABEL_CHARSET.test(l));
+  if (bad !== undefined) {
+    throw badRequest(`"${bad}" is not a usable label — a label may use only ${LABEL_CHARSET_HELP} (for example "ios-sim" or "ci-run-1234567")`);
+  }
+  return [...new Set(trimmed)];
 }
 
 /** Job labels ⊆ runner labels. An empty job label set matches any runner. */

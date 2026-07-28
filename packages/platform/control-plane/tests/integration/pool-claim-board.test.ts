@@ -235,6 +235,131 @@ test("pool: a revoked credential is refused at poll, claim, and exchange", async
   }, POOL);
 });
 
+test("pool: revoking mid-group refuses new work and lets the group already exchanged finish", async () => {
+  await withApp(async ({ api, base, app }: HostedDynamic) => {
+    const { project, suite, env } = await setUp(api, { key: "pool2b" });
+    const registered = await register(api, project, { name: "adas-laptop", labels: ["macos"] });
+    const runner = claimer(base, registered.credential);
+
+    const groupId = (await launch(api, { project, suite, env })).body.run_group.id;
+    const dispatchId = (await runner.poll()).body.claim.dispatch_id;
+    assert.equal((await runner.claim(dispatchId)).status, 200);
+    const exchanged = await runner.exchange({ dispatch_id: dispatchId, isolation: "process" });
+    assert.equal(exchanged.status, 200, JSON.stringify(exchanged.body));
+
+    // Someone revokes the machine while it is executing.
+    assert.equal((await api.del(`/projects/${project.key}/runners/${registered.id}`)).status, 204);
+
+    // No new work: the board and the exchange both close immediately.
+    for (const [what, res] of [
+      ["poll", await runner.poll()],
+      ["exchange", await runner.exchange({ dispatch_id: dispatchId, isolation: "process" })],
+    ] as HostedDynamic[]) {
+      assert.equal(res.status, 403, `${what} refuses a revoked credential`);
+      assert.match(res.body.error.message, /was revoked/, `${what} says why`);
+    }
+
+    // But the claim it already holds keeps its liveness channel. Without this
+    // the agent reads the refusal as "this claim is not mine" and tears the run
+    // down, and `heartbeat_at` goes stale until the reconciler kills the group.
+    const beat = await runner.heartbeat(dispatchId);
+    assert.equal(beat.status, 200, JSON.stringify(beat.body));
+    assert.equal(beat.body.canceled, false);
+    const beaten = await app.db.query(`SELECT heartbeat_at FROM dispatches WHERE id = $1`, [dispatchId]);
+    assert.ok(beaten.rows[0].heartbeat_at, "the heartbeat is recorded, so the reconciler still sees a live executor");
+    // A revoked runner still cannot heartbeat someone else's claim.
+    const other = claimer(base, (await register(api, project, { name: "keeper", labels: ["macos"] })).credential);
+    assert.equal((await other.heartbeat(dispatchId)).status, 403);
+
+    // And the group finishes under the bearer it was already issued.
+    const runnerHeaders = { authorization: `Bearer ${exchanged.body.token}`, "content-type": "application/json" };
+    const spec = await fetch(`${base}/api/v1/runner/groups/${groupId}`, { headers: runnerHeaders }).then((r) => r.json());
+    const run = spec.cases[0];
+    assert.equal(
+      (await fetch(`${base}/api/v1/runner/groups/${groupId}/cases/${run.run_id}/start`, { method: "POST", headers: runnerHeaders, body: "{}" })).status,
+      200,
+    );
+    const upload = await fetch(`${base}/api/v1/runner/runs/${run.db_id}/bundle`, {
+      method: "PUT",
+      headers: { authorization: `Bearer ${exchanged.body.token}`, "content-type": "application/vnd.playtest.run-bundle" },
+      body: Buffer.from("fake bundle"),
+    }).then((r) => r.json());
+    assert.equal(
+      (await fetch(`${base}/api/v1/runner/groups/${groupId}/cases/${run.run_id}/report`, {
+        method: "POST",
+        headers: runnerHeaders,
+        body: JSON.stringify({
+          status: "pass",
+          bundle: upload.artifact,
+          manifest: { run_id: run.run_id, case: { id: "add-todo" }, result: { status: "pass", end_reason: "done" }, status: "pass", duration_ms: 42, totals: { in: 0, out: 0 } },
+        }),
+      })).status,
+      200,
+    );
+    assert.equal(
+      (await fetch(`${base}/api/v1/runner/groups/${groupId}/complete`, { method: "POST", headers: runnerHeaders, body: JSON.stringify({ summary: {} }) })).status,
+      200,
+    );
+    const final = await api.get(`/run-groups/${groupId}`);
+    assert.equal(final.body.status, "done", "the contract's promise: a group already exchanged finishes");
+    assert.equal(final.body.runs[0].status, "pass");
+  }, POOL);
+});
+
+test("pool: a revoked runner's name is free again, and two live runners may not share one", async () => {
+  await withApp(async ({ api }: HostedDynamic) => {
+    const { project } = await setUp(api, { key: "pool2c" });
+    const first = await register(api, project, { name: "adas-laptop", labels: ["macos"] });
+
+    // Two standing runners may not answer to the same name.
+    const clash = await api.post(`/projects/${project.key}/runners`, { name: "adas-laptop" });
+    assert.equal(clash.status, 409);
+    assert.match(clash.body.error.message, /already registered and live/);
+    assert.match(clash.body.error.message, /revoke that one first/);
+
+    // Revoking is what frees it — which is exactly the console's own remedy for
+    // a credential nobody wrote down.
+    assert.equal((await api.del(`/projects/${project.key}/runners/${first.id}`)).status, 204);
+    const again = await register(api, project, { name: "adas-laptop", labels: ["macos"] });
+    assert.notEqual(again.id, first.id);
+    assert.notEqual(again.credential, first.credential);
+    // History keeps both, so a run placed on the old row still reads.
+    const listed = await api.get(`/projects/${project.key}/runners`);
+    assert.deepEqual(listed.body.items.map((r: HostedDynamic) => r.name), ["adas-laptop", "adas-laptop"]);
+    assert.equal(listed.body.items.filter((r: HostedDynamic) => r.revoked_at).length, 1);
+  }, POOL);
+});
+
+test("pool: a label outside the safe charset is refused where it is written", async () => {
+  await withApp(async ({ api, base }: HostedDynamic) => {
+    const { project } = await setUp(api, { key: "pool2d" });
+    // A comma would silently become two labels on the agent's `--labels`, and a
+    // quote or a space would break the start command the console hands over.
+    for (const bad of ["build,test", "ios sim", "pool:checkout", "$(whoami)"]) {
+      const res = await api.post(`/projects/${project.key}/runners`, { name: `r-${bad}`, labels: [bad] });
+      assert.equal(res.status, 400, `"${bad}" is refused: ${JSON.stringify(res.body)}`);
+      assert.match(res.body.error.message, /may use only letters, digits/);
+    }
+    // The environment side is the same validator, so a target cannot ask for a
+    // label no runner is allowed to advertise.
+    const env = await api.post(`/projects/${project.key}/environments`, {
+      name: "bad-labels",
+      runner_labels: ["ios sim"],
+      config: { app: { base_url: "http://127.0.0.1:9" } },
+    });
+    assert.equal(env.status, 400);
+    assert.match(env.body.error.message, /may use only letters, digits/);
+    // Re-advertisement at check-in is the same validator, so a runner cannot
+    // smuggle in a label the console would have refused to store.
+    const good = await register(api, project, { name: "adas-laptop", labels: ["ios-sim", "macos.14", "ci_1"] });
+    const runner = claimer(base, good.credential);
+    assert.deepEqual((await runner.poll()).body.runner.labels, ["ios-sim", "macos.14", "ci_1"]);
+    const smuggled = await runner.poll("?labels=ios%20sim");
+    assert.equal(smuggled.status, 400, JSON.stringify(smuggled.body));
+    assert.match(smuggled.body.error.message, /may use only letters, digits/);
+  }, POOL);
+});
+
 test("pool: label matching is subset semantics, oldest first, project-scoped", async () => {
   await withApp(async ({ api, base }: HostedDynamic) => {
     const { project, suite, env } = await setUp(api, { key: "pool3", labels: ["macos", "ios-sim"] });

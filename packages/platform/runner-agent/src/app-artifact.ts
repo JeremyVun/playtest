@@ -33,12 +33,44 @@ const S_IFLNK = 0o120000;
 const S_IFDIR = 0o040000;
 const UINT32_MAX = 0xffffffff;
 
+/**
+ * A central-directory record: where an entry's bytes are and what they are, but
+ * never the bytes themselves. Inflating the whole archive up front would hold
+ * the zip AND its full expansion in memory at once on a machine that is also
+ * meant to be heartbeating a claim, so `unzipInto` reads one entry at a time.
+ */
 interface ZipEntry {
   name: string;
   mode: number | null;
   isDirectory: boolean;
   isSymlink: boolean;
-  data: Buffer;
+  method: number;
+  localOffset: number;
+  csize: number;
+  usize: number;
+}
+
+/**
+ * How much an archive may expand to. Only a project developer can upload one, so
+ * this is a reliability guard rather than a security boundary: it exists so a
+ * pathological archive fails with a sentence instead of taking the runner's
+ * process — and every one — down with an out-of-memory kill. 4 GiB is far above
+ * any real `.app`, `.apk` or `.aab`; a deployment with a genuinely bigger build
+ * raises it.
+ */
+const DEFAULT_MAX_UNPACKED_BYTES = 4 * 1024 ** 3;
+
+function maxUnpackedBytes(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = (env.PLAYTEST_RUNNER_MAX_UNPACKED_MB || "").trim();
+  if (!raw) return DEFAULT_MAX_UNPACKED_BYTES;
+  const mb = Number(raw);
+  if (!Number.isFinite(mb) || mb <= 0) {
+    throw new Error(
+      `PLAYTEST_RUNNER_MAX_UNPACKED_MB must be a positive number of megabytes (got "${raw}") — ` +
+        `unset it to use the default of ${DEFAULT_MAX_UNPACKED_BYTES / 1024 ** 2} MB`,
+    );
+  }
+  return Math.round(mb * 1024 ** 2);
 }
 
 /**
@@ -88,8 +120,21 @@ async function pickUnpackedApp(dir: string): Promise<string> {
 
 /** Extract every entry of a ZIP buffer under `dest`, preserving modes and symlinks. */
 export async function unzipInto(buf: Buffer, dest: string): Promise<void> {
+  const entries = readZipEntries(buf);
+  // The whole expansion is measured from the central directory BEFORE a single
+  // byte is written, so an archive that would not fit costs one read of a table
+  // rather than a half-unpacked directory and a dead process.
+  const cap = maxUnpackedBytes();
+  const expanded = entries.reduce((sum, e) => sum + (e.isDirectory ? 0 : e.usize), 0);
+  if (expanded > cap) {
+    throw new Error(
+      `the app artifact unpacks to ${mib(expanded)} MB, over this runner's ${mib(cap)} MB limit — ` +
+        `upload a build without its debug symbols or test bundles, or raise ` +
+        `PLAYTEST_RUNNER_MAX_UNPACKED_MB on the runner`,
+    );
+  }
   await fsp.mkdir(dest, { recursive: true });
-  for (const entry of readZipEntries(buf)) {
+  for (const entry of entries) {
     // macOS `ditto` sequesters resource forks into __MACOSX/; they are not part
     // of the bundle and writing them back adds noise, not fidelity.
     if (entry.name.startsWith("__MACOSX/") || path.basename(entry.name) === ".DS_Store") continue;
@@ -99,8 +144,12 @@ export async function unzipInto(buf: Buffer, dest: string): Promise<void> {
       continue;
     }
     await fsp.mkdir(path.dirname(abs), { recursive: true });
+    // Read and inflate one entry, write it, and let it go before the next: peak
+    // memory is the archive plus its single largest member, not the archive plus
+    // everything in it.
+    const data = readLocalData(buf, entry);
     if (entry.isSymlink) {
-      const target = entry.data.toString("utf8");
+      const target = data.toString("utf8");
       // A link out of the bundle is either a mistake or an attack; either way it
       // is not something to recreate on the runner's disk.
       if (path.isAbsolute(target)) {
@@ -111,12 +160,14 @@ export async function unzipInto(buf: Buffer, dest: string): Promise<void> {
       await fsp.symlink(target, abs);
       continue;
     }
-    await fsp.writeFile(abs, entry.data);
+    await fsp.writeFile(abs, data);
     // The executable bit is load-bearing for a `.app`: without it the installed
     // bundle has no runnable binary.
     if (entry.mode != null) await fsp.chmod(abs, entry.mode & 0o7777);
   }
 }
+
+const mib = (bytes: number) => Math.round(bytes / 1024 ** 2);
 
 /** Every entry of a ZIP archive, read through its central directory. */
 function readZipEntries(buf: Buffer): ZipEntry[] {
@@ -170,19 +221,23 @@ function readZipEntries(buf: Buffer): ZipEntry[] {
       mode,
       isDirectory,
       isSymlink: mode != null && (mode & S_IFMT) === S_IFLNK,
-      data: isDirectory ? Buffer.alloc(0) : readLocalData(buf, localOffset, method, csize, usize),
+      method,
+      localOffset,
+      csize,
+      usize,
     });
   }
   return entries;
 }
 
-function readLocalData(buf: Buffer, offset: number, method: number, csize: number, usize: number): Buffer {
-  if (buf.readUInt32LE(offset) !== SIG_LOCAL) {
+/** One entry's bytes, inflated on demand at the moment they are written. */
+function readLocalData(buf: Buffer, { method, localOffset, csize, usize }: ZipEntry): Buffer {
+  if (buf.readUInt32LE(localOffset) !== SIG_LOCAL) {
     throw new Error("the app artifact is not a readable ZIP archive: a local file header is missing");
   }
   // The local header's own name/extra lengths — they may legitimately differ
   // from the central directory's, so they cannot be reused from there.
-  const start = offset + 30 + buf.readUInt16LE(offset + 26) + buf.readUInt16LE(offset + 28);
+  const start = localOffset + 30 + buf.readUInt16LE(localOffset + 26) + buf.readUInt16LE(localOffset + 28);
   const raw = buf.subarray(start, start + csize);
   if (method === METHOD_STORE) return Buffer.from(raw);
   if (method === METHOD_DEFLATE) return zlib.inflateRawSync(raw, { maxOutputLength: Math.max(usize, 1) });

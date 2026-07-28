@@ -20,6 +20,7 @@ import { audit, actorOf } from "../audit.ts";
 import { created, noContent, readJsonBody, readRawBody } from "../http.ts";
 import { requireAuth, guard, getProjectByKey, getSuite, stringField } from "./util.ts";
 import { AppError, badRequest, notFound, conflict } from "../errors.ts";
+import { normalizeLabels } from "../auth/runner-credentials.ts";
 import { blobKey } from "../store/object-store.ts";
 
 /**
@@ -346,11 +347,10 @@ function validateEnvFields(body: HostedDynamic, { nameRequired }: HostedDynamic)
     }
   }
   // Stored as a JSON array (never NULL): absent labels normalize to [] here, so
-  // every read — envView, dispatch label routing — sees a JS array.
-  let runner_labels = body.runner_labels ?? [];
-  if (!Array.isArray(runner_labels) || runner_labels.some((l) => typeof l !== "string")) {
-    throw badRequest(`"runner_labels" must be an array of strings`);
-  }
+  // every read — envView, dispatch label routing — sees a JS array. Through the
+  // same validator the runner side uses, so an environment can never ask for a
+  // label a runner is not allowed to advertise.
+  const runner_labels = normalizeLabels(body.runner_labels, "runner_labels");
   const discovery_allowed = body.discovery_allowed === true;
   return { name, config, runner_labels, discovery_allowed };
 }

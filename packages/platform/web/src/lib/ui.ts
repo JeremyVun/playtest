@@ -93,11 +93,15 @@ const FOCUSABLE =
  * keydown listener always gets removed — closing via a button used to leak it,
  * and a second stacked modal would then mis-close on the first Escape.
  *
- * @param {{ title: string, dismiss?: () => void }} opts `dismiss` runs on
- *   Escape and scrim click (the "no decision" exit); omit for a plain close.
+ * @param {{ title: string, dismiss?: () => void, confirmDismiss?: () => boolean | Promise<boolean> }} opts
+ *   `dismiss` runs on Escape and scrim click (the "no decision" exit); omit for
+ *   a plain close. `confirmDismiss` gates that exit for the rare dialog whose
+ *   content cannot be recovered by reopening it — a false answer leaves the
+ *   dialog exactly where it was. Every other modal passes neither and keeps the
+ *   plain contract: Escape closes.
  * @param {(close: () => void) => Node} build the dialog body
  */
-function openModal({ title, dismiss }: WebDynamic, build: WebDynamic) {
+function openModal({ title, dismiss, confirmDismiss }: WebDynamic, build: WebDynamic) {
   const root = document.getElementById("modal-root");
   // Whatever had focus opens the dialog and gets it back — losing your place in
   // a table because you opened and cancelled a dialog is a keyboard dead end.
@@ -112,7 +116,12 @@ function openModal({ title, dismiss }: WebDynamic, build: WebDynamic) {
     // it is still on the page.
     if (opener?.isConnected) opener.focus?.();
   };
-  const bail = () => { if (!closed) dismiss?.(); close(); };
+  const bail = async () => {
+    if (closed) return;
+    if (confirmDismiss && !(await confirmDismiss())) return;
+    dismiss?.();
+    close();
+  };
 
   const dialog = h("div.modal", { role: "dialog", "aria-modal": "true", "aria-label": title },
     h("h2.modal-title", {}, title));
@@ -157,9 +166,14 @@ export function confirmModal({ title, body, confirmLabel = "Confirm", cancelLabe
   });
 }
 
-/** A modal that hosts an arbitrary form; `render(close)` builds the body. */
-export function formModal(title: WebDynamic, render: WebDynamic) {
-  return openModal({ title }, (close: WebDynamic) => render(close));
+/**
+ * A modal that hosts an arbitrary form; `render(close)` builds the body.
+ * `opts.confirmDismiss` is the one-time-secret escape hatch described on
+ * `openModal`; omitting it (which every other call site does) keeps the plain
+ * Escape-closes contract.
+ */
+export function formModal(title: WebDynamic, render: WebDynamic, opts: WebDynamic = {}) {
+  return openModal({ title, ...opts }, (close: WebDynamic) => render(close));
 }
 
 /**

@@ -23,16 +23,19 @@ contract for the claim board, credentials, labels, and loss handling lives in
 
 In the console: **Settings → Runners → Register runner**.
 
-- **Name** — how this machine appears in run history (`adas-laptop`). Unique in
-  the project.
+- **Name** — how this machine appears in run history (`adas-laptop`). Unique
+  among the project's live runners; revoking one frees its name again.
 - **Labels** — what this machine can do (`macos, ios-sim`). Labels are routing,
   not authority: an environment asking for `ios-sim` places its runs on a runner
   advertising `ios-sim`. Leave blank and this runner accepts any of the
-  project's runs.
+  project's runs. A label is spelled with letters, digits, `.`, `_` and `-` —
+  the field is comma separated, so a comma inside a label would be two labels,
+  and the start command below is pasted straight into a shell.
 
 Registering mints a credential and shows it **once**, with the exact command to
 start the runner. Playtest stores only a hash of the credential and cannot show
-it again; if you lose it, register the runner again and revoke the old one.
+it again; if you lose it, revoke that runner and register it again under the
+same name.
 
 The section is only there on a deployment that runs `PLAYTEST_DISPATCH=pool` —
 elsewhere there is no claim board for a runner to poll. Once a runner exists,
@@ -51,10 +54,12 @@ PLAYTEST_RUNNER_CREDENTIAL='ptr_…' ./node_modules/.bin/runner-agent pool \
 ```
 
 The credential travels in the environment, never as an argument, so it stays out
-of your process list and out of anyone else's `ps`. If you would rather keep it
-in a file:
+of your process list and out of anyone else's `ps`. Pasted this way it does land
+in your shell history, so on a machine other people use, put it in a file only
+you can read and point `--credential-file` at that instead:
 
 ```sh
+umask 077 && printf 'ptr_…' > ~/.playtest/runner-credential
 ./node_modules/.bin/runner-agent pool --server https://playtest.example.com \
   --labels macos,ios-sim --credential-file ~/.playtest/runner-credential
 ```
@@ -97,9 +102,9 @@ A credential passed as an argument is refused, not accepted quietly.
 An **environment** is the deployment ring a run happens in: its credentials, its
 runner pool, and whether discovery is allowed. Under **Settings → Test targets →
 New environment**, set **Runner labels** to the labels that should route work to
-this machine (`macos, ios-sim`). A run is placed on a runner advertising *every*
-label its environment asks for; an environment with no labels runs anywhere in
-the project.
+this machine (`macos, ios-sim`) — the same alphabet the runner's own labels use.
+A run is placed on a runner advertising *every* label its environment asks for;
+an environment with no labels runs anywhere in the project.
 
 ## 4. Mobile: an app binary on your own disk
 
@@ -155,7 +160,10 @@ names `platform`, `device` and `appium_url`. A launch pins the upload's hash, so
 pushing a new build never changes a run already in flight, and the runner
 verifies and unpacks it into its own workspace before the run starts. Uploads
 are capped by the deployment (`PLAYTEST_APP_ARTIFACT_MAX_MB`, 512 MiB by
-default), and `DELETE` on the same URL clears it.
+default), and what an archive unpacks to is capped on the runner
+(`PLAYTEST_RUNNER_MAX_UNPACKED_MB`, 4096 by default). `DELETE` on the same URL
+clears it. In the console, uploading and removing a build apply immediately —
+they are not part of the form's Save.
 
 The launch preview says which of the three sources — the suite's
 `app.envs.<name>.app`, the environment (artifact or path), the suite's
@@ -265,7 +273,8 @@ work. Scope that token to the one project the pipeline gates.
 - Labels are untrusted routing input. A runner can only ever reach jobs in the
   project its credential is registered to.
 - Revoking a runner refuses its future check-ins and claims immediately; a group
-  already in flight finishes under the short-lived token it was already issued.
+  already in flight finishes under the short-lived token it was already issued,
+  heartbeats included, so revoking never kills work you are waiting on.
 - An ephemeral CI registration is a smaller blast radius again: it is minted
   from a signed GitHub token rather than a stored secret, it expires with the
   job, and it never appears in the standing runner list. Its verified

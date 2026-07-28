@@ -60,8 +60,13 @@ export async function createRunner(ctx: HostedDynamic) {
     } catch (e: HostedDynamic) {
       // A concurrent register can slip past any pre-check and hit the unique
       // index — surface the friendly conflict, never the raw constraint error.
+      // The index covers live runners only, so a revoked machine's name is free
+      // to reuse and this can only mean a second runner that is still standing.
       if (/UNIQUE constraint failed/.test(e.message)) {
-        throw conflict(`a runner named "${name}" is already registered in this project`);
+        throw conflict(
+          `a runner named "${name}" is already registered and live in this project — ` +
+            `revoke that one first, or give this machine a different name`,
+        );
       }
       throw e;
     }

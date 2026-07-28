@@ -116,6 +116,53 @@ test("bytes that do not match the pinned hash are refused, with the remedy", asy
   });
 });
 
+test("an archive that would unpack past the runner's limit is refused before anything is written", async () => {
+  await withWorkDir(async (workDir) => {
+    // The zip-bomb shape: two megabytes of nothing, deflated to almost nothing.
+    // Only a project developer can upload one, so this is a reliability guard —
+    // a runner that OOMs takes every other group on that machine with it.
+    const bytes = writeZip([
+      { name: "Big.app/", dir: true },
+      { name: "Big.app/blob.bin", content: Buffer.alloc(2 * 1024 * 1024), deflate: true },
+    ]);
+    const root = path.join(workDir, "grp");
+    const previous = process.env.PLAYTEST_RUNNER_MAX_UNPACKED_MB;
+    process.env.PLAYTEST_RUNNER_MAX_UNPACKED_MB = "1";
+    try {
+      await assert.rejects(
+        () =>
+          materializeAppArtifact({
+            api: fakeApi({}, { sha256: sha(bytes), bytes }),
+            artifact: { sha256: sha(bytes), size: bytes.length, filename: "Big.app.zip" },
+            root,
+          }),
+        (e: Error) => {
+          assert.match(e.message, /unpacks to 2 MB, over this runner's 1 MB limit/);
+          // A runner-facing failure carries its remedy.
+          assert.match(e.message, /PLAYTEST_RUNNER_MAX_UNPACKED_MB/);
+          return true;
+        },
+      );
+      assert.equal(fs.existsSync(path.join(root, "app", "unpacked")), false, "nothing was written");
+      // A nonsense cap is a configuration error with the default named, not a
+      // silent fallback to something nobody chose.
+      process.env.PLAYTEST_RUNNER_MAX_UNPACKED_MB = "lots";
+      await assert.rejects(
+        () =>
+          materializeAppArtifact({
+            api: fakeApi({}, { sha256: sha(bytes), bytes }),
+            artifact: { sha256: sha(bytes), size: bytes.length, filename: "Big.app.zip" },
+            root,
+          }),
+        /must be a positive number of megabytes/,
+      );
+    } finally {
+      if (previous === undefined) delete process.env.PLAYTEST_RUNNER_MAX_UNPACKED_MB;
+      else process.env.PLAYTEST_RUNNER_MAX_UNPACKED_MB = previous;
+    }
+  });
+});
+
 test("an archive entry that escapes its own directory is refused", async () => {
   await withWorkDir(async (workDir) => {
     const bytes = writeZip([{ name: "../escaped.txt", content: "nope" }]);

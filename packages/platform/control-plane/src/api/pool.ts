@@ -27,6 +27,7 @@ import {
   newRunnerCredential,
   normalizeLabels,
   requireRunnerCredential,
+  requireRunnerIdentity,
   labelsMatch,
 } from "../auth/runner-credentials.ts";
 import { verifyGithubOidc } from "../auth/github-oidc.ts";
@@ -359,9 +360,17 @@ export async function claimDispatch(ctx: HostedDynamic) {
  * It exists so the reconciler can tell "slow" from "gone" before the first case
  * starts and after the last one ends, and so a cancel reaches a runner the
  * control plane cannot call.
+ *
+ * The ONE route that answers a revoked or expired credential. Poll, claim and
+ * exchange still refuse both — no new work, no new scoped bearer — but a group
+ * already exchanged finishes under the bearer it holds, and it cannot finish if
+ * its liveness channel is closed under it. Authorization here is the claim, not
+ * the credential's standing: only the runner this dispatch is already assigned
+ * to gets past the check below, and revocation is what stops it acquiring
+ * another one.
  */
 export async function heartbeatClaim(ctx: HostedDynamic) {
-  const runner = await requireRunnerCredential(ctx);
+  const runner = await requireRunnerIdentity(ctx);
   await readJsonBody(ctx.req); // drained; the heartbeat carries no state today
   const { rows } = await ctx.db.query(
     `SELECT d.*, g.status AS group_status FROM dispatches d
@@ -376,6 +385,10 @@ export async function heartbeatClaim(ctx: HostedDynamic) {
   }
   const canceled = dispatch.canceled_at != null || dispatch.group_status === "canceled";
   await ctx.db.query(`UPDATE dispatches SET heartbeat_at = now() WHERE id = $1`, [dispatch.id]);
+  // Stamped even for a revoked or expired runner, because it is simply true: the
+  // machine is here, finishing the group it was already given. Nothing routes on
+  // `last_seen_at`, and the console reads revoked/expired ahead of presence, so
+  // the honest timestamp cannot make a dead credential look usable.
   await ctx.db.query(`UPDATE runners SET last_seen_at = now() WHERE id = $1`, [runner.id]);
   // `canceled: true` is the runner's cue to run the same teardown the local
   // adapter's child runs on SIGTERM. Case reports for finished cases are still
@@ -423,8 +436,10 @@ function advertisedLabels(ctx: HostedDynamic, runner: HostedDynamic): string[] {
   if (raw == null) return runner.labels || [];
   // Labels are untrusted routing input and confer no authority — the credential
   // is the boundary — so a runner may re-advertise its own at check-in. It can
-  // only ever reach jobs in the project its credential is registered to.
-  return [...new Set(String(raw).split(",").map((l) => l.trim()).filter(Boolean))];
+  // only ever reach jobs in the project its credential is registered to. The
+  // same validation registration used: a label the console cannot store is not a
+  // label a check-in may smuggle in.
+  return normalizeLabels(String(raw).split(",").map((l) => l.trim()).filter(Boolean));
 }
 
 function waitSeconds(raw: unknown): number {

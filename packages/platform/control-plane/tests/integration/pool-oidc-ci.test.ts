@@ -102,6 +102,7 @@ function runner(base: HostedDynamic, credential: HostedDynamic) {
   return {
     poll: (query = "") => call("GET", `/runner/pool/claims${query}`),
     claim: (dispatch: HostedDynamic) => call("POST", `/runner/pool/claims/${dispatch}`, {}),
+    heartbeat: (dispatch: HostedDynamic) => call("POST", `/runner/pool/claims/${dispatch}/heartbeat`, {}),
     exchange: (body: HostedDynamic) => call("POST", `/runner/exchange`, body),
   };
 }
@@ -286,6 +287,79 @@ test("ci: an expired ephemeral credential is refused at poll, claim and exchange
       // Nothing was placed, so the group is still on the board for a live runner.
       const group = await api.get(`/run-groups/${launched.body.run_group.id}`);
       assert.equal(group.body.placement.runner, null);
+    }, ciEnv(gh.url));
+  } finally {
+    await gh.close();
+  }
+});
+
+test("ci: a registration that expires mid-group does not interrupt the group it is running", async () => {
+  const gh = await issuer();
+  try {
+    await withApp(async ({ api, base, app }: HostedDynamic) => {
+      const { project, suite, env } = await setUp(api, { key: "ci6" });
+      const label = "ci-run-900300";
+      const registered = await registerOidc(base, {
+        github_oidc_token: ciToken(gh.sign, { runId: "900300" }),
+        project: project.key,
+        labels: [label],
+      });
+      assert.equal(registered.status, 201);
+      const ci = runner(base, registered.body.credential);
+
+      const launched = await api.post(`/projects/${project.key}/run-groups`, {
+        suite_id: suite.id,
+        environment_id: env.id,
+        selection: { ids: ["add-todo"] },
+        runner_labels: [label],
+      });
+      const groupId = launched.body.run_group.id;
+      const dispatchId = (await ci.poll()).body.claim.dispatch_id;
+      assert.equal((await ci.claim(dispatchId)).status, 200);
+      const exchanged = await ci.exchange({ dispatch_id: dispatchId, isolation: "process" });
+      assert.equal(exchanged.status, 200, JSON.stringify(exchanged.body));
+
+      // A long suite outlives PLAYTEST_POOL_OIDC_TTL_S. The registration is over;
+      // the group it is halfway through is not.
+      await app.db.query(`UPDATE runners SET expires_at = $1 WHERE id = $2`, [
+        new Date(Date.now() - 1000),
+        registered.body.id,
+      ]);
+      assert.equal((await ci.poll()).status, 403, "no new work");
+      const beat = await ci.heartbeat(dispatchId);
+      assert.equal(beat.status, 200, JSON.stringify(beat.body));
+      assert.equal(beat.body.canceled, false);
+
+      // The scoped bearer it already holds carries the group to the end.
+      const headers = { authorization: `Bearer ${exchanged.body.token}`, "content-type": "application/json" };
+      const spec = await fetch(`${base}/api/v1/runner/groups/${groupId}`, { headers }).then((r) => r.json());
+      const run = spec.cases[0];
+      assert.equal(
+        (await fetch(`${base}/api/v1/runner/groups/${groupId}/cases/${run.run_id}/start`, { method: "POST", headers, body: "{}" })).status,
+        200,
+      );
+      const upload = await fetch(`${base}/api/v1/runner/runs/${run.db_id}/bundle`, {
+        method: "PUT",
+        headers: { authorization: `Bearer ${exchanged.body.token}`, "content-type": "application/vnd.playtest.run-bundle" },
+        body: Buffer.from("fake bundle"),
+      }).then((r) => r.json());
+      assert.equal(
+        (await fetch(`${base}/api/v1/runner/groups/${groupId}/cases/${run.run_id}/report`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            status: "pass",
+            bundle: upload.artifact,
+            manifest: { run_id: run.run_id, case: { id: "add-todo" }, result: { status: "pass", end_reason: "done" }, status: "pass", duration_ms: 42, totals: { in: 0, out: 0 } },
+          }),
+        })).status,
+        200,
+      );
+      assert.equal(
+        (await fetch(`${base}/api/v1/runner/groups/${groupId}/complete`, { method: "POST", headers, body: JSON.stringify({ summary: {} }) })).status,
+        200,
+      );
+      assert.equal((await api.get(`/run-groups/${groupId}`)).body.status, "done");
     }, ciEnv(gh.url));
   } finally {
     await gh.close();

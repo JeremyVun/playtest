@@ -154,9 +154,14 @@ export class PoolDispatchClient {
    */
   async #unclaimedReason(row: DbRow, waitingMs: number): Promise<string> {
     const minutes = Math.max(1, Math.round(waitingMs / 60_000));
+    // Only runners a person could actually act on. An expired ephemeral
+    // registration is invisible in Settings and cannot be restarted, so naming
+    // one here would send a reader after a machine that no longer exists — the
+    // same standing `isExpired` gives poll, claim and exchange.
     const { rows: runners } = await this.db.query(
-      `SELECT name, labels FROM runners WHERE project_id = $1 AND revoked_at IS NULL`,
-      [row.project_id],
+      `SELECT name, labels FROM runners
+        WHERE project_id = $1 AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > $2)`,
+      [row.project_id, new Date()],
     );
     const wanted: string[] = row.labels || [];
     if (!runners.length) {

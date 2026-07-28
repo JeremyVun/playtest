@@ -66,7 +66,7 @@ test("environments: CRUD with discovery flag + runner labels", async () => {
       name: "staging",
       config: { app: { base_url: "https://staging.example.com" }, auth: { default: "member" }, secret_env: {} },
       discovery_allowed: true,
-      runner_labels: ["self-hosted", "playtest", "pool:checkout"],
+      runner_labels: ["self-hosted", "playtest", "pool-checkout"],
     });
     assert.equal(created.status, 201);
     assert.equal(created.body.discovery_allowed, true);

@@ -123,7 +123,7 @@ export async function runPool(opts: PoolOptions, deps: PoolDeps = {}): Promise<{
         if (failures) log("reconnected to the control plane");
         failures = 0;
       } catch (e) {
-        if (isCredentialRefusal(e)) throw new Error(firstLine(e));
+        if (isFatalRefusal(e)) throw new Error(firstLine(e));
         const delay = backoffDelayMs(++failures, { random });
         // Say it once per outage, not once per retry: a laptop that closed its
         // lid should not fill the terminal while it waits to come back.
@@ -151,7 +151,7 @@ export async function runPool(opts: PoolOptions, deps: PoolDeps = {}): Promise<{
         try {
           claim = await api.json("POST", `/runner/pool/claims/${offer.dispatch_id}`, {});
         } catch (e) {
-          if (isCredentialRefusal(e)) throw new Error(firstLine(e));
+          if (isFatalRefusal(e)) throw new Error(firstLine(e));
           // A lost race is the documented outcome for the runner that did not
           // win it, not an error: go straight back to the board.
           if (e instanceof RunnerApiError && e.status === 409) continue;
@@ -300,11 +300,14 @@ const describe = (offer: ClaimOffer) =>
   offer.kind === "mint" ? `session mint ${offer.mint_claim_id ?? offer.ref_id}` : `run group ${offer.run_group_id ?? offer.ref_id}`;
 
 /**
- * A credential the control plane refuses is a configuration problem, not an
- * outage: retrying it forever would hide the one thing the operator must fix.
+ * A request the control plane refuses on its merits is a configuration problem,
+ * not an outage: this loop would send the identical request forever, so retrying
+ * it hides the one thing the operator must fix. A refused credential (401/403)
+ * and a refused request (400 — a label this deployment will not accept, say) are
+ * both that shape; everything else is retried with backoff.
  */
-function isCredentialRefusal(e: unknown): boolean {
-  return e instanceof RunnerApiError && (e.status === 401 || e.status === 403);
+function isFatalRefusal(e: unknown): boolean {
+  return e instanceof RunnerApiError && (e.status === 400 || e.status === 401 || e.status === 403);
 }
 
 const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms).unref?.());

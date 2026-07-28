@@ -28,6 +28,32 @@ export function startCommand({ server, credential, labels = [], isolation = null
 
 const trimSlash = (url: string) => String(url || "").replace(/\/+$/, "");
 
+/** Mirrors the server's single label validator (`normalizeLabels`). */
+const LABEL_CHARSET = /^[A-Za-z0-9._-]+$/;
+const MAX_LABELS = 32;
+const MAX_LABEL_LENGTH = 64;
+
+/**
+ * What is wrong with this label list, said under the field that typed it rather
+ * than after a round trip. The charset is narrow for two concrete reasons the
+ * message does not need to spell out: a comma inside a label would split into
+ * two on the agent's `--labels`, and these labels are interpolated into the
+ * start command a person pastes into a shell.
+ */
+export function labelProblem(labels: string[]): string | null {
+  const bad = labels.find((l) => !LABEL_CHARSET.test(l));
+  if (bad !== undefined) {
+    return `“${bad}” can't be a label — use only letters, digits, “.”, “_” and “-”, as in ios-sim.`;
+  }
+  if (labels.length > MAX_LABELS) return `A runner advertises at most ${MAX_LABELS} labels.`;
+  if (labels.some((l) => l.length > MAX_LABEL_LENGTH)) return `A label is at most ${MAX_LABEL_LENGTH} characters.`;
+  return null;
+}
+
+/** A comma-separated label field, as the claim board reads it. */
+export const parseLabels = (raw: string): string[] =>
+  [...new Set(String(raw || "").split(",").map((l) => l.trim()).filter(Boolean))];
+
 /**
  * A value that can be read exactly once. The credential is minted once and
  * stored hashed — the server cannot show it again — so the console must not

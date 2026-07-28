@@ -8,7 +8,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   startCommand, oneShot, runnerLabelsText, runnerPresence, labelsMatch,
-  placementReadiness, poolPlacementCause,
+  placementReadiness, poolPlacementCause, labelProblem, parseLabels,
 } from "../src/lib/runners.js";
 import { SETTINGS_SECTIONS, visibleSections } from "../src/lib/settings-sections.js";
 import { ago } from "../src/lib/labels.js";
@@ -36,6 +36,29 @@ test("runners: registering yields one pasteable command, and the credential neve
     "PLAYTEST_RUNNER_CREDENTIAL='ptr_x' ./node_modules/.bin/runner-agent pool --server http://127.0.0.1:4177",
   );
   assert.match(startCommand({ server: "http://h", credential: "ptr_x", isolation: "container" }), /--isolation container$/);
+});
+
+test("runners: a label the start command could not carry is refused in the form", () => {
+  // The field is comma separated, so a comma inside a label is not a label with
+  // a comma in it — it is two labels, silently, all the way down to the agent's
+  // `--labels`. And the command is pasted into a shell, where a space or a
+  // metacharacter is worse than a typo.
+  assert.deepEqual(parseLabels(" macos , ios-sim ,, macos "), ["macos", "ios-sim"]);
+  assert.equal(labelProblem(["macos", "ios-sim", "ci-run-1234567", "node_20", "macos.14"]), null);
+  assert.equal(labelProblem([]), null);
+  for (const bad of ["ios sim", "pool:checkout", "$(whoami)", "it's", "a/b"]) {
+    const problem = labelProblem([bad]);
+    assert.ok(problem, `${bad} must be caught before the round trip`);
+    assert.ok(problem.includes(bad), problem);
+    assert.match(problem, /letters, digits/);
+  }
+  assert.match(labelProblem(Array.from({ length: 33 }, (_, i) => `l${i}`))!, /at most 32 labels/);
+  assert.match(labelProblem(["x".repeat(65)])!, /at most 64 characters/);
+  // The command a conforming label produces is unchanged.
+  assert.equal(
+    startCommand({ server: "https://playtest.example.com", credential: "ptr_x", labels: parseLabels("macos, ios-sim") }),
+    "PLAYTEST_RUNNER_CREDENTIAL='ptr_x' ./node_modules/.bin/runner-agent pool --server https://playtest.example.com --labels macos,ios-sim",
+  );
 });
 
 test("runners: the credential is revealed exactly once and is never retrievable again", () => {

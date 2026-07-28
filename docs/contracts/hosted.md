@@ -414,7 +414,14 @@ reconciler, and run-group lifecycle are the same ones every other adapter uses.
 - **Labels** route work. They are not secrets, confer no authority, and appear
   freely in environment settings and console UI. A runner may re-advertise its
   labels at check-in; that changes which of its project's jobs match it, never
-  which project it can reach.
+  which project it can reach. A label is spelled with letters, digits, `.`, `_`
+  and `-` only (at most 32 labels, 64 characters each), enforced at one
+  validator for every surface that accepts one — runner registration, an
+  environment's `runner_labels`, a per-launch pin, ephemeral CI registration and
+  check-in re-advertisement. The alphabet is narrow because labels travel
+  comma-joined on the agent's `--labels` (a comma inside one would silently
+  become two) and unquoted inside the start command the console hands over.
+  Anything outside it is `400`, naming the label and the allowed characters.
 
 Registration is project-scoped: `POST /api/v1/projects/:p/runners`
 (`developer`) returns the runner plus its one-time credential, `GET` the same
@@ -422,8 +429,12 @@ path (`viewer`) lists name, labels, last-seen and current claim, and
 `DELETE …/:r` (`developer`) revokes. Revocation is a timestamp, not a delete:
 the row and its history remain, future check-ins, claims and exchanges are
 refused, and a group already exchanged finishes under its already-issued scoped
-bearer. Revoking twice is a no-op. Registration, revocation, and every claim
-write audit rows. Runner names are unique per project.
+bearer — including its heartbeats, which the claim board keeps answering for the
+dispatch that runner already holds (see the claim board below). Revoking twice
+is a no-op. Registration, revocation, and every claim write audit rows. Runner
+names are unique among a project's **live** runners: revoking one frees its name,
+because "register it again" is the console's own remedy for a credential nobody
+wrote down, and a second standing runner under that name is the `409`.
 
 **Ephemeral CI runners.** `POST /runner/pool/register-oidc` is the second way to
 join a project's pool: a CI job presents its GitHub Actions OIDC token instead of
@@ -448,7 +459,10 @@ No long-lived runner secret lands in repository settings.
   credential outliving its job is a credential nobody is watching). An expired
   credential is refused at poll, claim and exchange exactly like a revoked one,
   with its own message. Expiry never interrupts work in flight: an exchanged
-  group runs on under its already-issued scoped bearer.
+  group runs on under its already-issued scoped bearer, and keeps heartbeating
+  its claim. An expired registration is also excluded from the unclaimed-timeout
+  diagnostic below, because it is invisible in Settings and cannot be restarted —
+  naming it would send a reader after a machine that no longer exists.
 - Ephemeral runners are **never listed as standing runners** —
   `GET /api/v1/projects/:p/runners` and the console's Runners section exclude
   them. They are pipeline scaffolding, not fleet.
@@ -494,7 +508,18 @@ runner-credential-authenticated routes are:
    provisioning event GitHub dispatch emits.
 3. `POST /runner/pool/claims/:dispatch/heartbeat` — coarse group-level liveness
    between claim and completion, on the order of tens of seconds. Case-level
-   telemetry remains the progress route. Only the claim holder may heartbeat it.
+   telemetry remains the progress route. Only the claim holder may heartbeat it,
+   and that — not the credential's standing — is the authorization: this is the
+   one runner-credential route that answers a **revoked or expired** credential,
+   because a group already exchanged must be able to finish and it cannot finish
+   with its liveness channel closed under it. (Refusing here broke that promise
+   twice: the agent reads any 4xx on a heartbeat as "this claim is no longer
+   mine" and tears the run down, and a stale `heartbeat_at` has the reconciler
+   fail the group as a dead executor.) Poll, claim and exchange keep refusing
+   both, so a revoked runner gains no new work and no new scoped bearer. The
+   heartbeat still stamps `last_seen_at`, which is simply true — the machine is
+   here, finishing what it was given — and cannot mislead, because the console
+   reads revoked and expired ahead of presence.
 
 **Presence is an edge on the feed, never a poll.** Every poll and every
 heartbeat stamps `runners.last_seen_at`, which is far too often to publish: a
@@ -878,6 +903,17 @@ the pinned hash before installing anything; the control plane serves what is
 stored, so integrity is decided on the machine that will run it. A pinned
 artifact whose object is gone degrades like a pruned bundle: an actionable
 `404`, never a `500` and never a runner-side crash.
+
+Unpacking a `.zip` on the runner has a second, runner-side cap: the archive's
+declared expansion, summed from its central directory **before** anything is
+written, may not exceed `PLAYTEST_RUNNER_MAX_UNPACKED_MB` (default 4096, a
+positive number or the process refuses to start the unpack). Over it is an
+actionable error naming both sizes and the variable. Only a project developer
+can upload an artifact, so this is a reliability guard rather than a security
+boundary: a runner killed for running out of memory takes every group on that
+machine with it, and stops answering the heartbeats that keep them alive. Entries
+are inflated one at a time as they are written, so peak memory is the archive
+plus its single largest member.
 
 The runner materializes the artifact into the case workspace — unpacking a
 zipped bundle with its unix modes and symlinks intact — and writes the resulting

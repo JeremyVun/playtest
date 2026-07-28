@@ -115,11 +115,12 @@ async function poolFixture(env: HostedDynamic = {}) {
     await pool.dispatchWorkflow({ dispatchId: id, kind: "group", refId: "g", labels, attempt: 1 });
     return id;
   };
-  const runner = async ({ name = "laptop", labels = [] }: HostedDynamic = {}) => {
+  const runner = async ({ name = "laptop", labels = [], expiresAt = null, ephemeral = 0 }: HostedDynamic = {}) => {
     const id = ulid();
     await db.query(
-      `INSERT INTO runners (id, project_id, name, labels, credential_hash) VALUES ($1, $2, $3, $4, $5)`,
-      [id, projectId, name, labels, hashToken(`${name}-credential`)],
+      `INSERT INTO runners (id, project_id, name, labels, credential_hash, ephemeral, expires_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [id, projectId, name, labels, hashToken(`${name}-credential`), ephemeral, expiresAt],
     );
     return id;
   };
@@ -170,6 +171,25 @@ test("getRunStatus: a project with no runners at all says so, with the remedy", 
   assert.equal(lost.conclusion, "unclaimed");
   assert.match(lost.reason, /no runner has checked in/);
   assert.match(lost.reason, /Settings → Runners/);
+  await db.end();
+});
+
+test("getRunStatus: an expired ephemeral registration is not offered as the remedy", async () => {
+  const { db, pool, board, runner } = await poolFixture();
+  // The CI job that registered this one is long over: it is invisible in
+  // Settings and cannot be restarted, so naming it would send a reader after a
+  // machine that no longer exists.
+  await runner({ name: "ci-900100.1-ab12", labels: ["macos"], ephemeral: 1, expiresAt: new Date(Date.now() - 60_000) });
+  const stale = await board({ labels: ["macos"], requestedAt: new Date(Date.now() - 20 * 60_000) });
+  const lost: HostedDynamic = await pool.getRunStatus(poolRunId(stale));
+  assert.equal(lost.conclusion, "unclaimed");
+  assert.match(lost.reason, /no runner has checked in/, "an expired registration is not a registered runner");
+  assert.equal(/ci-900100/.test(lost.reason), false, lost.reason);
+
+  // A live ephemeral registration IS actionable and still reads.
+  await runner({ name: "ci-900200.1-cd34", labels: ["linux"], ephemeral: 1, expiresAt: new Date(Date.now() + 600_000) });
+  const second = await board({ labels: ["macos"], requestedAt: new Date(Date.now() - 20 * 60_000) });
+  assert.match((await pool.getRunStatus(poolRunId(second)))!.reason!, /ci-900200/);
   await db.end();
 });
 

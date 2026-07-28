@@ -110,6 +110,24 @@ test("labels validate the same way wherever they are accepted", () => {
   assert.throws(() => normalizeLabels(["x".repeat(65)]), /at most 64 characters/);
 });
 
+test("a label is spelled in the one alphabet every carrier survives", () => {
+  // Everything the product actually generates or documents fits.
+  assert.deepEqual(
+    normalizeLabels(["macos", "ios-sim", "ci-run-1234567", "node_20", "macos.14", "SELF-HOSTED"]),
+    ["macos", "ios-sim", "ci-run-1234567", "node_20", "macos.14", "SELF-HOSTED"],
+  );
+  // A comma would become two labels on the agent's `--labels`; a space, a quote
+  // or a shell metacharacter would break the command the console hands over.
+  for (const bad of ["build,test", "ios sim", "pool:checkout", "$(whoami)", "it's", "a/b", "läbel"]) {
+    assert.throws(
+      () => normalizeLabels([bad]),
+      (e: HostedDynamic) =>
+        /may use only letters, digits/.test(e.message) && e.message.includes(bad),
+      `${bad} must be refused, by name`,
+    );
+  }
+});
+
 // -------------------------------------------------------------- expiry
 
 test("an expired ephemeral registration is refused exactly like a revoked one", async () => {

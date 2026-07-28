@@ -12,7 +12,7 @@ import { modelField } from "../lib/model-select.js";
 import { MASK, maskSecretEnv, literalSecretKeys } from "../lib/secret-mask.js";
 import { parseCookieList, formatCookieList } from "../lib/defaults-form.js";
 import { humanize as words, categoryLabel } from "../lib/vocab.js";
-import { startCommand, oneShot, runnerLabelsText, runnerPresence } from "../lib/runners.js";
+import { startCommand, oneShot, runnerLabelsText, runnerPresence, labelProblem, parseLabels } from "../lib/runners.js";
 import { subscribeFeed } from "../lib/feed.js";
 import { ago } from "../lib/labels.js";
 import {
@@ -270,56 +270,96 @@ function registerRunnerModal(projectKey: WebDynamic, refresh: WebDynamic) {
     const labels = h("input", { type: "text", placeholder: "macos, ios-sim" });
     const submitBtn = h("button.btn.primary", { type: "submit" }, "Register");
     return h("form", { onsubmit: submit },
-      fld("Name", name, "How this machine appears in run history. Unique in this project."),
-      fld("Labels", labels, "What this machine can do — an environment asking for these labels places its runs here. Comma separated; leave blank to take any of this project's runs."),
+      fld("Name", name, "How this machine appears in run history. Unique among this project's live runners — a revoked machine's name is free again."),
+      fld("Labels", labels, "What this machine can do — an environment asking for these labels places its runs here. Comma separated, using letters, digits, “.”, “_” and “-”; leave blank to take any of this project's runs."),
       h("div.modal-actions", {}, h("button.btn.ghost", { type: "button", onclick: () => close() }, "Cancel"), submitBtn),
     );
     async function submit(e: WebDynamic) {
       e.preventDefault();
-      const payload: WebDynamic = {
-        name: name.value.trim(),
-        labels: labels.value.split(",").map((s: WebDynamic) => s.trim()).filter(Boolean),
-      };
+      const payload: WebDynamic = { name: name.value.trim(), labels: parseLabels(labels.value) };
       if (!payload.name) return toast("Name the runner", "Give this machine a name you'll recognize in run history.", "err");
+      const problem = labelProblem(payload.labels);
+      if (problem) return toast("Check the labels", problem, "err");
       submitBtn.disabled = true;
       try {
         const runner = await api.post(`/projects/${projectKey}/runners`, payload);
-        revealRunnerCredential(runner, close, refresh);
+        close();
+        revealRunnerCredential(runner, refresh);
       } catch (err: WebDynamic) { toastError(err); submitBtn.disabled = false; }
     }
   });
 }
 
-/** The one and only sight of a runner credential. */
-function revealRunnerCredential(runner: WebDynamic, close: WebDynamic, refresh: WebDynamic) {
+/**
+ * The one and only sight of a runner credential.
+ *
+ * It gets its own dialog rather than the generic one because it is the single
+ * place in the console where dismissing a modal destroys something: Escape or a
+ * stray scrim click would take the only copy of a secret the server cannot
+ * reissue. So this dialog — and only this dialog — asks before it goes, and
+ * stops asking once the command has been copied somewhere it can be pasted from.
+ */
+function revealRunnerCredential(runner: WebDynamic, refresh: WebDynamic) {
   // A one-shot box, not a variable: a re-render, a reopened dialog or a stray
   // reference cannot show this twice, because the server itself cannot.
   const secret = oneShot(runner.credential);
   const command = startCommand({ server: location.origin, credential: secret.take() || "", labels: runner.labels || [] });
-  const root = document.querySelector("#modal-root .modal");
-  const copyBtn = h("button.btn.primary", {
-    onclick: async () => {
-      const ok = await copyText(command);
-      toast(ok ? "Command copied" : "Couldn't copy", ok ? "Paste it into a terminal on that machine." : "Select the command and copy it manually.", ok ? "ok" : "err");
+  let copied = false;
+  let copyBtn: WebDynamic = null;
+  let leave: WebDynamic = null;
+  // Empty until it is needed: an alert built up front would put two hidden
+  // buttons ahead of Copy in the dialog's focus order.
+  const guard = h("div.preview-warn", { role: "alert", hidden: true, style: "margin:12px 0 0" });
+
+  formModal(`${runner.name} is registered`, (done: WebDynamic) => {
+    leave = () => { done(); refresh(); };
+    copyBtn = h("button.btn.primary", {
+      onclick: async () => {
+        const ok = await copyText(command);
+        // A successful copy is the only proof we can get cheaply that the
+        // credential now exists somewhere else. It is enough to stop nagging.
+        copied = copied || ok;
+        toast(ok ? "Command copied" : "Couldn't copy", ok ? "Paste it into a terminal on that machine." : "Select the command and copy it manually.", ok ? "ok" : "err");
+      },
+    }, "Copy command");
+    return h("div", {},
+      h("p.dim", { style: "font-size:12.5px;margin:-4px 0 12px" },
+        "Run this on the machine you want your suites to execute on. It is the only time this credential is shown — Playtest stores a hash of it and cannot show it again."),
+      h("pre.mono", {
+        style: "background:var(--bg2);padding:12px;border-radius:6px;overflow:auto;font-size:12px;white-space:pre-wrap;word-break:break-all",
+        // The command is the payload of this dialog; make it selectable as one
+        // unit for people who copy with the keyboard rather than the button.
+        tabindex: "0",
+        "aria-label": "Runner start command",
+      }, command),
+      h("p.faint", { style: "font-size:11.5px;margin:10px 0 0" },
+        "Run it from your Playtest checkout. The credential travels in the environment, never as an argument, so it stays out of your process list. The runner then waits for work and prints what it is doing."),
+      h("p.faint", { style: "font-size:11.5px;margin:6px 0 0" },
+        "Pasted this way it also lands in your shell history. On a machine you share, put the credential in a file only you can read and start the runner with ",
+        h("span.mono", {}, "--credential-file <path>"), " instead."),
+      h("p.faint", { style: "font-size:11.5px;margin:6px 0 0" },
+        `Give an environment the ${(runner.labels || []).length ? `labels ${runnerLabelsText(runner.labels)}` : "runner labels you want"} under Test targets to place its runs here.`),
+      guard,
+      h("div.modal-actions", {}, copyBtn, h("button.btn.ghost", { onclick: leave }, "Done")),
+    );
+  }, {
+    // Escape and scrim-click are the only ways to lose this dialog by accident,
+    // and losing it costs a registration. Ask once, and never again once the
+    // command has been copied somewhere it can be pasted from.
+    confirmDismiss: () => {
+      if (copied) return true;
+      mount(guard,
+        h("div", {}, "This credential cannot be shown again — Playtest stores only a hash of it. Close now and this runner has to be registered over."),
+        h("div", { style: "display:flex;gap:8px;margin-top:8px" },
+          h("button.btn.btn-sm", { type: "button", onclick: () => { mount(guard); guard.hidden = true; copyBtn?.focus(); } }, "Copy it first"),
+          h("button.btn.btn-sm.danger", { type: "button", onclick: leave }, "Close anyway"),
+        ),
+      );
+      guard.hidden = false;
+      guard.querySelector("button")?.focus();
+      return false;
     },
-  }, "Copy command");
-  mount(root,
-    h("h3", {}, `${runner.name} is registered`),
-    h("p.dim", { style: "font-size:12.5px;margin:-4px 0 12px" },
-      "Run this on the machine you want your suites to execute on. It is the only time this credential is shown — Playtest stores a hash of it and cannot show it again."),
-    h("pre.mono", {
-      style: "background:var(--bg2);padding:12px;border-radius:6px;overflow:auto;font-size:12px;white-space:pre-wrap;word-break:break-all",
-      // The command is the payload of this dialog; make it selectable as one
-      // unit for people who copy with the keyboard rather than the button.
-      tabindex: "0",
-      "aria-label": "Runner start command",
-    }, command),
-    h("p.faint", { style: "font-size:11.5px;margin:10px 0 0" },
-      "Run it from your Playtest checkout. The credential travels in the environment, never as an argument, so it stays out of your process list. The runner then waits for work and prints what it is doing."),
-    h("p.faint", { style: "font-size:11.5px;margin:6px 0 0" },
-      `Give an environment the ${(runner.labels || []).length ? `labels ${runnerLabelsText(runner.labels)}` : "runner labels you want"} under Test targets to place its runs here.`),
-    h("div.modal-actions", {}, copyBtn, h("button.btn.ghost", { onclick: () => { close(); refresh(); } }, "Done")),
-  );
+  });
 }
 
 async function revokeRunner(projectKey: WebDynamic, runner: WebDynamic, refresh: WebDynamic) {
@@ -605,7 +645,7 @@ function envModal(projectKey: WebDynamic, existing: WebDynamic, refresh: WebDyna
     return h("form", { onsubmit: submit },
       fld("Name", name),
       fld("Runner labels", labels,
-        "Runs against this environment go to runners advertising ALL of these labels — that is the whole matching rule. Leave blank to let any runner in this project take them."),
+        "Runs against this environment go to runners advertising ALL of these labels — that is the whole matching rule. Comma separated, using letters, digits, “.”, “_” and “-”; leave blank to let any runner in this project take them."),
       fld("Cookies", cookies,
         "Browser cookies set before the first navigation, on every web run against this environment — name=value pairs separated by semicolons. A suite can override them on its own settings page."),
       h("label.check", { style: "margin:6px 0 12px" }, disc, "Allow discovery studies on this environment"),
@@ -696,6 +736,11 @@ function envModal(projectKey: WebDynamic, existing: WebDynamic, refresh: WebDyna
               : "Save this environment, then upload a build here.");
       mount(artifactSlot, h("div.field", {},
         h("div.field-label", {}, "Uploaded build"),
+        // The rest of this form is Save/Cancel; the build is not. Say so where
+        // the buttons are, rather than letting Cancel look like it undoes an
+        // upload it cannot reach.
+        h("div.faint", { style: "font-size:11.5px;margin-bottom:6px" },
+          "Uploading or removing a build applies immediately — Cancel does not undo it."),
         summary,
         h("div", { style: "display:flex;gap:8px;margin-top:8px" },
           uploadBtn,
@@ -715,7 +760,10 @@ function envModal(projectKey: WebDynamic, existing: WebDynamic, refresh: WebDyna
         try {
           current = await api.putRaw(
             `/environments/${current.id}/app-artifact?filename=${encodeURIComponent(file.name)}`,
-            await file.arrayBuffer(),
+            // The File itself, never a copy of it: fetch streams a Blob body off
+            // disk, where `await file.arrayBuffer()` would first pull a 400 MB
+            // build through the tab's JS heap.
+            file,
             "application/octet-stream",
           );
           toast("Build uploaded", `${file.name} — runs against ${current.name} install it`, "ok");
@@ -761,7 +809,10 @@ function envModal(projectKey: WebDynamic, existing: WebDynamic, refresh: WebDyna
         if (stored === undefined) return toast(`"${k}" is ${MASK}`, "that key has no stored value to keep — paste a value or a {\"$secret\": …} reference", "err");
         cfg.secret_env[k] = stored;
       }
-      const payload: WebDynamic = { name: name.value.trim(), config: cfg, runner_labels: labels.value.split(",").map((s: WebDynamic) => s.trim()).filter(Boolean), discovery_allowed: disc.checked };
+      const runnerLabels = parseLabels(labels.value);
+      const labelIssue = labelProblem(runnerLabels);
+      if (labelIssue) return toast("Check the runner labels", labelIssue, "err");
+      const payload: WebDynamic = { name: name.value.trim(), config: cfg, runner_labels: runnerLabels, discovery_allowed: disc.checked };
       try {
         if (existing) await api.put(`/environments/${existing.id}`, payload);
         else await api.post(`/projects/${projectKey}/environments`, payload);

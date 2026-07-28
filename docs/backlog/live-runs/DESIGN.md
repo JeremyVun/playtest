@@ -182,7 +182,19 @@ until seal, which is today's behavior.
 
 One serialized, single-flight queue per case — not scattered fire-and-forget
 requests. Order is the run-dir order; nothing is in flight concurrently, so
-nothing can complete out of order:
+nothing can complete out of order.
+
+The ~2 s tick is a **coalescing floor, not a schedule, and not a
+heartbeat**: the queue ships only *completed* work (a trajectory line
+exists only after its step finished and its artifacts are durable — the
+engine's own invariant). A tick where several steps completed batches
+them all; a tick where nothing completed sends **nothing** — inactivity
+is measured server-side by absence (`inactive_ms`), so no empty
+heartbeat exists. The floor matters for the API driver, where steps take
+milliseconds and per-step requests would be a flood; on web/mobile the
+tick is usually idle-waiting on a single step anyway. The interval is an
+internal constant (the progress reporter's cadence), not user
+configuration. What ships:
 
 - **Step artifacts** (`steps/NNN.png` and profile-dependent siblings) as
   staged objects: `PUT /runner/runs/:r/live/<entry-path>`. `(run, entry
@@ -294,7 +306,13 @@ GET <run base>/live?after=<line>&wait=<seconds>
   from the runner-agent's progress reporter into core: the hosted side
   serves the stored snapshot it already has; the local side folds
   `events.jsonl`. Same code, same vocabulary, no drift — and no new
-  "phase" field to plumb through the progress whitelist.
+  "phase" field to plumb through the progress whitelist. Precedence is
+  fixed: **`lines` are authoritative for completed steps; `progress`
+  only decorates the in-flight edge** (the pending row, the grading
+  state) and is never used to render a step. It may legitimately run
+  slightly ahead of `lines` — it knows step 7 started before line 7
+  exists — and both ride one response, so each poll paints one coherent
+  snapshot.
 - `inactive_ms` is a fact, not a diagnosis: time since the last persisted
   event (hosted: last progress/ingest). A long model call, a retry
   backoff, and a dead runner all look inactive; the viewer says "no
@@ -334,6 +352,11 @@ or `open: false` means today's behavior, unchanged). In live mode:
   `inactive_ms` renders as neutral inactivity ("no activity for 3m"),
   never as a claim the run died. On `open: false` the badge flips and the
   full reload lands the grade panel in place.
+- The live view is an **ephemeral preview, never the record**: on
+  `open: false` the viewer discards all live state and reloads wholly
+  from the sealed run, so the final rendered state is never a
+  live/sealed hybrid. The preview can be behind the truth (a dropped
+  increment) but can never be wrong-and-kept.
 - Degradation is boring by design: a missed poll retries with backoff; a
   `reset` answer triggers one full reload; a screenshot the platform never
   received renders the existing "not captured" placeholder; a viewer

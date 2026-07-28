@@ -169,6 +169,12 @@ This phase defines the live protocol both hosts implement.
   `rewriteLast`, `grade.json`, video), then stop.
 - No behavior change for sealed runs or hosts without the route (probe
   404 → today's exact behavior).
+- **Experience gate** (L0.3 is a UX-critical phase, not plumbing):
+  appends land without flicker, scroll jumps, or layout shift; focus,
+  selection, and open panels always survive repaints; the seal
+  transition lands in place with no flash of empty state; follow mode
+  feels like tailing, not like the page reloading. Review the running
+  experience by eye against a real recording, not only by tests.
 
 Tests: node-host unit tests (event-stream liveness incl. legacy,
 missing-`case_start`, and missing-terminal-event runs; phase-aware SIGINT
@@ -365,6 +371,10 @@ hosted suites green.
   gap the same way the runners console work did.
 - Copy pass over every new user-facing string (badge, follow control,
   pending row, inactivity copy, watch affordance).
+- **Experience gate** (same bar as L0.3): the run page's live embed, the
+  seal handoff between iframe and page chrome, and the runs-list watch
+  affordance must feel seamless — verified by eye on a real streaming
+  run, with the ux-lab scenario as the recorded evidence.
 
 Tests: hosted web build green; ux-lab scenario recorded; feed handling
 regression tests for the seal transition.

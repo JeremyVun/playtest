@@ -34,7 +34,9 @@ repository-only test seam, not a production integration surface. Internal file
 paths are unsupported.
 
 Notable behavioral seams include `willRecord` for record-pool dispatch and the
-reporting exports `healDigest` and `PHASE_DOING`. Model aliases are resolved
+reporting exports `healDigest`, `PHASE_DOING`, and `progressFold` — the pure
+engine-event fold both live surfaces share (the runner-agent's progress reporter
+folds the stream, the local viewer host folds `events.jsonl`). Model aliases are resolved
 inside the LLM facade; the internal `resolveModel` helper is not a supported
 specifier export. The LLM facade also exports `modelTiers()` — the shipped
 short tier enums — and `defaultModels`, the engine's built-in
@@ -346,7 +348,10 @@ narrowed by case. `--changed` and `--failed` are mutually exclusive and reject
 `view --json` does not start a server. It prints the same entries as
 `/runs.json` or `/changed.json`; `--failed` retains fail and infra, while
 `--case` and `--latest` further filter the array. Port and browser-opening
-flags are ignored.
+flags are ignored. Pointed at a single run directory or a `.ptrun`, it prints
+that one entry, with identity fields read from the manifest and the same
+[live projection](#live-runs) the listing form applies. `--latest`
+intentionally selects the newest run even when that run is still open.
 
 ### Listing, linting, and scaffolding
 
@@ -567,6 +572,8 @@ contained under its owning static or run root; traversal is rejected.
 - `/changed.json` lists passing runs awaiting an explicit accept: healed
   journeys and recordings the acceptance leak scan held back.
 - `/history.json?case=<case_id>` lists case history.
+- `/run/<run_id>/<case_id>/live` (`/run/live` in single-run mode) answers the
+  [live protocol](#live-runs) for one run.
 
 In single-run mode, `/runs.json` is not a picker and returns 404. For a local
 run directory, `/changed.json` resolves the surrounding runs root and returns
@@ -580,6 +587,7 @@ its review list; a bundle remains scoped to its provider.
   case_id,
   path,
   status,
+  open,                            // present only on an open run
   mode,
   healed,
   started_at,
@@ -629,6 +637,70 @@ its review list; a bundle remains scoped to its provider.
 `path` is navigable only in runs-root mode. Unknown cases return an empty
 array. Run discovery uses one bounded manifest walk, shared with runs-root
 history.
+
+### Live runs
+
+A run is **open** while it is still executing and **sealed** once its run
+directory has stopped changing. Liveness is read from the event stream the
+engine persists ([Progress events](engine.md#progress-events)) and never
+inferred from manifest contents: the placeholder manifest carries a
+terminal-looking status from the first instant of a case. `case_start` present
+with no terminal `case_end` is open, a terminal event is sealed, and no
+`events.jsonl` at all is a legacy sealed run. Liveness inherits the event
+stream's best-effort posture, so the degradations are defined rather than
+accidental: a missing `case_start` reads sealed, a missing terminal event reads
+open-but-inactive, and neither ever changes a run's status, artifacts, or exit
+code. A `.ptrun` bundle is sealed by construction.
+
+An open run's picker entry keeps the existing "no verdict yet" value —
+`status: null`, not a new enum member — and adds `open: true`; it never shows
+the placeholder's `interrupted`. A sealed entry carries no `open` key at all, so
+existing consumers are untouched. This applies to `/runs.json` and to both forms
+of `view --json`. Open runs are excluded from `/changed.json` and
+`/history.json` until they seal — a half-recorded run is neither history nor a
+review item; the exclusion is scoped to open runs and completed-run projections
+are unchanged.
+
+```text
+GET <run base>/live?after=<line>&wait=<seconds>
+```
+
+```js
+{
+  open,                  // false is the terminal answer
+  reset,                 // true: the cursor cannot be honored; reload fully
+  next,                  // line cursor to echo as `after`
+  has_more,              // true: drain immediately, do not long-poll
+  lines,                 // whole trajectory.jsonl lines, capped by count and bytes
+  manifest_generation,   // host-minted monotonic counter; compare inequality only
+  progress,              // the shared progress fold, or null
+  inactive_ms            // time since the run last showed activity
+}
+```
+
+The cursor is a plain line number. Only whole lines are delivered — a partial
+trailing line is held for the next poll — so `next` advances by exactly
+`lines.length` and a consumer observes every envelope once, in append order.
+Responses are capped in bytes and line count; `has_more` pages a late joiner
+through a backlog in bounded responses. A cursor beyond the host's truth, or one
+issued against an index the host had to rebuild, answers `reset: true` with no
+lines: the client reloads rather than the host guessing.
+
+`wait` is capped at 25 seconds and holds only a caught-up caller. The hold ends
+on trajectory growth, an `events.jsonl` append (progress and, critically,
+`case_end`), or a manifest rewrite, so a finished run transitions on the next
+wake rather than at the end of a full hold. `manifest_generation` is minted by
+the host from the manifest's change signature; clients compare it for
+inequality and refetch `manifest.json`, never interpret its value. `progress`
+is the shared fold's view — `{ step, max_steps, doing, action, cost_usd, model,
+tokens }` — and decorates the in-flight edge only: `lines` are authoritative for
+completed steps, and `progress` may legitimately run slightly ahead of them.
+`inactive_ms` is a fact, not a diagnosis. Absent and sealed runs answer
+`open: false` immediately.
+
+The route is additive and its absence is a supported degradation: a host that
+does not serve it answers 404, and a viewer that probes it must then behave
+exactly as it does with no live mode at all.
 
 Range requests are supported when the provider supports them. MIME handling
 must include JSON, JSONL, PNG, MP4, WebM, MHTML, ZIP, and text; unknown

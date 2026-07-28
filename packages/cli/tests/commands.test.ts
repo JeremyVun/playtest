@@ -277,3 +277,52 @@ test("export bakes --base-url into the generated spec", () => {
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("view --json projects an open run additively, in both the listing and single-run forms", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "playtest-cli-live-"));
+  try {
+    const fixture = makeRunsFixture(root);
+    // A sealed run's machine contract must not move: capture it verbatim first
+    // (the fixture runs predate events.jsonl entirely — legacy, sealed).
+    const sealedSingle = runCli(["view", fixture.recordDir, "--json"]);
+    const sealedList = runCli(["view", fixture.runsRoot, "--json"]);
+    assert.equal(sealedSingle.status, 0, output(sealedSingle));
+    assert.doesNotMatch(sealedSingle.stdout, /"open"/, "a sealed run carries no live key");
+    assert.doesNotMatch(sealedList.stdout, /"open"/);
+
+    // The same run, now recording: case_start with no terminal event.
+    fs.writeFileSync(
+      path.join(fixture.recordDir, "events.jsonl"),
+      JSON.stringify({ ts: "2026-06-10T03:00:00.000Z", type: "case_start", caseId: "todos/add-todo", mode: "record" }) + "\n",
+    );
+
+    const single = runCli(["view", fixture.recordDir, "--json"]);
+    assert.equal(single.status, 0, output(single));
+    const [entry] = JSON.parse(single.stdout);
+    assert.equal(entry.status, null, "no verdict yet — never the placeholder's interrupted");
+    assert.equal(entry.open, true);
+    assert.deepEqual(
+      { ...JSON.parse(sealedSingle.stdout)[0], status: null, open: true },
+      entry,
+      "only the verdict fields move; every other field is byte-for-byte what it was",
+    );
+
+    const list = JSON.parse(runCli(["view", fixture.runsRoot, "--json"]).stdout);
+    const open = list.find((e: LegacyTestValue) => e.path.startsWith(path.basename(path.dirname(path.dirname(fixture.recordDir)))));
+    assert.equal(open.status, null);
+    assert.equal(open.open, true);
+    for (const other of list.filter((e: LegacyTestValue) => e !== open)) {
+      assert.equal("open" in other, false, "sealed siblings are untouched");
+    }
+
+    // Sealing restores the original bytes exactly.
+    fs.appendFileSync(
+      path.join(fixture.recordDir, "events.jsonl"),
+      JSON.stringify({ ts: "2026-06-10T03:00:03.000Z", type: "case_end", caseId: "todos/add-todo", status: "pass" }) + "\n",
+    );
+    assert.equal(runCli(["view", fixture.recordDir, "--json"]).stdout, sealedSingle.stdout, "sealed output is byte-identical");
+    assert.equal(runCli(["view", fixture.runsRoot, "--json"]).stdout, sealedList.stdout);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

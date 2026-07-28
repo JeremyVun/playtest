@@ -278,8 +278,13 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
   // (docs/contracts/artifacts.md#diagnostic-and-progress-logs);
   // a write failure is swallowed like a throwing listener (events are telemetry,
   // never load-bearing for the run itself).
+  // Set by the case's own terminal event, so the SIGINT flusher below knows the
+  // run already sealed itself and appends nothing
+  // (docs/contracts/engine.md#progress-events).
+  let terminalEventWritten = false;
   const emit = (type: string, payload: DynamicValue = {}) => {
     const event = { type, caseId: rc.id, ...payload };
+    if (type === "case_end") terminalEventWritten = true;
     try {
       writer.appendEvent(event);
     } catch {}
@@ -395,8 +400,25 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
     } catch {}
   };
   writePlaceholderManifest();
+  // The SIGINT flush is phase-aware (docs/contracts/engine.md#progress-events):
+  // the manifest write above already refuses to clobber a final manifest, and
+  // the terminal event does the same job for the event stream — a Ctrl-C before
+  // the final manifest seals the run as interrupted; one during the finishing
+  // tail seals it honestly with grade and video possibly absent; one after the
+  // tail appends nothing, because the real case_end is already on disk. The
+  // append is best-effort like every other event write, and events-only: the
+  // in-process listener stream is untouched at signal time. kill -9 leaves no
+  // terminal event at all — open-but-inactive, which is the truth.
+  const sigintFlush = () => {
+    writePlaceholderManifest();
+    if (terminalEventWritten) return;
+    terminalEventWritten = true;
+    try {
+      writer.appendEvent({ type: "case_end", caseId: rc.id, status: "interrupted", interrupted: true });
+    } catch {}
+  };
   _installSigintHandler();
-  _sigintFlushers.add(writePlaceholderManifest);
+  _sigintFlushers.add(sigintFlush);
 
   // try/finally guarantees the flusher is unregistered on EVERY return path
   // (early finishInfra returns + normal completion). runCase never throws
@@ -1122,7 +1144,7 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
     emit("case_end", { status, result });
     return result;
   } finally {
-    _sigintFlushers.delete(writePlaceholderManifest);
+    _sigintFlushers.delete(sigintFlush);
     perf.span("case_total", caseStartedAt, null, {
       driver: rc.env?.driver ?? "web",
       start_mode: startMode,

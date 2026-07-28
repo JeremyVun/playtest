@@ -13,7 +13,7 @@ import { makeRedactor, collectSecretValues } from "./redact.ts";
 import { discoverCases } from "@playtest/core/suite";
 import { resolveBudget, schedulePool, willRecord } from "@playtest/core/run";
 import { writeBundle, baselinePaths } from "@playtest/core/artifacts";
-import { modeDoing, PHASE_DOING } from "@playtest/core/reporting";
+import { progressFold } from "@playtest/core/reporting";
 
 if (invokedDirectly()) {
   execFromCli().catch((e) => {
@@ -240,7 +240,11 @@ const PROGRESS_INTERVAL_MS = 2000;
  * reporting, step N/M, cost so far, tokens, model).
  */
 export function progressReporter(api: RunnerDynamic, groupId: string, runId: string, redactor: (value: string) => string, { intervalMs = PROGRESS_INTERVAL_MS, now = Date.now }: RunnerDynamic = {}) {
-  const snap: Record<string, RunnerDynamic> = {};
+  // The fold itself is core's (docs/contracts/engine.md#progress-events): the
+  // local viewer host folds the same events off events.jsonl for its live
+  // endpoint, so the two live surfaces share one vocabulary instead of two
+  // copies of this state machine.
+  const fold = progressFold({ redact: redactor });
   let timer: NodeJS.Timeout | null = null;
   let lastSent = 0;
   let dirty = false;
@@ -251,7 +255,7 @@ export function progressReporter(api: RunnerDynamic, groupId: string, runId: str
     if (stopped || !dirty) return;
     dirty = false;
     lastSent = now();
-    api.json("POST", `/runner/groups/${groupId}/cases/${runId}/progress`, { ...snap }).catch(() => {});
+    api.json("POST", `/runner/groups/${groupId}/cases/${runId}/progress`, { ...fold.view() }).catch(() => {});
   };
   const schedule = () => {
     dirty = true;
@@ -260,54 +264,10 @@ export function progressReporter(api: RunnerDynamic, groupId: string, runId: str
     timer.unref?.();
   };
 
-  // The mode-word state machine mirrors the CLI live reporter (packages/cli/src/live.ts):
-  // a pre-actor phase (setup) promotes the word, step_start restores the actor's
-  // own word, and the grader phases swap the model chip to the model actually
-  // doing the work.
-  let actorDoing: string | null = null;
-  let graderModel: string | null = null;
-  const onEvent = (ev: RunnerDynamic) => {
-    switch (ev.type) {
-      case "case_start":
-        actorDoing = snap.doing = modeDoing(ev.mode);
-        snap.max_steps = ev.maxSteps ?? null;
-        snap.model = ev.actorModel || null;
-        graderModel = ev.graderModel || null;
-        break;
-      case "step_start":
-        snap.step = ev.step;
-        snap.doing = actorDoing;
-        snap.action = ev.summary ? redactor(String(ev.summary)).slice(0, 200) : null;
-        break;
-      case "step_result":
-        if (ev.costSoFar != null) snap.cost_usd = ev.costSoFar;
-        if (ev.tokens) snap.tokens = ev.tokens;
-        break;
-      case "heal_start":
-        actorDoing = snap.doing = modeDoing("heal");
-        snap.action = null;
-        break;
-      case "heal_resume":
-        // Re-anchored: replay resumed, so the mode word goes back to acting.
-        actorDoing = snap.doing = modeDoing("act");
-        snap.action = null;
-        break;
-      case "phase":
-      case "grading": {
-        const phase: keyof typeof PHASE_DOING = ev.phase ?? ev.type;
-        snap.doing = PHASE_DOING[phase] ?? snap.doing;
-        snap.action = null; // the actor stopped acting; its last step summary is stale
-        if ((phase === "gate" || phase === "grading") && graderModel) snap.model = graderModel;
-        break;
-      }
-      default:
-        return; // retry/env_ready/gate_fail/warn/case_end move nothing a live row shows
-    }
-    schedule();
-  };
-
   return {
-    onEvent,
+    onEvent: (ev: RunnerDynamic) => {
+      if (fold.apply(ev)) schedule();
+    },
     stop: () => {
       stopped = true;
       if (timer) clearTimeout(timer);

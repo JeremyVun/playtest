@@ -837,8 +837,10 @@ the same way, and a serializer change would otherwise read as app drift on
 every page; a baseline with no recorded format is a wildcard and replays.
 
 The run directory receives an `interrupted` placeholder manifest before setup.
-`SIGINT` refreshes its partial totals before the process re-raises the signal
-and exits 130. Any completed final manifest disables later placeholder writes.
+`SIGINT` refreshes its partial totals and appends the terminal event described
+under [Progress events](#progress-events) before the process re-raises the
+signal and exits 130. Any completed final manifest disables later placeholder
+writes.
 
 ### Record and explore
 
@@ -1465,7 +1467,28 @@ warn         { message }
 case_end     { status, result }
 ```
 
-`case_end` is emitted on every exit path, including infrastructure failure.
+`case_end` is emitted on every exit path, including infrastructure failure, and
+it is emitted **after the finishing tail** — after grading, video, and every
+manifest rewrite. That ordering is load-bearing: `events.jsonl` is the run
+directory's durable open/sealed bracket, so `case_end` present means the run
+directory has stopped changing, which is what a live reader keys on
+([Live runs](interfaces.md#live-runs)). Every event is persisted synchronously
+but best-effort — a write failure is swallowed exactly like a throwing listener,
+because events are telemetry and never load-bearing for the run itself — so
+consumers treat a missing bracket as a defined degradation, never as an error.
+A crash path that bypasses the writer leaves no terminal event, which reads as
+open-but-inactive: the truth.
+
+`SIGINT` is phase-aware and rides the existing synchronous flusher, which still
+re-raises and preserves exit code 130. Before the final manifest, the flusher
+writes the interrupted placeholder as it always has and appends a terminal
+`case_end` carrying `status: "interrupted"` and `interrupted: true`. During the
+finishing tail it appends that same terminal event but leaves the completed
+manifest alone, so the run seals honestly with grade and video possibly absent.
+After the tail the run's own `case_end` is already on disk and nothing is
+appended. The append is best-effort like every other event write and reaches
+`events.jsonl` only — the in-process listener stream is untouched at signal
+time. `kill -9` leaves no terminal event at all.
 
 ## Running multiple cases
 

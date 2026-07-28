@@ -21,8 +21,11 @@ import {
   manifestToHistoryEntry,
   readJsonFile,
 } from "@playtest/core/artifacts";
+import { createLiveHost, isOpenRun, liveResponse, liveStatusProjection, liveTargetOf } from "./live.ts";
+import type { LiveHost } from "./live.ts";
 
 export { findManifests, manifestToHistoryEntry, readJsonFile };
+export { isOpenRun, liveStatusProjection } from "./live.ts";
 
 interface ViewerManifest extends RunManifest {
   score?: number | null;
@@ -56,6 +59,8 @@ interface RunListEntry {
   case_id: string;
   path: string;
   status: string | null;
+  /** Present only on an open run (docs/contracts/interfaces.md#viewer-server). */
+  open?: true;
   mode: string | null;
   healed: boolean;
   started_at: string | null;
@@ -114,10 +119,13 @@ export async function serveRun(dir: string, { port = 0, open = true, query = "" 
   }
   const provider = bundle ? BundleProvider.fromFile(root) : new LocalFsProvider(root);
   const singleRun = bundle || fs.existsSync(path.join(root, "manifest.json"));
+  // A bundle-backed run is sealed by construction, so its live endpoint answers
+  // open: false without scanning anything.
+  const live = createLiveHost(provider, { sealed: bundle });
 
   const server = http.createServer((req, res) => {
     try {
-      handle(req, res, root, singleRun, provider);
+      handle(req, res, root, singleRun, provider, live);
     } catch (e: any) { // SAFETY: route failures preserve the existing Error-like message response
       res.writeHead(500, { "content-type": "text/plain" }).end(`error: ${e.message}`);
     }
@@ -135,7 +143,7 @@ export async function serveRun(dir: string, { port = 0, open = true, query = "" 
   return server;
 }
 
-function handle(req: IncomingMessage, res: ServerResponse, root: string, singleRun: boolean, provider: StorageProvider) {
+function handle(req: IncomingMessage, res: ServerResponse, root: string, singleRun: boolean, provider: StorageProvider, live: LiveHost) {
   if (req.method !== "GET" && req.method !== "HEAD") {
     return res.writeHead(405).end();
   }
@@ -158,7 +166,22 @@ function handle(req: IncomingMessage, res: ServerResponse, root: string, singleR
     return json(res, history(provider, root, singleRun, u.searchParams.get("case")));
   }
   if (pathname.startsWith("/run/")) {
-    return sendFile(req, res, root, pathname.slice("/run/".length), provider);
+    const runPath = pathname.slice("/run/".length);
+    // The live route sits beside the run's entry routes and is purely additive:
+    // every existing route, and its degradation, is untouched. No run dir holds
+    // an entry named "live" (docs/contracts/artifacts.md#run-directory).
+    const target = liveTargetOf(runPath);
+    if (target !== null) {
+      // Best-effort like everything live: a failed probe answers 404, which is
+      // exactly what a host without the route answers, so the viewer degrades
+      // to its non-live behavior instead of erroring.
+      live.respond(req, target, u.searchParams).then(
+        (body) => liveResponse(res, body),
+        () => notFound(res),
+      );
+      return;
+    }
+    return sendFile(req, res, root, runPath, provider);
   }
   return sendFile(req, res, VIEWER_DIR, pathname === "/" ? "index.html" : pathname.slice(1));
 }
@@ -284,7 +307,10 @@ export function listRuns(provider: StorageProvider) {
       run_id: rel[0],
       case_id: rel.slice(1).join("/"), // dir-derived so picker links resolve
       path: rel.join("/"),
-      status: m.result?.status ?? null,
+      // Additive live projection: an open run keeps the existing "no verdict"
+      // vocabulary (status: null) and adds open: true, rather than showing the
+      // placeholder manifest's `interrupted`. A sealed run gains no key at all.
+      ...liveStatusProjection(m, provider, dir),
       mode: m.mode ?? null,
       healed: m.healed ?? false,
       started_at: m.started_at ?? null,
@@ -330,6 +356,11 @@ export function changed(provider: StorageProvider, root: string, singleRun: bool
     // same candidate files and are accepted the same way; everything else is skipped.
     if (m?.result?.status !== "pass") continue;
     if (m.healed !== true && m.baseline_scan?.blocked !== true) continue;
+    // A half-recorded run is not a review item: an open run is excluded until it
+    // seals (its final manifest is written before the finishing tail, so a
+    // passing run can be listed here while still grading). Scoped to open runs —
+    // completed-run review is untouched.
+    if (isOpenRun(rp, rel)) continue;
     let pending = false;
     if (typeof m.case?.file === "string") {
       const p = baselinePaths(m.case.file);
@@ -371,6 +402,9 @@ function history(provider: StorageProvider, root: string, singleRun: boolean, ca
   for (const rel of findManifestsVia(rp)) {
     const m = readJson(rp, join(rel, "manifest.json"));
     if (m?.case?.id !== caseId) continue;
+    // A half-recorded run is not history: an open run joins the sparkline once
+    // it seals. Scoped to open runs; completed-run history is untouched.
+    if (isOpenRun(rp, rel)) continue;
     entries.push(
       manifestToHistoryEntry(m, readJson(rp, join(rel, "grade.json"))?.score, {
         // manifestToHistoryEntry reads totals stamped into the manifest at generate-time. Fall back to a

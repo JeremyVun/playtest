@@ -21,7 +21,7 @@ import { runAll, willRecord, gradeRun } from "@playtest/core/run";
 import { caseLine, summary, healDigest } from "@playtest/core/reporting";
 import { LiveReporter } from "./live.ts";
 import { llmConfig, missingLlmConfigMessage } from "@playtest/core/llm";
-import { serveRun, listRuns, changed as changedJourneys } from "@playtest/run-viewer/node";
+import { serveRun, listRuns, liveStatusProjection, changed as changedJourneys } from "@playtest/run-viewer/node";
 import {
   BundleProvider,
   findRunsRoot,
@@ -633,7 +633,10 @@ function singleRunJson(provider: StorageProvider) {
       run_id: m.run_id ?? null,
       case_id: m.case?.id ?? null,
       path: "",
-      status: m.result?.status ?? null,
+      // Same live projection listRuns uses, so a run being recorded reads
+      // `status: null, open: true` here too instead of the placeholder
+      // manifest's `interrupted`. Sealed runs are byte-identical to before.
+      ...liveStatusProjection(m, provider),
       mode: m.mode ?? null,
       healed: m.healed ?? false,
       started_at: m.started_at ?? null,

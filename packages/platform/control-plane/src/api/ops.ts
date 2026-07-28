@@ -1,5 +1,5 @@
 // GET /projects/:p/ops: the project ops
-// dashboard — dispatch depth vs. the concurrency cap, GHA queue-wait, dispatch
+// dashboard — dispatch depth vs. the concurrency cap, board queue wait, dispatch
 // reconciler liveness, and LLM spend. Developer role, same bar as the
 // dispatches admin page it sits beside.
 import { guard, getProjectByKey } from "./util.ts";

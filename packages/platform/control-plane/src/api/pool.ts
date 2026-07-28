@@ -63,8 +63,8 @@ const MAX_EPHEMERAL_PER_RUN = 8;
  * POST /runner/pool/register-oidc — join the pool for one CI job.
  *
  * The GitHub OIDC token IS the registration badge: it is signed by GitHub,
- * scoped to one workflow run, and validated by the same verifier the
- * GitHub-dispatch exchange uses (`auth/github-oidc.ts`) against the deployment's
+ * scoped to one workflow run, and validated by the single OIDC verifier
+ * (`auth/github-oidc.ts`) against the deployment's
  * pinned issuer, audience, repository, workflow file and ref. No long-lived
  * secret lands in repository settings, and the credential this mints expires
  * with the job rather than outliving it in someone's settings page.
@@ -74,8 +74,7 @@ const MAX_EPHEMERAL_PER_RUN = 8;
  *   1. **It refuses to run unpinned.** Without `PLAYTEST_POOL_OIDC_REPOSITORY`
  *      the route is `503 not_configured`, because an unpinned check would accept
  *      a token from any repository on GitHub. Naming which repository may
- *      register is a deliberate deployment decision, exactly like naming the
- *      repository GitHub dispatch places workflows into.
+ *      register is a deliberate deployment decision.
  *   2. **The registration is ephemeral.** It expires (`pool.oidc.ttlMs`), it is
  *      never listed as a standing runner, and its verified provenance is stored
  *      beside it, so a reviewer can see which build produced a runner.
@@ -319,8 +318,8 @@ async function activeClaim(ctx: HostedDynamic, runnerId: string) {
  * concurrent runner wins (transaction guarantee #2); the loser is told what
  * happened and goes back to polling.
  *
- * The winning claim moves the dispatch to `scheduled` and emits the same
- * `run.status` provisioning event GitHub dispatch emits when it places a group.
+ * The winning claim moves the dispatch to `scheduled` and emits the
+ * `run.status` provisioning event for the group.
  */
 export async function claimDispatch(ctx: HostedDynamic) {
   const runner = await requireRunnerCredential(ctx);
@@ -385,7 +384,7 @@ export async function claimDispatch(ctx: HostedDynamic) {
         projectId: row.project_id,
         type: "run.status",
         entity: { run_group_id: row.ref_id },
-        payload: { status: "provisioning", dispatch_id: row.id, workflow_run_url: null, runner: { id: runner.id, name: runner.name } },
+        payload: { status: "provisioning", dispatch_id: row.id, runner: { id: runner.id, name: runner.name } },
       });
     }
     // The fleet moved: this runner is busy now, and the console's Runners

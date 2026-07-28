@@ -35,47 +35,54 @@ The agent supports two isolation modes:
 - `container` runs each case in an ephemeral container from the configured job
   image. Persistent hosted runners use this mode.
 
-The agent also runs authentication-mint jobs. A mint provider receives only its
-approved inputs in a clean workspace and must return Playwright storage-state
-JSON. Secret material is kept out of command arguments and temporary files are
-removed after use. During group runs, progress and errors are redacted before
-reporting.
+The pool loop also serves authentication-mint claims. A mint provider receives
+only its approved inputs in a clean workspace and must return Playwright
+storage-state JSON. Secret material is kept out of command arguments and
+temporary files are removed after use. During group runs, progress and errors
+are redacted before reporting.
 
-In normal use, the control plane starts this package. It is not a standalone
-service and has no listening port.
+The agent is a peer of the control plane, never its child: it dials out, polls
+the claim board, and claims work it can execute. The control plane starts no
+process in response to a launch and never connects to a runner. It has no
+listening port of its own.
 
-## Command entry points
+## Command entry point
 
-The executable accepts a dispatched run group or mint claim:
+There is one mode — the long-lived pool loop:
 
 ```sh
-node packages/platform/runner-agent/src/exec-group.ts exec \
-  --group <group-id> \
+./node_modules/.bin/runner-agent pool \
   --server http://127.0.0.1:4177 \
-  --isolation process
-
-node packages/platform/runner-agent/src/exec-group.ts mint \
-  --claim <claim-id> \
-  --server http://127.0.0.1:4177 \
-  --isolation process
+  --credential-file ~/.playtest/runner-credential \
+  --labels macos,ios-sim \
+  --config ~/.playtest/runner.yaml
 ```
 
-These commands require a matching control-plane record and runner exchange
-credentials. The local hosted launcher supplies them automatically.
+The credential comes from runner registration in the console (or, under
+`PLAYTEST_AUTH=dev`, from the site-scoped `local` runner the server seeds under
+its data root). `--config` names the runner configuration file that binds
+mobile applications/rings to builds, devices, and Appium backends on this
+machine; web/API-only runners do not need one.
 
 ## Source map
 
 ```text
+src/cli.ts                the `runner-agent` executable (pool mode only)
+src/pool.ts               claim-board poll, claim, exchange, and supervision loop
+src/runner-config.ts      --config parse, validation, and target bindings
 src/exec-group.ts         group exchange, scheduling, progress, and reporting
 src/case-runner.ts        process and container isolation
 src/case-runner-child.ts  one-case container protocol
 src/workspace.ts          snapshot, baseline, ring-overlay, and secret materialization
 src/api-client.ts         authenticated runner-protocol client
-src/exec-mint.ts          hosted mint-job lifecycle
+src/exec-mint.ts          hosted mint-claim lifecycle
 src/mint.ts               clean-room provider-script execution
+src/appium.ts             managed/external Appium backend lifecycle
+src/mobile.ts             mobile preflight and runtime-target assembly
+src/live-uploader.ts      in-flight evidence upload for open runs
 src/redact.ts             secret redaction
 src/janitor.ts            workspace and container cleanup
-tests/unit/               isolation, workspace, mint, and sandbox-boundary tests
+tests/unit/               isolation, workspace, mint, config, and mobile tests
 ```
 
 ## Development

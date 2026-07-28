@@ -326,7 +326,6 @@ CREATE TABLE executors (
   id                TEXT PRIMARY KEY,
   run_group_id      TEXT REFERENCES run_groups(id) ON DELETE SET NULL,
   kind              TEXT NOT NULL CHECK (kind IN ('group','media','mint')),
-  workflow_run_url  TEXT,
   versions          TEXT_JSON NOT NULL DEFAULT '{}',
   isolation         TEXT CHECK (isolation IS NULL OR isolation IN ('container','process')),
   registered_at     INT_TS NOT NULL DEFAULT (CAST(unixepoch('subsec') * 1000 AS INTEGER)),
@@ -382,8 +381,6 @@ CREATE TABLE dispatches (
   kind             TEXT NOT NULL CHECK (kind IN ('group','media','mint')),
   ref_id           TEXT NOT NULL,
   attempt          INTEGER NOT NULL,
-  workflow_run_id  TEXT,
-  workflow_run_url TEXT,
   executor_id      TEXT REFERENCES executors(id) ON DELETE SET NULL,
   status           TEXT NOT NULL CHECK (status IN ('requested','scheduled','running','concluded','reconciled_dead')),
   labels           TEXT_JSON,
@@ -399,7 +396,6 @@ CREATE TABLE dispatches (
 );
 
 CREATE INDEX dispatches_ref_idx ON dispatches(kind, ref_id, attempt);
-CREATE INDEX dispatches_workflow_idx ON dispatches(workflow_run_id);
 CREATE INDEX dispatches_project_active_idx ON dispatches(project_id, status);
 CREATE INDEX dispatches_runner_idx ON dispatches(runner_id) WHERE runner_id IS NOT NULL;
 CREATE INDEX dispatches_board_idx ON dispatches(project_id, status, requested_at)

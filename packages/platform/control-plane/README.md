@@ -45,9 +45,10 @@ npm run hosted
 ```
 
 This is the complete local platform. It builds both browser applications,
-defaults the control plane to development auth, and uses local dispatch there
-to spawn runner-agent processes when a run is launched. Do not start the web or
-runner-agent workspaces as separate local services.
+defaults the control plane to development auth, and supervises one peer
+`runner-agent pool` process beside the server — a launch posts to the claim
+board and that runner claims it, exactly as a CI or fleet runner would. Do not
+start the web or runner-agent workspaces as separate local services.
 
 The server needs no separate database service. `PLAYTEST_DATA_DIR` defaults to
 `.playtest-data` and contains both `playtest.sqlite` and the local object store.
@@ -75,14 +76,18 @@ src/routes.ts         complete route table
 src/config.ts         environment configuration and validation
 src/db.ts             SQLite connection and transactions
 src/auth/             people, roles, sessions, tokens, and OIDC
-src/api/              human-facing API handlers
-src/dispatch/         placement, local execution, GitHub dispatch, reconciliation
+src/api/              human-facing API handlers and the runner claim board
+src/dispatch/         launch placement, target snapshots, and reconciliation
+src/dev-runner.ts     dev-auth seeding of the site-scoped `local` runner
 src/suites/           safe suite storage, snapshots, export, and core resolution
 src/findings/         finding intake, deduplication, synthesis, and resolution
 src/events/           event feed and outbox
+src/live/             open-run ingest, staging, and serving
+src/media/            clip and media export
+src/authoring/        story authoring and assistance
 src/store/            filesystem and S3-compatible object stores
 src/retention/        evidence-retention policy and worker
-migrations/           forward-only numbered SQLite migrations
+migrations/           the single baseline SQLite migration
 ```
 
 ## Development

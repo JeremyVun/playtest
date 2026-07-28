@@ -715,7 +715,7 @@ export async function health(ctx: HostedDynamic) {
   }
   const dead = await db.query(
     `WITH latest_dead AS (
-       SELECT d.id, d.ref_id, d.workflow_run_url, d.requested_at,
+       SELECT d.id, d.ref_id, d.requested_at,
               row_number() OVER (
                 PARTITION BY d.ref_id
                 ORDER BY d.requested_at DESC, d.id DESC
@@ -730,7 +730,7 @@ export async function health(ctx: HostedDynamic) {
              WHERE r.run_group_id = g.id AND r.status IN ('infra','lost')
           )
      )
-     SELECT id, ref_id, workflow_run_url
+     SELECT id, ref_id
        FROM latest_dead
       WHERE rn = 1
       ORDER BY requested_at DESC LIMIT 3`,
@@ -741,7 +741,6 @@ export async function health(ctx: HostedDynamic) {
       kind: "infra",
       run_group_id: d.ref_id,
       note: "runner stopped before the run finished",
-      workflow_run_url: d.workflow_run_url,
     });
   }
 

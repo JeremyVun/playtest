@@ -406,9 +406,9 @@ returned bearer is short-lived and scoped to exactly one run group or mint
 claim; group and mint tokens are not interchangeable.
 
 The group spec includes only the selected cases, pinned snapshot, baseline
-references, this attempt's `ring` (`key`, `base_url`, the logical `config`
-overlay, `runner_labels`, and `resolved_secrets`) and `application` (`key`,
-`driver`, `platform`), session requirements, execution limits, concurrency
+references, this attempt's `ring` (`id`, `key`, `base_url`, the logical `config`
+overlay, `runner_labels`, and `resolved_secrets`) and `application` (`id`,
+`key`, `driver`, `platform`), session requirements, execution limits, concurrency
 policy, and model configuration needed by that group. The ring block is served
 from the attempt's target snapshot, so a ring edited mid-flight cannot change
 what an in-flight group runs against; only `resolved_secrets` is computed at
@@ -551,7 +551,7 @@ claims work. **No inbound connection to a runner exists.**
   labels at check-in; that changes which of the jobs in its scope match it, never
   what its scope is. A label is spelled with letters, digits, `.`, `_`
   and `-` only (at most 32 labels, 64 characters each), enforced at one
-  validator for every surface that accepts one — runner registration, an
+  validator for every surface that accepts one — runner registration,
   a ring's `runner_labels`, a per-launch pin, ephemeral CI registration and
   check-in re-advertisement. The alphabet is narrow because labels travel
   comma-joined on the agent's `--labels` (a comma inside one would silently
@@ -2122,7 +2122,7 @@ author stories, run them, inspect evidence, make a human decision.
   lights up no rail item is a bug, and the hermetic gate asserts the mapping.
 - System health is a status bar, not a page. Inside a project, a thin always-on
   footer (`packages/platform/web/src/lib/statusbar.ts`) states whether this console is
-  live and — for developers — dispatch depth against the cap, GHA queue wait,
+  live and — for developers — dispatch depth against the cap, board queue wait,
   reconciler liveness, and model spend; the dispatch ledger opens in a drawer
   over the page. The words and tones are DOM-free in `lib/ops-status.ts`. The
   bar reads `GET /projects/:p/ops` and

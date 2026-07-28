@@ -1,5 +1,5 @@
 // Ops metrics: the queries behind
-// GET /projects/:p/ops — dispatch depth, GHA queue-wait, reconciler liveness,
+// GET /projects/:p/ops — dispatch depth, board queue wait, reconciler liveness,
 // and LLM spend. Everything here is a projection over existing ledgers; the
 // liveness state is the service_heartbeats row each background loop stamps.
 import type { AppContext, DynamicJson } from "./types.ts";
@@ -58,9 +58,9 @@ async function dispatchDepth(ctx: AppContext, projectId: string) {
 }
 
 /**
- * GHA queue-wait: dispatch requested → executor exchanged, over the last 50
+ * Board queue wait: dispatch requested → executor exchanged, over the last 50
  * group dispatches that got an executor. `requested_at` is the ledger insert
- * (adjacent to the workflow_dispatch POST), `executors.registered_at` is the
+ * (the offer landing on the board), `executors.registered_at` is the
  * exchange — the closest durable pair we have to "queued" → "picked up".
  */
 async function queueWaitStats(ctx: AppContext, projectId: string) {

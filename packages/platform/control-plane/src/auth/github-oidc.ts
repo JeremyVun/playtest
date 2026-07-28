@@ -1,10 +1,9 @@
 // The GitHub Actions OIDC badge, verified in one place.
 //
-// Two surfaces present one of these tokens and both must be judged identically,
-// so this module is the single verifier rather than a check per caller:
+// One surface presents these tokens, and keeping the verification in its own
+// module keeps the pins (issuer, audience, repository, workflow, ref) in one
+// auditable place:
 //
-//   POST /runner/exchange              a GitHub-dispatched executor proving it is
-//                                      the workflow run this dispatch placed
 //   POST /runner/pool/register-oidc    a CI job asking for an ephemeral runner
 //                                      registration on the claim board
 //

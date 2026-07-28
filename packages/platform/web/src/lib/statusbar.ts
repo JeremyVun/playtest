@@ -19,7 +19,6 @@ import { h, mount } from "./dom.js";
 import { subscribeFeed } from "./feed.js";
 import { hasRole } from "./state.js";
 import { statusChip } from "./ui.js";
-import { short } from "./labels.js";
 import { opsItems, feedIndicator } from "./ops-status.js";
 
 // Anything that moves dispatch depth, spend, or reconciler state. Findings and
@@ -238,7 +237,7 @@ function paintPanel() {
       ? h("div.dim", {}, "Loading…")
       : rows.length
         ? h("div.card", {}, h("table.rows", {},
-            h("thead", {}, h("tr", {}, h("th", {}, "Attempt"), h("th", {}, "Status"), h("th", {}, "Workflow"), h("th", {}, "Isolation"), h("th", {}, "Updated"))),
+            h("thead", {}, h("tr", {}, h("th", {}, "Attempt"), h("th", {}, "Status"), h("th", {}, "Isolation"), h("th", {}, "Updated"))),
             h("tbody", {}, ...rows.map(dispatchRow)),
           ))
         : h("div.card.pad.dim", {}, "No dispatches yet."),
@@ -250,9 +249,6 @@ function dispatchRow(d: WebDynamic) {
   return h("tr", {},
     h("td.mono", {}, `${d.kind} ${d.attempt}`),
     h("td", {}, statusChip(d.status === "reconciled_dead" ? "infra" : d.status === "concluded" ? "pass" : "running", d.status)),
-    h("td", {}, d.workflow_run_url
-      ? h("a", { href: d.workflow_run_url, target: "_blank", rel: "noreferrer" }, short(d.workflow_run_id || d.workflow_run_url))
-      : h("span.faint", {}, "—")),
     h("td", {}, d.isolation || "—"),
     h("td.dim", {}, at ? new Date(at).toLocaleString() : "—"),
   );

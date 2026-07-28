@@ -443,8 +443,8 @@ export async function getRunGroupView(ctx: HostedDynamic, id: HostedDynamic) {
 
 /**
  * What produced this group's evidence: the newest attempt's placement, the
- * self-hosted runner that claimed it (pool dispatch only — the other adapters
- * leave `runner_id` null), and the isolation that runner reported at the
+ * self-hosted runner that claimed it (`runner_id` is null until a claim
+ * lands), and the isolation that runner reported at the
  * exchange. Evidence trust is stated, not laundered: a persistent shared runner
  * without per-case containers is visible as `process` here.
  */

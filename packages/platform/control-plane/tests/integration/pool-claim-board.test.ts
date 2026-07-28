@@ -117,7 +117,7 @@ test("pool: register, poll, race one winner, exchange, execute, report, complete
     assert.ok(winners[0].body.heartbeat_interval_s > 0);
 
     // The winning claim moved the dispatch to scheduled and announced
-    // provisioning exactly as a GitHub dispatch does.
+    // provisioning on the feed.
     const claimed = await app.db.query(`SELECT * FROM dispatches WHERE id = $1`, [dispatchId]);
     assert.equal(claimed.rows[0].status, "scheduled");
     assert.ok(claimed.rows[0].claimed_at);

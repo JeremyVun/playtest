@@ -27,15 +27,15 @@ test("status bar: waits read in the coarsest unit that still means something", (
 test("status bar: reconciler liveness — off is a choice, silence is a fault", () => {
   const off = reconcilerHealth({ configured: false, interval_s: 30 });
   assert.equal(off.value, "off");
-  assert.equal(off.tone, "neutral", "a deployment without GitHub dispatch is not unhealthy");
-  assert.match(off.note, /not configured/);
+  assert.equal(off.tone, "neutral", "a deployment that runs no reconciler loop is not unhealthy");
+  assert.match(off.note, /reconciler is disabled/);
 
   const never = reconcilerHealth({ configured: true, interval_s: 30, lag_s: null });
   assert.equal(never.tone, "infra");
   assert.match(never.value, /no heartbeat/, "the fault must be readable without colour");
 
-  // Late once it has missed three of its own intervals; one slow GitHub call is
-  // not an outage.
+  // Late once it has missed three of its own intervals; one slow sweep is not
+  // an outage.
   assert.equal(reconcilerHealth({ configured: true, interval_s: 30, lag_s: 89 }).tone, "pass");
   const stale = reconcilerHealth({ configured: true, interval_s: 30, lag_s: 91 });
   assert.equal(stale.tone, "infra");

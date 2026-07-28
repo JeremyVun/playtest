@@ -41,9 +41,9 @@ export async function exchange(ctx: HostedDynamic) {
   const group = await getGroup(ctx, dispatch.ref_id);
   await ctx.db.withTx(async (tx: HostedDynamic) => {
     await tx.query(
-      `INSERT INTO executors (id, run_group_id, kind, workflow_run_url, versions, isolation, last_report_at)
-         VALUES ($1, $2, 'group', $3, $4, $5, now())`,
-      [executorId, group.id, dispatch.workflow_run_url ?? null, versions, isolation],
+      `INSERT INTO executors (id, run_group_id, kind, versions, isolation, last_report_at)
+         VALUES ($1, $2, 'group', $3, $4, now())`,
+      [executorId, group.id, versions, isolation],
     );
     await tx.query(
       `UPDATE dispatches SET status = 'running', executor_id = $2 WHERE id = $1`,
@@ -54,7 +54,7 @@ export async function exchange(ctx: HostedDynamic) {
       projectId: group.project_id,
       type: "run.status",
       entity: { run_group_id: group.id },
-      payload: { status: "running", executor_id: executorId, workflow_run_url: dispatch.workflow_run_url ?? null },
+      payload: { status: "running", executor_id: executorId },
     });
   });
   return {
@@ -92,9 +92,9 @@ async function mintExchange(ctx: HostedDynamic, { dispatch, executorId, versions
       throw unauthenticated(`mint claim "${claimId}" is no longer pending`);
     }
     await tx.query(
-      `INSERT INTO executors (id, run_group_id, kind, workflow_run_url, versions, isolation, last_report_at)
-         VALUES ($1, NULL, 'mint', $2, $3, $4, now())`,
-      [executorId, dispatch.workflow_run_url ?? null, versions, isolation],
+      `INSERT INTO executors (id, run_group_id, kind, versions, isolation, last_report_at)
+         VALUES ($1, NULL, 'mint', $2, $3, now())`,
+      [executorId, versions, isolation],
     );
     await tx.query(`UPDATE dispatches SET status = 'running', executor_id = $2 WHERE id = $1`, [dispatch.id, executorId]);
   });

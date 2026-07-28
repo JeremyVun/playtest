@@ -242,9 +242,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
       writesPerMinute: Number(env.PLAYTEST_RATE_LIMIT_WRITES_PER_MIN ?? 240),
       writeBurst: Number(env.PLAYTEST_RATE_LIMIT_WRITE_BURST ?? 60),
     },
-    // How often the dispatch reconciler polls GitHub for liveness (Phase 7
-    // wires it into the server; earlier phases only ran it from tests). 0
-    // disables — fine for dev, never for a deployment that dispatches to GHA.
+    // How often the dispatch reconciler sweeps the board — dead executors by
+    // missed heartbeats, never-claimed dispatches by age. 0 disables — fine
+    // for tests, never for a real deployment.
     reconcile: {
       intervalMs: Number(env.PLAYTEST_RECONCILE_INTERVAL_S ?? 30) * 1000,
     },

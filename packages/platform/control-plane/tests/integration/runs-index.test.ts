@@ -186,32 +186,26 @@ test("runs index: per-run stats, story rows, and the needs-attention filter", as
     // overview alerts on the run, not on each placement attempt: one broken run
     // must not repeat the same row for every retry the reconciler made.
     const requestedAt = new Date();
-    for (const [attempt, url, age] of [
-      [8, "https://runner.invalid/dead-old", 1000],
-      [9, "https://runner.invalid/dead-new", 0],
-    ] as const) {
+    for (const [attempt, age] of [[8, 1000], [9, 0]] as const) {
       await app.db.query(
         `INSERT INTO dispatches
-           (id, project_id, kind, ref_id, attempt, workflow_run_id, workflow_run_url,
+           (id, project_id, kind, ref_id, attempt,
             status, requested_at, concluded_at, error)
-         VALUES ($1, $2, 'group', $3, $4, $5, $6, 'reconciled_dead', $7, $7, 'runner stopped')`,
+         VALUES ($1, $2, 'group', $3, $4, 'reconciled_dead', $5, $5, 'runner stopped')`,
         [
           `dead-attempt-${attempt}`,
           project.id,
           mixed,
           attempt,
-          `dead-workflow-${attempt}`,
-          url,
           new Date(requestedAt.getTime() - age),
         ],
       );
     }
     const deadOverview = await api.get(`/projects/${project.key}/health`);
     const infraAttention = deadOverview.body.attention.filter((item: HostedDynamic) => item.kind === "infra");
-    assert.equal(infraAttention.length, 1, "one run group produces one infrastructure attention row");
+    assert.equal(infraAttention.length, 1,
+      "two dead attempts on one run group collapse to a single infrastructure attention row");
     assert.equal(infraAttention[0].run_group_id, mixed);
-    assert.equal(infraAttention[0].workflow_run_url, "https://runner.invalid/dead-new",
-      "the row keeps the newest dispatch attempt");
     assert.equal(infraAttention[0].note, "runner stopped before the run finished");
 
     // --- a canceled run is never attention, even holding a failed story ---

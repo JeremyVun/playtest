@@ -392,7 +392,7 @@ export const COLUMN_TYPES: HostedDynamic = {
     runner_labels: "text[]",
   },
   executors: {
-    id: "text", run_group_id: "text", kind: "text", workflow_run_url: "text", versions: "json",
+    id: "text", run_group_id: "text", kind: "text", versions: "json",
     isolation: "text", registered_at: "ts", last_report_at: "ts", concluded_at: "ts", created_at: "ts",
   },
   runs: {
@@ -403,8 +403,8 @@ export const COLUMN_TYPES: HostedDynamic = {
     retention_pruned_at: "ts", retention_provenance: "json",
   },
   dispatches: {
-    id: "text", project_id: "text", kind: "text", ref_id: "text", attempt: "int", workflow_run_id: "text",
-    workflow_run_url: "text", executor_id: "text", status: "text", requested_at: "ts", concluded_at: "ts",
+    id: "text", project_id: "text", kind: "text", ref_id: "text", attempt: "int",
+    executor_id: "text", status: "text", requested_at: "ts", concluded_at: "ts",
     error: "text", created_at: "ts",
     // Pull-based placement (0015): the labels snapshot that makes this row a
     // claim-board entry, plus the claim the winning runner stamped on it.
@@ -843,7 +843,6 @@ export const TABLES: HostedDynamic = {
       id: IDS.executorGroup,
       run_group_id: IDS.group1,
       kind: "group",
-      workflow_run_url: "https://github.com/acme/playtest-runs/actions/runs/900100",
       versions: { playtest: "0.1.0", node: "20.11.1", playwright: "1.53.0" },
       isolation: "container",
       registered_at: T.group1,
@@ -855,7 +854,6 @@ export const TABLES: HostedDynamic = {
       id: IDS.executorMedia,
       run_group_id: null, // ON DELETE SET NULL column, and media executors are group-free
       kind: "media",
-      workflow_run_url: null,
       versions: {},
       isolation: "process",
       registered_at: T.triage,
@@ -867,7 +865,6 @@ export const TABLES: HostedDynamic = {
       id: IDS.executorMint,
       run_group_id: null,
       kind: "mint",
-      workflow_run_url: "https://github.com/acme/playtest-runs/actions/runs/900211",
       versions: { playtest: "0.1.0" },
       isolation: null, // nullable CHECK column
       registered_at: T.group2,
@@ -1112,16 +1109,14 @@ export const TABLES: HostedDynamic = {
       kind: "group",
       ref_id: IDS.group1,
       attempt: 1,
-      workflow_run_id: "900100",
-      workflow_run_url: "https://github.com/acme/playtest-runs/actions/runs/900100",
       executor_id: IDS.executorGroup,
       status: "concluded",
       requested_at: T.group1,
       concluded_at: T.run3End,
       error: null,
       created_at: T.group1,
-      // Placed on GitHub: the labels rode the workflow inputs, and no claim
-      // exists because the control plane started this executor itself.
+      // A historical row from before pull-based placement: it carries a labels
+      // snapshot but no claim, so `runner_id` and `claimed_at` stay NULL.
       labels: ["self-hosted", "playtest"],
       // The non-secret target snapshot this attempt served: application and ring
       // ids and keys, driver, platform, the ring's URL, the placement labels, and
@@ -1148,8 +1143,6 @@ export const TABLES: HostedDynamic = {
       kind: "media",
       ref_id: IDS.run1,
       attempt: 1,
-      workflow_run_id: null,
-      workflow_run_url: null,
       executor_id: IDS.executorMedia,
       status: "concluded",
       requested_at: T.triage,
@@ -1169,8 +1162,6 @@ export const TABLES: HostedDynamic = {
       kind: "mint",
       ref_id: IDS.sessionClaim,
       attempt: 2, // a second attempt after a reconciled-dead first try
-      workflow_run_id: "900211",
-      workflow_run_url: "https://github.com/acme/playtest-runs/actions/runs/900211",
       executor_id: IDS.executorMint,
       status: "running",
       requested_at: T.group2,
@@ -1192,8 +1183,6 @@ export const TABLES: HostedDynamic = {
       kind: "group",
       ref_id: IDS.group2,
       attempt: 1,
-      workflow_run_id: `pool:${IDS.dispatchPool}`,
-      workflow_run_url: null,
       executor_id: null,
       status: "scheduled",
       requested_at: T.group2,

@@ -10,17 +10,17 @@ export const fmtWait = (s: WebDynamic) =>
   s == null ? "—" : s < 90 ? `${Math.round(s)}s` : s < 5400 ? `${Math.round(s / 60)}m` : `${Math.round(s / 3600)}h`;
 
 // A heartbeat is late once it has missed three of its own intervals — one
-// missed beat is a slow GitHub call, three is a loop that stopped.
+// missed beat is a slow sweep, three is a loop that stopped.
 const STALE_FACTOR = 3;
 
 /**
- * Dispatch-reconciler liveness. "off" is a deployment choice (no GitHub
- * dispatch), not a fault, so it stays neutral; a configured loop that has gone
- * quiet is amber and says so.
+ * Dispatch-reconciler liveness. "off" is a deployment choice (the reconciler
+ * interval is zero), not a fault, so it stays neutral; a running loop that has
+ * gone quiet is amber and says so.
  * @returns {{ value: string, tone: "neutral"|"pass"|"infra", note: string }}
  */
 export function reconcilerHealth(rec: WebDynamic = {}): WebDynamic {
-  if (!rec.configured) return { value: "off", tone: "neutral", note: "GitHub dispatch is not configured" };
+  if (!rec.configured) return { value: "off", tone: "neutral", note: "the dispatch reconciler is disabled" };
   const every = `runs every ${rec.interval_s}s`;
   if (rec.lag_s == null) return { value: "no heartbeat", tone: "infra", note: `${every} — it has never reported` };
   if (rec.lag_s > STALE_FACTOR * Math.max(rec.interval_s, 1)) {

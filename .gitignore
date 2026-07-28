@@ -10,7 +10,7 @@ runs/
 *.log
 .DS_Store
 *.mp4
-.playtest-data/
+.playtest-data*/
 
 # hill-climb report: screenshot assets are regenerable from runs/ via bench/site.mjs (75MB, not committed)
 studies/hillclimb/report/assets/

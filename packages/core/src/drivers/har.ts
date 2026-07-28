@@ -16,10 +16,10 @@ export const MAX_BODY_READ = 1024 * 1024; // don't buffer responses larger than 
 export const HAR_FLUSH_INTERVAL_STEPS = 5;
 
 /**
- * The append-only mid-run journal beside har.json (BUILD_PLAN T5.1). Transient
- * and DIAGNOSTIC: it is not in any manifest, envelope, or artifact contract, and
- * it is deleted the moment har.json catches up with it — so a run that ends
- * normally never leaves one behind. See createHarFlusher for what it buys.
+ * The append-only mid-run journal beside har.json. Transient and DIAGNOSTIC: it
+ * is not in any manifest, envelope, or artifact contract, and it is deleted the
+ * moment har.json catches up with it — so a run that ends normally never leaves
+ * one behind. See createHarFlusher for what it buys.
  */
 export const HAR_JOURNAL_FILE = "har.journal.jsonl";
 
@@ -105,7 +105,7 @@ function journalLine(entry: unknown): string {
  * Step-counted HAR writer for hot paths. har.json is the artifact and is always
  * written in full — but rewriting the WHOLE accumulated HAR every Nth step is
  * quadratic in a long request-heavy run, so between full writes the new entries
- * are APPENDED to har.journal.jsonl instead (BUILD_PLAN T5.1):
+ * are APPENDED to har.journal.jsonl instead:
  *
  * - the first completed step writes har.json, so an early crash still leaves a
  *   valid (if short) HAR and any mid-run reader finds the file where it expects;

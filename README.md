@@ -77,7 +77,7 @@ A remotely hosted control plane cannot reach an app on your `localhost`, a build
 on your disk, or a device simulator. For those, run a **self-hosted runner** on
 the machine that already has them: register it under Settings → Runners, start it
 with the one command shown, and label an environment for it —
-[`docs/hosted-runners.md`](docs/hosted-runners.md) is the walkthrough.
+[`docs/guidance/hosted-runners.md`](docs/guidance/hosted-runners.md) is the walkthrough.
 
 ## Quickstart
 

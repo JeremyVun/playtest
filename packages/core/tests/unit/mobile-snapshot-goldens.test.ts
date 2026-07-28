@@ -1,4 +1,4 @@
-// Golden-file pin for the mobile page-source projections (BUILD_PLAN T2.1).
+// Golden-file pin for the mobile page-source projections.
 //
 // `parsePageSource` (the agent-facing `[eN]` text + element list) and
 // `nativePageSourceTree` (the debug tree the viewer diffs against it) used to run

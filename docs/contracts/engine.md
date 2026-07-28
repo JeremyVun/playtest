@@ -294,7 +294,15 @@ envelope. `location()` provides the value stored in `result.url`.
 `effectToken()` supplies the transport-specific no-effect fingerprint.
 `normalizeSnapshot()` removes transport-specific volatile noise before replay
 drift comparison. `consoleErrorLog()` optionally returns bounded structured
-messages behind the exact `consoleErrors()` count.
+messages behind the exact `consoleErrors()` count. On web, `captureAxe()` is a
+best-effort deferred-capture seam: an executed step returns
+`axe_deferred_at` as a runner-only monotonic timestamp; after the following
+snapshot completes, the runner starts that step's scan. Agent/heal scans run
+during the following model turn; act replay joins the same scan before its next
+dispatch. The next page operation always waits for it, and the trajectory
+append latches on it, preserving step order. Every loop exit flushes a pending
+scan before gate evaluation. Terminal `done`/`give_up` states are captured
+inline.
 
 Three optional hooks decide what a driver *persists*, as opposed to what it
 captures. `snapshotProjection(text)` returns the value stored as the envelope's
@@ -400,7 +408,9 @@ and text artifacts. The model screenshot is downscaled only when its longest
 edge exceeds 1568 px; the stored PNG stays full size. Snapshot capture failure
 degrades to text-only. A numeric viewport height captures the visible viewport;
 `height: null` stores full-page stills. Web also captures axe WCAG A/AA
-violations after settled actions and on the terminal state, best-effort.
+violations best-effort: executed-step scans run after the following snapshot,
+during the following model turn when model-driven, while terminal-state scans
+run inline.
 
 The snapshot contains visible interactive elements, headings, labels, and
 significant text, capped at roughly 200 elements or 6,000 characters.

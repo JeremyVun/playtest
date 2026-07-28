@@ -1,5 +1,5 @@
-// Artifact profiles (docs/backlog/perf/BUILD_PLAN.md T3.1/T3.2,
-// docs/contracts/artifacts.md#artifact-profiles): `artifacts: core | debug`
+// Artifact profiles (docs/contracts/artifacts.md#artifact-profiles):
+// `artifacts: core | debug`
 // decides whether a run pays for the browser-forensics extras — the Playwright
 // trace, MHTML, and the driver's native accessibility tree — that nothing in the
 // harness, the gate, the grader, or the viewer reads back.

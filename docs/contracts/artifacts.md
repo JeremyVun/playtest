@@ -197,7 +197,11 @@ web, a screen or route identifier for mobile, and a path for API.
 
 `perf` may be `null` on drivers that cannot measure it. `axe` is best-effort and
 web-only; it contains at most 25 violations and its `counts.total` is the total
-violation-node count. Missing capture produces no `axe` field.
+violation-node count. For an executed step it is captured after the following
+snapshot, during the following model turn when model-driven; act replay joins
+the scan before its next dispatch. Terminal `done`/`give_up` capture is inline.
+Dynamic page timers can therefore change the scanned state within that measured
+deferral window. Missing or rejected capture produces no `axe` field.
 
 `console_errors` contains the messages captured in that step's window. The web
 driver retains at most 50 structured messages for diagnosis while

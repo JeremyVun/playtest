@@ -263,8 +263,8 @@ test("processScreenshotImage computes dHash and downscaled image in one page eva
   assert.deepEqual(processed.screenshot, downscaled);
 });
 
-// The mid-run write schedule (BUILD_PLAN T5.1): har.json in full on the first
-// step and on any forced call, an APPEND to the transient journal in between.
+// The mid-run write schedule: har.json in full on the first step and on any
+// forced call, an APPEND to the transient journal in between.
 test("createHarFlusher writes the first step, journals later steps, and force-flushes current entries", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "playtest-har-"));
   try {

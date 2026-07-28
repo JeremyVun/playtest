@@ -16,7 +16,7 @@
 # pipeline run, the runner advertises it, and the launch pins it. Two pull
 # requests building at the same time therefore cannot claim each other's job and
 # test the wrong build — which is exactly what would happen with one shared
-# label like `ci`. See docs/hosted-runners.md § CI.
+# label like `ci`. See docs/guidance/hosted-runners.md § CI.
 
 name: playtest
 

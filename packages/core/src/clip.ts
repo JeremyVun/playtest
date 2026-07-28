@@ -296,7 +296,7 @@ const FFMPEG_FALLBACKS = [
 /**
  * One child process, awaited. Every ffmpeg call in this module goes through
  * here: a `spawnSync` blocks the WHOLE event loop, which in a parallel suite
- * charges one case's ffmpeg to every other case in flight (BUILD_PLAN T4.1).
+ * charges one case's ffmpeg to every other case in flight.
  * `spawned` distinguishes "the binary could not be started" (ENOENT/EACCES —
  * `error.code` is a string) from "it ran and exited non-zero" (numeric code).
  */

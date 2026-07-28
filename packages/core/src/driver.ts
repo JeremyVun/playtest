@@ -63,6 +63,12 @@ export interface DriverResult {
   network: { requests: DriverNetworkRequest[] };
   har_entries: number[];
   expect?: { status: number };
+  /**
+   * Monotonic timestamp taken when a web action finishes settling. Runner-only:
+   * it measures how long the deferred axe scan waits for the following snapshot
+   * and is never persisted in the trajectory.
+   */
+  axe_deferred_at?: number;
   [key: string]: unknown;
 }
 

@@ -8,8 +8,8 @@ authoritative: a hosted run becomes viewable only when its sealed `.ptrun`
 bundle and final case report have landed, and the viewer loads a run exactly
 once per navigation.
 
-The async-axe work that once rode along here is its own backlog item:
-[`docs/backlog/async-axe.md`](../async-axe.md).
+The async-axe work that once rode along here shipped independently; its runtime
+contract is recorded in [`docs/contracts/engine.md`](../../contracts/engine.md).
 
 ## Problem
 

@@ -1,4 +1,4 @@
-// The capture persistence barrier (BUILD_PLAN T2.2). captureSnapshot() now runs
+// The capture persistence barrier. captureSnapshot() runs
 // the title, screenshot (+dHash/downscale), MHTML and native-AX reads
 // CONCURRENTLY and writes their artifacts through fs.promises. That is only safe
 // if the returned snapshot is still a coherent, fully-persisted step: the runner
@@ -102,7 +102,7 @@ test("captureSnapshot: every step artifact is on disk, and the a11y text is the 
 
 // A step whose debug artifacts fail to write must not take the run down, and
 // must not leave the envelope claiming a screenshot that isn't there.
-// Artifact profiles (BUILD_PLAN T3.1, docs/contracts/artifacts.md#artifact-profiles).
+// Artifact profiles (docs/contracts/artifacts.md#artifact-profiles).
 // The listing is the contract: `debug` is exactly the set this driver has always
 // written, and `core` is that set minus the three browser-forensics extras
 // nothing reads back. Asserted as SET EQUALITY rather than as presence checks,

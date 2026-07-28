@@ -246,12 +246,15 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
   // driverFactory is a test seam (docs/contracts/engine.md#run-lifecycle): the
   // hermetic engine tests inject a scripted in-memory driver to exercise the
   // act/heal loop without a browser. Production callers never pass it.
-  // envFactory is a second test seam alongside driverFactory: the finishing tail
-  // (T4.1) is the one place where env.teardown() can throw, and no hermetic
+  // envFactory is a second test seam alongside driverFactory: the finishing
+  // tail is the one place where env.teardown() can throw, and no hermetic
   // fixture environment can be made to fail on demand. Production callers never
   // pass it.
   const { runsRoot, runId, mode = "auto", grade = true, headed = false, refresh = false, onEvent = () => {}, driverFactory = createDriver, envFactory = prepareEnv } = opts;
-  // Concurrency permits handed down by schedulePool (BUILD_PLAN T4.2). A case
+  // Test seam for exercising the abort cleanup without a 30-second wait.
+  // Production callers omit it and retain the full grace period.
+  const hardTimeoutGraceMs = opts.hardTimeoutGraceMs ?? 30000;
+  // Concurrency permits handed down by schedulePool. A case
   // run on its own — `playtest run` of a single story, a hosted single-case
   // executor, a test — gets the identity permits and behaves exactly as before:
   // `release` is a no-op and the two semaphores run their thunk inline.
@@ -459,6 +462,7 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
     } catch (e) {
       return finishInfra(`driver launch failed: ${firstLine(e)}`, { env });
     }
+    const axeCapture = new DeferredAxeCapture(driver, writer);
     // No live screencast is recorded any more — the shareable video.mp4 is a
     // post-run slideshow of the per-step stills, paced at AUTOPLAY_MS/frame, so a
     // wall-clock start offset is meaningless. Always null; the viewer + clip key
@@ -552,7 +556,7 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
       let resumeIndex = 0;
       for (;;) {
         const failed = await actLoop({
-          driver, writer, rc, deadline, r, emit,
+          driver, writer, rc, deadline, r, emit, axeCapture,
           baselineEnvelopes: baseline.envelopes,
           track: track.slice(resumeIndex), actedFrom,
           baselineBase, liveBase: env.baseUrl,
@@ -603,7 +607,7 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
           ? []
           : track.filter((s: DynamicValue) => s.step > failed.step && typeof s.snapshot_text === "string");
         const resumed = await recordLoop({
-          driver, writer, rc, persona, deadline, r, emit,
+          driver, writer, rc, persona, deadline, r, emit, axeCapture,
           anchor: window.length ? { window, baselineBase, liveBase: env.baseUrl } : null,
         });
         if (!resumed) {
@@ -627,7 +631,7 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
         resumeIndex = track.findIndex((s) => s.step === resumed.step);
       }
     } else {
-      await recordLoop({ driver, writer, rc, persona, deadline, r, emit });
+      await recordLoop({ driver, writer, rc, persona, deadline, r, emit, axeCapture });
     }
   };
 
@@ -636,7 +640,7 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
   let timer;
   try {
     const cap = new Promise((resolve) => {
-      timer = setTimeout(() => resolve(HARD_TIMEOUT), rc.limits.timeout_ms + 30000);
+      timer = setTimeout(() => resolve(HARD_TIMEOUT), rc.limits.timeout_ms + hardTimeoutGraceMs);
     });
     const loop = body();
     if ((await Promise.race([loop, cap])) === HARD_TIMEOUT) {
@@ -658,6 +662,17 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
     }
   } finally {
     clearTimeout(timer);
+  }
+
+  // No loop exit may leave its final executed step uncommitted. When there was
+  // no successor snapshot (max_steps, stuck, timeout, abort, or error), flush()
+  // starts the scan now; otherwise it only joins the scan already overlapping
+  // the actor turn. This precedes every gate and every further page operation.
+  try {
+    await axeCapture.flush();
+  } catch (e) {
+    r.endReason = "error";
+    r.runError = r.runError ?? firstLine(e);
   }
 
   if (infra) return finishInfra(infra.message, { driver, env });
@@ -951,10 +966,10 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
   finalManifestWritten = true; // the SIGINT flusher must not clobber this now
 
   // ------------------------------------------------------------- the tail
-  // Two independent finishing jobs, run CONCURRENTLY (BUILD_PLAN T4.1):
+  // Two independent finishing jobs, run CONCURRENTLY:
   //
   //   grade — the grader model call. Everything it reads exists already:
-  //     the trajectory and the manifest are handed to it in memory (T5.2),
+  //     the trajectory and the manifest are handed to it in memory,
   //     final.a11y.txt was written by stopRecording before the gate, and the
   //     per-step artifacts it may fetch were persisted by captureSnapshot. It
   //     reads no har.json, so the HAR-flush ordering below is not its business.
@@ -1118,7 +1133,129 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
   }
 }
 
-async function recordLoop({ driver, writer, rc, persona, deadline, r, emit, anchor = null }: DynamicValue) {
+class DeferredAxeCapture {
+  #driver: DynamicValue;
+  #writer: RunWriter;
+  #perf: PerfSidecar;
+  #pending: DynamicValue = null;
+
+  constructor(driver: DynamicValue, writer: RunWriter) {
+    this.#driver = driver;
+    this.#writer = writer;
+    this.#perf = writer.perf;
+  }
+
+  get enabled(): boolean {
+    return typeof this.#driver.captureAxe === "function";
+  }
+
+  /**
+   * Latch an executed envelope until its best-effort scan settles. Non-web
+   * drivers retain the historical immediate append path.
+   */
+  defer(envelope: DynamicValue, settledAt = 0): void {
+    if (!this.enabled) {
+      this.#writer.appendEnvelope(envelope);
+      return;
+    }
+    if (this.#pending) throw new Error("deferred axe invariant: previous envelope is still pending");
+    this.#pending = {
+      envelope,
+      step: envelope.step,
+      settledAt,
+      scan: null,
+      scanStartedAt: 0,
+      scanSettledAt: 0,
+      deferredMs: 0,
+    };
+  }
+
+  /**
+   * The only normal scan start: immediately after the successor snapshot has
+   * finished, before the next model turn or replay dispatch. No page operation
+   * may run until barrier() has joined it.
+   */
+  afterSnapshot(): void {
+    const pending = this.#pending;
+    if (!pending || pending.scan) return;
+    pending.scanStartedAt = this.#perf.now();
+    pending.deferredMs =
+      pending.scanStartedAt && pending.settledAt
+        ? Math.max(0, pending.scanStartedAt - pending.settledAt)
+        : 0;
+    pending.scan = Promise.resolve()
+      .then(() => this.#driver.captureAxe())
+      .then((axe: DynamicValue) => {
+        if (axe) pending.envelope.axe = axe;
+      })
+      .catch(() => {
+        // Best-effort: rejection leaves the field absent and never changes the
+        // action result or run status.
+      })
+      .finally(() => {
+        pending.scanSettledAt = this.#perf.now();
+      });
+  }
+
+  /**
+   * Correctness barrier before the next action or page operation. It also owns
+   * the ordered trajectory append: step N cannot be written until its scan has
+   * settled, and no later executed step can exist before this barrier passes.
+   */
+  async barrier(): Promise<void> {
+    const pending = this.#pending;
+    if (!pending) return;
+    this.afterSnapshot();
+    const blockedAt = this.#perf.now();
+    await pending.scan;
+    const finishedAt = this.#perf.now();
+    const blockedMs = blockedAt && finishedAt ? Math.max(0, finishedAt - blockedAt) : 0;
+    const scanMs =
+      pending.scanStartedAt && pending.scanSettledAt
+        ? Math.max(0, pending.scanSettledAt - pending.scanStartedAt)
+        : 0;
+    this.#perf.record("axe", scanMs, pending.step, {
+      terminal: false,
+      violations: pending.envelope.axe?.violations?.length ?? null,
+      blocked_ms: blockedMs,
+      deferred_ms: pending.deferredMs,
+    });
+    this.#writer.appendEnvelope(pending.envelope);
+    this.#pending = null;
+  }
+
+  /** Resolve the last step when no successor snapshot exists. */
+  async flush(): Promise<void> {
+    await this.barrier();
+  }
+
+  /** Terminal done/give_up retains an inline capture of the page just read. */
+  async terminal(step: number): Promise<DynamicValue> {
+    if (!this.enabled) return null;
+    const startedAt = this.#perf.now();
+    let axe = null;
+    try {
+      axe = await this.#driver.captureAxe();
+    } catch {
+      // Best-effort, matching deferred capture.
+    }
+    const finishedAt = this.#perf.now();
+    this.#perf.record(
+      "axe",
+      startedAt && finishedAt ? Math.max(0, finishedAt - startedAt) : 0,
+      step,
+      {
+        terminal: true,
+        violations: axe?.violations?.length ?? null,
+        blocked_ms: 0,
+        deferred_ms: 0,
+      },
+    );
+    return axe;
+  }
+}
+
+async function recordLoop({ driver, writer, rc, persona, deadline, r, emit, axeCapture, anchor = null }: DynamicValue) {
   const perf = writer.perf; // diagnostic timing sidecar (perf.ts)
   const actor = new Actor(rc, persona);
   actor.setupContext = r.setupContext;
@@ -1143,13 +1280,17 @@ async function recordLoop({ driver, writer, rc, persona, deadline, r, emit, anch
     perf.span("snapshot", snapshotAt, stepNum);
     if (r.aborted) return;
     r.lastSnapshot = snap.text;
+    axeCapture.afterSnapshot();
     // Re-anchor (docs/contracts/engine.md#act-and-heal): the snapshot is already
     // captured for the actor's next turn, so testing it against the remaining
     // baseline window costs no driver work. A unique match hands the wheel back
     // to the deterministic replayer; the actor never knows the check exists.
     if (anchor && agentSteps >= 1) {
       const match = findAnchor(driver, snap, anchor.window, rc, anchor.baselineBase, anchor.liveBase);
-      if (match) return match;
+      if (match) {
+        await axeCapture.barrier();
+        return match;
+      }
     }
     let agentStep, tokens, llmRetries;
     // actor_request covers the whole turn INCLUDING a validation retry and any
@@ -1187,6 +1328,7 @@ async function recordLoop({ driver, writer, rc, persona, deadline, r, emit, anch
     } catch (e) {
       perf.span("actor_request", actorAt, stepNum, { ok: false, http_retries: httpRetries });
       if (r.aborted) return;
+      await axeCapture.barrier();
       const message = firstLine(e);
       const envelope = baseEnvelope(stepNum, {
         mode: "error",
@@ -1244,11 +1386,10 @@ async function recordLoop({ driver, writer, rc, persona, deadline, r, emit, anch
     });
     const type = agentStep.action.type;
     if (type === "done" || type === "give_up") {
-      // Web-only hook; timing an absent one would file a 0 ms row on every
-      // api/mobile terminal step and dilute the span's p50.
-      const axeAt = driver.captureAxe ? perf.now() : 0;
-      const axe = await driver.captureAxe?.();
-      if (driver.captureAxe) perf.span("axe", axeAt, stepNum, { terminal: true });
+      // The prior executed envelope must settle before this inline terminal scan
+      // touches the page or this terminal envelope is appended.
+      await axeCapture.barrier();
+      const axe = await axeCapture.terminal(stepNum);
       Object.assign(envelope, {
         result: { ok: true, error: null, settle_ms: 0, url: snap.url },
         perf: emptyPerf(),
@@ -1276,6 +1417,9 @@ async function recordLoop({ driver, writer, rc, persona, deadline, r, emit, anch
     // for a value nothing reads; on mobile that call is an Appium alert probe.
     const tokenable = type === "click" || type === "tap" || type === "type";
     let before: string | null = null;
+    // effectToken and execute are page operations. Neither may overlap the scan
+    // that began after this turn's snapshot.
+    await axeCapture.barrier();
     if (tokenable) {
       const tokenAt = perf.now();
       before = await driver.effectToken();
@@ -1294,7 +1438,10 @@ async function recordLoop({ driver, writer, rc, persona, deadline, r, emit, anch
       perf: exec.perf,
       artifacts: artifactsFor(stepNum, exec.har_entries, artifactFlags(driver, snap)),
       network: exec.network,
-      ...(exec.axe ? { axe: exec.axe } : {}),
+      // Reserve axe's historical key position while its value is pending.
+      // JSON.stringify omits undefined on rejection; assigning after the scan
+      // preserves byte order on success.
+      ...(axeCapture.enabled ? { axe: undefined } : {}),
       ...(exec.console_errors?.length ? { console_errors: exec.console_errors } : {}),
       tokens,
       ...(llmRetries?.length ? { llm_retries: llmRetries } : {}),
@@ -1307,8 +1454,8 @@ async function recordLoop({ driver, writer, rc, persona, deadline, r, emit, anch
     // note (multiple allowed). Only assigned when present — a clean step keeps
     // NO confusion/raises keys (web golden byte-identical when unused).
     applyActorRaises(envelope, agentStep, confusion);
-    writer.appendEnvelope(envelope);
     r.envelopes.push(envelope);
+    axeCapture.defer(envelope, exec.axe_deferred_at);
     agentSteps += 1;
     emit("step_result", { step: stepNum, ok: exec.ok, error: exec.error, settleMs: exec.settle_ms, costSoFar: costSoFar(), tokens:
       tokensSoFar(tokens.in) });
@@ -1346,7 +1493,7 @@ export function isStuck(envelopes: DynamicValue[]) {
  * Walk the baseline's action track. Returns the failed baseline step (heal
  * point) or null when the track completed / deadline hit.
  */
-async function actLoop({ driver, writer, rc, deadline, r, emit, baselineEnvelopes, track = null, actedFrom = new Map(), baselineBase = null, liveBase = null }: DynamicValue) {
+async function actLoop({ driver, writer, rc, deadline, r, emit, axeCapture, baselineEnvelopes, track = null, actedFrom = new Map(), baselineBase = null, liveBase = null }: DynamicValue) {
   const perf = writer.perf; // diagnostic timing sidecar (perf.ts)
   // `track` is the (remaining) action track to walk — the caller passes a tail
   // slice when replay resumes after a re-anchored heal — and `actedFrom` maps
@@ -1369,6 +1516,7 @@ async function actLoop({ driver, writer, rc, deadline, r, emit, baselineEnvelope
     const snap = await driver.captureSnapshot(stepNum);
     perf.span("snapshot", snapshotAt, stepNum);
     r.lastSnapshot = snap.text;
+    axeCapture.afterSnapshot();
     // Snapshot drift (docs/contracts/engine.md#act-and-heal): the actor chose
     // this action against baseStep's
     // snapshot, so if the freshly-captured snapshot diverges from what the
@@ -1389,6 +1537,7 @@ async function actLoop({ driver, writer, rc, deadline, r, emit, baselineEnvelope
     // from this baseline step. The marker carries confusion.type "state_drift":
     // the actor's history renderer reads it as "SKIPPED — decide fresh from here".
     if (drift) {
+      await axeCapture.barrier();
       const envelope = baseEnvelope(stepNum, {
         ts,
         mode: "act",
@@ -1425,6 +1574,7 @@ async function actLoop({ driver, writer, rc, deadline, r, emit, baselineEnvelope
       return baseStep;
     }
     const bindings = remapBindings(baseStep.bindings, actedFrom);
+    await axeCapture.barrier();
     const dispatchAt = perf.now();
     const exec = await driver.executeLocator(baseStep, { step: stepNum, bindings });
     perf.span("action_dispatch", dispatchAt, stepNum, { mode: "act", type: actionOf(baseStep)?.type, ok: exec.ok });
@@ -1442,8 +1592,7 @@ async function actLoop({ driver, writer, rc, deadline, r, emit, baselineEnvelope
       perf: exec.perf,
       artifacts: artifactsFor(stepNum, exec.har_entries, artifactFlags(driver, snap)),
       network: exec.network,
-      // web-only a11y capture (always-on); conditional → byte-identical otherwise.
-      ...(exec.axe ? { axe: exec.axe } : {}),
+      ...(axeCapture.enabled ? { axe: undefined } : {}),
     });
     // Step-scoped expectation (docs/contracts/engine.md#act-and-heal): the
     // baseline recorded the EXACT status this step answered. A different status
@@ -1454,8 +1603,8 @@ async function actLoop({ driver, writer, rc, deadline, r, emit, baselineEnvelope
     // An execution failure escalates to heal: resume after the failed step.
     if (!exec.ok) envelope.confusion = { type: "action_failed", note: exec.error };
     else if (statusDrift) envelope.confusion = { type: "state_drift", note: statusDrift };
-    writer.appendEnvelope(envelope);
     r.envelopes.push(envelope);
+    axeCapture.defer(envelope, exec.axe_deferred_at);
     emit("step_result", {
       step: stepNum, ok: exec.ok, error: exec.error ?? statusDrift, settleMs: exec.settle_ms,
       costSoFar: estimateCost(rc.actor_model, r.tokens),
@@ -1502,13 +1651,13 @@ async function actLoop({ driver, writer, rc, deadline, r, emit, baselineEnvelope
   } catch {}
   perf.span("snapshot", finalSnapshotAt, stepNum);
   if (r.aborted) return null;
+  axeCapture.afterSnapshot();
   // Same always-on WCAG capture the record loop's done/give_up branch takes: the
   // final acted page is a real, gradeable surface. Web-only (optional chaining),
   // full-page, best-effort (null → no `axe`, keeping non-web / capture-failure
   // envelopes byte-identical).
-  const terminalAxeAt = driver.captureAxe ? perf.now() : 0;
-  const axe = snap ? await driver.captureAxe?.() : null;
-  if (driver.captureAxe) perf.span("axe", terminalAxeAt, stepNum, { terminal: true });
+  await axeCapture.barrier();
+  const axe = snap ? await axeCapture.terminal(stepNum) : null;
   const envelope = baseEnvelope(stepNum, {
     mode: "act",
     ...(terminalStep ? { acted_from: terminalStep.step } : {}),
@@ -2041,7 +2190,7 @@ function semaphore(limit: number) {
  * class, so ids dispatch in a stable order. The pure scheduler — no I/O,
  * deterministic — so it can be unit-tested without a browser or a model.
  *
- * The task is handed three permits (BUILD_PLAN T4.2):
+ * The task is handed three permits:
  *
  *   permits.release()  the case's recording is over — its browser is closed and
  *                      its environment torn down. Gives the record permit back

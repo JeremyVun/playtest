@@ -1,13 +1,13 @@
-// The finishing tail: grading overlaps teardown (docs/backlog/perf/BUILD_PLAN.md T4.1).
+// The finishing tail: grading overlaps teardown.
 //
 // Everything after the gate used to be one strict line — manifest, driver
-// close, env teardown, VTT, ffmpeg slideshow, THEN the grader call. Phase 4
-// splits it into two jobs that run concurrently and joins them by settling
+// close, env teardown, VTT, ffmpeg slideshow, THEN the grader call. The current
+// pipeline splits it into two jobs that run concurrently and joins them by settling
 // both. Three things have to survive that, and each is pinned below:
 //
 //   1. the overlap is real (the grader is already in flight while the
 //      environment is still tearing down);
-//   2. the recording permit is handed back at teardown, not at grade (T4.2);
+//   2. the recording permit is handed back at teardown, not at grade;
 //   3. every failure combination ends with the SAME status and the same
 //      escape behaviour as the serial order — only `env.teardown()` can throw
 //      here, and a throw still leaves runCase as it always did (it escapes,

@@ -90,7 +90,7 @@ If the job hangs at the wait and then times out, the usual cause is that nothing
 claimed the work: check the runner log the last step prints, and confirm the
 launch and the runner agree on the label.
 
-More: [`docs/hosted-runners.md`](../../docs/hosted-runners.md) for the runner
+More: [`docs/guidance/hosted-runners.md`](../../docs/guidance/hosted-runners.md) for the runner
 walkthrough and the CI recipe in prose,
 [`docs/contracts/hosted.md`](../../docs/contracts/hosted.md#runner-pool) for the
 contract.

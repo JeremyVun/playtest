@@ -172,8 +172,8 @@ export class MobileDriver implements Driver {
   #lastSourceDigest: string | null = null;
   // The page source #settle() finished on, kept so the captureSnapshot that
   // immediately follows does not refetch and reparse the very screen settle just
-  // proved stable (docs/backlog/perf/BUILD_PLAN.md, T1.1). `seq` is the device
-  // operation counter (#seq) at the moment settle returned: the entry is
+  // proved stable. `seq` is the device operation counter (#seq) at the moment
+  // settle returned: the entry is
   // consumable only while it still matches, so ANY device command in between
   // (tap, type, swipe, back, alert action) invalidates it. Consumed at most once
   // — cleared on read — because a second capture of the same step is a fresh
@@ -181,8 +181,8 @@ export class MobileDriver implements Driver {
   // Never covers alert state: a system alert is drawn by another process and is
   // absent from page source, so captureSnapshot always probes for one live.
   // The `walk` rides along for the same reason the parse does: the debug native
-  // tree is derived from the SAME nodes (T2.1), so a reused screen re-walks
-  // nothing at all.
+  // tree is derived from the SAME nodes, so a reused screen re-walks nothing at
+  // all.
   #settleSource: { seq: number; raw: string; parsed: MobileSnapshot; walk: MobilePageSourceWalk } | null = null;
   // Monotonic count of device-MUTATING operations this driver has issued. Every
   // one of them runs through #run() (execute/executeLocator are the only callers
@@ -350,7 +350,7 @@ export class MobileDriver implements Driver {
     // ONE walk of the XML (mobile-snapshot.ts#walkPageSource) feeds BOTH the
     // custom snapshot here and the debug native tree below — they are two
     // projections of the same nodes, and the regex pass is the expensive half
-    // (BUILD_PLAN T2.1). A reused settle screen already carries its walk.
+    // of the work. A reused settle screen already carries its walk.
     const walked = reused ?? this.#walkAndParse(xml);
     const parsed = walked.parsed;
     perf.span("snapshot_parse", at, stepNum, { reused: Boolean(reused) });
@@ -483,10 +483,10 @@ export class MobileDriver implements Driver {
 
   /**
    * One regex walk of a page source, plus the custom parse derived from it
-   * (BUILD_PLAN T2.1). Callers that ALSO want the debug native tree keep the
-   * walk and pass it to nativePageSourceTree, so a snapshot pays for one pass
-   * over the XML instead of two. A caller that only wants the parse (the
-   * effectToken fallback, the settle poll) just drops the walk.
+   * Callers that ALSO want the debug native tree keep the walk and pass it to
+   * nativePageSourceTree, so a snapshot pays for one pass over the XML instead
+   * of two. A caller that only wants the parse (the effectToken fallback, the
+   * settle poll) just drops the walk.
    */
   #walkAndParse(xml: string): { walk: MobilePageSourceWalk; parsed: MobileSnapshot } {
     const walk = walkPageSource(xml);

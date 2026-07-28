@@ -57,10 +57,11 @@ export function axeSource(): string {
 }
 
 /**
- * Run axe-core against the freshly-settled page and return the step's a11y
- * capture — one full-page `axe.run` over the whole document, counting every
- * WCAG violation on the page. Best-effort — the caller swallows any throw so
- * axe never breaks a run.
+ * Run axe-core against the current page and return the step's a11y capture —
+ * one full-page `axe.run` over the whole document, counting every violation.
+ * Executed steps call this after the following snapshot, during the actor turn
+ * when model-driven; terminal steps call it inline. The caller swallows any
+ * throw so axe never breaks a run.
  */
 export async function runAxeInPage(page: Page): Promise<AxeCapture> {
   const hasAxe = await page.evaluate(() => !!window.axe);

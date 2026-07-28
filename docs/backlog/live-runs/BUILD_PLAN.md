@@ -3,8 +3,8 @@
 Date: 2026-07-28
 Source: [`DESIGN.md`](./DESIGN.md). Revised twice same day after two
 independent static reviews against HEAD; every fact below was re-verified
-against source at second revision. The async-axe work moved to its own
-item, [`docs/backlog/async-axe.md`](../async-axe.md). Re-verify anchors
+against source at second revision. The async-axe work shipped independently;
+see [`docs/contracts/engine.md`](../../contracts/engine.md). Re-verify anchors
 before each phase — line numbers rot, invariants shouldn't.
 
 Verified facts the phases lean on (including the sharp edges):
@@ -391,8 +391,7 @@ and the viewer package. L1 only the control plane. L2 only the
 runner-agent. L3 only the hosted web app. Phases can be reverted alone;
 L2 without L1 sends traffic that gets refused acks and stops itself
 (harmless by design), and L1 without L2 serves nothing new (also
-harmless). The async-axe item ([`docs/backlog/async-axe.md`](../async-axe.md))
-is fully independent of this chain.
+harmless). Async axe capture is fully independent of this chain.
 
 ## Global acceptance
 

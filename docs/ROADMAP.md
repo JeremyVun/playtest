@@ -78,30 +78,23 @@ Prior evidence:
 - [ ] Improve vision-mode behavior on non-vision models and add viewer
       debugging aids.
 - [ ] Sharpen the discovery report prompts and answers loop.
-- [ ] Reduce web and mobile driver settle time and per-step overhead. Audited
-      in [`docs/backlog/perf/ANALYSIS.md`](backlog/perf/ANALYSIS.md); phased
-      plan in [`docs/backlog/perf/BUILD_PLAN.md`](backlog/perf/BUILD_PLAN.md).
-      Phases 0–4 have landed and are measured in
-      [`docs/backlog/perf/BASELINE.md`](backlog/perf/BASELINE.md): a diagnostic
-      `perf.jsonl` sidecar with the `tools/perf/baseline.mjs` harness, the mobile
-      hot path, the concurrent web capture with a HAR journal, the
-      `artifacts: core | debug` recording profiles, and the pipeline shape —
-      an async ffmpeg slideshow with a memoized probe, grading overlapped with
-      teardown, and a worker released at the end of a case's *recording* rather
-      than at the end of the case. Of Phase 5 only T5.3 (a `context.jsonl`
-      delta format) remains, and it is still deferred as measure-first.
+- [x] Reduce recording-path per-step and finishing overhead. Shipped a
+      diagnostic `perf.jsonl` sidecar with the
+      [`tools/perf/baseline.mjs`](../tools/perf/baseline.mjs) harness, mobile
+      settled-source reuse, effect-token gating, one-pass mobile source
+      projection, concurrent web capture, a HAR journal, an async ffmpeg
+      slideshow with a memoized probe, grading overlapped with teardown, and
+      worker release when recording ends. Settle windows remain intentional
+      correctness barriers; the remaining measured web hot-path opportunity is
+      tracked separately below.
 - [x] Simplify run artifacts by folding or retiring redundant per-step files.
-      Shipped as the `artifacts: core | debug` profiles (perf BUILD_PLAN Phase
-      3): the default run no longer writes the Playwright trace, MHTML, or the
+      Shipped as the `artifacts: core | debug` profiles: the default run no
+      longer writes the Playwright trace, MHTML, or the
       driver's native accessibility tree, which nothing read back and which were
       73% of a web run's bytes. See
       [`docs/contracts/artifacts.md`](contracts/artifacts.md#artifact-profiles).
 - [ ] Improve Playwright export with opt-in idiomatic locators, API-driver
       export to `node --test`, and a viewer-reachable hosted download action.
 - [ ] Add an opt-in semantic LLM pass to `playtest lint`.
-- [ ] Move the always-on web axe scan off the step-loop critical path.
-      Plan: [`docs/backlog/async-axe.md`](backlog/async-axe.md) — deferred
-      scan overlapping the actor's model wait, with pending-scan flush on
-      every loop exit and honest semantic-drift acceptance.
 - [ ] Scope and complete the Lumen migration when its external dependency
       lands.

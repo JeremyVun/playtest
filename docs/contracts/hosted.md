@@ -481,7 +481,7 @@ No long-lived runner secret lands in repository settings.
 The CI recipe this enables — build, start the app on localhost, register with the
 job's OIDC token under a label unique to the pipeline run, launch pinned to that
 label, wait for the verdict — is written out in
-[`docs/hosted-runners.md`](../hosted-runners.md) with a copyable workflow under
+[`docs/guidance/hosted-runners.md`](../guidance/hosted-runners.md) with a copyable workflow under
 `examples/ci-github-actions/`. The unique label is load-bearing, not cosmetic:
 two concurrent pull requests sharing one label would claim each other's jobs and
 report green against the wrong build.

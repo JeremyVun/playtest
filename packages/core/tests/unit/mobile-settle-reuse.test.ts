@@ -1,7 +1,7 @@
-// The mobile driver's retained settle source (docs/backlog/perf/BUILD_PLAN.md,
-// T1.1): `#settle()` finishes holding the very page source it just proved
-// stable, and the `captureSnapshot()` that follows reuses it instead of asking
-// the device for the same screen a second time.
+// The mobile driver's retained settle source: `#settle()` finishes holding the
+// very page source it just proved stable, and the `captureSnapshot()` that
+// follows reuses it instead of asking the device for the same screen a second
+// time.
 //
 // Appium round-trips dominate a mobile step, so what is asserted here is COUNTS
 // as much as content: how many `getPageSource()` calls a launch and a step cost,

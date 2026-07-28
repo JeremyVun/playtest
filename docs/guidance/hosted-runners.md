@@ -17,7 +17,7 @@ resolves to `http://127.0.0.1:…` on that same machine.
 
 Deployments select pull-based placement with `PLAYTEST_DISPATCH=pool`. The
 contract for the claim board, credentials, labels, and loss handling lives in
-[`contracts/hosted.md`](./contracts/hosted.md#runner-pool).
+[`contracts/hosted.md`](../contracts/hosted.md#runner-pool).
 
 ## 1. Register the runner
 
@@ -203,7 +203,7 @@ exit 0 / 1 / 2                   ◀────────── group complet
 ```
 
 The complete workflow is in
-[`examples/ci-github-actions/playtest.yml`](../examples/ci-github-actions/playtest.yml) —
+[`examples/ci-github-actions/playtest.yml`](../../examples/ci-github-actions/playtest.yml) —
 copy it into `.github/workflows/` and edit the two marked blocks.
 
 ### The label is the point

@@ -1,5 +1,4 @@
-// The pre-action effect token is fetched only where something can read it
-// (docs/backlog/perf/BUILD_PLAN.md, T1.2).
+// The pre-action effect token is fetched only where something can read it.
 //
 // `detectConfusion()`'s no_effect rule compares a before/after token for exactly
 // three verbs — click, tap, type — and treats a null before-token as "no

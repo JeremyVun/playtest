@@ -1,10 +1,10 @@
-// Recording-performance baseline harness (docs/backlog/perf/BUILD_PLAN.md T0.2).
+// Recording-performance baseline harness.
 //
 // Runs a SHORT and a LONG recording at suite concurrency 1, 2, and 4, then
 // reports p50/p95 per perf.jsonl span, peak RSS, and artifact bytes by type.
-// Every phase of the perf plan is accepted against numbers this produces, so it
-// has to be repeatable: no network, no model credentials, no Docker, no
-// database. A workbench, not a test — nothing in `npm test` runs it.
+// Performance changes are accepted against numbers this produces, so it has to
+// be repeatable: no network, no model credentials, no Docker, no database. A
+// workbench, not a test — nothing in `npm test` runs it.
 //
 //   node tools/perf/baseline.mjs                 # api workload (no browser)
 //   node tools/perf/baseline.mjs --driver=web    # real Chromium, local fixture
@@ -13,8 +13,8 @@
 //   node tools/perf/baseline.mjs --driver=api --grader-ms=2000
 //   node tools/perf/baseline.mjs --driver=api --grader-ms=2000 --no-overlap
 //
-// --artifacts pins the recording profile the generated suite declares (T3.1;
-// docs/contracts/artifacts.md#artifact-profiles). It is written explicitly into
+// --artifacts pins the recording profile the generated suite declares
+// (docs/contracts/artifacts.md#artifact-profiles). It is written explicitly into
 // every cell's playtest.yaml rather than left to the default, so a run of this
 // harness measures the profile it says it measures even if the default moves.
 //

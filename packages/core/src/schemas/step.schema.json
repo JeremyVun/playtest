@@ -57,7 +57,7 @@
     "axe": {
       "type": "object",
       "additionalProperties": false,
-      "description": "web only: axe-core WCAG 2.0 A/AA + 2.1 AA violations (always-on for web, never enters the actor prompt). A single full-page `axe.run` over the whole document, counting every violation on the page. On executed agent/act steps it is captured AFTER the action settled; on the terminal done/give_up steps it is a full-page capture of the page the actor ended on. Absent on non-web runs, state-drift markers, and when axe capture fails (best-effort).",
+      "description": "web only: axe-core WCAG 2.0 A/AA + 2.1 AA violations (always-on for web, never enters the actor prompt). A single full-page `axe.run` over the whole document, counting every violation on the page. On executed agent/act steps it is captured best-effort after the following snapshot; model-driven scans run during the following model turn, while act replay joins before its next dispatch. Dynamic page timers may change the scanned state in that measured deferral window. On terminal done/give_up steps it is captured inline from the page the actor ended on. Absent on non-web runs, state-drift markers, and when axe capture fails.",
       "required": ["violations", "counts"],
       "properties": {
         "violations": {

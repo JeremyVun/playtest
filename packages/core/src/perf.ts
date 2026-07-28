@@ -4,17 +4,18 @@
 // envelope, bundle tier, viewer surface, or grader input names this file, and
 // nothing downstream may start depending on it: deleting it must change no
 // behavior. Spans are NOT added to trajectory.jsonl, which is pinned by
-// committed baselines. See docs/backlog/perf/BUILD_PLAN.md (Phase 0) — the
-// recording-performance work is accepted against measured spans rather than
-// guesses, and the retained run telemetry cannot separate snapshot capture from
-// the actor model call because `step_start` is only emitted after the actor
-// returns.
+// committed baselines. Recording-performance work is accepted against measured
+// spans rather than guesses: ordinary run telemetry cannot separate snapshot
+// capture from the actor model call because `step_start` is only emitted after
+// the actor returns.
 //
 // One line per span:
 //
 //   {"t":1753660800123,"step":3,"span":"snapshot","ms":27.412}
 //   {"t":1753660800124,"step":3,"span":"actor_request","ms":24980.5,
 //    "meta":{"tokens_in":9123,"cache_read":8192,"validation_retries":0}}
+//   {"t":1753660800150,"step":2,"span":"axe","ms":24.3,
+//    "meta":{"blocked_ms":0.05,"deferred_ms":412.7,"terminal":false}}
 //
 // `t` is wall-clock epoch ms at the moment the span CLOSED (so a reader can
 // order spans against events.jsonl); `ms` is measured with performance.now(),

@@ -1,8 +1,8 @@
-// The case scheduler (docs/backlog/perf/BUILD_PLAN.md, T4.2).
+// The case scheduler.
 //
 // `schedulePool` is the one piece of the runner that is pure: no I/O, no clock
-// of its own (the stagger is injected), no model. So the pipelining Phase 4
-// introduces — a case hands its worker back as soon as it STOPS RECORDING and
+// of its own (the stagger is injected), no model. A case hands its worker back
+// as soon as it STOPS RECORDING and
 // finishes its grade detached — is provable here with plain deferred promises
 // instead of a browser and a gateway.
 //

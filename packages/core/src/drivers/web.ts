@@ -865,7 +865,7 @@ export class WebDriver implements Driver {
     // phase can see which one it moved. Diagnostic only — no behavior changes,
     // and a disabled sidecar makes every perf call a single null check.
     //
-    // Shape (BUILD_PLAN T2.2): the custom snapshot runs FIRST and alone, because
+    // The custom snapshot runs FIRST and alone, because
     // it is what assigns the `[eN]` refs every later step resolves against.
     // Everything after it — title, screenshot (+dHash/downscale), MHTML, the
     // native AX tree — is an independent read of the same settled page, so they
@@ -1071,25 +1071,20 @@ export class WebDriver implements Driver {
   }
 
   /**
-   * Run axe-core full-page against the CURRENT settled page. The done/give_up
-   * terminal steps take no action so they never enter #run (where the per-action
-   * axe capture lives) — yet the page the actor read to declare success/failure
-   * is a real, gradeable surface. The runner calls this on those steps so their
-   * WCAG state is captured too (else a run that finishes from its opening page
-   * carries NO axe at all → grade.a11y is dropped). Best-effort, mirroring #run:
-   * a throw is swallowed and null is returned, so the envelope simply carries no
-   * `axe`.
+   * Run axe-core full-page against the CURRENT page. The runner invokes this
+   * after the following snapshot for executed steps. Model-driven scans overlap
+   * only the actor request; act replay joins before dispatch. done/give_up
+   * invokes it inline because no later turn exists. Best-effort: a throw is
+   * swallowed and null is returned, so the envelope simply carries no `axe`.
    * @returns {Promise<{ violations: object[], counts: { total: number } }|null>}
    */
   async captureAxe(): Promise<AxeCapture | null> {
-    const axeAt = this.#perf.now();
     try {
       const result = await runAxeInPage(this.page);
       if (result && Array.isArray(result.violations)) return result;
     } catch {
-      // best-effort, as before: a failed capture simply yields no `axe`
-    } finally {
-      this.#perf.span("axe", axeAt, null, { terminal: true });
+      // Best-effort: a failed capture simply yields no `axe`. The runner owns
+      // timing because only it knows the deferred delay and dispatch wait.
     }
     return null;
   }
@@ -1241,18 +1236,10 @@ export class WebDriver implements Driver {
       this.#perf.span("action_perform", performAt, null, { type: action.type });
 
       const settle_ms = await this.#settle();
-      // Always-on a11y capture: run axe-core full-page against the freshly-settled
-      // page (the user-visible state AFTER the action), counting every WCAG
-      // violation on the page. Best-effort — never throws out, never enters the
-      // actor prompt, so the web golden control stays byte-identical (axe rides
-      // only the ExecResult, attached by the runner).
-      let axe: AxeCapture | null = null;
-      const axeAt = this.#perf.now();
-      try {
-        const result = await runAxeInPage(this.page);
-        if (result && Array.isArray(result.violations)) axe = result;
-      } catch {}
-      this.#perf.span("axe", axeAt, null, { violations: axe?.violations?.length ?? null });
+      // The runner defers axe until the following snapshot has completed, then
+      // overlaps it only with the actor request. This monotonic stamp never
+      // leaves the process; it measures the settle-to-scan delay in perf.jsonl.
+      const axe_deferred_at = this.#perf.enabled ? performance.now() : 0;
       const win = await this.#readWindow();
       // A back that actually changed documents is nav-attributed via !sameDoc; a
       // no-op / same-document back keeps windowed perf (no stale page-load vitals).
@@ -1309,15 +1296,12 @@ export class WebDriver implements Driver {
         },
         har_entries: harEntries,
         network: { requests },
-      // web-only a11y capture; absent when axe failed/was empty-of-violations is
-      // STILL present (counts: {total:0}). Conditional only on capture success so
-      // a failed-axe ExecResult is shaped exactly as before.
-      ...(axe ? { axe } : {}),
-      // Console/page errors captured during THIS step's window (the viewer's
-      // per-step expandable list). Conditional so a clean step's envelope stays
-      // byte-identical — the web golden control never carries this key.
-      ...(this.#errorLog.length > errLogStart ? { console_errors: this.#errorLog.slice(errLogStart) } : {}),
-    };
+        axe_deferred_at,
+        // Console/page errors captured during THIS step's window (the viewer's
+        // per-step expandable list). Conditional so a clean step's envelope stays
+        // byte-identical — the web golden control never carries this key.
+        ...(this.#errorLog.length > errLogStart ? { console_errors: this.#errorLog.slice(errLogStart) } : {}),
+      };
   }
 
   async #perform(action: StepAction, locator: Locator | null): Promise<unknown> {

@@ -30,7 +30,7 @@ test("hosted concurrency inherits the project policy and lets the suite replace 
     { total: 1, record: 1, grade: 1, cpu: 1 },
     "hosted remains serial by default",
   );
-  // The tail permits (BUILD_PLAN T4.2) are carried but never exercised here:
+  // The tail permits are carried but never exercised here:
   // the hosted executor runs each case through runCaseIsolated without passing
   // them down, so a hosted group keeps its strictly serial case boundary.
 });

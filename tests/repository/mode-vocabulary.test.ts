@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const LABELS_JS = path.join(REPO_ROOT, "packages/platform/web/src/lib/labels.ts");
 const REPORT_JS = path.join(REPO_ROOT, "packages/core/src/report.ts");
+const VIEWER_APP = path.join(REPO_ROOT, "packages/run-viewer/src/web/app.ts");
 
 /** Pull `const NAME[: Type] = { ... };` out of JS/TS source text and eval the
  * object literal (own-repo source, not user input — safe enough for a pin test). */
@@ -39,4 +40,19 @@ test("MODE_DOING/MODE_DID: the web mirror is byte-true to core report.ts", () =>
   const coreDid = extractConst(reportSrc, "MODE_DID");
   assert.deepEqual(webDid, coreDid, "MODE_DID must be identical between labels.js and report.ts");
   assert.deepEqual(Object.keys(webDid).sort(), ["act", "explore", "heal", "record"]);
+});
+
+// The viewer's live pending row must know which stage words mean "the actor has
+// stopped acting", so it never paints a phantom in-flight step during the gate
+// or the grading tail. The viewer has no bundler, so it carries an inline copy
+// of core's post-actor vocabulary — pinned here for the same reason as above.
+test("PHASE_DOING: the viewer's live pending row mirrors core report.ts", () => {
+  const corePhase = extractConst(fs.readFileSync(REPORT_JS, "utf8"), "PHASE_DOING");
+  const appSrc = fs.readFileSync(VIEWER_APP, "utf8");
+  const m = /const LIVE_PHASE_WORDS = new Set\((\[[^\]]*\])\)/.exec(appSrc);
+  assert.ok(m, "expected LIVE_PHASE_WORDS = new Set([...]) in the viewer app");
+  const viewerWords = new Function(`return (${m[1]});`)() as string[]; // SAFETY: own-repo source, not user input
+  assert.deepEqual([...viewerWords].sort(), Object.values(corePhase).sort(),
+    "LIVE_PHASE_WORDS must carry exactly core's post-actor stage words");
+  assert.deepEqual(Object.keys(corePhase).sort(), ["finishing", "gate", "grading", "observing", "setup"]);
 });

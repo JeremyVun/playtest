@@ -750,6 +750,27 @@ A pending healed pass displays exact accept and reject commands. A resolved or
 superseded run displays no mutation command. The viewer itself remains
 read-only.
 
+The viewer probes [`live`](#live-runs) exactly once per run it opens. A 404 or
+`open: false` leaves every behavior on this page unchanged, so a viewer opened
+on a sealed run is indistinguishable from one built without live mode. On
+`open: true` it enters live mode: the run loads once as usual, then one
+long-poll request at a time appends new trajectory lines to the loaded run in
+place — drain immediately while `has_more`, hold when caught up, jittered
+backoff on a failed poll, one full reload on `reset`, and a re-read of
+`manifest.json` whenever `manifest_generation` differs. Appended envelopes
+render in append order, identical to a full load. Follow mode tracks the newest
+step by default; any explicit step selection disengages it and a Live control
+re-engages it, and no repaint may take focus, selection, or an opened panel from
+the reader. The run header shows a live badge in place of a status the run has
+not earned — an open run's manifest is the placeholder, whose status is
+terminal-looking by design — and sustained `inactive_ms` adds neutral inactivity
+copy that reports silence and claims nothing more. A pending row renders from
+`progress` alone: it names a step only while the actor is acting and progress
+runs ahead of the trajectory, never from step-budget arithmetic, and never as a
+rendered step. `open: false` ends live mode: the viewer discards all live state
+and reloads the run through the normal path, so the final rendering is never a
+live/sealed hybrid.
+
 History movement uses the standard comparable-pin rules. It displays duration,
 step, LCP, and score deltas when both sides provide them. Regression/improvement
 badges use status transitions and score changes of at least five points;

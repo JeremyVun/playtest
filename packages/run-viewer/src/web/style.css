@@ -321,6 +321,85 @@ a.rn-btn:hover { color: var(--accent); border-color: var(--accent); background: 
 }
 #play:hover, #play.on { color: var(--bg0); background: var(--pass); }
 
+/* ---------- live mode (an open run streaming in) ---------- */
+
+/* Follow control, sized and seated exactly like #play beside it — the accent
+   colour rather than the pass green, because it is a state, not an action. */
+.live-follow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: 8px;
+  padding: 4px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--faint);
+  border: 1px solid var(--line2);
+  border-radius: 999px;
+  background: transparent;
+}
+.live-follow:hover { color: var(--accent); border-color: var(--accent); }
+.live-follow.on { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+
+/* The ● that says "still going". Steady at 0.55 opacity when idle so a silent
+   run stops winking at the reader without the badge disappearing. */
+.live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+  animation: live-pulse 1.9s ease-in-out infinite;
+}
+@keyframes live-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.28; } }
+
+.chip.live { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.chip.live .live-dot { width: 6px; height: 6px; }
+.chip.live.quiet .live-dot { animation: none; opacity: 0.55; }
+
+@media (prefers-reduced-motion: reduce) {
+  .live-dot { animation: none; }
+}
+
+/* Pending row: the in-flight edge, rendered from `progress` alone. Same
+   skeleton and metrics as a real .cell, so nothing shifts when the step it is
+   waiting for lands and takes its place. Not a button — it is not a step. */
+.cell.pending {
+  /* a touch wider than a frame: "recording step 7 of 20" must read whole, and
+     the row is always last, so nothing before it can move */
+  width: 190px;
+  cursor: default;
+  border-style: dashed;
+  border-color: var(--line2);
+  background: var(--bg1);
+}
+.cell.pending .cell-thumb { background: var(--bg1); }
+.cell.pending .cell-line .t { color: var(--accent); }
+.cell.pending .cell-line svg.ic { color: var(--accent); }
+
+.pending-pulse {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: live-pulse 1.9s ease-in-out infinite;
+}
+
+/* indeterminate settle lane: a shuttle rather than a fill, since there is no
+   duration to report yet */
+.settle-bar.pending-bar {
+  width: 34%;
+  background: var(--accent);
+  animation: pending-shuttle 1.6s ease-in-out infinite;
+}
+@keyframes pending-shuttle {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(190%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pending-pulse, .settle-bar.pending-bar { animation: none; }
+}
+
 .tabs-hint { margin-left: auto; font-family: var(--mono); font-size: 10px; color: var(--faint); }
 
 /* change count worn by the Diff tab — amber, the changed-journey color */

@@ -54,6 +54,8 @@ const state: ViewerDynamic = {
   pwA11yCache: new Map(),
   context: null,           // { system, byStep:Map<step,{messages}> } from context.jsonl, or null
   videoOk: false,
+  live: null,              // live-mode state while this run is open; null for every sealed run
+  liveResume: null,        // {follow, step} carried across a live reload so the seal lands in place
 };
 
 let wired = false; // one-time listeners (tabs, keys, run links); loadRun re-runs on run switches
@@ -352,7 +354,7 @@ async function boot() {
   if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
   state.rootMode = Boolean(runParam);
   state.manifest = await fetchJson(state.base + "/manifest.json");
-  if (state.manifest) return loadRun();
+  if (state.manifest) return openRunView();
   if (!runParam) {
     // ?filter=changed|failed and ?case=<id> come from `playtest view` flags.
     if (params.get("filter") === "changed") {
@@ -389,9 +391,16 @@ async function loadRun() {
   const contextRel = m.artifacts?.context ?? null;
   // The heal's drift report, only when the manifest advertises one (an API heal).
   const driftRel = m.artifacts?.drift_report ?? null;
+  // In live mode the trajectory arrives from the live drain rather than a second
+  // read of trajectory.jsonl: the endpoint hands out whole lines against a line
+  // cursor, so seeding from it is what makes the poll loop's first `after` name
+  // the same line the page is rendering. Consumed once — the seal reload goes
+  // back through the normal path and reads the sealed file.
+  const seed = state.live?.seed ?? null;
+  if (state.live) state.live.seed = null;
   // context.jsonl is only fetched when the manifest advertises it (record/heal)
   const [trajText, har, grade, baseText, history, contextText, drift] = await Promise.all([
-    fetchText(state.base + "/" + (m.artifacts?.trajectory ?? "trajectory.jsonl")),
+    seed ? Promise.resolve(seed.join("\n")) : fetchText(state.base + "/" + (m.artifacts?.trajectory ?? "trajectory.jsonl")),
     fetchJson(state.base + "/" + (m.artifacts?.har ?? "har.json")),
     gradeRel ? fetchJson(state.base + "/" + gradeRel) : null,
     baseRel ? fetchText(state.base + "/" + baseRel) : null,
@@ -461,6 +470,8 @@ async function loadRun() {
     initRunLinks();
     $("#play").addEventListener("click", () => setPlaying(!state.playing));
     $("#cap-wide-btn").addEventListener("click", () => setCapWide(!state.capWide));
+    // blur like the stage tabs do, so space stays the autoplay key afterwards
+    $("#live-follow").addEventListener("click", (e: ViewerDynamic) => { setFollow(!state.live?.follow); e.currentTarget.blur(); });
   }
 
   if (state.steps.length) {
@@ -469,6 +480,20 @@ async function loadRun() {
     if (m.result?.status === "fail" || m.mode === "heal") {
       const i = state.steps.findIndex((s: ViewerDynamic) => s.result?.ok === false || s.confusion);
       if (i >= 0) start = i;
+    }
+    // Live mode opens on the tail, the way a log viewer does: the newest
+    // evidence is the reason to be watching at all.
+    if (state.live) start = state.steps.length - 1;
+    // A live reload (a `reset` answer, or the seal) re-enters the same run: land
+    // where the reader already was rather than snapping back to step 1 — the
+    // repaint-preservation rule applies to the biggest repaint of all.
+    if (state.liveResume) {
+      if (state.liveResume.follow) start = state.steps.length - 1;
+      else {
+        const i = state.steps.findIndex((s: ViewerDynamic) => s.step === state.liveResume.step);
+        if (i >= 0) start = i;
+      }
+      state.liveResume = null;
     }
     // A ?step= deep-link wins, once — pager/history moves after that are normal.
     if (state.deepStep != null) {
@@ -501,6 +526,7 @@ async function navigate(path: ViewerDynamic, { push = true } = {}) {
   if (!manifest) { location.href = "?run=" + encodeURIComponent(path); return; }
   if (push) history.pushState(null, "", "?run=" + encodeURIComponent(path));
   setPlaying(false);
+  stopLive(); // the loop belongs to the run we are leaving
   state.runPath = path;
   state.base = base;
   state.manifest = manifest;
@@ -513,7 +539,372 @@ async function navigate(path: ViewerDynamic, { push = true } = {}) {
   state.diffPair.clear();
   state.a11yCache.clear();
   state.pwA11yCache.clear();
+  await openRunView();
+}
+
+/* ---------- live mode: an open run streaming into this page ----------
+
+   The viewer probes `<run base>/live` exactly once at load
+   (docs/contracts/interfaces.md#live-runs). A 404 — a host that does not serve
+   the route — or `open: false` — a sealed run, including every `.ptrun` bundle —
+   leaves everything below untouched: a viewer opened on a sealed run never
+   learns that live mode exists.
+
+   On `open: true` the run still loads exactly once through loadRun(); the only
+   differences are that its trajectory is seeded from the live drain (so the poll
+   loop's cursor names the same lines the page rendered) and that a long-poll
+   loop then appends to that state in place.
+
+   The live view is an ephemeral preview, never the record. `lines` are
+   authoritative for completed steps and `progress` only decorates the in-flight
+   edge; at `open: false` every byte of live state is discarded and the sealed
+   run is loaded whole through the normal path, so the final rendering can never
+   be a live/sealed hybrid. */
+
+const LIVE_WAIT_S = 25;            // held poll, the contract's cap
+const LIVE_BACKOFF_MS = 1000;      // first retry after a failed poll
+const LIVE_BACKOFF_MAX_MS = 15000;
+const LIVE_DRAIN_PAGES = 500;      // paging guard while draining a late joiner's backlog
+const LIVE_QUIET_MS = 30000;       // silence worth saying out loud
+
+// Post-actor stage words from the shared progress fold (PHASE_DOING in
+// packages/core/src/report.ts — inline copy, the viewer has no bundler). The
+// pending row names a step only while the actor is acting, so an early `done`,
+// the gate, or a grading tail never shows a phantom in-flight step.
+const LIVE_PHASE_WORDS = new Set(["setting up", "observing", "evaluating gate", "saving", "grading"]);
+
+// Reused across header repaints so the badge's pulse never restarts mid-run
+// (replaceChildren moves these nodes rather than recreating them).
+let liveBadgeEl: ViewerDynamic = null;
+let liveQuietEl: ViewerDynamic = null;
+
+async function fetchLive(after: ViewerDynamic, wait: ViewerDynamic, signal: ViewerDynamic = null) {
+  const r = await fetch(`${state.base}/live?after=${after}&wait=${wait}`, signal ? { signal } : {});
+  if (!r.ok) return null;
+  return await r.json();
+}
+
+/** Load a run, entering live mode when the host says it is still open. */
+async function openRunView() {
+  let probe = null;
+  try { probe = await fetchLive(0, 0); } catch { probe = null; }
+  if (probe?.open) {
+    const primed = await primeLive(probe);
+    // A run that sealed between the probe and the drain is simply a sealed run.
+    if (primed?.open) state.live = { ...primed, follow: true, ready: false, stopped: false, fails: 0, abort: null };
+  }
   await loadRun();
+  if (!state.live) { renderFollow(); return; }
+  renderPending();
+  renderFollow();
+  if (state.live.follow) scrollTail();
+  state.live.ready = true; // from here on, a selection is the reader's, not ours
+  pollLive();
+}
+
+/**
+ * Drain the whole backlog before the first paint, so live mode opens on the run
+ * as it stands instead of flashing an empty one and filling in.
+ */
+async function primeLive(first: ViewerDynamic) {
+  let body = first;
+  const seed: ViewerDynamic = [];
+  for (let page = 0; page < LIVE_DRAIN_PAGES; page++) {
+    seed.push(...(body.lines ?? []));
+    if (!body.open || !body.has_more) break;
+    let next = null;
+    try { next = await fetchLive(body.next, 0); } catch { next = null; }
+    // A failed or refused page stops the drain: paint what arrived and let the
+    // poll loop resync from the cursor the host last honored.
+    if (!next || next.reset) break;
+    body = next;
+  }
+  return {
+    seed,
+    cursor: body.next ?? seed.length,
+    generation: body.manifest_generation,
+    progress: body.progress ?? null,
+    inactiveMs: body.inactive_ms ?? 0,
+    drain: body.has_more === true,
+    open: body.open === true,
+  };
+}
+
+/**
+ * The poll loop: one request in flight at a time, forever, in five states —
+ * drain (`has_more`: ask again immediately), hold (caught up: the host holds the
+ * request up to 25 s), backoff (a failed poll retries the same cursor with
+ * jitter), reset (the cursor cannot be honored: one full reload), and seal
+ * (`open: false`: discard live state, reload the sealed run, stop).
+ */
+async function pollLive() {
+  const live = state.live;
+  if (!live || live.polling) return;
+  live.polling = true;
+  while (state.live === live && !live.stopped) {
+    let body = null;
+    live.abort = new AbortController();
+    try {
+      body = await fetchLive(live.cursor, live.drain ? 0 : LIVE_WAIT_S, live.abort.signal);
+    } catch { body = null; }
+    live.abort = null;
+    if (state.live !== live || live.stopped) return;
+    if (!body) {
+      live.fails++;
+      await sleep(liveBackoff(live.fails));
+      continue;
+    }
+    live.fails = 0;
+    if (!body.open) return sealLive();
+    if (body.reset) return reloadLive();
+    applyLive(body);
+    live.drain = body.has_more === true;
+  }
+}
+
+const sleep = (ms: ViewerDynamic) => new Promise((r) => setTimeout(r, ms));
+
+// Exponential with ±50% jitter, so a host that went away is not hammered and
+// several tabs coming back do not synchronize.
+function liveBackoff(fails: ViewerDynamic) {
+  const base = Math.min(LIVE_BACKOFF_MAX_MS, LIVE_BACKOFF_MS * 2 ** Math.min(fails - 1, 6));
+  return Math.round(base * (0.5 + Math.random()));
+}
+
+function applyLive(body: ViewerDynamic) {
+  const live = state.live;
+  live.cursor = body.next;
+  live.progress = body.progress ?? null;
+  live.inactiveMs = body.inactive_ms ?? 0;
+  const grew = appendEnvelopes(body.lines ?? []);
+  // The generation is host-minted: compare it for inequality, never interpret it.
+  if (body.manifest_generation !== live.generation) {
+    live.generation = body.manifest_generation;
+    refreshManifest(live);
+  }
+  renderPending();
+  if (!grew) renderHeader(); // appends re-render it already
+  if (grew && live.follow) followTail();
+}
+
+async function refreshManifest(live: ViewerDynamic) {
+  const m = await fetchJson(liveManifestUrl());
+  if (!m || state.live !== live) return;
+  state.manifest = m;
+  renderHeader();
+}
+
+/**
+ * An open run's manifest is rewritten repeatedly, sometimes several times a
+ * second; the host serves it `cache-control: no-cache` with a `Last-Modified`
+ * whose resolution is one second, so a plain re-read can be answered 304 from
+ * the browser cache with the previous version's bytes. A per-read cursor makes
+ * every live re-read its own URL. Sealed runs never take this path, so their
+ * requests are byte-identical to today's.
+ */
+let liveManifestSeq = 0;
+const liveManifestUrl = () => `${state.base}/manifest.json?live=${++liveManifestSeq}`;
+
+/**
+ * Append-only: rebuilding the strip would drop loaded thumbnails, the scroll
+ * position, and whatever the reader had focused. New cells land after the ones
+ * already on screen, in exactly the order a full load would have produced.
+ */
+function appendEnvelopes(lines: ViewerDynamic) {
+  if (!lines.length) return false;
+  const from = state.steps.length;
+  for (const raw of lines) {
+    const t = String(raw).trim();
+    if (!t) continue;
+    try { state.steps.push(JSON.parse(t)); } catch { /* skip bad line, exactly like a full load */ }
+  }
+  if (state.steps.length === from) return false;
+  const strip = $("#strip");
+  const pending = $("#live-pending");
+  for (let i = from; i < state.steps.length; i++) {
+    const cell = stripCell(state.steps[i], i);
+    pending ? strip.insertBefore(cell, pending) : strip.append(cell);
+  }
+  renderHeader();
+  if (from) {
+    syncStepTotal();
+  } else {
+    // The run's first evidence: leave the empty-run state behind.
+    setInspTab("step");
+    select(0, { instant: true, auto: true });
+  }
+  return true;
+}
+
+/** "step 3 / 12" as the total grows — cheaper and stiller than a full repaint. */
+function syncStepTotal() {
+  const el = $("#cap-meta .cap-step");
+  if (el && state.steps.length) el.textContent = `step ${state.steps[state.cur].step} / ${state.steps.length}`;
+}
+
+/* ---------- follow mode ---------- */
+
+function setFollow(on: ViewerDynamic) {
+  if (!state.live || state.live.follow === on) return;
+  state.live.follow = on;
+  renderFollow();
+  if (on && state.steps.length) followTail();
+}
+
+function renderFollow() {
+  const btn = $("#live-follow");
+  if (!btn) return;
+  const live = state.live;
+  btn.hidden = !live;
+  if (!live) return;
+  btn.classList.toggle("on", live.follow);
+  btn.setAttribute("aria-pressed", String(live.follow));
+  btn.title = live.follow ? "following the newest step — click to stay put" : "follow the newest step again";
+}
+
+/**
+ * Track the newest step the way a log tail does. Never steals focus: `auto`
+ * keeps select() off the strip cell, and a reader whose focus sits inside a
+ * panel select() would replace keeps it — the strip still grows and scrolls, so
+ * the tail keeps reading as a tail.
+ */
+function followTail() {
+  const active: ViewerDynamic = document.activeElement;
+  if (!active?.closest?.("#inspector, #cap-body")) select(state.steps.length - 1, { auto: true });
+  scrollTail();
+}
+
+function scrollTail() {
+  const el = $("#live-pending") ?? $("#strip .cell:last-of-type");
+  el?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+}
+
+/* ---------- the pending row and the live badge ---------- */
+
+/**
+ * What the run is doing right now, from `progress` alone — never from step
+ * budget arithmetic, and never as a step. A step number shows only while the
+ * actor is acting AND progress genuinely runs ahead of the trajectory, so the
+ * row can neither repeat a rendered step nor invent one during the tail.
+ */
+function pendingLabel() {
+  const p = state.live?.progress;
+  if (!p?.doing) return null;
+  const last = state.steps.length ? state.steps[state.steps.length - 1].step : 0;
+  const acting = !LIVE_PHASE_WORDS.has(p.doing) && typeof p.step === "number" && p.step > last;
+  if (!acting) return { text: String(p.doing), action: null };
+  return {
+    text: p.max_steps ? `${p.doing} step ${p.step} of ${p.max_steps}` : `${p.doing} step ${p.step}`,
+    action: p.action ?? null,
+  };
+}
+
+function renderPending() {
+  const row = state.live ? pendingLabel() : null;
+  let el = $("#live-pending");
+  if (!row) { el?.remove(); return; }
+  if (!el) {
+    // Same skeleton and metrics as a real cell, so the strip's height never
+    // shifts when a landed step takes the pending row's place.
+    el = h("div", { class: "cell pending", id: "live-pending" },
+      h("div", { class: "cell-thumb" }, h("div", { class: "nopic" }, h("span", { class: "pending-pulse" }))),
+      h("div", { class: "cell-cap" },
+        h("div", { class: "cell-line" },
+          h("span", { class: "n" }, "··"),
+          icon("i-wait"),
+          h("span", { class: "t" })),
+        h("div", { class: "cell-tele" },
+          h("div", { class: "settle-lane" }, h("div", { class: "settle-bar pending-bar" })))));
+    $("#strip").append(el);
+  }
+  const t = el.querySelector(".t");
+  if (t.textContent !== row.text) t.textContent = row.text;
+  t.title = row.action ?? "";
+}
+
+function liveBadge() {
+  if (!liveBadgeEl) {
+    liveBadgeEl = h("span", { class: "chip live", title: "This run is still executing — steps appear here as they are recorded." },
+      h("span", { class: "live-dot" }), "live");
+  }
+  liveBadgeEl.classList.toggle("quiet", (state.live?.inactiveMs ?? 0) >= LIVE_QUIET_MS);
+  return liveBadgeEl;
+}
+
+// A fact, never a diagnosis: a long model call, a retry backoff and a dead
+// runner all look the same from here, so the copy claims nothing beyond silence.
+function liveQuietChip() {
+  const ms = state.live?.inactiveMs ?? 0;
+  if (ms < LIVE_QUIET_MS) return null;
+  if (!liveQuietEl) {
+    liveQuietEl = h("span", { class: "chip", title: "Time since this run last wrote anything. It may be thinking, retrying, or gone — the viewer only reports the silence." });
+  }
+  liveQuietEl.textContent = `no activity for ${fmtQuiet(ms)}`;
+  return liveQuietEl;
+}
+
+function fmtQuiet(ms: ViewerDynamic) {
+  const s = Math.round(ms / 1000);
+  if (s < 90) return `${s}s`;
+  const m = Math.round(s / 60);
+  return m < 90 ? `${m}m` : `${Math.round(m / 60)}h`;
+}
+
+/* ---------- leaving live mode ---------- */
+
+function dropLive() {
+  const live = state.live;
+  if (!live) return null;
+  live.stopped = true;
+  live.abort?.abort();
+  state.live = null;
+  liveBadgeEl = null;
+  liveQuietEl = null;
+  $("#live-pending")?.remove();
+  // Where the reader was, so the reload that follows can land in place.
+  return live.follow
+    ? { follow: true, step: null }
+    : { follow: false, step: state.steps[state.cur]?.step ?? null };
+}
+
+/** Run switch: the loop belongs to the run being left. */
+function stopLive() {
+  dropLive();
+  renderFollow();
+}
+
+/**
+ * `open: false` is the terminal answer. Discard every byte of the preview and
+ * load the sealed run whole through the normal path — the terminal envelope's
+ * rewrite, grade.json, the video and the grade panel all land together, in
+ * place, with the reader's step still selected.
+ */
+async function sealLive() {
+  state.liveResume = dropLive();
+  renderFollow();
+  await rereadManifest();
+  await loadRun();
+}
+
+/**
+ * The manifest is rewritten through the finishing tail — the verdict, the
+ * duration and the artifact set all land after the last step. loadRun() renders
+ * whatever manifest state already holds, so a reload that re-enters the run
+ * must re-read it or it would paint the placeholder the run opened with.
+ */
+async function rereadManifest() {
+  const m = await fetchJson(liveManifestUrl());
+  if (m) state.manifest = m;
+}
+
+/** A cursor the host cannot honor: reload fully, still live. */
+async function reloadLive() {
+  const resume = dropLive();
+  state.liveResume = resume;
+  renderFollow();
+  await rereadManifest();
+  await openRunView();
+  if (state.live && resume) setFollow(resume.follow);
 }
 
 // Plain left-clicks on ?run= links (pager, history dots, expanded picker rows
@@ -829,33 +1220,49 @@ function renderHeader() {
     h("span", { class: "run-id" }, ` · ${m.run_id ?? ""}`),
   );
 
-  const badges = [statusChip(m.result?.status), modeChip(m.mode, m.healed, m.result?.status)];
+  // An open run has no verdict yet, and its manifest is the placeholder written
+  // for crash visibility — whose status says `interrupted` from the first
+  // instant of the case. Liveness is never inferred from manifest contents
+  // (docs/contracts/interfaces.md#live-runs), so live mode shows the ● badge in
+  // the status chip's place rather than a terminal-looking word the run has not
+  // earned; the seal reload puts the real verdict there.
+  const badges = state.live
+    ? [liveBadge(), liveQuietChip(), modeChip(m.mode, m.healed, null)]
+    : [statusChip(m.result?.status), modeChip(m.mode, m.healed, m.result?.status)];
   const reason = m.result?.end_reason;
-  if (reason && reason !== "done") badges.push(h("span", { class: "chip warn" }, reason.replace("_", " ")));
+  if (!state.live && reason && reason !== "done") badges.push(h("span", { class: "chip warn" }, reason.replace("_", " ")));
   badges.push(h("span", { class: "chip", title: "How many steps the agent took — one action (click, type, navigate, …) per step." }, `${state.steps.length} steps`));
-  badges.push(h("span", { class: "chip", title: "Wall-clock time for the whole run, start to finish." }, fmtMs(m.duration_ms)));
+  if (!state.live || m.duration_ms != null) {
+    badges.push(h("span", { class: "chip", title: "Wall-clock time for the whole run, start to finish." }, fmtMs(m.duration_ms)));
+  }
   const conf = m.totals?.confusion_events ?? 0;
   if (conf > 0) badges.push(h("span", { class: "chip warn", title: "Confusion events — moments the agent floundered: an action failed, repeated against an unchanged page, or had no visible effect, or the agent itself flagged that it was stuck." }, icon("i-warn"), `${conf} confusion`));
   const findings = m.totals?.finding_events ?? 0;
   if (findings > 0) badges.push(h("span", { class: "chip", title: "Actor findings — structured sticky notes the agent raised about the product (kind: finding), separate from free-form thoughts." }, icon("i-warn"), `${findings} finding${findings === 1 ? "" : "s"}`));
   const move = movementBadge();
   if (move) badges.push(move);
+  // (liveQuietChip is the one optional slot; everything else is unconditional)
   // The targeted environment (app.envs.<name> via --env). The default env has no
   // name — a "[DEFAULT]" chip would only confuse, so it's omitted there.
   const envName = m.env?.env_name;
   if (envName) badges.push(h("span", { class: "chip", title: m.env?.base_url ?? "" }, String(envName).toUpperCase()));
-  $("#run-badges").replaceChildren(...badges);
+  $("#run-badges").replaceChildren(...badges.filter(Boolean));
 
-  const t = m.totals?.tokens ?? {};
-  const cost = m.totals?.cost_usd;
+  // An open run's manifest totals are the placeholder's zeros; the running
+  // spend rides the live progress snapshot instead, labelled as partial. (Cost
+  // is not a step, so decorating it from `progress` breaks no precedence rule.)
+  const p = state.live?.progress;
+  const t = (state.live ? p?.tokens : null) ?? m.totals?.tokens ?? {};
+  const cost = (state.live ? p?.cost_usd : null) ?? m.totals?.cost_usd;
   const el = $("#cost-strip");
   const cachePct = t.in ? Math.round(((t.cache_read ?? 0) / t.in) * 100) : 0;
   el.replaceChildren(
-    h("div", { class: "cost-label", title: "Estimated US-dollar cost of the model (LLM) API calls for this whole run. Checked/replayed runs make no model calls, so they cost about nothing." }, "run cost"),
+    h("div", { class: "cost-label", title: "Estimated US-dollar cost of the model (LLM) API calls for this whole run. Checked/replayed runs make no model calls, so they cost about nothing." },
+      state.live ? "run cost so far" : "run cost"),
     h("div", { class: "cost-usd" }, "$" + (cost ?? 0).toFixed(4)),
     h("div", { class: "cost-sub", title: "Total input / output tokens for the run, and the share of input served from the prompt cache (higher means cheaper)." },
       !t.in && !t.out && !cost
-        ? "no model calls"
+        ? (state.live ? "no model calls yet" : "no model calls")
         : `${fmtTokens(t.in)} in · ${fmtTokens(t.out)} out · ${cachePct}% cached`),
   );
 }
@@ -1058,60 +1465,65 @@ function renderStrip() {
   const strip = $("#strip");
   strip.replaceChildren();
   if (!state.steps.length) {
-    strip.append(h("div", { class: "empty-note", style: "padding:18px" }, "no steps recorded"));
+    // A live run with no step yet says so through its pending row instead: the
+    // evidence has not been recorded, not "no steps recorded".
+    if (!state.live) strip.append(h("div", { class: "empty-note", style: "padding:18px" }, "no steps recorded"));
     return;
   }
-  state.steps.forEach((env: ViewerDynamic, i: ViewerDynamic) => {
-    const d = describe(env);
-    const thumb = h("div", { class: "cell-thumb" });
-    if (env.artifacts?.screenshot) {
-      const img = h("img", { src: state.base + "/" + env.artifacts.screenshot, alt: "", loading: "lazy" });
-      img.addEventListener("error", () => img.replaceWith(h("div", { class: "nopic" }, icon("i-film"))));
-      thumb.append(img);
-    } else {
-      thumb.append(h("div", { class: "nopic" }, icon("i-film")));
-    }
-    const flags = [];
-    if (env.result?.ok === false) flags.push(h("span", { class: "flag fail", title: "step failed" }, icon("i-x")));
-    if (env.confusion) flags.push(h("span", { class: "flag warn", title: "confusion: " + env.confusion.type }, icon("i-warn")));
-    if (Array.isArray(env.raises) && env.raises.some((r: ViewerDynamic) => r.kind === "finding")) {
-      flags.push(h("span", { class: "flag", title: "actor finding raise" }, icon("i-warn")));
-    }
-    if (isHealStep(env)) flags.push(h("span", { class: "flag heal", title: "healed — the agent found a new path here" }, icon("i-branch")));
-    // a11y flag: this step's page carried axe-core WCAG violations (full-page
-    // run — what accessibility_violations gates on). See the step's a11y panel.
-    const axeTotal = env.axe?.counts?.total ?? 0;
-    if (axeTotal > 0) {
-      flags.push(h("span", { class: "flag a11y",
-        title: `${axeTotal} WCAG violation${axeTotal === 1 ? "" : "s"} — see the step's accessibility panel` },
-        icon("i-check")));
-    }
-    if (flags.length) thumb.append(h("div", { class: "flags" }, ...flags));
+  state.steps.forEach((env: ViewerDynamic, i: ViewerDynamic) => strip.append(stripCell(env, i)));
+}
 
-    const settle = settleTail(env);
-    const tele = h("div", { class: "cell-tele", title: `still working ${fmtMs(settle)} — how long the page kept changing (network + page updates) after this step's action, beyond the settle quiet-window` },
-      h("div", { class: "settle-lane" },
-        h("div", { class: "settle-bar", style: `width:${Math.min(100, (settle / MAX_SETTLE_BAR) * 100)}%` })),
-      h("span", { class: "cell-ms" }, fmtMs(settle)),
-      (env.perf?.js_errors ?? 0) > 0 ? icon("i-warn") : null,
-    );
-
-    // border tint mirrors the flags so trouble spots read from across the room
-    const cellCls = "cell" +
-      (env.result?.ok === false ? " c-fail" : env.confusion ? " c-warn" : isHealStep(env) ? " c-heal" : "");
-    strip.append(h("button", { class: cellCls, "data-i": i, onclick: () => select(i) },
-      thumb,
-      h("div", { class: "cell-cap" },
-        h("div", { class: "cell-line" },
-            h("span", { class: "n" }, String(env.step).padStart(2, "0")),
-            icon(d.icon),
-            h("span", { class: "t" }, `${d.verb} ${d.arg ?? ""}`)),
-          tele,
-        ),
-        h("div", { class: "cell-prog" }), // autoplay countdown bar; animates while #strip.playing
-      ));
-    });
+/** One film-strip frame. Built per envelope so live appends reuse it verbatim. */
+function stripCell(env: ViewerDynamic, i: ViewerDynamic) {
+  const d = describe(env);
+  const thumb = h("div", { class: "cell-thumb" });
+  if (env.artifacts?.screenshot) {
+    const img = h("img", { src: state.base + "/" + env.artifacts.screenshot, alt: "", loading: "lazy" });
+    img.addEventListener("error", () => img.replaceWith(h("div", { class: "nopic" }, icon("i-film"))));
+    thumb.append(img);
+  } else {
+    thumb.append(h("div", { class: "nopic" }, icon("i-film")));
   }
+  const flags = [];
+  if (env.result?.ok === false) flags.push(h("span", { class: "flag fail", title: "step failed" }, icon("i-x")));
+  if (env.confusion) flags.push(h("span", { class: "flag warn", title: "confusion: " + env.confusion.type }, icon("i-warn")));
+  if (Array.isArray(env.raises) && env.raises.some((r: ViewerDynamic) => r.kind === "finding")) {
+    flags.push(h("span", { class: "flag", title: "actor finding raise" }, icon("i-warn")));
+  }
+  if (isHealStep(env)) flags.push(h("span", { class: "flag heal", title: "healed — the agent found a new path here" }, icon("i-branch")));
+  // a11y flag: this step's page carried axe-core WCAG violations (full-page
+  // run — what accessibility_violations gates on). See the step's a11y panel.
+  const axeTotal = env.axe?.counts?.total ?? 0;
+  if (axeTotal > 0) {
+    flags.push(h("span", { class: "flag a11y",
+      title: `${axeTotal} WCAG violation${axeTotal === 1 ? "" : "s"} — see the step's accessibility panel` },
+      icon("i-check")));
+  }
+  if (flags.length) thumb.append(h("div", { class: "flags" }, ...flags));
+
+  const settle = settleTail(env);
+  const tele = h("div", { class: "cell-tele", title: `still working ${fmtMs(settle)} — how long the page kept changing (network + page updates) after this step's action, beyond the settle quiet-window` },
+    h("div", { class: "settle-lane" },
+      h("div", { class: "settle-bar", style: `width:${Math.min(100, (settle / MAX_SETTLE_BAR) * 100)}%` })),
+    h("span", { class: "cell-ms" }, fmtMs(settle)),
+    (env.perf?.js_errors ?? 0) > 0 ? icon("i-warn") : null,
+  );
+
+  // border tint mirrors the flags so trouble spots read from across the room
+  const cellCls = "cell" +
+    (env.result?.ok === false ? " c-fail" : env.confusion ? " c-warn" : isHealStep(env) ? " c-heal" : "");
+  return h("button", { class: cellCls, "data-i": i, onclick: () => select(i) },
+    thumb,
+    h("div", { class: "cell-cap" },
+      h("div", { class: "cell-line" },
+          h("span", { class: "n" }, String(env.step).padStart(2, "0")),
+          icon(d.icon),
+          h("span", { class: "t" }, `${d.verb} ${d.arg ?? ""}`)),
+        tele,
+      ),
+      h("div", { class: "cell-prog" }), // autoplay countdown bar; animates while #strip.playing
+    );
+}
 
   /* ---------- autoplay: walk the steps like a slideshow ---------- */
 
@@ -1119,6 +1531,7 @@ function renderStrip() {
 
   function setPlaying(on: ViewerDynamic) {
     if (on && !state.steps.length) return;
+    if (on && state.live?.ready) setFollow(false); // driving the slideshow is driving
     state.playing = on;
     clearInterval(playTimer);
     playTimer = null;
@@ -1144,6 +1557,9 @@ function renderStrip() {
 function select(i: ViewerDynamic, { instant = false, auto = false } = {}) {
   if (!state.steps.length) return;
   if (!auto && state.playing) setPlaying(false); // manual navigation pauses the slideshow
+  // Any explicit step selection takes the view off the tail; the Live control
+  // hands it back. `ready` keeps loadRun's own opening select() out of this.
+  if (!auto && state.live?.ready) setFollow(false);
   state.cur = Math.max(0, Math.min(i, state.steps.length - 1));
   const env = state.steps[state.cur];
 
@@ -2154,11 +2570,18 @@ function reflectInspWide() {
 }
 
 function renderEmptyRun() {
+  // A live run has simply not produced its first step yet; the pending row says
+  // what it is doing, so the panels must not claim the run recorded nothing.
+  const live = Boolean(state.live);
   $("#sec-step").replaceChildren(sec("i-film", "steps", null,
-    h("div", { class: "empty-note" }, "trajectory.jsonl is missing or empty — run-level results are under the Run tab")));
-  $("#cap-thought").textContent = "No steps were recorded for this run.";
+    h("div", { class: "empty-note" }, live
+      ? "no step recorded yet — the first one appears here as soon as it lands"
+      : "trajectory.jsonl is missing or empty — run-level results are under the Run tab")));
+  $("#cap-thought").textContent = live
+    ? "This run is still going. The first step's evidence appears here as soon as it is recorded."
+    : "No steps were recorded for this run.";
   $("#cap-thought").className = "cap-thought quiet";
-  $("#a11y-pre").textContent = "no steps — nothing was seen";
+  $("#a11y-pre").textContent = live ? "no step recorded yet" : "no steps — nothing was seen";
   $("#shot-wrap").hidden = true;
   const miss = $("#shot-missing");
   miss.hidden = false;
@@ -2490,6 +2913,10 @@ function gateRow(c: ViewerDynamic, { advisory = false } = {}) {
 }
 
 function renderGate() {
+  // An open run's manifest is the placeholder, whose empty gate would read as a
+  // hard "gate fail" the run has not been given. The gate runs in the finishing
+  // tail; the seal reload renders the real one.
+  if (state.live) return sec("i-check", "gate", null, h("div", { class: "empty-note" }, "not evaluated yet — the gate runs when the case finishes"));
   const gate = state.manifest.result?.gate;
   if (!gate) return sec("i-check", "gate", null, h("div", { class: "empty-note" }, "no gate result in manifest"));
   const rows = (gate.checks ?? []).map((c: ViewerDynamic) => gateRow(c));

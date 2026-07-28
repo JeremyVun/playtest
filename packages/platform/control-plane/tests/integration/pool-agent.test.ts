@@ -126,7 +126,14 @@ test("pool: the real agent claims a launched group and runs an API suite against
         "the runner to check in",
         agent,
       );
-      assert.match(agent.out.stdout, /Playtest runner "adas-laptop" — project poolagent/);
+      // The banner reaches this process through a pipe, so it can trail the
+      // check-in row it precedes: wait for it rather than sampling it.
+      await until(
+        async () => /Playtest runner "adas-laptop" — project poolagent/.test(agent.out.stdout),
+        "the agent to say who it is",
+        agent,
+        20_000,
+      );
       assert.match(agent.out.stdout, /waiting for work/);
 
       const launched = await api.post(`/projects/${project.key}/run-groups`, {

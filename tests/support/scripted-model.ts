@@ -107,13 +107,19 @@ const DEFAULT_GRADE = {
  * `grade` tool offered instead of `step`; answering it here is what lets a whole
  * hosted run group finish offline. `grade` replaces the canned verdict.
  */
-export async function startScriptedModel(steps: AgentStep[], { grade = DEFAULT_GRADE }: { grade?: object } = {}) {
+export async function startScriptedModel(
+  steps: AgentStep[],
+  { grade = DEFAULT_GRADE, delayMs = 0 }: { grade?: object; delayMs?: number } = {},
+) {
   const calls: unknown[] = [];
   let i = 0;
   const server = http.createServer((req, res) => {
     let raw = "";
     req.on("data", (c) => (raw += c));
-    req.on("end", () => {
+    // `delayMs` gives a scripted run a realistic tempo: a step that lands in
+    // microseconds leaves no window for anything watching the run to observe it.
+    req.on("end", () => void setTimeout(() => answer(), delayMs));
+    const answer = () => {
       let parsed: { tools?: Array<{ function?: { name?: string } }> } | null = null;
       try {
         parsed = JSON.parse(raw);
@@ -147,7 +153,7 @@ export async function startScriptedModel(steps: AgentStep[], { grade = DEFAULT_G
       });
       res.writeHead(200, { "content-type": "application/json", "content-length": Buffer.byteLength(body) });
       res.end(body);
-    });
+    };
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve as () => void)); // SAFETY: Node's listen callback omits the Promise resolver argument
   const { port } = server.address() as import("node:net").AddressInfo; // SAFETY: a listening TCP server has an AddressInfo here

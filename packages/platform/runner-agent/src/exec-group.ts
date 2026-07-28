@@ -6,7 +6,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ApiClient } from "./api-client.ts";
 import { materializeWorkspace } from "./workspace.ts";
-import { runCaseIsolated, stopActiveContainers } from "./case-runner.ts";
+import { CONTAINER_WS, runCaseIsolated, stopActiveContainers } from "./case-runner.ts";
+import { liveUploader } from "./live-uploader.ts";
 import { cleanupWorkspace, sweepDocker } from "./janitor.ts";
 import { runMintScript } from "./mint.ts";
 import { makeRedactor, collectSecretValues } from "./redact.ts";
@@ -156,6 +157,19 @@ export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
       const sideEffectsBefore = readSideEffects(rc.file);
       await api.json("POST", `/runner/groups/${spec.run_group_id}/cases/${item.run_id}/start`, {});
       const progress = progressReporter(api, spec.run_group_id, item.run_id, redactor);
+      // The live uploader is a second consumer of the same event stream, on the
+      // same coalescing floor: it streams the case's evidence in ahead of its
+      // bundle so the run is viewable while it executes
+      // (docs/contracts/hosted.md "Live staging routes"). Everything it does is
+      // indifferent at the case boundary — it never affects what follows.
+      const live = liveUploader(api, {
+        groupId: spec.run_group_id,
+        runId: item.run_id,
+        runDbId: item.db_id,
+        live: spec.uploads?.live ?? null,
+        workspaceRoot: workspace.root,
+        containerRoot: opts.isolation === "container" ? CONTAINER_WS : null,
+      });
       let report;
       try {
         const res = await runCaseIsolated(rc, {
@@ -168,7 +182,10 @@ export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
           grade: item.options?.grade !== false,
           env: workspace.env,
           allowDocker: (spec.environment?.runner_labels || []).includes("docker"),
-          onEvent: progress.onEvent,
+          onEvent: (ev: RunnerDynamic) => {
+            progress.onEvent(ev);
+            live.onEvent(ev);
+          },
         });
         const bundle = await uploadBundle(api, item.db_id, res.runDir);
         const sideEffectsAfter = readSideEffects(rc.file);
@@ -185,8 +202,15 @@ export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
         // group — it reports infra with a first line, core discipline; a
         // docker-stopped container under cancel reports canceled.
         report = { status: canceled ? "canceled" : "infra", error: redactor(firstLine(e)) };
+      } finally {
+        // Shutdown is the scheduler's, not the uploader's: stop both live
+        // consumers here — before the final report and before the workspace is
+        // cleaned up — so no background read races the teardown and no timer or
+        // held request outlives the case. A cancel (docker stop, SIGTERM drain)
+        // arrives through this same path.
+        progress.stop();
+        await live.stop();
       }
-      progress.stop();
       await api.json("POST", `/runner/groups/${spec.run_group_id}/cases/${item.run_id}/report`, report);
       orderedResults[index] = report;
     });

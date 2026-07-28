@@ -449,7 +449,27 @@ truncated.
 
 The group spec advertises the live URL templates and every cap under
 `uploads.live`, so a runner sizes its batches from the deployment rather than
-from a constant it compiled in.
+from a constant it compiled in. A runner may keep the advertised route *path*
+while dialling its own origin: `publicUrl` is not necessarily the address the
+runner was pointed at.
+
+**The uploader's posture.** The runner-agent ships this stream from one
+serialized, single-flight queue per case, on the progress reporter's ~2 s
+coalescing floor — a floor, not a heartbeat: a tick where nothing completed
+sends nothing, and inactivity is read server-side from absence. It opens on
+manifest readiness rather than on `case_start` (the event precedes the
+placeholder write), ships each tick in run-dir order — artifacts, then the
+trajectory delta naming only acked artifacts, then a manifest re-POST if the
+run rewrote it — and lets acks drive the queue: a `gap` or `divergent` refusal
+rewinds to the answered count, a transport failure pauses and the next tick
+retries from the same position. Where the stream cannot continue honestly —
+`budget`, `line_too_large`, a refusal no retry can fix, or a queue hopelessly
+behind — **the uploader stops itself**, silently and without truncating or
+inventing skip markers; the sealed bundle carries everything regardless. The
+case scheduler owns shutdown: the queue is stopped and any in-flight request
+aborted before the case report and before workspace cleanup. Nothing the
+uploader does or fails to do may change a run's status, ordering, timing, or
+sealed artifacts.
 
 ## Runner pool
 

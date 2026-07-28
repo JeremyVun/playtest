@@ -9,7 +9,10 @@
 import childProcess from "node:child_process";
 import { runCase } from "@playtest/core/run";
 
-const CONTAINER_WS = "/ws";
+/** Where the group workspace is mounted inside a case container. Exported
+ * because streamed engine events carry these paths and the live uploader has to
+ * translate them back the same way the final result is translated. */
+export const CONTAINER_WS = "/ws";
 const CHILD = "/opt/playtest/packages/platform/runner-agent/src/case-runner-child.ts";
 
 // Model-gateway + browser knobs the case needs beyond the workspace env.

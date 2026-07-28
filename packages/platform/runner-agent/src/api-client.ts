@@ -26,7 +26,9 @@ export class ApiClient {
     return new ApiClient(this.baseUrl, token);
   }
 
-  async json(method: string, path: string, body: RunnerDynamic = undefined): Promise<RunnerDynamic> {
+  /** `signal` is the live uploader's abort seam: a case ending must not wait on
+   * a held request (docs/backlog/live-runs/DESIGN.md). Every other caller omits it. */
+  async json(method: string, path: string, body: RunnerDynamic = undefined, { signal }: RunnerDynamic = {}): Promise<RunnerDynamic> {
     const headers: Record<string, string> = {};
     if (this.token) headers.authorization = `Bearer ${this.token}`;
     if (body !== undefined) headers["content-type"] = "application/json";
@@ -34,6 +36,7 @@ export class ApiClient {
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
+      signal,
     });
     if (res.status === 204) return null;
     const data = await res.json().catch(() => ({}));
@@ -49,10 +52,10 @@ export class ApiClient {
     return Buffer.from(await res.arrayBuffer());
   }
 
-  async putBytes(path: string, bytes: RunnerDynamic, contentType = "application/octet-stream"): Promise<RunnerDynamic> {
+  async putBytes(path: string, bytes: RunnerDynamic, contentType = "application/octet-stream", { signal }: RunnerDynamic = {}): Promise<RunnerDynamic> {
     const headers: Record<string, string> = { "content-type": contentType };
     if (this.token) headers.authorization = `Bearer ${this.token}`;
-    const res = await fetch(`${this.baseUrl}/api/v1${path}`, { method: "PUT", headers, body: bytes });
+    const res = await fetch(`${this.baseUrl}/api/v1${path}`, { method: "PUT", headers, body: bytes, signal });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new RunnerApiError(res.status, data);
     return data;

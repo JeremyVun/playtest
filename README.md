@@ -184,7 +184,18 @@ actor_model: gpt5_4_mini           # role-plays the user (this is the default; a
 grader_model: gpt5_5               # scores runs and checks `assert:` gates (default shown)
 max_steps: 50                      # per-run limit on actor steps
 timeout: 4m                        # per-run wall-clock limit
+artifacts: core                    # core (default) · debug — how much each run keeps
 ```
+
+`artifacts: core` keeps everything anything reads: the accessibility snapshots,
+the step screenshots, the video, the HAR, and the trajectory. `artifacts: debug`
+additionally keeps the browser forensics — the Playwright trace, MHTML copies of
+each page, and the browser's own accessibility tree — which nothing in Playtest
+reads back but which help when you are debugging one specific run by hand. They
+are also most of what a run costs: on a typical web run the trace alone is about
+70% of the bytes on disk and most of the time spent closing the browser. Set it
+per case as well as per suite; the run records which profile it used, and the
+viewer works the same either way.
 
 #### Secrets (api)
 

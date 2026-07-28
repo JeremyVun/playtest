@@ -27,6 +27,10 @@
       "minimum": 0,
       "description": "Internal tuning knob for visual_regression: the Hamming-distance threshold (0-64) over the per-step screenshot dHash above which the screenshot reads as pixel drift. Higher = more tolerant (fewer drift heals); lower = stricter. Default 10."
     },
+    "artifacts": {
+      "enum": ["core", "debug"],
+      "description": "How much each run writes to disk, default \"core\". core: everything the actor, the gate, the grader, and the viewer read — accessibility text, step screenshots, video, HAR, trajectory/manifest/events. debug: adds the browser-forensics extras (Playwright trace.zip, per-step and final MHTML, the driver's native accessibility tree), which nothing in the harness reads back and which dominate a run's bytes and its close time. Turn it on for a suite you are debugging, not for a suite you run nightly."
+    },
     "perf": {
       "type": "object",
       "additionalProperties": false,

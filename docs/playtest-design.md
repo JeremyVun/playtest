@@ -337,13 +337,21 @@ runs/<run-id>/<case-id>/
   grade.json           # grader output
   drift-report.json    # api heals: classification, signals, narrative
   video.mp4 + .vtt     # slideshow stitched from per-step stills
-  trace.zip            # native Playwright trace — known-good fallback viewer
-  steps/               # per step: .png screenshot, .mhtml page, .a11y.txt snapshot
+  trace.zip            # debug profile: native Playwright trace
+  steps/               # per step: .png screenshot, .a11y.txt snapshot
+                       #   debug profile adds .mhtml and the browser's own a11y tree
 ```
 
-The MHTML snapshots mean any step can be reopened in a browser later, exactly
-as the agent saw it — no app needed, so triage is offline and post-hoc
-questions ("was the banner present at step 9 last Tuesday?") stay answerable.
+How much of that a run keeps is one suite/case key, `artifacts: core | debug`.
+The default, `core`, writes everything anything reads — the snapshots, the
+stills, the video, the network log, the trajectory. `debug` adds the browser
+forensics: the Playwright trace and an MHTML copy of every page, so any step can
+be reopened in a browser later exactly as the agent saw it, no app needed
+("was the banner present at step 9 last Tuesday?"). That forensic set is
+genuinely useful and genuinely expensive — the trace alone is about 70% of a web
+run's bytes — so it is opt-in per suite rather than a tax on every nightly run.
+Neither profile changes the evidence: the snapshots, actions, gate, and grade
+are identical, and runs recorded under different profiles still compare.
 
 Storage sits behind a provider seam: a run is either a plain directory or a
 sealed **`.ptrun` bundle** — a deterministic, content-addressed zip with

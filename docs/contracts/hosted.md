@@ -1599,9 +1599,18 @@ legal holds no longer exist.
 
 Run evidence has three tiers:
 
-- `full`: the complete bundle, including heavy media and traces;
+- `full`: the complete bundle as the run recorded it, including heavy media and
+  any Playwright trace;
 - `core`: manifest, trajectory, grade, text evidence, and timing captions;
 - `meta`: database projections only.
+
+A `full` bundle is *complete*, not *fixed*: which artifacts a run records is the
+suite's own choice of artifact profile
+([artifacts.md](artifacts.md#artifact-profiles)), and the default profile writes
+no Playwright trace, no MHTML, and no native accessibility tree. Retention never
+assumes an artifact is present — every tier is a filter, and an absent path is
+simply absent. Nothing in the control plane or the runner agent reads a trace or
+an MHTML file, and no console surface exposes one.
 
 Retention moves at most one tier per cycle. `full` to `core` rewrites the bundle
 with the artifact contract's deterministic rules and records old hash, new hash,

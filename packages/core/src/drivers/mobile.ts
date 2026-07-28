@@ -24,7 +24,7 @@ import { PerfSidecar } from "../perf.ts";
 import type { Browser as WebdriverBrowser, ChainablePromiseElement, remote as webdriverRemote } from "webdriverio";
 import type { Driver, DriverResolution, DriverResult, DriverSnapshot } from "../driver.ts";
 import type { StepAction, StepEnvelope } from "../trajectory.ts";
-import type { ResolvedEnvironment, SettleConfig } from "../types.ts";
+import type { ArtifactProfile, ResolvedEnvironment, SettleConfig } from "../types.ts";
 import type { MobileSnapshot, MobileSnapshotElement, MobilePageSourceWalk } from "./mobile-snapshot.ts";
 
 type MobileEnvironment = Extract<ResolvedEnvironment, { driver: "mobile" }>;
@@ -145,7 +145,7 @@ function timedClient(client: WebdriverBrowser, perf: PerfSidecar): WebdriverBrow
 }
 
 export class MobileDriver implements Driver {
-  static async launch({ env, runDir, perf = PerfSidecar.off() }: { env: MobileEnvironment; runDir: string; perf?: PerfSidecar }): Promise<MobileDriver> {
+  static async launch({ env, runDir, perf = PerfSidecar.off(), artifacts = "debug" }: { env: MobileEnvironment; runDir: string; perf?: PerfSidecar; artifacts?: ArtifactProfile }): Promise<MobileDriver> {
     fs.mkdirSync(path.join(runDir, "steps"), { recursive: true });
     const url = new URL(env.appium_url || "http://127.0.0.1:4723");
     const client = await clientFactory({
@@ -156,7 +156,7 @@ export class MobileDriver implements Driver {
       logLevel: "silent",
       capabilities: capabilitiesFor(env),
     });
-    return new MobileDriver({ client, runDir, settle: env.settle, perf });
+    return new MobileDriver({ client, runDir, settle: env.settle, perf, artifacts });
   }
 
   #client: WebdriverBrowser;
@@ -210,8 +210,15 @@ export class MobileDriver implements Driver {
   #firstSettle = true;
   // The run's diagnostic timing sidecar (perf.ts); no-op outside a run.
   #perf: PerfSidecar;
-  constructor({ client, runDir, settle = null, perf = PerfSidecar.off() }: { client: WebdriverBrowser; runDir: string; settle?: SettleConfig | null; perf?: PerfSidecar }) {
+  // How much this session writes to disk
+  // (docs/contracts/artifacts.md#artifact-profiles). The mobile driver's only
+  // debug-profile artifact is the native page-source tree; everything else it
+  // writes is evidence. Defaults to "debug" so a driver constructed directly
+  // (unit tests, external callers) records exactly what it always has.
+  #artifacts: ArtifactProfile;
+  constructor({ client, runDir, settle = null, perf = PerfSidecar.off(), artifacts = "debug" }: { client: WebdriverBrowser; runDir: string; settle?: SettleConfig | null; perf?: PerfSidecar; artifacts?: ArtifactProfile }) {
     this.#perf = perf;
+    this.#artifacts = artifacts;
     // Every Appium round-trip this driver makes goes through the timed client;
     // wrapping here is the single central seam the plan asks for.
     this.#client = timedClient(client, perf);
@@ -222,6 +229,11 @@ export class MobileDriver implements Driver {
   // ---- pinned descriptors ----
   get id(): "mobile" {
     return "mobile";
+  }
+
+  /** The recording profile this session launched under; see #artifacts. */
+  get artifactProfile(): ArtifactProfile {
+    return this.#artifacts;
   }
 
   get settle() {
@@ -358,12 +370,18 @@ export class MobileDriver implements Driver {
     // so this is a render, not a second parse. Flattened to the same
     // `role "name"` shape so the viewer diffs it against our custom snapshot;
     // never seen by the agent. Best-effort — a throw is swallowed, no artifact.
-    at = perf.now();
-    try {
-      const tree = nativePageSourceTree(xml, walked.walk);
-      if (tree) fs.writeFileSync(p.pw_a11y, tree + "\n");
-    } catch {}
-    perf.span("snapshot_native_ax", at, stepNum);
+    // Skipped entirely under the core profile
+    // (docs/contracts/artifacts.md#artifact-profiles): the walk above is still
+    // needed for the agent-facing snapshot, but this second projection of it is
+    // pure render cost for an artifact nothing reads back.
+    if (this.#artifacts === "debug") {
+      at = perf.now();
+      try {
+        const tree = nativePageSourceTree(xml, walked.walk);
+        if (tree) fs.writeFileSync(p.pw_a11y, tree + "\n");
+      } catch {}
+      perf.span("snapshot_native_ax", at, stepNum);
+    }
     // Screenshot fetched above (concurrently with the source); just decode + write.
     let screenshot: Buffer | null = null;
     at = perf.now();

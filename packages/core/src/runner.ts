@@ -158,14 +158,25 @@ export function willRecord(rc: DynamicValue, { mode = "auto", refresh = false }:
  * What artifacts the active driver wrote for a step, from the step's snapshot.
  * screenshot rides when the snapshot grabbed a frame (web always; mobile when a
  * frame came back; api never — its captureSnapshot returns screenshot: null).
- * mhtml is web-only. For web both are true, so artifactsFor's output is the same
- * keys/values it always emitted. pw_a11y (the driver's NATIVE a11y tree, a
- * debug-only artifact) rides on web (Chromium's full AX tree) AND mobile (the
- * full unfiltered Appium page-source tree) — both surface what our custom
- * snapshot filter dropped, in the viewer's Custom|Native diff.
+ * mhtml is web-only. pw_a11y (the driver's NATIVE a11y tree, a debug-only
+ * artifact) rides on web (Chromium's full AX tree) AND mobile (the full
+ * unfiltered Appium page-source tree) — both surface what our custom snapshot
+ * filter dropped, in the viewer's Custom|Native diff.
+ *
+ * Both are also DEBUG-PROFILE artifacts
+ * (docs/contracts/artifacts.md#artifact-profiles), so the flags read the
+ * profile off the DRIVER rather than off the case: the object that decided not
+ * to capture a file is the same object that tells the envelope not to advertise
+ * it, which is what keeps "no envelope names a file that is not on disk" true
+ * by construction. A driver that predates the profile reads as "debug".
  */
 function artifactFlags(driver: DynamicValue, snap: DynamicValue) {
-  return { screenshot: snap?.screenshot !== null, mhtml: driver.id === "web", pwA11y: driver.id === "web" || driver.id === "mobile" };
+  const debug = (driver.artifactProfile ?? "debug") === "debug";
+  return {
+    screenshot: snap?.screenshot !== null,
+    mhtml: driver.id === "web" && debug,
+    pwA11y: (driver.id === "web" || driver.id === "mobile") && debug,
+  };
 }
 function addTokens(total: DynamicValue, t: DynamicValue) {
   total.in += (t?.in ?? 0);
@@ -397,6 +408,7 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
         status: "infra", gate: { pass: false, checks: [] },
         consoleErrors: 0, baseline, willGrade: false, headed, settle: driver?.settle,
         snapshotFormat: driver?.snapshotFormat, viewport: driver?.viewport,
+        artifacts: driver?.artifactProfile,
       });
       writer.writeManifest(manifest);
       const result = { status: "infra", runDir: writer.dir, manifest, score: null, error };
@@ -920,6 +932,7 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
     rc, runId, mode: actualMode, startedAt, videoStartedAt, llm, env, r,
     status, gate, consoleErrors: driver.consoleErrors(), baseline, willGrade, headed, settle: driver.settle,
     snapshotFormat: driver.snapshotFormat, viewport: driver.viewport, persona,
+    artifacts: driver.artifactProfile,
   });
   writer.writeManifest(manifest);
   finalManifestWritten = true; // the SIGINT flusher must not clobber this now
@@ -1705,9 +1718,16 @@ function secretNamesFor(rc: DynamicValue) {
   return [...names].sort();
 }
 
-export function buildManifest({ rc, runId, mode, startedAt, videoStartedAt, llm, env, r, status, gate, consoleErrors, baseline, willGrade, headed = false, settle = undefined, snapshotFormat = undefined, viewport = undefined, persona = undefined, video = null }: DynamicValue): DynamicValue {
+export function buildManifest({ rc, runId, mode, startedAt, videoStartedAt, llm, env, r, status, gate, consoleErrors, baseline, willGrade, headed = false, settle = undefined, snapshotFormat = undefined, viewport = undefined, persona = undefined, video = null, artifacts = undefined }: DynamicValue): DynamicValue {
   const finishedAt: DynamicValue = new Date();
   const secrets = secretNamesFor(rc);
+  // The recording profile this run actually ran under
+  // (docs/contracts/artifacts.md#artifact-profiles). Prefer the LIVE driver's
+  // answer — it is the object that made the capture decisions — and fall back to
+  // the case's own value for the placeholder manifest written before any driver
+  // exists. It decides both the recorded provenance below and whether
+  // artifacts.trace may name a file.
+  const profile = artifacts ?? rc.artifacts ?? "core";
   return {
     schema_version: 1,
     run_id: runId,
@@ -1741,6 +1761,12 @@ export function buildManifest({ rc, runId, mode, startedAt, videoStartedAt, llm,
       // vision) affects the observed threshold keys comparability.
       visual_regression: rc.visual_regression,
       visual_regression_drift: rc.visual_regression_drift,
+      // Which recording profile wrote this run's evidence
+      // (docs/contracts/artifacts.md#artifact-profiles). Provenance, not a pin:
+      // it explains why a trace/MHTML/native tree is absent, and it never makes
+      // two runs incomparable — the profile changes what is written BESIDE the
+      // evidence, never the snapshot text, the actions, or the gate.
+      artifacts: profile,
       limits: rc.limits,
     },
     mode,
@@ -1846,7 +1872,11 @@ export function buildManifest({ rc, runId, mode, startedAt, videoStartedAt, llm,
       // null until the post-run slideshow build assigns "video.mp4" (ffmpeg
       // present); a non-null video_started_at marks a legacy webm screencast.
       video,
-      trace: "trace.zip",
+      // The Playwright trace exists only when a WEB run recorded under the
+      // debug profile: the other two drivers never had one, and a core-profile
+      // web run never starts tracing at all. Null rather than a path nothing
+      // wrote — a manifest must not advertise a file that is not on disk.
+      trace: (rc.env?.driver ?? "web") === "web" && profile === "debug" ? "trace.zip" : null,
       grade: willGrade ? "grade.json" : null,
       // per-turn actor context windows, for diagnostics; absent on pure act runs
       // (no model calls) and explicitly null so the viewer doesn't probe for it

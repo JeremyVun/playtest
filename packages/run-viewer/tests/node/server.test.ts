@@ -189,6 +189,63 @@ test("BundleProvider conformance: single-run routes byte-match filesystem provid
   }
 });
 
+// ---------- core-profile runs ----------
+
+// A run recorded under `artifacts: core`
+// (docs/contracts/artifacts.md#artifact-profiles) has no trace.zip, no MHTML,
+// and no native a11y tree. The viewer has always had to tolerate absent optional
+// artifacts — it hides the Custom|Playwright toggle when an envelope carries no
+// pw_a11y, and it never references trace.zip at all — so this pins the contract
+// that makes that safe: a core run serves every route the viewer actually reads,
+// its envelopes name only files that exist, and probing for the absent ones is a
+// clean 404 rather than an error page.
+test("a core-profile run directory serves everything the viewer reads", async () => {
+  const runDir = path.join(tmpRoot, "core-profile-run");
+  fs.mkdirSync(path.join(runDir, "steps"), { recursive: true });
+  const source = path.join(runsRoot, healRunDir);
+  for (const name of ["manifest.json", "trajectory.jsonl", "har.json", "grade.json"]) {
+    fs.copyFileSync(path.join(source, name), path.join(runDir, name));
+  }
+  for (const n of ["001", "002", "003"]) {
+    for (const ext of ["png", "a11y.txt"]) {
+      fs.copyFileSync(path.join(source, "steps", `${n}.${ext}`), path.join(runDir, "steps", `${n}.${ext}`));
+    }
+  }
+  const manifest = JSON.parse(fs.readFileSync(path.join(runDir, "manifest.json"), "utf8"));
+  manifest.case.artifacts = "core";
+  manifest.artifacts.trace = null;
+  fs.writeFileSync(path.join(runDir, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
+
+  const server = await serveRun(runDir, { port: 0, open: false });
+  try {
+    const b = `http://127.0.0.1:${server.address().port}`;
+    const m = await getJson(`${b}/run/manifest.json`);
+    assert.equal(m.case.artifacts, "core", "the profile is readable provenance");
+    assert.equal(m.artifacts.trace, null, "a core manifest names no trace");
+
+    // Every envelope artifact path resolves: the rule the profile has to keep is
+    // that nothing is advertised which is not on disk.
+    const traj = await fetch(`${b}/run/trajectory.jsonl`);
+    assert.equal(traj.status, 200);
+    const envelopes = (await traj.text()).trim().split("\n").map((l) => JSON.parse(l));
+    assert.ok(envelopes.length > 0);
+    for (const env of envelopes) {
+      assert.equal(env.artifacts?.pw_a11y, undefined, "no native-tree path, so the viewer's toggle stays hidden");
+      assert.equal(env.artifacts?.mhtml, undefined, "no MHTML path is advertised");
+      for (const rel of [env.artifacts?.screenshot, env.artifacts?.a11y].filter(Boolean)) {
+        assert.equal((await fetch(`${b}/run/${rel}`)).status, 200, `${rel} must be served`);
+      }
+    }
+
+    // The debug-only artifacts are simply absent, not broken.
+    for (const rel of ["trace.zip", "final.mhtml", "steps/001.pw-a11y.txt", "steps/001.mhtml"]) {
+      assert.equal((await fetch(`${b}/run/${rel}`)).status, 404, `${rel} is absent, not an error`);
+    }
+  } finally {
+    server.close();
+  }
+});
+
 // ---------- single-run mode ----------
 
 test("single-run mode: /runs.json 404s, /changed.json still resolves the run", async () => {

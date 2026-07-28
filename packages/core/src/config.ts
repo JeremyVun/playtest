@@ -688,6 +688,19 @@ async function resolveCase(
   // a screenshot reads as pixel drift).
   const visualRegression = merged.visual_regression ?? true;
   const visualRegressionDrift = merged.visual_regression_drift ?? VISION_DRIFT_DEFAULT;
+  // artifacts: how much this run writes to disk
+  // (docs/contracts/artifacts.md#artifact-profiles). "core" is the default
+  // because the extras "debug" adds — the Playwright trace, MHTML, the native
+  // a11y tree — are read by nothing in the harness, the gate, the grader, or the
+  // viewer, yet they are the majority of a web run's bytes and of its close
+  // time. The schema's enum normally rejects a typo first; this guard also
+  // covers programmatic callers that build a case object without Ajv.
+  const artifacts = merged.artifacts ?? "core";
+  if (artifacts !== "core" && artifacts !== "debug") {
+    throw new DummyConfigError(
+      `${file}: "artifacts: ${JSON.stringify(merged.artifacts)}" is not a profile — use "core" (the default: a11y text, step screenshots, video, HAR, trajectory) or "debug" (core plus the Playwright trace, MHTML, and the native a11y tree)`,
+    );
+  }
   // `observe:` is the ADVISORY sibling of `success:`
   // (docs/contracts/engine.md#invariant-policies): the same entry shapes, but
   // its results never gate. Case-only and journey-only, exactly like success.
@@ -871,6 +884,11 @@ async function resolveCase(
     vision,
     visual_regression: visualRegression,
     visual_regression_drift: visualRegressionDrift,
+    // The recording profile the drivers gate their debug captures on
+    // (docs/contracts/artifacts.md#artifact-profiles). Not a comparability pin:
+    // it changes what is written BESIDE the evidence, never the evidence — the
+    // snapshot text, the actions, and the gate see exactly the same run.
+    artifacts,
     limits: { max_steps, timeout_ms },
     // Run-wide concurrency from playtest.yaml (CLI --parallel/--parallel-record
     // override it). int n | true (default pool) | { total, record } | null (auto).

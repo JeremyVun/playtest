@@ -40,6 +40,7 @@ and user-facing commands are defined in
   vision: false,
   visual_regression: true,
   visual_regression_drift: 10,
+  artifacts: "core",
   parallel: null,
   limits: { max_steps: 50, timeout_ms: 240000 },
   actor_model: "gpt5_4_mini",
@@ -90,6 +91,7 @@ limits:
   timeout: 4m
 visual_regression: true
 visual_regression_drift: 10
+artifacts: core
 ```
 
 `vision` defaults to true for discovery and false for journey. A journey cannot
@@ -241,9 +243,11 @@ kinds, and performance keys are validated according to the driver matrix.
 `base_url` is required for web and API. Mobile requires `app.app`.
 
 `visual_regression` and its drift threshold are accepted for every case but
-are inert when the driver produces no screenshot hash. `parallel` is resolved
-on each case from its defaults chain. Without a CLI override, the first
-non-null value in case-ID order becomes the run-wide setting.
+are inert when the driver produces no screenshot hash. `artifacts` is accepted
+for every case, must be `core` or `debug`, and is inert on the API driver, which
+writes none of the debug-profile artifacts. `parallel` is resolved on each case
+from its defaults chain. Without a CLI override, the first non-null value in
+case-ID order becomes the run-wide setting.
 
 ## Driver contract
 
@@ -305,10 +309,23 @@ tokens in place of values earlier responses produced, plus the binding records
 the envelope stores ([Bindings](#bindings)). It returns the same action object
 by identity when nothing binds. A driver without these hooks persists exactly
 what it captured and decided. Web exposes `viewport` and uses optional
-`stopRecording()` to freeze the final DOM and write
-`final.a11y.txt`/`final.mhtml` before gate evaluation. Its return value contains
-the post-action final text; the runner replaces its gate/grader-facing
-`lastSnapshot` with that value. Per-step artifacts remain pre-action evidence.
+`stopRecording()` to freeze the final DOM and write `final.a11y.txt` before gate
+evaluation, plus `final.mhtml` under the `debug` artifact profile only. Its
+return value contains the post-action final text; the runner replaces its
+gate/grader-facing `lastSnapshot` with that value. Per-step artifacts remain
+pre-action evidence.
+
+A driver also exposes the read-only `artifactProfile` it launched under
+(`core` | `debug`; absent reads as `debug`). It is the single source of truth
+for which optional captures ran, and the runner reads it — rather than the case
+— when deciding which artifact paths an envelope may advertise, so a skipped
+capture and the record that describes it cannot disagree. Under `core` the web
+driver never starts a Playwright trace and issues no MHTML or native-AX
+round-trip, and the mobile driver renders no native page-source tree; what each
+one gates is defined in
+[Artifact profiles](artifacts.md#artifact-profiles). Nothing in the engine reads
+any of those artifacts back, so no phase of a run behaves differently under the
+two profiles.
 
 `execute()` and `executeLocator()` take an optional context —
 `{ step, bindings }` — naming the run step the action belongs to and the

@@ -16,7 +16,7 @@ import type { AxeCapture } from "../axe-source.ts";
 import type { Driver, DriverResolution, DriverResult, DriverSnapshot } from "../driver.ts";
 import type { EnrichedOpenApi } from "../openapi.ts";
 import type { StepAction, StepEnvelope } from "../trajectory.ts";
-import type { ResolvedViewport, SettleConfig } from "../types.ts";
+import type { ArtifactProfile, ResolvedViewport, SettleConfig } from "../types.ts";
 
 interface WebInstrumentation {
   lastMutationAt: number;
@@ -499,7 +499,8 @@ export class WebDriver implements Driver {
     cookies = null,
     openapi = null,
     caseFile = null,
-    perf = PerfSidecar.off()
+    perf = PerfSidecar.off(),
+    artifacts = "debug"
   }: {
     baseUrl: string;
     runDir: string;
@@ -512,6 +513,7 @@ export class WebDriver implements Driver {
     openapi?: string | null;
     caseFile?: string | null;
     perf?: PerfSidecar;
+    artifacts?: ArtifactProfile;
   }): Promise<WebDriver> {
     fs.mkdirSync(path.join(runDir, "steps"), { recursive: true });
     // Spec ingestion is CONFIGURATION, exactly as on the api driver
@@ -553,10 +555,17 @@ export class WebDriver implements Driver {
       // derive domain/path; a session input like storage_state, not a pin.
       const cookieList = cookiesFor(cookies, baseUrl);
       if (cookieList.length) await context.addCookies(cookieList);
-      await context.tracing.start({ screenshots: true, snapshots: true });
+      // The Playwright trace is DEBUG-PROFILE ONLY
+      // (docs/contracts/artifacts.md#artifact-profiles). Nothing in the harness,
+      // the gate, the grader, or the viewer reads trace.zip, yet with
+      // screenshots+snapshots on it is ~70% of a web run's bytes and ~89% of
+      // driver.close(). Not starting it is the whole saving: a trace that never
+      // starts costs nothing to stop, and close() skips the flush to match.
+      const debugArtifacts = artifacts === "debug";
+      if (debugArtifacts) await context.tracing.start({ screenshots: true, snapshots: true });
       await context.addInitScript(initInstrumentation);
       const page = await context.newPage();
-      const session = new WebDriver({ baseUrl, runDir, browser, context, page, settle, viewport: vp, spec, perf });
+      const session = new WebDriver({ baseUrl, runDir, browser, context, page, settle, viewport: vp, spec, perf, artifacts });
       // When cookies route to a blue/green slot, the FIRST cold document hit can
       // serve a stale edge-cached HTML referencing chunk hashes that 404 (the
       // page renders unstyled and never hydrates); a warm second hit is correct.
@@ -628,6 +637,14 @@ export class WebDriver implements Driver {
   // when the driver is constructed outside a run (unit tests, external callers).
   #perf: PerfSidecar;
 
+  // How much this session writes to disk
+  // (docs/contracts/artifacts.md#artifact-profiles). "core" — what createDriver
+  // passes for a case that did not ask otherwise — skips the Playwright trace,
+  // per-step and final MHTML, and the native a11y tree. It defaults to "debug"
+  // here so a WebDriver constructed directly (unit tests, external callers)
+  // records exactly what it always has.
+  #artifacts: ArtifactProfile;
+
   constructor({
     baseUrl,
     runDir,
@@ -637,7 +654,8 @@ export class WebDriver implements Driver {
     settle = null,
     viewport = DEFAULT_VIEWPORT,
     spec = null,
-    perf = PerfSidecar.off()
+    perf = PerfSidecar.off(),
+    artifacts = "debug"
   }: {
     baseUrl: string;
     runDir: string;
@@ -648,7 +666,9 @@ export class WebDriver implements Driver {
     viewport?: ResolvedViewport;
     spec?: EnrichedOpenApi | null;
     perf?: PerfSidecar;
+    artifacts?: ArtifactProfile;
   }) {
+    this.#artifacts = artifacts;
     this.baseUrl = baseUrl;
     this.page = page;
     this.#spec = spec ?? null;
@@ -716,6 +736,11 @@ export class WebDriver implements Driver {
 
   get id(): "web" {
     return "web";
+  }
+
+  /** The recording profile this session launched under; see #artifacts. */
+  get artifactProfile(): ArtifactProfile {
+    return this.#artifacts;
   }
 
   /**
@@ -901,14 +926,20 @@ export class WebDriver implements Driver {
       return { screenshot: wrote ? processed.screenshot : null, screenshotHash: processed.screenshotHash };
     })();
 
-    const mhtmlTask = (async (): Promise<void> => {
+    // The two DEBUG-PROFILE captures (docs/contracts/artifacts.md#artifact-profiles).
+    // Under "core" they are not merely written elsewhere — the CDP round-trips
+    // never happen, so the concurrent group above stops contending with the
+    // screenshot for the same session, which is where the saving actually is.
+    const debugArtifacts = this.#artifacts === "debug";
+
+    const mhtmlTask = debugArtifacts ? (async (): Promise<void> => {
       const mhtmlAt = perf.now();
       try {
         const { data } = await this.#cdp!.send("Page.captureSnapshot", { format: "mhtml" }); // SAFETY: launch initializes CDP before returning a WebDriver
         await write(p.mhtml, data, "mhtml");
       } catch {}
       perf.span("snapshot_mhtml", mhtmlAt, stepNum);
-    })();
+    })() : null;
 
     // Debug-only: the browser's NATIVE a11y tree (Chromium's full AX tree via
     // CDP — nothing filtered, so gaps in OUR custom snapshot show up). Flattened
@@ -916,18 +947,18 @@ export class WebDriver implements Driver {
     // the two side-by-side. Never seen by the agent, never part of snap.text or
     // the return value — best-effort, never breaks a run. (page.accessibility was
     // removed in modern Playwright, hence CDP.)
-    const nativeAxTask = (async (): Promise<void> => {
+    const nativeAxTask = debugArtifacts ? (async (): Promise<void> => {
       const axAt = perf.now();
       try {
         const tree = await this.#nativeAxTree();
         if (tree) await write(p.pw_a11y, tree + "\n", "pw_a11y");
       } catch {}
       perf.span("snapshot_native_ax", axAt, stepNum);
-    })();
+    })() : null;
 
     // The persistence barrier: every artifact of this step is on disk before the
     // caller gets a snapshot it can put in an envelope.
-    const [title, { screenshot, screenshotHash }] = await Promise.all([titleTask, screenshotTask, a11yWrite, mhtmlTask, nativeAxTask]);
+    const [title, { screenshot, screenshotHash }] = await Promise.all([titleTask, screenshotTask, a11yWrite, mhtmlTask, nativeAxTask] as const);
     return { text: snap.text, url, title, refCount: snap.refCount, truncated: snap.truncated, screenshot, screenshotHash };
   }
 
@@ -1111,10 +1142,16 @@ export class WebDriver implements Driver {
       fs.writeFileSync(path.join(this.#runDir, "final.a11y.txt"), snap.text + "\n");
       this.#finalSnapshot = { text: snap.text, url: this.#checkUrl };
     } catch {}
-    try {
-      const { data } = await this.#cdp!.send("Page.captureSnapshot", { format: "mhtml" }); // SAFETY: launch initializes CDP before returning a WebDriver
-      fs.writeFileSync(path.join(this.#runDir, "final.mhtml"), data);
-    } catch {}
+    // final.a11y.txt above is the terminal-state evidence the gate and the
+    // grader read, so it is written under every profile. final.mhtml is its
+    // debug-only companion — a forensic copy of the same DOM that nothing reads
+    // back (docs/contracts/artifacts.md#artifact-profiles).
+    if (this.#artifacts === "debug") {
+      try {
+        const { data } = await this.#cdp!.send("Page.captureSnapshot", { format: "mhtml" }); // SAFETY: launch initializes CDP before returning a WebDriver
+        fs.writeFileSync(path.join(this.#runDir, "final.mhtml"), data);
+      } catch {}
+    }
 
     // A fresh context+page on the same browser holds the final DOM so
     // element_exists keeps the same Playwright locator engine (shadow-DOM
@@ -1148,14 +1185,22 @@ export class WebDriver implements Driver {
   }
 
   async close(): Promise<void> {
+    // The HAR's forced flush stays FIRST and synchronous: har.json is evidence
+    // the gate and the invariant policies read, and it must be complete before
+    // anything below can fail. Nothing here may be reordered ahead of it.
     this.#flushHar(true);
-    const traceAt = this.#perf.now();
-    try {
-      await this.#context.tracing.stop({ path: path.join(this.#runDir, "trace.zip") });
-    } catch {}
-    // The single biggest artifact in a retained web run (3.7 MB p50 / 18.9 MB
-    // p90); Phase 3 makes it conditional and is accepted against this span.
-    this.#perf.span("trace_stop", traceAt);
+    // The trace flush is the single biggest cost in close() (89% of the span,
+    // 161 of 180 ms) and it is skipped outright under the core profile, where
+    // tracing was never started (launch()). Guarding rather than relying on the
+    // catch keeps the `trace_stop` span honest: absent means "not recorded",
+    // not "recorded in 0 ms".
+    if (this.#artifacts === "debug") {
+      const traceAt = this.#perf.now();
+      try {
+        await this.#context.tracing.stop({ path: path.join(this.#runDir, "trace.zip") });
+      } catch {}
+      this.#perf.span("trace_stop", traceAt);
+    }
     await this.#checkContext?.close().catch(() => {});
     await this.#context.close().catch(() => {});
     await this.#browser.close().catch(() => {});

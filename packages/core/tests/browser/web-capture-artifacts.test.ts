@@ -102,6 +102,73 @@ test("captureSnapshot: every step artifact is on disk, and the a11y text is the 
 
 // A step whose debug artifacts fail to write must not take the run down, and
 // must not leave the envelope claiming a screenshot that isn't there.
+// Artifact profiles (BUILD_PLAN T3.1, docs/contracts/artifacts.md#artifact-profiles).
+// The listing is the contract: `debug` is exactly the set this driver has always
+// written, and `core` is that set minus the three browser-forensics extras
+// nothing reads back. Asserted as SET EQUALITY rather than as presence checks,
+// because the failure this guards against is a gate that drops one artifact too
+// many — or an envelope that keeps naming one that is gone.
+const DEBUG_STEP_FILES = ["001.a11y.txt", "001.mhtml", "001.png", "001.pw-a11y.txt"];
+const CORE_STEP_FILES = ["001.a11y.txt", "001.png"];
+
+async function profileRun(artifacts: LegacyTestValue) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), `playtest-profile-${artifacts}-`));
+  const driver = await WebDriver.launch({ baseUrl: app.url, runDir: dir, ...(artifacts ? { artifacts } : {}) });
+  let snap: LegacyTestValue;
+  try {
+    await driver.start();
+    snap = await driver.captureSnapshot(1);
+    await driver.stopRecording();
+  } finally {
+    await driver.close();
+  }
+  return {
+    dir,
+    snap,
+    steps: fs.readdirSync(path.join(dir, "steps")).sort(),
+    top: fs.readdirSync(dir).sort(),
+  };
+}
+
+test("artifact profiles: core drops the trace, MHTML and native AX tree; debug is unchanged", async () => {
+  const debug = await profileRun("debug");
+  const core = await profileRun("core");
+  try {
+    assert.deepEqual(debug.steps, DEBUG_STEP_FILES, "the debug profile writes exactly the historical step set");
+    assert.deepEqual(core.steps, CORE_STEP_FILES, "the core profile writes only the evidence");
+
+    // Run-dir level: trace.zip is never started under core, so close() has
+    // nothing to flush; final.mhtml is the debug companion of final.a11y.txt,
+    // which is terminal-state evidence and rides under BOTH profiles.
+    assert.ok(debug.top.includes("trace.zip"), "the debug profile still flushes the Playwright trace");
+    assert.ok(debug.top.includes("final.mhtml"), "the debug profile still captures the final MHTML");
+    assert.deepEqual(core.top.filter((f: string) => f === "trace.zip" || f === "final.mhtml"), [], "a core run writes neither");
+    for (const run of [debug, core]) {
+      assert.ok(run.top.includes("final.a11y.txt"), "the terminal-state evidence the gate and grader read is always written");
+    }
+
+    // The profile changes what is written beside the evidence, never the
+    // evidence: the actor sees the same page and the pixel oracle still fires.
+    assert.equal(core.snap.text, debug.snap.text, "the agent-facing snapshot is identical across profiles");
+    assert.match(String(core.snap.screenshotHash), /^[0-9a-f]{16}$/, "visual regression still has its dHash");
+    assert.equal(
+      fs.readFileSync(path.join(core.dir, "steps", "001.a11y.txt"), "utf8"),
+      core.snap.text + "\n",
+    );
+
+    // A driver constructed without a profile keeps recording what it always did.
+    const legacy = await profileRun(null);
+    try {
+      assert.deepEqual(legacy.steps, DEBUG_STEP_FILES);
+      assert.equal(legacy.snap.text, debug.snap.text);
+    } finally {
+      fs.rmSync(legacy.dir, { recursive: true, force: true });
+    }
+  } finally {
+    for (const run of [debug, core]) fs.rmSync(run.dir, { recursive: true, force: true });
+  }
+});
+
 test("captureSnapshot: a failed PNG write is reported as no screenshot, not as a crash", async () => {
   const driver = await WebDriver.launch({ baseUrl: app.url, runDir });
   try {

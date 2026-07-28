@@ -35,7 +35,7 @@ import { DummyConfigError } from "./config.ts";
 import { PerfSidecar } from "./perf.ts";
 import { WebDriver } from "./drivers/web.ts";
 import type { StepAction, StepEnvelope } from "./trajectory.ts";
-import type { DriverId, ResolvedCase, ResolvedEnvironment } from "./types.ts";
+import type { ArtifactProfile, DriverId, ResolvedCase, ResolvedEnvironment } from "./types.ts";
 
 export interface DriverResolution {
   locator: string | null;
@@ -102,6 +102,15 @@ export interface Driver {
   readonly overlay: Record<string, unknown>;
   readonly snapshotFormat: string;
   readonly viewport?: { width: number; height: number | null } | null;
+  /**
+   * The recording profile this driver launched under
+   * (docs/contracts/artifacts.md#artifact-profiles). The runner reads it to
+   * decide which per-step artifact paths an envelope may advertise, so a driver
+   * that gates a capture and the manifest that describes it can never disagree.
+   * Absent (an external/legacy driver) reads as "debug" — the historical
+   * everything-on behavior.
+   */
+  readonly artifactProfile?: ArtifactProfile;
 
   start(): Promise<DriverResult>;
   captureSnapshot(stepNum: number): Promise<DriverSnapshot>;
@@ -157,6 +166,12 @@ export async function createDriver(
         openapi: rc.env.openapi ?? null,
         caseFile: rc.file,
         perf,
+        // The `artifacts` profile decides whether this run pays for the
+        // Playwright trace, MHTML, and the native a11y tree at all
+        // (docs/contracts/artifacts.md#artifact-profiles). A ResolvedCase always
+        // carries one; the driver's own default stays "debug" so a driver
+        // constructed outside a run records exactly what it always did.
+        artifacts: rc.artifacts ?? "core",
       });
     case "mobile": {
       // Dynamic import keeps the Appium/webdriverio module graph out of web/api
@@ -166,6 +181,8 @@ export async function createDriver(
         env: rc.env as Extract<ResolvedEnvironment, { driver: "mobile" }>,
         runDir,
         perf,
+        // Gates the debug native page-source tree; see the web case above.
+        artifacts: rc.artifacts ?? "core",
       });
     }
     case "api": {

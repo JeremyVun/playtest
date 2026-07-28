@@ -9,6 +9,12 @@
 //   node tools/perf/baseline.mjs                 # api workload (no browser)
 //   node tools/perf/baseline.mjs --driver=web    # real Chromium, local fixture
 //   node tools/perf/baseline.mjs --json out.json
+//   node tools/perf/baseline.mjs --driver=web --artifacts=debug
+//
+// --artifacts pins the recording profile the generated suite declares (T3.1;
+// docs/contracts/artifacts.md#artifact-profiles). It is written explicitly into
+// every cell's playtest.yaml rather than left to the default, so a run of this
+// harness measures the profile it says it measures even if the default moves.
 //
 // Two local fixtures stand in for the system under test — the invariant-api
 // ledger and the todo-app page, both already used by the offline suites — and a
@@ -269,9 +275,9 @@ function artifactBytes(runsRoot) {
 
 // ------------------------------------------------------------------- cells
 
-function writeSuite(dir, { workload, baseUrl, count, cases }) {
+function writeSuite(dir, { workload, baseUrl, count, cases, artifacts }) {
   fs.mkdirSync(path.join(dir, "stories"), { recursive: true });
-  fs.writeFileSync(path.join(dir, "playtest.yaml"), `${workload.suiteHeader}actor_model: sonnet\ngrader_model: sonnet\n`);
+  fs.writeFileSync(path.join(dir, "playtest.yaml"), `${workload.suiteHeader}actor_model: sonnet\ngrader_model: sonnet\nartifacts: ${artifacts}\n`);
   for (let i = 1; i <= cases; i++) {
     fs.writeFileSync(
       path.join(dir, "stories", `journey-${i}.yaml`),
@@ -281,9 +287,9 @@ function writeSuite(dir, { workload, baseUrl, count, cases }) {
   return dir;
 }
 
-async function runCell({ workload, label, count, concurrency, tmpRoot, target }) {
+async function runCell({ workload, label, count, concurrency, tmpRoot, target, artifacts }) {
   const cell = `${label}-c${concurrency}`;
-  const suite = writeSuite(path.join(tmpRoot, `suite-${cell}`), { workload, count, cases: CASES_PER_CELL });
+  const suite = writeSuite(path.join(tmpRoot, `suite-${cell}`), { workload, count, cases: CASES_PER_CELL, artifacts });
   const runsRoot = path.join(tmpRoot, `runs-${cell}`);
   const gateway = await startStepGateway(workload.steps(count));
   process.env.PLAYTEST_LLM_BASE_URL = gateway.url;
@@ -317,6 +323,7 @@ async function runCell({ workload, label, count, concurrency, tmpRoot, target })
     steps: count,
     cases: CASES_PER_CELL,
     concurrency,
+    artifacts,
     wall_ms: wallMs,
     statuses,
     peak_rss_mb: Math.round(peakRss / 1048576),
@@ -331,7 +338,7 @@ const kb = (n) => `${(n / 1024).toFixed(1)} KB`;
 
 function printCell(cell) {
   const statuses = Object.entries(cell.statuses).map(([k, v]) => `${v} ${k}`).join(", ");
-  console.log(`\n### ${cell.workload} · ${cell.length} (${cell.steps} steps) · concurrency ${cell.concurrency}`);
+  console.log(`\n### ${cell.workload} · ${cell.length} (${cell.steps} steps) · concurrency ${cell.concurrency} · artifacts ${cell.artifacts}`);
   // schedulePool staggers worker startup by 500 ms per slot so concurrent cases
   // do not fire their first model call together; at c>1 that is a fixed floor on
   // the suite wall, and on short workloads it dominates it.
@@ -356,9 +363,15 @@ async function main() {
   const args = process.argv.slice(2);
   const driver = (args.find((a) => a.startsWith("--driver="))?.split("=")[1] ?? "api").trim();
   const jsonOut = args.includes("--json") ? args[args.indexOf("--json") + 1] : null;
+  const artifacts = (args.find((a) => a.startsWith("--artifacts="))?.split("=")[1] ?? "core").trim();
   const workload = WORKLOADS[driver];
   if (!workload) {
     console.error(`unknown --driver "${driver}" (expected ${Object.keys(WORKLOADS).join(" | ")})`);
+    process.exitCode = 2;
+    return;
+  }
+  if (artifacts !== "core" && artifacts !== "debug") {
+    console.error(`unknown --artifacts "${artifacts}" (expected core | debug)`);
     process.exitCode = 2;
     return;
   }
@@ -372,21 +385,21 @@ async function main() {
   try {
     for (const [label, count] of [["short", SHORT_STEPS], ["long", LONG_STEPS]]) {
       for (const concurrency of CONCURRENCIES) {
-        process.stderr.write(`running ${driver}/${label}/c${concurrency}…\n`);
-        cells.push(await runCell({ workload, label, count, concurrency, tmpRoot, target }));
+        process.stderr.write(`running ${driver}/${artifacts}/${label}/c${concurrency}…\n`);
+        cells.push(await runCell({ workload, label, count, concurrency, tmpRoot, target, artifacts }));
       }
     }
   } finally {
     await target.close().catch(() => {});
   }
 
-  console.log(`## ${driver} workload`);
+  console.log(`## ${driver} workload · artifacts: ${artifacts}`);
   console.log(`\nnode ${process.version} · ${os.cpus()[0]?.model ?? "unknown cpu"} · ${os.availableParallelism()} threads · ${new Date().toISOString().slice(0, 10)}`);
   for (const cell of cells) printCell(cell);
 
   if (jsonOut) {
     const out = path.resolve(ROOT, jsonOut);
-    fs.writeFileSync(out, JSON.stringify({ driver, node: process.version, cells }, null, 2) + "\n");
+    fs.writeFileSync(out, JSON.stringify({ driver, artifacts, node: process.version, cells }, null, 2) + "\n");
     process.stderr.write(`wrote ${out}\n`);
   }
   fs.rmSync(tmpRoot, { recursive: true, force: true });

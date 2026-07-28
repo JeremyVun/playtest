@@ -107,6 +107,17 @@ export function isBundlePath(file: unknown): boolean {
   return String(file).endsWith(".ptrun");
 }
 
+/**
+ * The `core` RETENTION tier's keep filter — what survives when a finished
+ * bundle is aged down (docs/contracts/hosted.md#retention). Not to be confused
+ * with the `artifacts: core` RECORDING profile
+ * (docs/contracts/artifacts.md#artifact-profiles), which decides what a run
+ * writes in the first place. They are deliberately different sets and compose
+ * one way: this tier is strictly smaller (it also drops screenshots, video, and
+ * HAR), so a core-profile run tiered to core loses exactly what a debug-profile
+ * one does. Being a filter, it needs no change when an artifact was never
+ * recorded — an absent path simply never appears.
+ */
 export function coreBundleKeepPath(rel: string): boolean {
   return (
     rel === "manifest.json" ||

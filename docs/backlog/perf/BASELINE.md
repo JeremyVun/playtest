@@ -210,6 +210,110 @@ never reaches. What changed is the *shape* — an interval flush now appends onl
 the new entries, and har.json is rewritten in full only on the forced flushes
 (pre-gather, pre-gate, close).
 
+## Phase 3 result (T3.1/T3.2), measured 2026-07-28
+
+`artifacts: core | debug` (docs/contracts/artifacts.md#artifact-profiles). The
+harness now pins the profile explicitly:
+
+```sh
+node tools/perf/baseline.mjs --driver=web --artifacts=debug
+node tools/perf/baseline.mjs --driver=web --artifacts=core
+```
+
+Both cells below are the same machine, back to back. `debug` is today's
+behavior; `core` is the new default.
+
+### Bundle size — the headline
+
+Long cell (4 runs × 20 steps, c1):
+
+| artifact | debug | core |
+|---|---:|---:|
+| `trace.zip` | 14 321 KB | — |
+| step PNGs | 4 473 KB | 4 473 KB |
+| MHTML | 877 KB | — |
+| `video.mp4` + `.vtt` | 479 KB | 479 KB |
+| `context.jsonl` | 230 KB | 230 KB |
+| `trajectory.jsonl` | 167 KB | 163 KB |
+| native AX text | 162 KB | — |
+| `perf.jsonl` (sidecar) | 127 KB | 98 KB |
+| a11y text | 96 KB | 96 KB |
+| `har.json` | 95 KB | 95 KB |
+| `events.jsonl` | 37 KB | 37 KB |
+| `manifest.json` | 11 KB | 11 KB |
+| **total** | **21 077 KB** | **5 684 KB** |
+
+**A core run is 73% smaller** (76% on the short cell). Point 2 of the original
+baseline predicted ~70%; it lands slightly better because MHTML and the native
+tree go with the trace. `trajectory.jsonl` shrinks 3% because envelopes no
+longer carry the two absent artifact paths, and `perf.jsonl` shrinks because two
+spans per step stop existing.
+
+### Close time and the spans
+
+Long cell, c1:
+
+| span | debug p50 / p95 | core p50 / p95 |
+|---|---:|---:|
+| `driver_close` | 169.9 / 182.8 | **15.6 / 16.4** |
+| `trace_stop` | 150.8 / 161.5 | — (never started) |
+| `snapshot` | 47.2 / 52.4 | 43.8 / 48.4 |
+| `snapshot_screenshot` | 40.7 / 44.3 | 39.2 / 43.3 |
+| `snapshot_source` | 2.57 / 3.24 | 1.66 / 2.12 |
+| `snapshot_mhtml` | 3.13 / 6.09 | — |
+| `snapshot_native_ax` | 3.05 / 4.81 | — |
+| `snapshot_write` | 0.37 / 0.79 (n=336) | 0.47 / 0.65 (n=168) |
+| `action_resolve` | 16.2 / 22.0 | 12.1 / 16.5 |
+| `effect_token` | 0.94 / 1.19 | 0.34 / 0.42 |
+| `action_dispatch` | 590.1 / 642.9 | 572.7 / 630.1 |
+| `settle` | 525.8 / 539.5 | 518.0 / 528.2 |
+| `case_total` | 14 642 / 14 713 | 14 112 / 14 230 |
+| peak RSS | 320 MB | 232 MB |
+
+`driver_close` collapses to 15.6 ms, a **91% cut**, exactly the ~20 ms point 2
+projected. Short cell: 72.1 → 14.7 ms.
+
+Three things the plan did not predict:
+
+1. **Tracing taxes every CDP round-trip, not just the flush.** With
+   `snapshots: true` Playwright instruments each action, so turning tracing off
+   also moves spans that have nothing to do with artifacts: `effect_token`
+   0.94 → 0.34 ms (−64%), `action_resolve` 16.2 → 12.1 ms (−25%),
+   `snapshot_source` 2.57 → 1.66 ms (−35%). None of these are artifact writes;
+   they are page evaluates and locator round-trips that were paying a tracing
+   surcharge.
+2. **Peak RSS drops 28%** on the long cell (320 → 232 MB) and stops growing with
+   concurrency (debug: 245/309/315 MB at c1/c2/c4 on the short cell; core: flat
+   at 238/240/238). The trace buffer is held in memory until close, so it was a
+   per-context memory cost as well as a per-run byte cost.
+3. **`snapshot` only falls 7%** (47.2 → 43.8 ms). Phase 2 had already hidden
+   MHTML and the native AX read behind the screenshot, so removing them outright
+   recovers only the CDP contention, not their full serial cost. The screenshot
+   remains the floor, as it has since the first baseline.
+
+### End to end
+
+Per-case harness time (model excluded) and suite wall, stagger subtracted:
+
+| cell | `case_total` p50 debug → core | suite wall debug → core |
+|---|---|---|
+| short c1 | 4 631 → 4 523 ms | 18.9 → 18.1 s |
+| short c4 | 4 612 → 4 484 ms | 4.7 → 4.5 s |
+| long c1 | 14 643 → 14 112 ms | 58.5 → 56.5 s |
+| long c4 | 15 178 → 14 491 ms | 15.4 → 14.6 s |
+
+A 3–5% wall-clock cut, which is the right expectation: `settle` (500 ms per
+step, deliberate) still dominates a web case, and the profile's real prize is
+the 73% storage cut and the 91% close-time cut, both of which land on retention,
+upload, and the tail of every run rather than on its middle.
+
+### Not done
+
+Rolling trace chunks are still not implemented, and this phase found no evidence
+to revisit them: with the trace off by default, the pathological 125 MB
+caret-blink case in ANALYSIS.md cannot occur on a default run at all, so chunking
+would only bound a bundle a user explicitly asked for.
+
 ## Sidecar cost
 
 Measured on the api long cell — the fastest workload, ~130 spans written per

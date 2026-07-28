@@ -45,7 +45,8 @@ All present pins must match. A pin missing from either manifest is a wildcard so
 legacy runs remain comparable. `gateway` is recorded for diagnosis but excluded
 because it may contain an ephemeral port. Rendering-only inputs such as
 `device_scale_factor`, session inputs such as cookies or authentication labels,
-and mobile `preserve_session` are not comparability pins.
+mobile `preserve_session`, and the [artifact profile](#artifact-profiles) are
+not comparability pins.
 
 Prompt text is not versioned and does not determine run comparability. Every
 incompatible step or envelope change bumps `STEP_SCHEMA_VERSION`. Every change
@@ -130,9 +131,9 @@ invented value.
   },
   artifacts: {
     screenshot: "steps/007.png",
-    mhtml: "steps/007.mhtml",
+    mhtml: "steps/007.mhtml",        // web, debug profile only
     a11y: "steps/007.a11y.txt",
-    pw_a11y: "steps/007.pw-a11y.txt",
+    pw_a11y: "steps/007.pw-a11y.txt", // web + mobile, debug profile only
     har_entries: [12, 13, 14]
   },
   network: {
@@ -296,6 +297,49 @@ file back and it does not affect comparability.
 A failed write or throwing event listener cannot fail the case. Event payloads
 are defined under [Engine progress events](engine.md#progress-events).
 
+## Artifact profiles
+
+A case's `artifacts` key selects how much a run writes to disk. It is a
+case-level key, inheritable from `playtest.yaml`, and it takes exactly two
+values:
+
+| Profile | What a run writes |
+|---|---|
+| `core` (default) | Everything the actor, the gate, the grader, and the viewer read: accessibility text (`steps/NNN.a11y.txt`, `final.a11y.txt`), step screenshots, the video and its captions, `har.json`, `trajectory.jsonl`, `manifest.json`, `events.jsonl`, `context.jsonl`, and the baseline/grade/drift files. |
+| `debug` | `core` plus the browser-forensics extras: the Playwright trace (`trace.zip`), per-step and final MHTML, and the driver's native accessibility tree (`steps/NNN.pw-a11y.txt`). |
+
+Every artifact only `debug` writes is one **nothing in the product reads back**:
+the harness, the gate, the grader, and the viewer never open a trace or an
+MHTML file, and the native tree feeds one optional side-by-side diff the viewer
+hides when the artifact is absent. They exist for a human debugging a specific
+run, and they dominate what a run costs — on a representative web run
+`trace.zip` alone is about 70% of the bytes and its close-time flush is about
+90% of `driver.close()`.
+
+The profile is enforced at capture, not at cleanup: under `core` the tracing
+session is never started and the MHTML and native-tree round-trips are never
+issued. Consequences that are part of this contract:
+
+- **Evidence is identical across profiles.** The snapshot text, refs, snapshot
+  format pin, actions, resolutions, screenshots, perceptual hashes, HAR, gate
+  results, and grade are byte-for-byte what they would have been. The profile
+  changes what is written *beside* the evidence, never the evidence, so it is
+  not a comparability pin and a `core` run and a `debug` run of the same case
+  compare normally.
+- **No envelope or manifest names a file that was not written.** A step
+  envelope's `artifacts.mhtml` and `artifacts.pw_a11y` are omitted under `core`,
+  and `manifest.artifacts.trace` is `null` for every run that recorded no trace
+  — which now also covers the `api` and `mobile` drivers, neither of which ever
+  had one.
+- **`manifest.case.artifacts`** records the profile the run used, so a reader
+  can distinguish "recorded under `core`" from "the trace was pruned later".
+
+This is orthogonal to a bundle's retention `tier`
+([Storage providers and run bundles](#storage-providers-and-run-bundles)):
+a profile decides what a run records, a tier prunes a bundle that already
+exists. The `core` *tier* is strictly smaller than the `core` *profile* — it
+also drops screenshots, video, and HAR.
+
 ## Run directory
 
 ```text
@@ -303,7 +347,7 @@ runs/<run-id>/<case-id>/
   manifest.json
   trajectory.jsonl
   har.json
-  trace.zip
+  trace.zip            # web, debug profile only
   grade.json
   drift-report.json
   baseline.jsonl
@@ -314,13 +358,13 @@ runs/<run-id>/<case-id>/
   clip.mp4
   clip.vtt
   final.a11y.txt
-  final.mhtml
+  final.mhtml          # web, debug profile only
   grade.error.json
   steps/
     NNN.png
-    NNN.mhtml
+    NNN.mhtml          # web, debug profile only
     NNN.a11y.txt
-    NNN.pw-a11y.txt
+    NNN.pw-a11y.txt    # web + mobile, debug profile only
 ```
 
 Run IDs use UTC `YYYY-MM-DDTHHmm-xxxx`, where `xxxx` is four hexadecimal
@@ -331,10 +375,13 @@ characters. Step filenames use three-digit, 1-based numbers.
 runs. `grade.json` exists only after grading. `drift-report.json` exists only
 after an API heal ([Drift report](#drift-report)). `grade.error.json` exists only
 when forced grade-tool validation fails and raw attempts are available. Driver
-capabilities determine which step artifacts exist. Web step artifacts capture
-what the actor saw before each action; `final.a11y.txt` and `final.mhtml`
-capture the DOM after the last action and are the authoritative terminal-state
-evidence used by gates and grading.
+capabilities and the run's [artifact profile](#artifact-profiles) together
+determine which step artifacts exist; a reader must treat every entry marked
+above as conditional and degrade rather than fail when one is absent. Web step
+artifacts capture what the actor saw before each action. `final.a11y.txt`
+captures the DOM after the last action and is the authoritative terminal-state
+evidence used by gates and grading; `final.mhtml` is its debug-profile forensic
+companion and is read by nothing.
 
 ### Grade artifact
 
@@ -457,6 +504,7 @@ wall-clock `video.webm`, which consumers must continue to support.
     vision,
     visual_regression,
     visual_regression_drift,
+    artifacts: "core" | "debug",
     limits
   },
   mode: "record" | "act" | "heal" | "explore",
@@ -557,7 +605,7 @@ wall-clock `video.webm`, which consumers must continue to support.
     trajectory: "trajectory.jsonl",
     har: "har.json",
     video: "video.mp4" | "video.webm" | null,
-    trace: "trace.zip",
+    trace: "trace.zip" | null,
     grade: "grade.json" | null,
     context: "context.jsonl" | null,
     baseline_copy: "baseline.jsonl" | null,
@@ -569,6 +617,11 @@ wall-clock `video.webm`, which consumers must continue to support.
 `case.mode` describes the authored case kind. `mode` describes the execution
 strategy. Discovery uses `case.mode: "discovery"` and execution mode
 `"explore"`.
+
+`case.artifacts` records the [artifact profile](#artifact-profiles) the run used.
+`artifacts.trace` names `trace.zip` only when a `web` run recorded under the
+`debug` profile, and is `null` otherwise — including for every `api` and
+`mobile` run, which never produce one.
 
 `case.redact` and `case.secrets` appear only when the case declares them, and
 carry redaction paths and secret *names* — never a resolved value. They let a
@@ -1006,7 +1059,10 @@ Bundles are sealed. Clips and other post-hoc outputs are sibling artifacts
 rather than in-place mutations.
 
 A retention rewrite copies only selected entries into a new deterministic
-bundle. The `core` tier retains at least:
+bundle. The `core` **tier** here is a retention filter over a finished bundle
+and is unrelated to — and strictly smaller than — the `core`
+[artifact profile](#artifact-profiles) a run records under. It retains at
+least:
 
 ```text
 manifest.json

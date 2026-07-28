@@ -5,6 +5,14 @@ export type FetchLike = typeof globalThis.fetch;
 
 export type DriverId = "web" | "mobile" | "api";
 export type CaseMode = "journey" | "discovery";
+/**
+ * How much a run writes to disk (docs/contracts/artifacts.md#artifact-profiles).
+ * "core" (the default) records everything the harness, the actor, the gate, the
+ * grader, and the viewer read; "debug" adds the browser-forensics extras — the
+ * Playwright trace, MHTML, and the driver's native accessibility tree.
+ * Orthogonal to a bundle's retention `tier`, which prunes a FINISHED bundle.
+ */
+export type ArtifactProfile = "core" | "debug";
 export type PersonaReference = string;
 
 export interface Persona {
@@ -134,6 +142,7 @@ export interface DefaultsConfig {
   vision?: boolean;
   visual_regression?: boolean;
   visual_regression_drift?: number;
+  artifacts?: ArtifactProfile;
   perf?: PerfConfig;
   max_steps?: number;
   timeout?: DurationInput;
@@ -334,6 +343,7 @@ interface ResolvedCaseBase<D extends DriverId, K extends string> {
   vision: boolean;
   visual_regression: boolean;
   visual_regression_drift: number;
+  artifacts: ArtifactProfile;
   limits: {
     max_steps: number;
     timeout_ms: number;

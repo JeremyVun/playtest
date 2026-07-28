@@ -103,12 +103,18 @@ Prior evidence:
 - [ ] Reduce web and mobile driver settle time and per-step overhead. Audited
       in [`docs/backlog/perf/ANALYSIS.md`](backlog/perf/ANALYSIS.md); phased
       plan in [`docs/backlog/perf/BUILD_PLAN.md`](backlog/perf/BUILD_PLAN.md).
-      Phase 0 has landed: runs write a diagnostic `perf.jsonl` sidecar and
-      `tools/perf/baseline.mjs` reports the measured starting point in
-      [`docs/backlog/perf/BASELINE.md`](backlog/perf/BASELINE.md).
-- [ ] Simplify run artifacts by folding or retiring redundant per-step files;
-      update [`docs/contracts/artifacts.md`](contracts/artifacts.md). Covered
-      by Phase 3 of the perf BUILD_PLAN above.
+      Phases 0–3 have landed and are measured in
+      [`docs/backlog/perf/BASELINE.md`](backlog/perf/BASELINE.md): a diagnostic
+      `perf.jsonl` sidecar with the `tools/perf/baseline.mjs` harness, the mobile
+      hot path, the concurrent web capture with a HAR journal, and the
+      `artifacts: core | debug` recording profiles. Phases 4–5 (pipeline shape,
+      smaller measure-first wins) remain.
+- [x] Simplify run artifacts by folding or retiring redundant per-step files.
+      Shipped as the `artifacts: core | debug` profiles (perf BUILD_PLAN Phase
+      3): the default run no longer writes the Playwright trace, MHTML, or the
+      driver's native accessibility tree, which nothing read back and which were
+      73% of a web run's bytes. See
+      [`docs/contracts/artifacts.md`](contracts/artifacts.md#artifact-profiles).
 - [ ] Improve Playwright export with opt-in idiomatic locators, API-driver
       export to `node --test`, and a viewer-reachable hosted download action.
 - [ ] Add an opt-in semantic LLM pass to `playtest lint`.

@@ -125,21 +125,46 @@ Liveness is explicit state, never an inference from manifest contents:
   event means sealed; no `events.jsonl` at all means a legacy (sealed) run.
   `case_end` is written after the finishing tail completes — grading,
   video, and every manifest rewrite included — so "sealed" genuinely means
-  the run dir has stopped changing. The SIGINT flusher (which already
-  writes the placeholder manifest durably) additionally appends a terminal
-  event, so a Ctrl-C run seals; a `kill -9` leaves no terminal event and
-  the run reads as open-but-inactive, which is the truth.
+  the run dir has stopped changing.
+
+Local liveness is itself **best-effort, because event writes are**: the
+engine deliberately swallows event-write failures (events are telemetry,
+never load-bearing), and that stays true. The degradations are defined,
+not accidental: a missing `case_start` reads as sealed/non-live; a
+missing `case_end` reads as open-but-inactive; neither condition ever
+changes a run's status, artifacts, or exit code. Event writes are never
+made fatal for live viewing's sake.
+
+Ctrl-C is phase-aware, riding the existing synchronous SIGINT flusher
+(which stays synchronous, re-raises, and preserves exit code 130):
+
+- **Before the final manifest**: the flusher writes the interrupted
+  placeholder as today, then appends an *interrupted* terminal event —
+  the run seals as interrupted.
+- **During the finishing tail** (final manifest written, grade/video in
+  flight): the flusher already refuses to clobber the final manifest; it
+  appends an interrupted terminal event, sealing honestly — grade and
+  video may be absent, and no fully graded seal is implied.
+- **After the tail**: the normal `case_end` is already on disk; the
+  flusher appends nothing.
+- `kill -9` at any point leaves no terminal event: open-but-inactive,
+  which is the truth.
 
 This replaces any manifest-status inference, which is wrong twice over: the
 placeholder carries a terminal-looking status by design, and the "final"
 manifest write precedes the tail's grade and video rewrites.
 
-**Both hosts' pickers project openness the same way.** An open run reports
-a live status and no verdict — never the placeholder's `interrupted` — and
-is excluded from history and movement/changed projections until sealed, in
-the hosted adapter *and* the local `runs.json`/`history.json` (which today
-read the placeholder manifest verbatim). A half-recorded run is not
-history.
+**Both hosts' pickers project openness the same way, additively.** An
+open run's picker entry keeps the existing status vocabulary —
+`"status": null` (no verdict yet) — and adds `"open": true`; it never
+shows the placeholder's `interrupted`, and no new status enum value is
+minted, so scripts consuming `playtest view --json` (a supported machine
+contract that prints exactly these entries) keep working. The single-run
+`view <dir> --json` path, which today reads the manifest directly, goes
+through the same projection helper. Open runs are excluded from history
+and movement/changed projections **until sealed** — the exclusion is
+scoped to open runs in viewer projections; completed-run history is
+untouched. A half-recorded run is not history.
 
 ## The open-run lifecycle
 
@@ -171,7 +196,13 @@ nothing can complete out of order:
   dropped, so a divergent retry is refused, never silently merged — and
   the new suffix appended; a batch that would leave a gap is refused and
   the answered count tells the uploader where to rewind. Idempotent,
-  self-healing, order-preserving.
+  self-healing, order-preserving. Batches are sized by **bytes** under an
+  explicit route body cap set comfortably above the practical envelope
+  maximum (envelopes are bounded in practice — axe is capped at 25
+  violations with capped HTML). The pathological single line that still
+  exceeds the cap makes the uploader stop streaming that run — no
+  truncation, no skip markers polluting the virtual trajectory; the seal
+  carries everything regardless.
 - **Manifest snapshots** whenever the runner rewrote it, replacing the
   row-stored copy (generation-bumped; small, rewritten whole today).
 
@@ -252,7 +283,13 @@ GET <run base>/live?after=<line>&wait=<seconds>
   joiner through the backlog in bounded responses. The request is held up
   to `wait` seconds (capped like the feed) only when the caller is caught
   up. Hosted, ingest wakes holders through the feed-waker mechanism;
-  locally the host detects trajectory growth.
+  locally the held request watches **all three signals** — trajectory
+  growth, `events.jsonl` growth (progress and, critically, `case_end`),
+  and manifest change — so a finished run transitions on the next wake,
+  not after a full hold with no new trajectory line.
+- Runs opened from a `.ptrun` bundle are sealed by construction and
+  always answer `open: false`; `view --latest` intentionally picks the
+  newest run including an open one, and streams it.
 - `progress` comes from one shared, pure event-folding function extracted
   from the runner-agent's progress reporter into core: the hosted side
   serves the stored snapshot it already has; the local side folds
@@ -333,8 +370,9 @@ Deferred to landing, per contract rules; the touched surfaces are:
 - [`docs/contracts/interfaces.md`](../../contracts/interfaces.md): the
   viewer's `live` HTTP route on both hosts — response shape, line
   cursors, paging, `reset` — its degradation (absence must leave the
-  viewer exactly as today), and the live projection in the local
-  `runs.json`/`history.json`.
+  viewer exactly as today), and the additive `"open": true` /
+  `"status": null` projection in picker entries, which is also the
+  `playtest view --json` wire shape (both listing and single-run forms).
 - [`docs/contracts/engine.md`](../../contracts/engine.md): documents what
   is already true and now load-bearing — `case_end` as the durable seal
   record written after the finishing tail — plus the SIGINT terminal

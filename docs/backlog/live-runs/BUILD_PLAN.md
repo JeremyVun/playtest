@@ -14,13 +14,26 @@ Verified facts the phases lean on (including the sharp edges):
   (`packages/core/src/trajectory.ts`). Step artifacts hit disk behind an
   awaited barrier *before* the envelope naming them is appended
   (`packages/core/src/drivers/web.ts`, `captureSnapshot`).
-- **Every engine event is persisted synchronously** to `events.jsonl`
-  (`runner.ts` emit → `writer.appendEvent`, an `appendFileSync`), and
-  `case_end` is emitted **after the finishing tail** — grading, video, and
-  every manifest rewrite (`runner.ts:~1107`; the infra path emits its own
+- **Every engine event is persisted synchronously but best-effort** to
+  `events.jsonl` (`runner.ts` emit → `writer.appendEvent`, an
+  `appendFileSync` inside a swallowing try/catch — events are telemetry,
+  never load-bearing, and `artifacts.md` pins that posture). `case_end`
+  is emitted **after the finishing tail** — grading, video, and every
+  manifest rewrite (`runner.ts:~1107`; the infra path emits its own
   `case_end`). One crash path bypasses the writer (`runAll`'s catch calls
   `onEvent` directly), leaving no terminal event — such a run reads as
-  open-but-inactive, which is honest.
+  open-but-inactive, which is honest. Liveness inherits best-effort:
+  missing `case_start` ⇒ sealed/non-live, missing `case_end` ⇒
+  open-but-inactive, and neither ever changes run status or exit code.
+- The SIGINT flusher **deliberately stops rewriting the manifest** once
+  the final manifest is written (`finalManifestWritten`,
+  `runner.ts:~378`, `~951`) because the tail may still be grading —
+  terminal-event semantics must be phase-aware, not unconditional.
+- `playtest view --json` is a supported machine contract printing exactly
+  the picker entries (`interfaces.md`), and the **single-run form bypasses
+  `listRuns()`** — `singleRunJson()` reads `manifest.json` directly
+  (`packages/cli/src/cli.ts:~618-631`), so it too must go through the
+  live projection helper or it prints `interrupted` for open runs.
 - The placeholder manifest is written with terminal-looking status
   `interrupted` *after* the `case_start` event; the "final" manifest write
   precedes the tail rewrites. Manifest contents indicate neither liveness
@@ -80,11 +93,20 @@ This phase defines the live protocol both hosts implement.
 
 - No new artifact. Local liveness reads `events.jsonl`: `case_start`
   present with no terminal `case_end` = open; terminal event = sealed;
-  no `events.jsonl` = legacy sealed run.
-- Core change (one small slice): the SIGINT flusher — which already
-  durably writes the placeholder manifest — additionally appends a
-  terminal event, so Ctrl-C seals. `kill -9` leaves an open-but-inactive
-  run, by design.
+  no `events.jsonl` = legacy sealed run. **Best-effort by inheritance**
+  (event writes are swallowed by design and stay that way): missing
+  `case_start` degrades to sealed/non-live, missing `case_end` to
+  open-but-inactive; neither changes run status, artifacts, or exit
+  code. Event writes are never made fatal.
+- Core change (one small slice): the SIGINT flusher appends a terminal
+  event with **phase-aware semantics** — before the final manifest, the
+  interrupted placeholder plus an interrupted terminal event; during the
+  finishing tail (the flusher already refuses to clobber the final
+  manifest), an interrupted terminal event sealing honestly with grade
+  and video possibly absent; after the tail, nothing (the normal
+  `case_end` exists). The flusher stays synchronous, re-raises, and
+  preserves exit code 130. `kill -9` leaves an open-but-inactive run, by
+  design.
 - The shared progress fold: extract the pure event→snapshot folding from
   `exec-group.ts`'s `progressReporter` into core (the runner-agent
   re-imports it; behavior identical). The local host uses it over
@@ -102,17 +124,31 @@ This phase defines the live protocol both hosts implement.
   only, partial trailing line held for the next poll). A cursor beyond
   the host's truth, or an index the host had to rebuild inconsistently,
   answers `reset: true`.
-- Response caps (bytes and lines) with `has_more`; growth detected by
-  stat poll while holding, bounded `wait` like the feed's 25 s cap.
-  `manifest_generation`: host-minted monotonic counter bumped when the
-  manifest's `(mtimeMs, size)` changes; clients compare inequality only.
-  `progress` from the shared fold; `inactive_ms` from the last
-  `events.jsonl` append.
-- **Local live projections**: `listRuns` and `history` stop reading open
-  runs' placeholder manifests verbatim — an open run projects a live
-  status with no verdict in `runs.json` and is excluded from
-  `history.json`/`changed.json` until sealed, mirroring L1's hosted
-  projection rule.
+- Response caps (bytes and lines) with `has_more`; while holding, the
+  host stat-polls **all three signals** — `trajectory.jsonl`,
+  `events.jsonl` (progress and `case_end`), and `manifest.json` — so a
+  finished run transitions on the next wake, not after a full 25 s hold
+  with no new trajectory line. `manifest_generation`: host-minted
+  monotonic counter bumped when the manifest's `(mtimeMs, size)`
+  changes; clients compare inequality only. `progress` from the shared
+  fold (cached by file offset, incremental per poll); `inactive_ms` from
+  the last `events.jsonl` append.
+- **Local live projections, additive wire shape**: an open run's picker
+  entry keeps `"status": null` (the existing "no verdict" meaning — no
+  new enum value) and adds `"open": true`, in `listRuns` *and* in
+  `singleRunJson()`, which is refactored through the same projection
+  helper (today it reads the manifest directly and would print
+  `interrupted`). Open runs are excluded from `history.json`/
+  `changed.json` until sealed — exclusion scoped to open runs in viewer
+  projections only; completed-run history is untouched. `view --latest`
+  intentionally picks the newest run including an open one and streams
+  it.
+- **Picker liveness must stay cheap**: `listRuns` is synchronous over
+  every run, so it determines liveness by tail-reading the final
+  non-empty event line (a small tail-read primitive on the provider),
+  never by parsing whole `events.jsonl` files; `.ptrun`-backed providers
+  are sealed by construction and skip the scan (and the live endpoint
+  answers `open: false` for them).
 - Absent or sealed runs answer `open: false` immediately. The route is
   additive; every existing route and its degradation is untouched.
 
@@ -134,31 +170,40 @@ This phase defines the live protocol both hosts implement.
 - No behavior change for sealed runs or hosts without the route (probe
   404 → today's exact behavior).
 
-Tests: node-host unit tests (event-stream liveness incl. legacy and
-missing-terminal-event runs, SIGINT sealing, append detection, held poll
-waking, partial-line handling, caps + `has_more` paging, `reset`
-answering, generation bumps, inactivity reporting, live picker/history
-projections); a hermetic integration test driving a real recording run in
-one process while a fetch-based client follows the live endpoint and
-asserts it observes every envelope in order through paging, then the
-terminal transition; a shared-fold equivalence test (fold over
-`events.jsonl` ≡ fold over the same events streamed). Browser viewer
-test: live-mode append, follow-mode engage/disengage, pending-row
-behavior, inactivity copy, seal transition.
+Tests: node-host unit tests (event-stream liveness incl. legacy,
+missing-`case_start`, and missing-terminal-event runs; phase-aware SIGINT
+sealing — before the final manifest, during the tail with grade absent,
+after the tail — with exit code 130 preserved; tail-read liveness on the
+picker incl. `.ptrun` short-circuit; held poll waking on trajectory,
+event, *and* manifest changes — a `case_end` with no new trajectory line
+transitions promptly; partial-line handling; caps + `has_more` paging;
+`reset` answering; generation bumps; inactivity reporting; the additive
+`{status: null, open: true}` projection in `runs.json` *and* the
+single-run `view --json` path; history/changed exclusion scoped to open
+runs); a hermetic integration test driving a real recording run in one
+process while a fetch-based client follows the live endpoint and asserts
+it observes every envelope in order through paging, then the terminal
+transition; a shared-fold equivalence test (fold over `events.jsonl` ≡
+fold over the same events streamed). Browser viewer test: live-mode
+append, follow-mode engage/disengage, pending-row behavior, inactivity
+copy, seal transition.
 
 Acceptance (the local benchmark): `playtest view` against a run dir being
 recorded by another process streams steps without reload and transitions
 to the sealed view — grade panel included — at completion; a SIGKILLed
-recording shows open with growing inactivity, a Ctrl-C'd one seals.
-`npm test`, `npm run test:viewer`, and `test:mobile` (the SIGINT-flusher
-slice touches the runner) green.
+recording shows open with growing inactivity; a Ctrl-C'd one seals as
+interrupted (grade/video absent is legal); `playtest view --json` output
+for sealed runs is byte-identical to today. `npm test`,
+`npm run test:viewer`, and `test:mobile` (the SIGINT-flusher slice
+touches the runner) green.
 
 ### L0 contract
 
 `docs/contracts/interfaces.md`: the `live` viewer route (shape, line
 cursors, paging, `reset`), required degradation when absent, and the
-local live projections — in this phase, so L1 implements against a
-written contract.
+additive `{status: null, open: true}` picker/`view --json` wire shape
+(listing and single-run forms) — in this phase, so L1 implements against
+a written contract.
 
 ## Phase L1 — Control-plane open runs: ingest, staging, serving
 
@@ -193,7 +238,11 @@ any runner sends real traffic.
 - `POST /runner/runs/:r/live/trajectory` — `{ from_line, lines }` against
   the ledger's count: overlap resends are **verified** (stored-prefix
   hash must match) then deduplicated; a divergent resend is refused; a
-  gap is refused with the count so the uploader rewinds.
+  gap is refused with the count so the uploader rewinds. The route
+  carries an **explicit body cap** set comfortably above the practical
+  envelope maximum (envelopes are bounded — axe caps at 25 violations
+  with capped HTML); a single line exceeding it is refused with a
+  distinct reason (see L2's self-disable).
 - All routes behind `requireRunner` with the run-group check, like the
   bundle PUT; all answer refused/no-op once the run is terminal.
 
@@ -206,9 +255,10 @@ any runner sends real traffic.
   (works from `open` onward) and `trajectory.jsonl` concatenated from
   the SQLite ledger.
 - Picker projection from DB state: an open run (`live_opened_at` set,
-  status non-terminal) reports a live status and no verdict — never the
-  placeholder's `interrupted`. Open runs are excluded from
-  `history.json` and `changed.json` until sealed.
+  status non-terminal) projects the same additive wire shape as L0 —
+  `"status": null, "open": true` — never the placeholder's
+  `interrupted`. Open runs are excluded from `history.json` and
+  `changed.json` until sealed.
 - Hosted `live` endpoint implementing the L0 contract exactly: line
   cursor over the ledger, caps + `has_more`, `reset` for unhonorable
   cursors, `manifest_generation` from the row's snapshot generation,
@@ -270,9 +320,13 @@ viewability-before-bundle statement — in this phase.
 - Acks drive the queue: refused artifact ⇒ its lines stay queued;
   divergence or gap refusal ⇒ rewind/resync from the answered count;
   transport failure ⇒ pause, retry next tick from the same position.
-  Bounded memory (byte offsets, never buffered run dirs); if the queue
-  falls hopelessly behind or the budget is exhausted, the uploader stops
-  itself — the case never notices.
+  Trajectory batches are sized by **bytes** under the route cap; the
+  pathological single line that alone exceeds the cap (oversized-line
+  refusal) stops streaming for that run — no truncation, no skip
+  markers, the seal carries everything. Bounded memory (byte offsets,
+  never buffered run dirs); if the queue falls hopelessly behind or the
+  budget is exhausted, the uploader stops itself — the case never
+  notices.
 - **Shutdown is explicit and owned by the case scheduler**: `stop()` in
   the same `finally` that stops the progress reporter — clears the tick
   timer, aborts any in-flight request (`AbortController`), and drops the

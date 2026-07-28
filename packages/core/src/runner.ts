@@ -476,7 +476,10 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
     } catch (e: DynamicValue) {
       return finishInfra(e.message);
     }
-    emit("env_ready", { base_url: env.baseUrl, managed: env.managed });
+    // Null for mobile, for the same reason the manifest records null: the
+    // Appium endpoint this machine dialled is not a fact about the application,
+    // and the event stream is uploaded with the run.
+    emit("env_ready", { base_url: recordedBaseUrl(rc, env), managed: env.managed });
 
     let driver: DynamicValue;
     try {
@@ -1942,6 +1945,18 @@ function secretNamesFor(rc: DynamicValue) {
   return [...names].sort();
 }
 
+/**
+ * The base URL a run RECORDS, which is not always the one it dials. Web and API
+ * runs record the origin they reached. A mobile run records null: `prepareEnv`
+ * returns the Appium endpoint (or the `appium://local` sentinel) as the driver's
+ * connection target, and neither is a fact about the application under test —
+ * it is a fact about the machine, and gate 9 keeps those on the machine.
+ */
+function recordedBaseUrl(rc: DynamicValue, env: DynamicValue): string | null {
+  if ((rc.env?.driver ?? "web") === "mobile") return null;
+  return env?.baseUrl ?? rc.env.base_url ?? null;
+}
+
 export function buildManifest({ rc, runId, mode, startedAt, videoStartedAt, llm, env, r, status, gate, consoleErrors, baseline, willGrade, headed = false, settle = undefined, snapshotFormat = undefined, viewport = undefined, persona = undefined, video = null, artifacts = undefined }: DynamicValue): DynamicValue {
   const finishedAt: DynamicValue = new Date();
   const secrets = secretNamesFor(rc);
@@ -2018,7 +2033,13 @@ export function buildManifest({ rc, runId, mode, startedAt, videoStartedAt, llm,
       vision: rc.vision,
     },
     env: {
-      base_url: env?.baseUrl ?? rc.env.base_url,
+      // A mobile run has NO base URL to record. `prepareEnv` hands the driver
+      // the Appium endpoint under the same field name because that is what it
+      // dials, but which Appium server this machine happens to run is a
+      // runner-local physical fact: it must not reach a manifest, and through it
+      // a baseline, a hosted evidence projection, or a run page
+      // (docs/contracts/hosted.md, "Applications and rings").
+      base_url: recordedBaseUrl(rc, env),
       managed: env?.managed ?? false,
       driver: rc.env?.driver ?? "web",
       // The selected env overlay name (app.envs.<name>); only emitted when one

@@ -167,17 +167,29 @@ export async function claimAndExchange(
  * runs the group or mint executor — the same process a person starts on their
  * own machine. The credential rides the environment, never argv.
  */
-export function startPoolAgent(base: string, credential: string, { llmUrl = "http://127.0.0.1:1", labels = "", isolation = "process" }: HostedDynamic = {}) {
+export function startPoolAgent(
+  base: string,
+  credential: string,
+  { llmUrl = "http://127.0.0.1:1", labels = "", isolation = "process", config = null, env = {} }: HostedDynamic = {},
+) {
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "pool-agent-"));
-  const out = { stdout: "", stderr: "" };
+  // `exit` records HOW the agent went away. An agent that is killed by a signal
+  // and one that returns from its loop look identical through `exitCode` alone,
+  // and the difference is the whole diagnosis.
+  const out: HostedDynamic = { stdout: "", stderr: "", exit: null };
   const args = [RUNNER_AGENT_CLI, "pool", "--server", base, "--isolation", isolation, "--work-dir", workDir];
   if (labels) args.push("--labels", labels);
+  // This machine's own runner.yaml: mobile bindings, Appium backends, devices.
+  // Nothing in it is ever uploaded, so a test that passes one is asserting the
+  // same boundary a real operator relies on.
+  if (config) args.push("--config", config);
   const child = spawn(process.execPath, args, {
-    env: { ...childEnv(llmUrl), PLAYTEST_RUNNER_CREDENTIAL: credential },
+    env: { ...childEnv(llmUrl), PLAYTEST_RUNNER_CREDENTIAL: credential, ...env },
     stdio: ["ignore", "pipe", "pipe"],
   });
   child.stdout.on("data", (d) => (out.stdout += d));
   child.stderr.on("data", (d) => (out.stderr += d));
+  child.once("exit", (code, signal) => (out.exit = { code, signal }));
   return {
     child,
     out,
@@ -201,8 +213,16 @@ export async function untilAgent(pred: () => Promise<HostedDynamic>, what: strin
   while (Date.now() < deadline) {
     const value = await pred();
     if (value) return value;
-    if (agent?.child?.exitCode != null) {
-      assert.fail(`the runner agent exited (code ${agent.child.exitCode}) before ${what}\nSTDOUT:\n${agent.out.stdout}\nSTDERR:\n${agent.out.stderr}`);
+    if (agent?.out?.exit) {
+      // `process.stdout` to a pipe is asynchronous, so an agent that exits
+      // immediately after logging loses that line unless the reader is given a
+      // moment. Wait before quoting its output, or the diagnosis is missing
+      // exactly the sentence that explains the exit.
+      await sleep(500);
+      const { code, signal } = agent.out.exit;
+      assert.fail(
+        `the runner agent exited (code ${code}, signal ${signal}) before ${what}\nSTDOUT:\n${agent.out.stdout}\nSTDERR:\n${agent.out.stderr}`,
+      );
     }
     await sleep(250);
   }
@@ -296,6 +316,45 @@ export function runCli(args: HostedDynamic, llmUrl: HostedDynamic) {
     child.on("exit", (code) => resolve({ code, stdout, stderr }));
     child.on("error", reject);
   });
+}
+
+/**
+ * Design gate 9, as an assertion: no platform-managed record and no response
+ * carries a runner-resolved physical fact — a mobile build path, a device id, or
+ * an Appium endpoint.
+ *
+ * `needles` are the literal strings the RUNNER really used. Every table in the
+ * data root is serialized and searched, then every response the caller names.
+ * `skipTables` is for the ONE stated exception: `suite_files` holds verbatim
+ * authored suite source, which may legitimately contain physical fields.
+ *
+ * Every violation is collected before failing, so one run names the whole leak
+ * rather than the alphabetically first table holding it.
+ */
+export async function assertNoPhysicalFacts(
+  app: HostedDynamic,
+  needles: string[],
+  { skipTables = [], responses = [] }: { skipTables?: string[]; responses?: Array<[string, HostedDynamic]> } = {},
+) {
+  const violations: string[] = [];
+  const scan = (where: string, serialized: string) => {
+    for (const needle of needles) {
+      if (serialized.includes(needle)) violations.push(`${where} carries "${needle}"`);
+    }
+  };
+  const tables = (
+    await app.db.query(`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name`)
+  ).rows.map((r: HostedDynamic) => r.name);
+  assert.ok(tables.includes("dispatches") && tables.includes("run_groups"), `unexpected schema: ${tables.join(", ")}`);
+  for (const table of tables) {
+    if (skipTables.includes(table)) continue;
+    scan(`table "${table}"`, JSON.stringify((await app.db.query(`SELECT * FROM "${table}"`)).rows));
+  }
+  for (const [what, res] of responses) {
+    assert.equal(res.status, 200, `${what}: ${res.status} ${JSON.stringify(res.body)}`);
+    scan(`response "${what}"`, JSON.stringify(res.body));
+  }
+  assert.deepEqual(violations, [], `runner-resolved physical facts reached the platform:\n  ${violations.join("\n  ")}`);
 }
 
 /** Grab an ephemeral free TCP port and release it immediately — for tests that

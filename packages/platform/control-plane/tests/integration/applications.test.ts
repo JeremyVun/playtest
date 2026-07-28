@@ -10,7 +10,8 @@
 //      physical fields are inert under hosted execution
 //   12 a pre-refactor data root fails boot with an actionable message
 //   13 deletion is refused while referenced, naming the referrers; nothing cascades
-// plus the R1 mobile-launch refusal, removed in R3 when runner bindings land.
+// plus the mobile launch, which posts to the board like any other and carries a
+// target block with no URL and no build (the claiming runner supplies it).
 import test from "node:test";
 import assert from "node:assert/strict";
 import fsp from "node:fs/promises";
@@ -349,12 +350,18 @@ test("group spec: the ring target rides the dispatch snapshot, and authored phys
   });
 });
 
-// -------------------------------------------------------------- R1 mobile dark
+// ------------------------------------------------------------- mobile launch
 
-test("launch: a mobile application is refused with the reason, until runner bindings land", async () => {
-  await withApp(async ({ api }: HostedDynamic) => {
-    const p = await project(api, "mobiledark");
-    const { ring } = await createTarget(api, p, { key: "todo-ios", driver: "mobile", platform: "ios" });
+test("launch: a mobile application posts to the board like any other — no URL, no build, the runner supplies it", async () => {
+  await withApp(async ({ api, app }: HostedDynamic) => {
+    const p = await project(api, "mobilelaunch");
+    const { application, ring } = await createTarget(api, p, {
+      key: "todo-ios",
+      name: "Todo iOS",
+      driver: "mobile",
+      platform: "ios",
+      runnerLabels: ["macbook"],
+    });
     const suite = (await api.post(`/projects/${p.key}/suites`, { slug: "ios", name: "iOS" })).body;
     assert.equal(
       (
@@ -370,10 +377,44 @@ test("launch: a mobile application is refused with the reason, until runner bind
       ).status,
       200,
     );
+
+    // The preview says what a mobile launch can honestly say: the pair, no URL,
+    // and that the claiming runner supplies the build. It never claims the
+    // platform inspected a binary or a device.
+    const preview = await api.post(`/projects/${p.key}/run-groups/preview`, { suite_id: suite.id, ring_id: ring.id });
+    assert.equal(preview.status, 200, JSON.stringify(preview.body));
+    assert.equal(preview.body.target.application.key, "todo-ios");
+    assert.equal(preview.body.target.application.driver, "mobile");
+    assert.equal(preview.body.target.application.platform, "ios");
+    assert.equal(preview.body.target.ring.key, "local");
+    assert.equal(preview.body.target.resolved_base_url, null);
+    assert.equal(preview.body.target.build_supplied_by_runner, true);
+    assert.deepEqual(preview.body.placement.runner_labels, ["macbook"]);
+    assert.equal(preview.body.placement.runner_online, false, "nothing advertising these labels has checked in");
+
     const launched = await api.post(`/projects/${p.key}/run-groups`, { suite_id: suite.id, ring_id: ring.id });
-    assert.equal(launched.status, 400, JSON.stringify(launched.body));
-    assert.match(launched.body.error.message, /mobile placement lands with runner bindings/);
-    assert.match(launched.body.error.message, /its own configuration file/);
+    assert.equal(launched.status, 200, JSON.stringify(launched.body));
+    const groupId = launched.body.run_group.id;
+    assert.equal(launched.body.run_group.application.driver, "mobile");
+    assert.equal(launched.body.run_group.ring.base_url, null);
+
+    // The board entry: a mobile offer carries the SAME target block every offer
+    // does, with `base_url` null and `platform` set — the two fields a runner
+    // decides compatibility from. Nothing else about the device travels.
+    const dispatch = (await app.db.query(`SELECT * FROM dispatches WHERE ref_id = $1`, [groupId])).rows[0];
+    assert.equal(dispatch.status, "requested", "nothing is started: the ledger row IS the claim-board entry");
+    assert.equal(dispatch.target.application_key, "todo-ios");
+    assert.equal(dispatch.target.application_id, application.id);
+    assert.equal(dispatch.target.ring_key, "local");
+    assert.equal(dispatch.target.driver, "mobile");
+    assert.equal(dispatch.target.platform, "ios");
+    assert.equal(dispatch.target.base_url, null);
+    assert.deepEqual(dispatch.target.labels, ["macbook"]);
+    assert.deepEqual(
+      Object.keys(dispatch.target).sort(),
+      ["application_id", "application_key", "base_url", "config", "driver", "labels", "platform", "ring_id", "ring_key"],
+      "the target snapshot has no room for a build path, a device or an Appium endpoint",
+    );
   });
 });
 

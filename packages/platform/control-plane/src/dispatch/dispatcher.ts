@@ -53,7 +53,6 @@ export function targetSnapshot(application: HostedDynamic, ring: HostedDynamic, 
 
 export async function createRunGroup(ctx: HostedDynamic, { principal, project, suite, application, ring, selection, note = null, runnerLabels = null }: HostedDynamic) {
   selection = normalizeSelection(selection);
-  requireDispatchableDriver(application);
   const active = await ctx.db.query(
     `SELECT COUNT(*) AS n FROM dispatches
       WHERE project_id = $1 AND status IN (${inClause(ACTIVE_DISPATCHES, 2)})`,
@@ -179,20 +178,6 @@ export async function createRunGroup(ctx: HostedDynamic, { principal, project, s
     run_group: await getRunGroupView(ctx, groupId),
     runs: runs.map(runView),
   };
-}
-
-/**
- * Hosted mobile is dark until runner bindings land (R3 of the runner refactor).
- * Refuse the launch here rather than letting a group nothing can execute sit on
- * the claim board until its unclaimed timeout.
- */
-function requireDispatchableDriver(application: HostedDynamic) {
-  if (application.driver !== "mobile") return;
-  throw badRequest(
-    `"${application.key}" is a mobile application, and hosted mobile placement lands with runner bindings — ` +
-      `a runner declares which application and ring it can build for in its own configuration file, and no ` +
-      `runner can claim this work yet. Run mobile cases from the CLI in the meantime.`,
-  );
 }
 
 /**

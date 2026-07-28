@@ -609,6 +609,15 @@ export async function dispatchAdmin(ctx: HostedDynamic) {
 async function runById(ctx: HostedDynamic, id: HostedDynamic) {
   const { rows } = await ctx.db.query(
     `SELECT r.*, g.project_id, g.suite_id, g.application_id, g.ring_id,
+            -- Where this run ran, by NAME as well as by id. The group projection
+            -- already folds the pair in; a run read on its own had only opaque
+            -- ids, so anything reading one run — a CLI, an API consumer, a
+            -- notification — could not say "todo-ios/local" without two more
+            -- requests. Keys are immutable, which is exactly why evidence cites
+            -- them (docs/contracts/artifacts.md, "Writing and retention rewrites").
+            app.key AS application_key, app.name AS application_name,
+            app.driver AS application_driver, app.platform AS application_platform,
+            ring.key AS ring_key, ring.name AS ring_name, ring.base_url AS ring_base_url,
             (SELECT json_object('key', a.key, 'sha256', a.sha256, 'size', a.size,
                                 'tier', a.tier, 'created_at', a.created_at)
                FROM artifacts a
@@ -642,6 +651,8 @@ async function runById(ctx: HostedDynamic, id: HostedDynamic) {
               WHERE f.resolved_by_run_id = r.id AND f.merged_into IS NULL
                 AND f.state = 'resolved') AS resolved_findings
        FROM runs r JOIN run_groups g ON g.id = r.run_group_id
+       JOIN applications app ON app.id = g.application_id
+       JOIN rings ring ON ring.id = g.ring_id
       WHERE r.id = $1`,
     [id],
   );
@@ -655,6 +666,21 @@ async function runById(ctx: HostedDynamic, id: HostedDynamic) {
   run.clip = parseEmbeddedArtifact(run.clip);
   run.findings = run.findings ? JSON.parse(run.findings) : [];
   run.resolved_findings = run.resolved_findings ? JSON.parse(run.resolved_findings) : [];
+  // The joined columns fold into the same two objects the group projection
+  // serves, so one shape describes "where this ran" wherever it is read. A
+  // mobile ring's `base_url` is null; nothing else about the device is here,
+  // because nothing else about it is the platform's to hold.
+  run.application = {
+    id: run.application_id,
+    key: run.application_key,
+    name: run.application_name,
+    driver: run.application_driver,
+    platform: run.application_platform ?? null,
+  };
+  run.ring = { id: run.ring_id, key: run.ring_key, name: run.ring_name, base_url: run.ring_base_url ?? null };
+  for (const key of ["application_key", "application_name", "application_driver", "application_platform", "ring_key", "ring_name", "ring_base_url"]) {
+    delete run[key];
+  }
   return run;
 }
 

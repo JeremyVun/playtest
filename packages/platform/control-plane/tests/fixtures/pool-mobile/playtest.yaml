@@ -1,18 +1,17 @@
 # Fixture suite for the hosted MOBILE pool path (tests/mobile/pool-mobile.test.ts).
 #
-# The device target is environment-owned: the runner-agent's overlay rewrites
-# app.envs.<name>.{platform,app,device,appium_url} to the simulator and the
-# freshly built .app on the RUNNER's own disk, and the case runs with
-# --env <name>. That is the whole point of this path — the binary is a plain
-# local path on the machine holding the device, never an uploaded artifact.
+# It authors NO physical target — no build path, no device, no Appium endpoint.
+# Those are facts only the claiming runner knows: it reads them from its own
+# config file, keyed by the immutable (application key, ring key) the console
+# shows, and they arrive as core's runtime target after the complete authored
+# merge (docs/contracts/hosted.md, "Applications and rings").
 #
-# `app:` below is a placeholder that is never installed. It exists because the
-# control plane resolves and lists a suite's cases with NO --env selected
-# (packages/platform/control-plane/src/suites/resolve.ts → core discoverCases),
-# and core requires app.app for the mobile driver at that stage
-# (packages/core/src/config.ts: "the mobile driver needs app.app"). The
-# environment overlay replaces it wholesale the moment a real run happens.
+# The suite commits and lists anyway because every hosted read resolves through
+# core's STRUCTURAL mode, which validates cases and logical configuration
+# without requiring a complete physical target
+# (docs/contracts/engine.md, "Resolution modes"). The placeholder `app:` this
+# file used to carry existed only to satisfy executable resolution at listing
+# time; structural resolution made it unnecessary.
 app:
   driver: mobile
   platform: ios
-  app: ./placeholder.app

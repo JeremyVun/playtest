@@ -519,7 +519,7 @@ wall-clock `video.webm`, which consumers must continue to support.
     vision
   },
   env: {
-    base_url,
+    base_url,                 // null for mobile (engine.md, environment preparation)
     managed: false,
     driver: "web" | "mobile" | "api",
     env_name?,
@@ -795,7 +795,7 @@ record when either changes. `pins.snapshot_format` fingerprints the serializer:
 when it differs from the running driver's format the baseline is unreadable
 (every page would drift) and the case re-records; a baseline with no recorded
 format is a wildcard and replays. `base_url` lets drift comparison normalize
-origins.
+origins; it is the run manifest's recorded value, so it is null for mobile.
 `verdicts` lets a clean act replay reuse gate kinds declared inheritable by the
 engine. Missing fields retain legacy wildcard or live-evaluation behavior.
 
@@ -969,6 +969,17 @@ viewer behavior as an unpacked run directory, including media Range requests.
 The writer runs only after core finishes all post-execution work and closes
 artifact writers. Hosted runners upload the bundle and sidecar, report their
 size and SHA-256, and treat local copies as disposable.
+
+A run bundle records nothing about where it was placed. **Placement facts are the
+platform's**: which application and ring a group ran against, and which runner
+claimed it, live on the group — `application`, `ring`, and `placement` on
+`GET /api/v1/run-groups/:id` ([Hosted contracts](hosted.md#run-groups-and-runs))
+— by id *and* key, so evidence names its surface without a join. The manifest's
+`env.env_name` is the ring key the runner materialized the overlay under, and
+that is the only trace of hosting inside the bundle. Nothing in the bundle
+carries a mobile build path, a device id, or an Appium endpoint; nor does any
+platform record. The one stated exception is verbatim authored suite source,
+which is stored and exported as written for CLI use.
 
 Hosted metadata stores an artifact key, byte size, SHA-256, tier, and
 verification time. The `.ptrun` bytes remain in the configured object store;

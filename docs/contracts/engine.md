@@ -884,6 +884,14 @@ published localhost port. The resulting URL has no trailing slash. Teardown
 runs `down -v --rmi local`, removing the run's containers, volumes, and
 locally built image while retaining pulled base images.
 
+A mobile case has no base URL. Environment preparation hands the driver the
+resolved `appium_url` (or the `appium://local` sentinel) under the same internal
+field, because that is what the driver dials — but which Appium server a machine
+runs is a property of the machine, not of the application under test. So a
+mobile run **records** `base_url` as `null`: in the `env_ready` event, in the run
+manifest's `env`, and therefore in every baseline accepted from it. Web and API
+runs record the origin they reached, unchanged.
+
 External cases use `base_url` unchanged. Web/API health probing accepts HTTP
 status below 500 and attempts five times one second apart. A failed localhost
 probe suggests starting the app or adding a nearby compose file; managed probe

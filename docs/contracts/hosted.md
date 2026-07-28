@@ -319,7 +319,9 @@ after a partial completion, an in-place retry — even if the ring's labels chan
 in between. `GET /api/v1/run-groups/:id` states the outcome in `placement`: the
 attempt's `labels` and whether the launch or the ring chose them
 (`labels_source`, `launch` | `ring`), and carries the group's `application` and
-`ring` by key so a reader never has to join an opaque id. The launch preview
+`ring` by key so a reader never has to join an opaque id. `GET /api/v1/runs/:r`
+folds the same two objects in, so a single run read names its surface without
+two more requests. The launch preview
 reports the same pair before anything is created, plus `target` (the application,
 the ring, the `resolved_base_url` for web/API, and `build_supplied_by_runner`
 for mobile) and `placement.runner_online` — whether a runner advertising these
@@ -881,7 +883,8 @@ zero runner ceremony, over exactly the placement path CI and a fleet use.
 ### The pool runner process
 
 `runner-agent pool --server <url> [--labels a,b] [--isolation process|container]
-[--work-dir <dir>] [--credential-file <path>]` is the long-lived agent, and the
+[--work-dir <dir>] [--credential-file <path>] [--config <path>]` is the
+long-lived agent, and the
 package's ONLY entry point (`docs/contracts/interfaces.md`). Its loop is check
 in → long-poll → claim → exchange → execute through the group or mint executor →
 complete → poll again.
@@ -1157,10 +1160,17 @@ and no size cap to configure: a mobile build lives on the runner that will
 install it, and in a real deployment comes from an internal artifactory through
 a runner-side provider the platform never sees.
 
-Hosted mobile placement is currently refused at launch with an actionable error:
-the runner binding model it needs has not landed yet, so a mobile group would
-sit on the claim board until its unclaimed timeout. Mobile cases run from the
-CLI in the meantime.
+A mobile launch is posted to the claim board exactly like a web or API one. Its
+offer and its group spec carry the same target block — `base_url` null,
+`platform` set — and the build, the device and the Appium endpoint are supplied
+by whichever runner claims it, from that runner's own configuration file
+([Runner configuration file](interfaces.md#runner-configuration-file)). A runner
+holding no binding for the offered `(application key, ring key)` skips the offer
+locally and another runner claims it unaffected; when nothing binds it, the group
+ends with the ordinary unclaimed-timeout diagnostic naming the labels it waited
+on. The launch preview for a mobile ring reports no URL and
+`build_supplied_by_runner: true`; nothing in the hosted path ever claims the
+platform inspected a binary or a device.
 
 Secret values are encrypted at rest and write-only through the API. The root
 encryption key is external to the database. Losing it makes stored secrets and

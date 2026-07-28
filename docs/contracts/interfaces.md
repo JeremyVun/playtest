@@ -651,10 +651,14 @@ group is claimable only when all of the following hold:
 A backend's lifetime is one run group. Managed mode picks an unused port, binds
 **loopback only**, health-checks `/status`, and verifies the platform driver is
 installed — refusing with the exact `appium driver install …` command when it is
-not. It never installs or mutates Appium drivers itself. The server is torn down
-with the group however the group ends; a server that dies mid-group turns the
-remaining cases into infra failures carrying a diagnostic with an exit status and
-at most one line of output, absolute paths replaced.
+not. It never installs or mutates Appium drivers itself. A managed server runs in
+a **process group of its own**, and teardown signals that group: an Appium is the
+root of a subtree — the platform driver, WebDriverAgent, simulator plumbing — and
+signalling only the server leaves parts of it behind on a runner that will host
+the next group too. The server is torn down with the group however the group
+ends; a server that dies mid-group turns the remaining cases into infra failures
+carrying a diagnostic with an exit status and at most one line of output,
+absolute paths replaced. The runner outlives every server it starts.
 
 Mobile execution is **serial per backend** whatever the suite's `parallel` says:
 two concurrent cases cannot share a simulator or a device.

@@ -512,7 +512,15 @@ function isFatalRefusal(e: unknown): boolean {
   return e instanceof RunnerApiError && (e.status === 400 || e.status === 401 || e.status === 403);
 }
 
-const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms).unref?.());
+/**
+ * The loop's own waits — backoff after an unreachable control plane, backoff
+ * past the skip cap. Deliberately NOT unref'd: this is control flow, not
+ * telemetry. A runner waiting to retry has nothing else holding its event loop
+ * open, and an unref'd timer would let the process exit 0 in the middle of the
+ * backoff it just announced. (The heartbeat and progress timers ARE unref'd, and
+ * should be: those are telemetry, and nothing should stay alive for them.)
+ */
+const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /**
  * Resolve the registration credential. Never from argv: `--credential-file`

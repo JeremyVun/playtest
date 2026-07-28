@@ -94,7 +94,13 @@ export class AppiumBackends {
       findAppium: deps.findAppium ?? defaultFindAppium,
       freePort: deps.freePort ?? defaultFreePort,
       now: deps.now ?? Date.now,
-      sleep: deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms).unref?.())),
+      // NOT unref'd, and that is load-bearing. These sleeps are control flow —
+      // "wait for the server to answer", "wait for it to die" — and the process
+      // they run in may have nothing else keeping its event loop alive at that
+      // moment: the instant the Appium child exits, its handle goes with it. An
+      // unref'd timer there let the whole runner exit 0 mid-teardown, silently,
+      // between finishing a group and logging that it had.
+      sleep: deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms))),
       env: deps.env ?? process.env,
       log: deps.log ?? (() => {}),
     };
@@ -190,6 +196,12 @@ export class AppiumBackends {
     const child = this.#deps.spawn(cmd.command, args, {
       env: { ...this.#deps.env, APPIUM_HOME: appiumHome(this.#deps.env) },
       stdio: ["ignore", "ignore", "pipe"],
+      // Its OWN process group. An Appium is the root of a subtree — the platform
+      // driver, WebDriverAgent, simulator plumbing — and its shutdown does not
+      // account for all of it. Signalling the group is what actually ends that
+      // subtree, instead of leaving processes behind on a runner that will host
+      // the next group too.
+      detached: true,
     });
     let stderr = "";
     child.stderr?.on("data", (chunk: RunnerDynamic) => {
@@ -206,20 +218,29 @@ export class AppiumBackends {
       state.error = e;
     });
 
+    // The server is a group leader (`detached` above), so signal the GROUP: a
+    // bare `child.kill` reaches the Appium process and leaves whatever it
+    // started behind. Falls back to the process itself when there is no group
+    // to name — a platform without process groups, or a stubbed spawn.
+    const signalServer = (sig: NodeJS.Signals) => {
+      try {
+        if (child.pid) process.kill(-child.pid, sig);
+        else child.kill(sig);
+      } catch {
+        try {
+          child.kill(sig);
+        } catch {}
+      }
+    };
+
     let closed = false;
     const stop = async () => {
       if (closed) return;
       closed = true;
       if (state.exit) return;
-      try {
-        child.kill("SIGTERM");
-      } catch {}
+      signalServer("SIGTERM");
       for (let i = 0; i < 25 && !state.exit; i++) await this.#deps.sleep(READY_POLL_MS);
-      if (!state.exit) {
-        try {
-          child.kill("SIGKILL");
-        } catch {}
-      }
+      if (!state.exit) signalServer("SIGKILL");
     };
 
     const deadline = this.#deps.now() + READY_TIMEOUT_MS;

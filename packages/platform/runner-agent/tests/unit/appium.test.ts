@@ -85,8 +85,37 @@ test("appium: a managed backend spawns on a free loopback port, health-checks, a
   assert.deepEqual(handle.credentialEnv, {}, "a managed backend has no credential to deliver");
   assert.equal(handle.died(), null);
 
+  // Its own process group: an Appium roots a subtree (platform driver,
+  // WebDriverAgent, simulator plumbing) that only a group signal actually ends.
+  assert.equal(spawned[0].options.detached, true, "the server is its own process-group leader");
+
   await handle.close();
   assert.equal(child.killed, "SIGTERM", "the server does not outlive the group it was started for");
+});
+
+test("appium: teardown signals the server's process GROUP, so nothing it started is left behind", async () => {
+  const child = fakeServer();
+  child.pid = 4242;
+  const signalled: Array<[number, string]> = [];
+  const { deps } = healthyDeps(child);
+  const backends = new AppiumBackends(deps);
+  const handle = await backends.open(managed());
+
+  const realKill = process.kill;
+  // A negative pid is a process GROUP in POSIX terms. Intercepted rather than
+  // really sent: 4242 is somebody else's process on this machine.
+  (process as LegacyTestValue).kill = (pid: number, signal: string) => {
+    signalled.push([pid, signal]);
+    if (pid === -4242) child.emit("exit", 0, null);
+    return true;
+  };
+  try {
+    await handle.close();
+  } finally {
+    process.kill = realKill;
+  }
+  assert.deepEqual(signalled, [[-4242, "SIGTERM"]], "the group, not the one process");
+  assert.equal(child.killed, false, "and never the bare process when a group is nameable");
 });
 
 test("appium: a missing platform driver is refused with the install command, and nothing is installed", async () => {

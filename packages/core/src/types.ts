@@ -364,9 +364,36 @@ export type ResolvedCase<K extends string = never> =
   | ResolvedCaseBase<"mobile", K>
   | ResolvedCaseBase<"api", K>;
 
+/**
+ * The five PHYSICAL target fields a host may replace after the authored merge
+ * (docs/contracts/engine.md#runtime-target). Everything else in `app.*` is
+ * logical and stays authored. A supplied field replaces; an omitted one is
+ * CLEARED, not inherited — this is a whole-target replacement, never a patch.
+ */
+export interface RuntimeTarget {
+  base_url?: string | null;
+  app?: string | null;
+  platform?: "ios" | "android" | null;
+  device?: string | null;
+  appium_url?: string | null;
+}
+
+/**
+ * How complete a resolved case must be
+ * (docs/contracts/engine.md#resolution-modes).
+ * - "executable" (default): a runnable case — web/API need `base_url`, mobile
+ *   needs `app.app`. The CLI and any runner use this.
+ * - "structural": validate cases and logical configuration only. A host that
+ *   edits, lists, lints, or exports suites whose physical target is supplied
+ *   elsewhere uses this; it never runs the case.
+ */
+export type ResolutionMode = "executable" | "structural";
+
 export interface DiscoverCasesOptions {
   tags?: string[];
   ids?: string[];
   baseUrl?: string | null;
   env?: string | null;
+  runtimeTarget?: RuntimeTarget | null;
+  resolution?: ResolutionMode;
 }

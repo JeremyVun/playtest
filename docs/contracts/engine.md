@@ -106,7 +106,9 @@ discoverCases(paths, {
   tags = [],
   ids = [],
   baseUrl = null,
-  env = null
+  env = null,
+  runtimeTarget = null,
+  resolution = "executable"
 })
 ```
 
@@ -158,6 +160,74 @@ knows nor cares where it came from. The overlay
 cannot contain driver selection, compose, API configuration, or a nested
 `envs`. Naming an unknown environment reports the available names.
 `--base-url` wins over the selected environment and forces external mode.
+
+### Runtime target
+
+`runtimeTarget` is the one resolution input a **placing host** owns — the layer
+that answers "where does this run", as opposed to everything a suite author
+writes. It is applied last, over the complete authored merge:
+
+1. the `playtest.yaml` defaults chain,
+2. the case file,
+3. the selected `app.envs.<name>` overlay,
+4. `app.auth` identity resolution,
+5. **the runtime target**.
+
+```js
+runtimeTarget: { base_url?, app?, platform?, device?, appium_url? }
+```
+
+Those five keys are the **physical** fields; every other `app.*` key is logical
+and is never touched. The override is a whole-target **replacement
+discriminated by the case's driver**, not a partial merge:
+
+- every physical field the driver uses takes the override's value;
+- a physical field the override omits is **cleared**, never inherited — an
+  override that omits `device` means the driver's default device, not the
+  device the suite authored;
+- physical fields the driver does not use are cleared outright, so a caller
+  need not know the driver to assemble a target;
+- `compose` is cleared, because an authored compose block must not boot a
+  different application under the caller's target — the same reason
+  `--base-url` already forces external mode;
+- an empty override (`{}`) is still an override and clears the whole target,
+  after which executable resolution refuses the case for the usual reason.
+
+Absent (the default, and the CLI's behavior), resolution is byte-for-byte what
+it was: authored physical fields resolve exactly as before. A suite's authored
+physical fields therefore stay valid for direct CLI use and are simply inert
+under a placing host — the suite can no longer redirect a placed run.
+
+`baseUrl` (`--base-url`) is the one-field form of the same setting and keeps its
+own semantics: it sets `base_url` and clears `compose`, leaving other physical
+fields alone. Supplying both a base URL and a runtime target is a
+`DummyConfigError` rather than a precedence puzzle.
+
+A malformed target is the caller's error and is reported as a
+`DummyConfigError` naming the offending key: an unknown key, a non-string or
+empty value, or a `platform` outside `ios`/`android`. An explicit `null` value
+means "clear", identical to omitting the key.
+
+### Resolution modes
+
+`resolution` selects how complete a resolved case must be:
+
+- `"executable"` (default) — a runnable case. Web and API require `base_url`;
+  mobile requires `app.app`. The CLI and every runner use this.
+- `"structural"` — validate cases and logical configuration **only**. It drops
+  exactly those two physical-completeness requirements and nothing else: schema
+  validity, case-only keys, the driver matrix, success-kind and perf scoping,
+  identity resolution, and every other cross-field rule still apply.
+
+Structural resolution exists for hosts that edit, list, lint, review, preview,
+or export suites whose physical target is supplied at placement rather than
+authored. Substituting a placeholder target during validation is not an
+alternative: it would mask real errors, and for mobile there is no app path to
+invent. A structurally resolved case carries `env.base_url` / `env.app` as
+`null`; anything that would run it must resolve it again executably (or supply
+a runtime target), so an incomplete target can never reach a driver.
+
+Any other value for `resolution` is a `DummyConfigError` naming both modes.
 
 ### Web identity
 
@@ -241,7 +311,9 @@ request body is opaque to field paths — only a whole-`body` entry applies.
 
 A discovery case cannot declare `success`. Driver-specific fields, success
 kinds, and performance keys are validated according to the driver matrix.
-`base_url` is required for web and API. Mobile requires `app.app`.
+`base_url` is required for web and API. Mobile requires `app.app`. Those two
+target requirements are the only ones structural resolution drops (see
+"Resolution modes"); every other rule here applies in both modes.
 
 `visual_regression` and its drift threshold are accepted for every case but
 are inert when the driver produces no screenshot hash. `artifacts` is accepted
@@ -344,6 +416,31 @@ ignore it.
 Per-action validation and execution failures return `ok: false`; they do not
 throw. A driver throws only when the transport itself is unusable. `close()`
 must attempt to finalize transport artifacts even after a failed step.
+
+#### Toolchain probes
+
+Core owns the driver-toolchain probes, so every host asks the same question and
+reports the same answer. Exported from `@playtest/core/suite`:
+
+```js
+probeMobileClient()          // resolves, or throws DummyConfigError
+__setMobileClientProbe(fn)   // test seam; null restores the real import
+```
+
+`probeMobileClient()` answers exactly one question: **is the Appium client
+(`webdriverio`, an optional dependency) importable**. A missing client becomes a
+`DummyConfigError` naming the install command, never a raw `MODULE_NOT_FOUND`
+from deep inside a run; an import that fails for any other reason reports its
+real first-line cause instead of a misleading reinstall hint. The probe is
+headless and side-effect free — it starts nothing, dials nothing, prompts for
+nothing — which is what makes it callable outside a terminal.
+
+Its scope is deliberately narrow, and the boundary is contractual: the Appium
+server, the platform driver, and a reachable device are **not** checked here.
+Those are facts about a particular machine, so whoever owns the machine owns the
+diagnosis; a driver-level failure still surfaces as an `InfraError` carrying the
+Appium message. The CLI's `preflightFor(driver)` composes this probe with its
+own browser install flow ([Interfaces](interfaces.md#exit-codes-and-errors)).
 
 ### Driver matrix
 

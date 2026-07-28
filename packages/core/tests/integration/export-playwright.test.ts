@@ -49,6 +49,21 @@ test("the emitted spec parses as an ES module (escaping is structurally sound)",
   assertParses(render().code);
 });
 
+test("the URL-less spec parses too, and its guard is the only source of BASE_URL", () => {
+  // A structurally-resolved suite (docs/contracts/engine.md#resolution-modes)
+  // exports with no baked-in target. The emitted guard is real code, so it gets
+  // the same structural check as the rest of the spec.
+  const { code } = exportSpec({
+    caseCfg: { ...CASE, env: { ...CASE.env, base_url: null } },
+    envelopes: ENVELOPES as LegacyTestValue, // SAFETY: frozen generator fixture predates the current envelope contract
+    meta: META,
+    sourcePath: "stories/checkout.yaml",
+  });
+  assertParses(code);
+  assert.doesNotMatch(code, /PLAYTEST_BASE_URL \?\?/);
+  assert.match(code, /const BASE_URL = requireBaseUrl\(\);/);
+});
+
 test("a locator full of quotes and backslashes still parses", () => {
   // The fixture above is realistic; this is the adversarial case. If escaping is
   // wrong, --check fails rather than the test merely asserting on a substring.

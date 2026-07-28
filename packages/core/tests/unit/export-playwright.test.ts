@@ -273,6 +273,20 @@ test("BASE_URL defaults to the case's base_url and stays env-overridable", () =>
   assert.match(code, /const BASE_URL = process\.env\.PLAYTEST_BASE_URL \?\? "http:\/\/app\.test";/);
 });
 
+test("a case with no resolved base_url emits a guarded, typed BASE_URL", () => {
+  // A structurally-resolved suite (docs/contracts/engine.md#resolution-modes)
+  // has no URL to bake in. Emitting `?? ""` would send the spec at whatever the
+  // empty string navigates to; the guard throws one actionable error instead,
+  // and keeps BASE_URL a `string` rather than `string | undefined`.
+  const { code, notes } = emit({ env: { driver: "web", base_url: null } });
+  assert.doesNotMatch(code, /PLAYTEST_BASE_URL \?\?/);
+  assert.match(code, /const BASE_URL = requireBaseUrl\(\);/);
+  assert.match(code, /function requireBaseUrl\(\): string \{/);
+  assert.match(code, /if \(!url\) \{/);
+  assert.match(code, /PLAYTEST_BASE_URL is not set\./);
+  assert.ok(notes.some((n: LegacyTestValue) => /set PLAYTEST_BASE_URL/.test(n)));
+});
+
 // ---------- header and framing ----------
 
 test("the header states the one-way contract unmissably", () => {

@@ -150,7 +150,7 @@ export function exportSpec({
   out.push(...header({ caseCfg, meta, sourcePath, steps, success }));
   out.push(`import { test, expect } from "@playwright/test";`);
   out.push("");
-  out.push(`const BASE_URL = process.env.PLAYTEST_BASE_URL ?? ${js(caseCfg.env?.base_url ?? "")};`);
+  out.push(...baseUrlBinding(caseCfg.env?.base_url ?? null, notes));
   out.push("");
   if (needsGlob) {
     out.push(`/** Playtest gate globs: \`*\` matches any run, \`?\` one character, anchored. */`);
@@ -173,6 +173,38 @@ export function exportSpec({
   out.push("");
 
   return { filename: specFilename(caseCfg.id), code: out.join("\n"), notes };
+}
+
+/**
+ * The spec's `BASE_URL` binding. A case that resolved a base URL bakes it in as
+ * the default, still overridable by `PLAYTEST_BASE_URL`. A case that resolved
+ * none — a suite whose target is supplied at placement rather than authored,
+ * resolved structurally (docs/contracts/engine.md#resolution-modes) — gets NO
+ * baked-in default: inventing one (or emitting `""`) would send the spec at
+ * whatever the empty string navigates to. The environment override is then the
+ * only source, and the spec fails fast and typed: `BASE_URL` is `string`, never
+ * `string | undefined` left to produce an invalid navigation.
+ */
+function baseUrlBinding(baseUrl: string | null, notes: string[]): string[] {
+  if (baseUrl) return [`const BASE_URL = process.env.PLAYTEST_BASE_URL ?? ${js(baseUrl)};`];
+  notes.push(
+    `this case resolved no app.base_url, so the spec has no default target — set PLAYTEST_BASE_URL when running it`,
+  );
+  return [
+    `/** The exported suite declares no base URL, so the environment is the only source. */`,
+    `function requireBaseUrl(): string {`,
+    `  const url = process.env.PLAYTEST_BASE_URL;`,
+    `  if (!url) {`,
+    `    throw new Error(`,
+    `      "PLAYTEST_BASE_URL is not set. This spec was exported from a suite that declares no app.base_url, " +`,
+    `        "so it has no built-in target — set PLAYTEST_BASE_URL to the application's base URL and re-run.",`,
+    `    );`,
+    `  }`,
+    `  return url;`,
+    `}`,
+    ``,
+    `const BASE_URL = requireBaseUrl();`,
+  ];
 }
 
 function header({

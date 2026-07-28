@@ -12,8 +12,11 @@ import readline from "node:readline/promises";
 import { chromium } from "playwright";
 import type { Readable, Writable } from "node:stream";
 import type { DriverId } from "@playtest/core/suite";
-import { DummyConfigError } from "@playtest/core/suite";
-import { firstLine } from "@playtest/core/artifacts";
+import { DummyConfigError, probeMobileClient } from "@playtest/core/suite";
+// The is-the-Appium-client-importable probe lives in core so the CLI and any
+// other host (a runner's own preflight) ask it identically; the test seam is
+// re-exported unchanged for this package's self-test.
+export { __setMobileClientProbe } from "@playtest/core/suite";
 
 const INSTALL_CMD = "npx playwright install chromium";
 
@@ -33,8 +36,6 @@ interface PreflightOptions {
   input?: Readable;
   output?: Writable;
 }
-
-type MobileClientProbe = () => Promise<unknown>;
 
 function installChromium({ json = false }: Pick<PreflightOptions, "json"> = {}) {
   return new Promise<boolean>((resolve) => {
@@ -99,37 +100,13 @@ export async function ensureBrowser(opts: PreflightOptions = {}) {
  * @param {"web"|"mobile"|"api"} driver
  * @returns {Promise<{ channel: string|null }>}
  */
-// webdriverio is an optionalDependency, lazy-imported by the mobile driver. A
-// missing client becomes a friendly, actionable error here (never a raw
-// MODULE_NOT_FOUND from deep inside a run). The Appium server, platform driver,
-// and a reachable device are checked when the driver creates its session —
-// failures there surface as InfraError with the Appium message.
-
-// Test seam (mirrors mobile.js's __setMobileClientFactory): swap how the mobile
-// client is probed so the offline self-test can exercise both the absent-client
-// and present-client branches WITHOUT depending on whether webdriverio is
-// actually installed in the test environment. Defaults to the real lazy import.
-const defaultMobileClientProbe = () => import("webdriverio");
-let mobileClientProbe: MobileClientProbe = defaultMobileClientProbe;
-export function __setMobileClientProbe(fn: MobileClientProbe | null | undefined) {
-  mobileClientProbe = fn ?? defaultMobileClientProbe;
-}
-
+// The mobile probe is core's (probeMobileClient): a missing webdriverio becomes
+// a friendly, actionable DummyConfigError, never a raw MODULE_NOT_FOUND from
+// deep inside a run. The Appium server, platform driver, and a reachable device
+// are checked when the driver creates its session — failures there surface as
+// InfraError with the Appium message.
 async function preflightMobile() {
-  try {
-    await mobileClientProbe();
-  } catch (e: any) { // SAFETY: lazy-import failures are Error-like objects with optional Node module codes
-    // A genuine not-installed error → the install hint. Any OTHER import failure
-    // (a broken native binding, a version/syntax error in a present package) gets
-    // its real cause appended, so we don't tell the user to reinstall a package
-    // that is already there.
-    const missing = e?.code === "ERR_MODULE_NOT_FOUND" || e?.code === "MODULE_NOT_FOUND";
-    throw new DummyConfigError(
-      missing
-        ? "the mobile driver needs the Appium client. Run: npm i webdriverio (and ensure an Appium server + platform driver + a device/simulator are available)"
-        : `the 'webdriverio' client failed to load: ${firstLine(e)}`,
-    );
-  }
+  await probeMobileClient();
   return { channel: null };
 }
 

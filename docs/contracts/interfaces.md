@@ -272,7 +272,12 @@ baseline is still the truth — but it is reported as a note.
 The emitted file is TypeScript with no `playtest` imports: an
 `@playwright/test` import, a `BASE_URL` const defaulting to the case's
 `app.base_url` and overridable via `PLAYTEST_BASE_URL`, and a header carrying
-the case id, story, baseline run id, `story_hash`, and pins. `app.cookies`
+the case id, story, baseline run id, `story_hash`, and pins. A case that
+resolved **no** `app.base_url` — a suite resolved structurally, whose target is
+supplied at placement (`docs/contracts/engine.md#resolution-modes`) — bakes in
+no default: `PLAYTEST_BASE_URL` becomes the only source, and the spec throws one
+actionable error when it is unset. `BASE_URL` is always `string`, never
+`string | undefined`, and never the empty string. `app.cookies`
 become a `context.addCookies` call before the first navigation. Request and
 console-error collectors are emitted only when the gate needs them, so the file
 holds no unused bindings.

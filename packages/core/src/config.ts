@@ -36,8 +36,10 @@ import type {
   ParallelConfig,
   PerfConfig,
   RedactConfig,
+  ResolutionMode,
   ResolvedCase,
   ResolvedViewport,
+  RuntimeTarget,
 } from "./types.ts";
 
 type JsonSchema = SchemaObject;
@@ -259,6 +261,82 @@ const APP_KEY_DRIVERS: Record<string, DriverId[]> = {
 };
 const DURATION_UNITS: Record<"ms" | "s" | "m", number> = { ms: 1, s: 1000, m: 60000 };
 
+// The PHYSICAL target fields — the ones that say WHERE a case runs rather than
+// WHAT it does (docs/contracts/engine.md#runtime-target). A host that owns
+// placement (the hosted runner) replaces this whole set after the authored
+// merge; which of them a driver actually uses is read off APP_KEY_DRIVERS
+// above, so there is one source of truth for the driver matrix.
+const RUNTIME_TARGET_KEYS = ["base_url", "app", "platform", "device", "appium_url"] as const;
+type RuntimeTargetKey = (typeof RUNTIME_TARGET_KEYS)[number];
+const MOBILE_PLATFORMS = ["ios", "android"] as const;
+
+/**
+ * Validate a caller-supplied runtime target. Shape errors are the caller's
+ * (a runner assembling an override), so they surface as DummyConfigError with
+ * the offending key named — never a raw TypeError deep in resolution. Returns
+ * null when no override was supplied. Pure; exported for test.
+ */
+export function normalizeRuntimeTarget(value: unknown): RuntimeTarget | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "object" || Array.isArray(value)) {
+    throw new DummyConfigError(
+      `runtimeTarget must be an object of ${RUNTIME_TARGET_KEYS.join("/")} (got ${JSON.stringify(value)})`,
+    );
+  }
+  const entries = value as Record<string, unknown>;
+  const unknown = Object.keys(entries).filter((k) => !(RUNTIME_TARGET_KEYS as readonly string[]).includes(k));
+  if (unknown.length) {
+    throw new DummyConfigError(
+      `runtimeTarget: unknown key${unknown.length > 1 ? "s" : ""} ${unknown.join(", ")} — a runtime target replaces only the physical fields ${RUNTIME_TARGET_KEYS.join(", ")}`,
+    );
+  }
+  // A supplied field must be a real value; null/undefined means "clear it", which
+  // is what an absent key already means — so both forms are accepted and drop out.
+  const str = (key: RuntimeTargetKey): string | undefined => {
+    const v = entries[key];
+    if (v === undefined || v === null) return undefined;
+    if (typeof v !== "string" || !v.trim()) {
+      throw new DummyConfigError(
+        `runtimeTarget.${key} must be a non-empty string (omit the key to clear it; got ${JSON.stringify(v)})`,
+      );
+    }
+    return v;
+  };
+  const platform = str("platform");
+  if (platform !== undefined && !(MOBILE_PLATFORMS as readonly string[]).includes(platform)) {
+    throw new DummyConfigError(
+      `runtimeTarget.platform must be one of ${MOBILE_PLATFORMS.join("/")} (got ${JSON.stringify(platform)})`,
+    );
+  }
+  return {
+    base_url: str("base_url"),
+    app: str("app"),
+    platform: platform as RuntimeTarget["platform"], // SAFETY: checked against MOBILE_PLATFORMS above
+    device: str("device"),
+    appium_url: str("appium_url"),
+  };
+}
+
+/**
+ * Apply the runtime target to a merged `app` accumulator: a WHOLE-TARGET
+ * replacement discriminated by driver, never a partial merge. Every physical
+ * field the driver uses takes the override's value or is cleared (an override
+ * that omits `device` means the driver's default, never the authored device);
+ * physical fields the driver does not use are cleared outright; and `compose`
+ * is cleared, because an authored compose block must not boot a different
+ * application under the caller's target (`--base-url` already nulls it to
+ * force external mode).
+ */
+function applyRuntimeTarget(env: InternalAppConfig, target: RuntimeTarget, driver: DriverId): void {
+  const uses = (key: RuntimeTargetKey): boolean => (APP_KEY_DRIVERS[key] ?? []).includes(driver);
+  env.base_url = uses("base_url") ? target.base_url ?? undefined : undefined;
+  env.app = uses("app") ? target.app ?? undefined : undefined;
+  env.platform = uses("platform") ? target.platform ?? undefined : undefined;
+  env.device = uses("device") ? target.device ?? undefined : undefined;
+  env.appium_url = uses("appium_url") ? target.appium_url ?? undefined : undefined;
+  env.compose = null;
+}
+
 /**
  * app.allowed_origins (api only): the egress allowlist — origins the driver may
  * reach besides base_url's own. Entries must be BARE http(s) origins
@@ -310,14 +388,32 @@ export function parseDuration(v: unknown): number {
 /**
  * Discover and resolve test cases.
  * @param {string[]} paths dirs and/or .yaml case files
- * @param {{ tags?: string[], ids?: string[], baseUrl?: string|null, env?: string|null }} [opts]
+ * @param {{ tags?: string[], ids?: string[], baseUrl?: string|null, env?: string|null,
+ *           runtimeTarget?: object|null, resolution?: "executable"|"structural" }} [opts]
  *   env: the --env name selecting an app.envs.<name> overlay (null = top-level app.* only).
+ *   runtimeTarget: the physical target a placing host owns, applied AFTER the
+ *     complete authored merge (docs/contracts/engine.md#runtime-target).
+ *   resolution: "structural" validates without requiring a complete physical
+ *     target (docs/contracts/engine.md#resolution-modes).
  * @returns {Promise<object[]>} ResolvedCase[] sorted by id
  */
 export async function discoverCases(
   paths: string[],
-  { tags = [], ids = [], baseUrl = null, env = null }: DiscoverCasesOptions = {}
+  { tags = [], ids = [], baseUrl = null, env = null, runtimeTarget = null, resolution = "executable" }: DiscoverCasesOptions = {}
 ): Promise<ResolvedCase[]> {
+  if (resolution !== "executable" && resolution !== "structural") {
+    throw new DummyConfigError(
+      `unknown resolution mode ${JSON.stringify(resolution)} (use "executable" to run a case, "structural" to validate one)`,
+    );
+  }
+  const target = normalizeRuntimeTarget(runtimeTarget);
+  // --base-url is the one-field form of the same setting, so accepting both
+  // would be a precedence puzzle rather than a configuration.
+  if (target && baseUrl !== null && baseUrl !== undefined) {
+    throw new DummyConfigError(
+      "both a base URL and a runtime target were supplied — --base-url is the one-field form of runtimeTarget.base_url, so pass exactly one",
+    );
+  }
   const found = new Map<string, string>(); // abs case file → suite root the user named
   const strays = new Set<string>(); // case-shaped yamls outside any suite root / stories/ dir
   for (const p of paths) {
@@ -352,7 +448,7 @@ export async function discoverCases(
   const cases: ResolvedCaseDraft[] = [];
   for (const [file, root] of found) {
     const registry = await registryFor(file);
-    const c = await resolveCase(file, root, baseUrl, registry, env);
+    const c = await resolveCase(file, root, { baseUrl, registry, env, runtimeTarget: target, resolution });
     if (tags.length === 0 || c.tags.some((t) => tags.includes(t))) cases.push(c);
   }
 
@@ -513,12 +609,24 @@ function dropFirstStories(parts: string[]): string[] {
   return parts.slice(0, i).concat(parts.slice(i + 1));
 }
 
+interface ResolveCaseOptions {
+  baseUrl?: string | null;
+  registry?: AssertionRegistry;
+  env?: string | null;
+  runtimeTarget?: RuntimeTarget | null;
+  resolution?: ResolutionMode;
+}
+
 async function resolveCase(
   file: string,
   namedRoot: string,
-  baseUrl: string | null,
-  registry: AssertionRegistry = { routing: new Map(), assertions: [] },
-  env: string | null = null
+  {
+    baseUrl = null,
+    registry = { routing: new Map(), assertions: [] },
+    env = null,
+    runtimeTarget = null,
+    resolution = "executable",
+  }: ResolveCaseOptions = {}
 ): Promise<ResolvedCaseDraft> {
   const caseDir = path.dirname(file);
   const top = findRepoRoot(caseDir); // null → no .git ancestor: every ancestor contributes
@@ -585,6 +693,14 @@ async function resolveCase(
       );
     }
   }
+  // The placing host's physical target, applied LAST over the complete authored
+  // merge (defaults chain → case → --env overlay). Authored physical fields stay
+  // valid for direct CLI use and are simply inert here — the suite can no longer
+  // redirect which application a placed run reaches
+  // (docs/contracts/engine.md#runtime-target). Applied after the authored-key
+  // driver-scope check above, so an authored `app.app` on a web case is still
+  // the config error it always was, override or not.
+  if (runtimeTarget) applyRuntimeTarget(merged.env, runtimeTarget, driver);
   // app.auth: the per-story identity label, resolved through app.auth_states
   // AFTER the full merge (defaults chain → case → env overlay), so the label is
   // environment-agnostic and the selected env supplies the map. "none" explicitly
@@ -621,8 +737,13 @@ async function resolveCase(
   }
 
   // base_url is required for web/api (they reach an HTTP origin); mobile reaches
-  // a device/Appium server and only needs the app binary.
-  if (driver !== "mobile" && !merged.env.base_url) {
+  // a device/Appium server and only needs the app binary. Both are
+  // EXECUTABLE-only requirements: structural resolution validates the case and
+  // its logical configuration for a host whose physical target arrives
+  // elsewhere — at placement, not in the suite
+  // (docs/contracts/engine.md#resolution-modes). Faking a target here instead
+  // would mask real errors, and for mobile there is no app path to fake.
+  if (resolution === "executable" && driver !== "mobile" && !merged.env.base_url) {
     // When envs are declared, name them as the recovery (the CLI also offers an
     // interactive picker off err.availableEnvs on a TTY); else the plain hint.
     const envHint = envNames.length ? ` (or pass --env <name>; available: ${envNames.join(", ")})` : "";
@@ -632,7 +753,7 @@ async function resolveCase(
     err.availableEnvs = envNames;
     throw err;
   }
-  if (driver === "mobile" && !merged.env.app) {
+  if (resolution === "executable" && driver === "mobile" && !merged.env.app) {
     throw new DummyConfigError(
       `${file}: the mobile driver needs app.app — the path to the .app/.ipa/.apk to install`,
     );

@@ -59,7 +59,9 @@ executor protocol. `PLAYTEST_DISPATCH=pool` places work on self-hosted runners
 that claim it outbound (see "Runner pool"). All three implement one adapter
 interface, so run-group lifecycle, the dispatch ledger, and the reconciler do
 not vary by adapter. Dispatch is placement; it is not the system of record or an
-artifact store.
+artifact store. Mixing adapters within one deployment is deliberately deferred:
+if it ever lands, the seam is an environment-level placement field, and schema
+decisions should not paint over that.
 
 ## Storage, deployment topology, and transactions
 

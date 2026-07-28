@@ -31,49 +31,6 @@ Plan: [`docs/backlog/api-testing/BUILD_PLAN.md`](backlog/api-testing/BUILD_PLAN.
       authorized stakeholder API and publish the preregistered regression,
       authored-suite, and total-cost-of-ownership verdicts.
 
-### Self-hosted runners and app artifacts
-
-Design: [`docs/backlog/self-hosted-runners/DESIGN.md`](backlog/self-hosted-runners/DESIGN.md).
-Plan: [`docs/backlog/self-hosted-runners/BUILD_PLAN.md`](backlog/self-hosted-runners/BUILD_PLAN.md).
-
-- [x] **R0–R1 — Pull-based runner pool:** runner registry, credentialed
-      claim board behind `PLAYTEST_DISPATCH=pool`, and the runner-agent pool
-      mode, so a runner on a developer machine executes hosted runs against
-      local targets with outbound HTTP only. Landed: the control plane's
-      registry, board, pool adapter, claim-bound exchange and reconciler loss
-      shapes (R0), then `runner-agent pool`, the minimal Settings → Runners
-      console slice, and the laptop walkthrough
-      ([`docs/hosted-runners.md`](hosted-runners.md)) (R1).
-- [x] **R2 — Ephemeral CI runners:** a CI job registers itself with its GitHub
-      OIDC token (`POST /runner/pool/register-oidc`, pinned repository/workflow/
-      ref, credential expiring with the job, never listed as standing), a launch
-      pins its own `runner_labels` over the environment's, and the reference
-      PR-gating workflow lives in `examples/ci-github-actions/` with the recipe
-      in [`docs/hosted-runners.md`](hosted-runners.md).
-- [x] **R3 — Environment app artifacts:** `PUT`/`DELETE
-      /api/v1/environments/:e/app-artifact` store an APK or a zipped `.app`
-      content-addressed under a deployment cap
-      (`PLAYTEST_APP_ARTIFACT_MAX_MB`, default 512); a launch pins the hash so a
-      re-upload never changes an in-flight or historical group; the runner
-      fetches it through `GET /runner/artifacts/:sha256`, verifies the hash,
-      unpacks a zipped bundle, and writes the local path into the environment
-      overlay's `app:` before core discovery. Precedence (suite-env > environment
-      > suite) is stated in the launch preview's `target.app`, an unreachable
-      suite-relative binary is refused at launch, and an unreferenced blob enters
-      the existing GC.
-- [x] **R4 — Console surfaces:** the front door for all of it. Settings →
-      Runners shows presence and the run each runner is executing, repainted
-      from a new `runner.status` feed edge rather than a poll and gated on
-      `capabilities.pool_dispatch`; Test targets gains first-class mobile device
-      fields and app-artifact upload/replace/clear with the cap stated up front;
-      the New suite dialog asks identity only, with a skippable driver-aware
-      "where does this app run?" card on the empty suite that picks or creates a
-      ring; the launch dialog says placement out loud and warns when no matching
-      runner is checked in; a run's provenance names the runner and isolation
-      that produced it, and an unclaimed run gets the runner-setup remedy.
-      `GET /run-groups/:id?wait=true` now actually holds, as the automation
-      contract always said.
-
 ### Live runs: open runs streaming into the viewer
 
 Design: [`docs/backlog/live-runs/DESIGN.md`](backlog/live-runs/DESIGN.md).

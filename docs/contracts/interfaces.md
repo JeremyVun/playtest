@@ -687,9 +687,13 @@ issued against an index the host had to rebuild, answers `reset: true` with no
 lines: the client reloads rather than the host guessing.
 
 `wait` is capped at 25 seconds and holds only a caught-up caller. The hold ends
-on trajectory growth, an `events.jsonl` append (progress and, critically,
-`case_end`), or a manifest rewrite, so a finished run transitions on the next
-wake rather than at the end of a full hold. `manifest_generation` is minted by
+on anything the viewer must repaint for — new trajectory lines, the run sealing,
+a manifest rewrite, or a progress move — so a finished run transitions on the
+next wake rather than at the end of a full hold. Each host watches whichever
+signals carry those facts: the local host stat-polls `trajectory.jsonl`,
+`events.jsonl` (progress and, critically, `case_end`) and `manifest.json`, while
+the hosted host re-reads the rows a wakeup announces. `manifest_generation` is
+minted by
 the host from the manifest's change signature; clients compare it for
 inequality and refetch `manifest.json`, never interpret its value. `progress`
 is the shared fold's view — `{ step, max_steps, doing, action, cost_usd, model,

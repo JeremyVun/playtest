@@ -12,6 +12,7 @@ import { audit } from "../audit.ts";
 import { ulid } from "../ulid.ts";
 import { emitPlatformEvent } from "../events/outbox.ts";
 import { withLease } from "../leases.ts";
+import { OPEN_STATUSES } from "../live/staging.ts";
 import type { Db, DbRow, Tx } from "../db.ts";
 import type { AppContext, DynamicJson } from "../types.ts";
 
@@ -32,6 +33,20 @@ type QueryTarget = Db | Tx;
 export const DEFAULT_RETENTION = Object.freeze({ events_days: 14, full_days: 90, core_days: 365 });
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * How long a terminal run's live staging survives without a sealed bundle.
+ *
+ * Staging is deleted at seal, so this window only ever covers the runs that
+ * produced no bundle — a failed upload reporting `infra`, or a run the
+ * reconciler failed because its runner died. For those, staging is the only
+ * evidence the run produced, and a day is long enough for a person to look at
+ * it the next morning. The same window reaps a `pending` reservation whose
+ * upload crashed between reserving and marking `ready`, refunding it with the
+ * row; a case is budgeted at under an hour of runtime, so no live upload is
+ * still in flight by then.
+ */
+const LIVE_STAGING_GRACE_MS = DAY_MS;
 
 // Generous relative to a normal cycle, but bounded: bundle rewrites and integrity
 // hashing are slow, and the renewal timer covers a cycle that legitimately runs
@@ -72,6 +87,7 @@ export async function runRetentionCycle(
     integrity_failed: 0,
     orphan_objects_deleted: 0,
     blob_objects_deleted: 0,
+    live_staging_collected: 0,
   };
 
   const held = await withLease(ctx.db, RETENTION_LEASE, { ttlMs: RETENTION_LEASE_TTL_MS, log: ctx.log }, async () => {
@@ -96,6 +112,11 @@ export async function runRetentionCycle(
 
     const snap = await ctx.db.withTx((tx) => pruneSnapshots(tx));
     summary.snapshots_pruned += snap.deleted;
+
+    // Live staging GC runs BEFORE the orphan sweep in the same cycle, so a row
+    // dropped here has its object collected by the sweep below even if the
+    // explicit delete misses.
+    summary.live_staging_collected += await ctx.db.withTx((tx) => gcLiveStaging(tx, now, cleanupKeys));
 
     const integrity = await integritySweep(ctx, { now, limit: integritySample });
     summary.integrity_checked += integrity.checked;
@@ -451,10 +472,87 @@ async function integritySweep(
   return { checked, failed };
 }
 
+/**
+ * Garbage collect live staging (docs/contracts/hosted.md, "Live runs").
+ *
+ * Three things are collected, all of them owned state rather than debris:
+ *
+ *   1. every ledger row of a TERMINAL run that has no bundle, once the grace
+ *      window has passed — the failed-upload and dead-runner cases, whose
+ *      staging was the only evidence they produced;
+ *   2. `pending` reservations older than the same window — an upload that
+ *      crashed between reserving and marking `ready`, refunded by the delete;
+ *   3. any row whose run row is gone (schema-level cascade normally removes
+ *      these; collecting them here keeps the invariant self-evident rather than
+ *      dependent on a pragma).
+ *
+ * Rows go in this transaction, objects on `cleanupKeys` after it — and deleting
+ * a row deliberately re-exposes its object to the orphan sweep as the backstop.
+ */
+async function gcLiveStaging(tx: Tx, now: Date, cleanupKeys: string[]): Promise<number> {
+  const cutoff = new Date(now.getTime() - LIVE_STAGING_GRACE_MS);
+  const open = [...OPEN_STATUSES].map((s) => `'${s}'`).join(",");
+  const { rows: staleRuns } = await tx.query(
+    `SELECT r.id FROM runs r
+      WHERE r.status NOT IN (${open})
+        AND COALESCE(r.finished_at, r.updated_at) < $1
+        AND NOT EXISTS (SELECT 1 FROM artifacts a WHERE a.run_id = r.id AND a.kind = 'bundle')
+        AND (EXISTS (SELECT 1 FROM live_trajectory t WHERE t.run_id = r.id)
+             OR EXISTS (SELECT 1 FROM live_artifacts la WHERE la.run_id = r.id)
+             OR r.live_manifest IS NOT NULL)
+      ORDER BY r.finished_at
+      LIMIT 200`,
+    [cutoff],
+  );
+  let collected = 0;
+  for (const run of staleRuns) {
+    const { rows } = await tx.query(`SELECT key FROM live_artifacts WHERE run_id = $1`, [run.id]);
+    cleanupKeys.push(...rows.map((r: DbRow) => String(r.key)));
+    await tx.query(`DELETE FROM live_artifacts WHERE run_id = $1`, [run.id]);
+    const dropped = await tx.query(`DELETE FROM live_trajectory WHERE run_id = $1`, [run.id]);
+    await tx.query(`UPDATE runs SET live_manifest = NULL WHERE id = $1`, [run.id]);
+    collected += rows.length + (dropped.rowCount || 0);
+  }
+  // Stale reservations, wherever they sit — including on a run still executing,
+  // where a crashed upload would otherwise hold its budget for the run's life.
+  const { rows: stalePending } = await tx.query(
+    `SELECT id, key FROM live_artifacts WHERE state = 'pending' AND created_at < $1`,
+    [cutoff],
+  );
+  for (const row of stalePending) {
+    cleanupKeys.push(String(row.key));
+    await tx.query(`DELETE FROM live_artifacts WHERE id = $1`, [row.id]);
+    collected += 1;
+  }
+  // Orphan parity: a ledger row whose run row is gone owns nothing.
+  const { rows: orphaned } = await tx.query(
+    `SELECT id, key FROM live_artifacts WHERE run_id NOT IN (SELECT id FROM runs)`,
+  );
+  for (const row of orphaned) {
+    cleanupKeys.push(String(row.key));
+    await tx.query(`DELETE FROM live_artifacts WHERE id = $1`, [row.id]);
+    collected += 1;
+  }
+  const strayLines = await tx.query(`DELETE FROM live_trajectory WHERE run_id NOT IN (SELECT id FROM runs)`);
+  return collected + (strayLines.rowCount || 0);
+}
+
+/**
+ * Objects under `runs/` that no row owns. Both ledgers count as owners: a
+ * `bundle`/`clip` artifacts row, and a live staging row in EITHER state.
+ *
+ * The `pending` half is what closes the window the two-phase reservation exists
+ * for. A reservation is committed before its object is written, so from the
+ * instant a live object can exist it already has an owner here, and this sweep
+ * — which deletes every unowned `runs/` object in the same cycle — can run
+ * mid-stream without ever touching staged bytes. Any reader added later must be
+ * listed here too, or its objects will be deleted out from under it.
+ */
 async function orphanRunObjects(ctx: AppContext): Promise<string[]> {
   const keys = await ctx.store.list("runs/");
   if (!keys.length) return [];
   const known = new Set<string>((await ctx.db.query(`SELECT key FROM artifacts`)).rows.map((r: DbRow) => r.key));
+  for (const row of (await ctx.db.query(`SELECT key FROM live_artifacts`)).rows) known.add(row.key);
   return keys.filter((key: string) => !known.has(key));
 }
 

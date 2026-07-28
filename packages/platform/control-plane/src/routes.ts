@@ -20,6 +20,7 @@ import * as authRoutes from "./api/auth-routes.ts";
 import * as authProviders from "./api/auth-providers.ts";
 import * as runs from "./api/runs.ts";
 import * as executor from "./api/executor-api.ts";
+import * as liveIngest from "./api/live-ingest.ts";
 import * as viewer from "./api/viewer-adapter.ts";
 import * as review from "./api/review.ts";
 import * as storyDraft from "./api/story-draft.ts";
@@ -199,6 +200,13 @@ export function buildRouter() {
   r.post(`${v}/runner/mints/:claim/complete`, executor.mintComplete);
   r.put(`${v}/runner/runs/:r/bundle`, executor.uploadBundle);
   r.post(`${v}/runner/groups/:g/cases/:run_id/start`, executor.caseStart);
+  // Live staging (docs/contracts/hosted.md, "Live runs"): additive, ack-answered,
+  // and behind the same group-scoped runner token as the bundle PUT. The
+  // trajectory POST registers before the entry wildcard only for readability —
+  // the two differ by method, so order does not decide.
+  r.post(`${v}/runner/groups/:g/cases/:run_id/open`, liveIngest.openCase);
+  r.post(`${v}/runner/runs/:r/live/trajectory`, liveIngest.postLiveTrajectory);
+  r.put(`${v}/runner/runs/:r/live/*entry`, liveIngest.putLiveEntry);
   r.post(`${v}/runner/groups/:g/cases/:run_id/progress`, executor.caseProgress);
   r.post(`${v}/runner/groups/:g/cases/:run_id/report`, executor.caseReport);
   r.post(`${v}/runner/groups/:g/complete`, executor.complete);

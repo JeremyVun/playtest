@@ -19,8 +19,16 @@ import { scheduleAutoDedupe } from "../findings/auto-dedupe.ts";
 import { scheduleAutoResolve } from "../findings/auto-resolve.ts";
 import { inClause } from "../db.ts";
 import { personaPath } from "./personas.ts";
-
-const BUNDLE_LIMIT = 512 * 1024 * 1024;
+import {
+  BUNDLE_LIMIT,
+  LIVE_ENTRY_LIMIT,
+  LIVE_LINE_LIMIT,
+  LIVE_MANIFEST_LIMIT,
+  LIVE_MAX_BATCH_LINES,
+  LIVE_TRAJECTORY_BODY_LIMIT,
+  dropStaging,
+  wakeLive,
+} from "../live/staging.ts";
 
 export async function exchange(ctx: HostedDynamic) {
   const body = await readJsonBody(ctx.req);
@@ -187,6 +195,20 @@ export async function groupSpec(ctx: HostedDynamic) {
     baselines: await currentBaselines(ctx, group.suite_id),
     uploads: {
       bundle_url_template: `${ctx.config.publicUrl}/api/v1/runner/runs/{run_db_id}/bundle`,
+      // The live-staging surface and its caps, advertised rather than hardcoded
+      // in the uploader: a runner sizes its batches by bytes under these
+      // numbers, and a deployment may lower the run budget.
+      live: {
+        open_url_template: `${ctx.config.publicUrl}/api/v1/runner/groups/{run_group_id}/cases/{run_id}/open`,
+        entry_url_template: `${ctx.config.publicUrl}/api/v1/runner/runs/{run_db_id}/live/{entry}`,
+        trajectory_url_template: `${ctx.config.publicUrl}/api/v1/runner/runs/{run_db_id}/live/trajectory`,
+        max_manifest_bytes: LIVE_MANIFEST_LIMIT,
+        max_entry_bytes: LIVE_ENTRY_LIMIT,
+        max_body_bytes: LIVE_TRAJECTORY_BODY_LIMIT,
+        max_line_bytes: LIVE_LINE_LIMIT,
+        max_batch_lines: LIVE_MAX_BATCH_LINES,
+        run_budget_bytes: ctx.config.live.runBudgetBytes,
+      },
     },
     budget: { max_runtime_s: 50 * 60, retry_remaining: group.selection?.retry_remaining ?? 1 },
     executor_id: runner.executor_id,
@@ -429,11 +451,14 @@ export async function caseProgress(ctx: HostedDynamic) {
   const progress = progressView(body);
   await ctx.db.withTx(async (tx: HostedDynamic) => {
     const updated = await tx.query(
-      `UPDATE runs SET progress = $2, updated_at = now()
+      // `live_activity_at` too: a progress tick is the run showing activity, and
+      // the live endpoint's `inactive_ms` is a fact about exactly that.
+      `UPDATE runs SET progress = $2, live_activity_at = now(), updated_at = now()
         WHERE id = $1 AND status IN ('running','uploading')`,
       [run.id, progress],
     );
     if (updated.rowCount === 0) return;
+    wakeLive(tx, run.id);
     await emitPlatformEvent(tx, {
       projectId: group.project_id,
       type: "run.event",
@@ -487,6 +512,8 @@ export async function caseReport(ctx: HostedDynamic) {
   const gradeIssues = ["pass", "fail", "explored"].includes(status)
     ? await collectRunGradeIssues(ctx, run.id, manifest)
     : null;
+  // Staged live objects to delete once the report commits (see below).
+  let stagedKeys: string[] = [];
   await ctx.db.withTx(async (tx: HostedDynamic) => {
     await tx.query(
       `UPDATE runs
@@ -548,7 +575,28 @@ export async function caseReport(ctx: HostedDynamic) {
       run: { id: run.id, case_id: run.case_id, story_id: run.story_id },
       collected: gradeIssues,
     });
+    // Live staging is dropped only when a VERIFIED sealed bundle exists for this
+    // run — the artifacts row the bundle PUT wrote, not the report's own claim
+    // about one. A terminal report WITHOUT a bundle (a failed upload reporting
+    // `infra`, or a reconciler-failed run) keeps its staging through the
+    // retention grace window: it is then the only evidence the run produced.
+    // Ledger rows go in this transaction; their objects go after it commits.
+    const sealed = await tx.query(`SELECT 1 FROM artifacts WHERE run_id = $1 AND kind = 'bundle' LIMIT 1`, [run.id]);
+    if (sealed.rows.length) stagedKeys = await dropStaging(tx, run.id);
+    // The run just went terminal, so every live holder must learn it is sealed
+    // on the next wake rather than at the end of a full hold.
+    wakeLive(tx, run.id);
   });
+  // Post-commit and best-effort: an object left behind because a delete failed
+  // has no ledger row any more, so the retention orphan sweep collects it. A
+  // live cleanup failure must never affect the case report.
+  for (const key of stagedKeys) {
+    try {
+      await ctx.store.delete(key);
+    } catch (e: HostedDynamic) {
+      ctx.log?.warn?.({ msg: "live staging object was not deleted at seal", key, err: e?.message || String(e) });
+    }
+  }
   // Post-commit, best-effort: this report may have filed unreviewed findings —
   // schedule the debounced semantic dedupe sweep over them.
   if (status === "fail" || gradeIssues) scheduleAutoDedupe(ctx, group.project_id);

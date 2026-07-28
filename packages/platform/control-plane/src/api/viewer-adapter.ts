@@ -26,7 +26,14 @@ import { HttpResult } from "../http.ts";
 import { notFound } from "../errors.ts";
 import { sendFile } from "../response.ts";
 import { loadRunBundle } from "../run-storage.ts";
+import { isRunOpen, readTrajectoryText, readyArtifact } from "../live/staging.ts";
+import { liveAnswer } from "./live-view.ts";
 import { guard, getProjectByKey } from "./util.ts";
+
+// An open run is excluded from the history and movement projections until it
+// seals: a half-recorded run is neither history nor a review item. The exclusion
+// is scoped to open runs; completed-run projections are untouched.
+const NOT_OPEN = `NOT (r.live_opened_at IS NOT NULL AND r.status IN ('queued','running','uploading'))`;
 
 const VIEWER_DIR = path.join(platformWebAssetsDir, "viewer");
 
@@ -62,29 +69,49 @@ export async function viewStatic(ctx: HostedDynamic) {
  * the verbatim manifest JSON (projection = copy, never transform —
  * docs/contracts/artifacts.md#manifest),
  * so each entry equals what core listRuns reads out of the same manifest.json.
+ *
+ * An open run is projected from its live manifest snapshot and keeps the
+ * existing "no verdict yet" vocabulary — `status: null` plus an additive
+ * `open: true` — never the placeholder's terminal-looking `interrupted`. A
+ * sealed entry carries no `open` key at all, so existing consumers are
+ * untouched (docs/contracts/interfaces.md#live-runs).
  */
 export async function runsJson(ctx: HostedDynamic) {
   const project = await getProjectByKey(ctx, ctx.params.p);
   guard(ctx, project.id, "viewer");
   const { rows } = await ctx.db.query(
-    `SELECT r.run_id, r.case_id, r.manifest FROM runs r
+    // A live manifest snapshot enters the picker only while the run is open. A
+    // terminal run that never reported one keeps its staging (it is the only
+    // evidence it produced) but stays out of the picker exactly as before —
+    // projecting the placeholder's `interrupted` over a run the platform knows
+    // ended as `infra` would be worse than absence.
+    `SELECT r.run_id, r.case_id, r.status, r.manifest, r.live_manifest, r.live_opened_at FROM runs r
        JOIN run_groups g ON g.id = r.run_group_id
-      WHERE g.project_id = $1 AND r.manifest IS NOT NULL`,
+      WHERE g.project_id = $1
+        AND (r.manifest IS NOT NULL
+             OR (r.live_manifest IS NOT NULL AND r.live_opened_at IS NOT NULL
+                 AND r.status IN ('queued','running','uploading')))`,
     [project.id],
   );
-  const runs = rows.map(({ run_id, case_id, manifest: m }: HostedDynamic) => ({
-    run_id: m.run_id ?? null,
-    case_id,
-    path: `${run_id}/${case_id}`,
-    status: m.result?.status ?? null,
-    mode: m.mode ?? null,
-    healed: m.healed ?? false,
-    started_at: m.started_at ?? null,
-    duration_ms: m.duration_ms ?? null,
-    story: m.case?.story ?? null,
-    description: m.case?.description ?? null,
-    tags: m.case?.tags ?? [],
-  }));
+  const runs = rows.map((row: HostedDynamic) => {
+    const { run_id, case_id } = row;
+    const open = isRunOpen(row);
+    const m = row.manifest ?? row.live_manifest;
+    return {
+      run_id: m.run_id ?? null,
+      case_id,
+      path: `${run_id}/${case_id}`,
+      status: open ? null : m.result?.status ?? null,
+      ...(open ? { open: true as const } : {}),
+      mode: m.mode ?? null,
+      healed: m.healed ?? false,
+      started_at: m.started_at ?? null,
+      duration_ms: m.duration_ms ?? null,
+      story: m.case?.story ?? null,
+      description: m.case?.description ?? null,
+      tags: m.case?.tags ?? [],
+    };
+  });
   return runs.sort((a: HostedDynamic, b: HostedDynamic) => String(b.started_at).localeCompare(String(a.started_at)));
 }
 
@@ -104,7 +131,7 @@ export async function changedJson(ctx: HostedDynamic) {
             EXISTS (SELECT 1 FROM candidates c WHERE c.run_id = r.id AND c.status = 'pending') AS pending
        FROM runs r
        JOIN run_groups g ON g.id = r.run_group_id
-      WHERE g.project_id = $1 AND r.manifest IS NOT NULL
+      WHERE g.project_id = $1 AND r.manifest IS NOT NULL AND ${NOT_OPEN}
         AND json_extract(r.manifest, '$.healed') IN (1, 'true')
         AND json_extract(r.manifest, '$.result.status') = 'pass'`,
     [project.id],
@@ -137,7 +164,7 @@ export async function historyJson(ctx: HostedDynamic) {
   const { rows } = await ctx.db.query(
     `SELECT r.run_id, r.case_id, r.score, r.manifest FROM runs r
        JOIN run_groups g ON g.id = r.run_group_id
-      WHERE g.project_id = $1 AND r.case_id = $2 AND r.manifest IS NOT NULL`,
+      WHERE g.project_id = $1 AND r.case_id = $2 AND r.manifest IS NOT NULL AND ${NOT_OPEN}`,
     [project.id, caseId],
   );
   const entries = rows.map(({ run_id, case_id, score, manifest: m }: HostedDynamic) =>
@@ -161,8 +188,16 @@ const SIBLING_KINDS: HostedDynamic = { "clip.mp4": "clip", "clip.webm": "clip", 
  * GET /projects/:p/view/run/<run_id>/<case_id>/<entry…> — one bundle entry.
  * The path is core-shaped (the same `path` runs.json hands out); the run row is
  * found by run_id + case_id prefix, newest first when a run_id ever repeats
- * across groups. Range honored (core sendFile); sibling clip artifacts
- * take precedence over bundle entries of the same name.
+ * across groups. Range honored (core sendFile).
+ *
+ * Entry precedence is **sibling artifact → sealed bundle entry → staged live
+ * entry**: today's sibling-over-bundle order (so a generated clip wins over the
+ * bundled original) is preserved exactly, and staging is appended as the final
+ * rung. A run is therefore viewable before its bundle exists, and a sealed run
+ * serves byte-for-byte what it always did.
+ *
+ * `<entry>` = `live` is the live endpoint rather than a file
+ * (docs/contracts/interfaces.md#live-runs); a bundle can never contain that name.
  */
 export async function runEntry(ctx: HostedDynamic) {
   const project = await getProjectByKey(ctx, ctx.params.p);
@@ -171,7 +206,8 @@ export async function runEntry(ctx: HostedDynamic) {
   const runId = rel.split("/")[0];
   if (!runId) throw notFound("not found");
   const { rows } = await ctx.db.query(
-    `SELECT r.id, r.run_id, r.case_id FROM runs r
+    `SELECT r.id, r.run_id, r.case_id, r.status, r.live_opened_at, r.live_manifest, r.live_activity_at
+       FROM runs r
        JOIN run_groups g ON g.id = r.run_group_id
       WHERE g.project_id = $1 AND r.run_id = $2
       ORDER BY r.created_at DESC`,
@@ -181,6 +217,7 @@ export async function runEntry(ctx: HostedDynamic) {
   if (!run) throw notFound(`no run "${runId}" here`);
   const entry = rel.slice(`${run.run_id}/${run.case_id}/`.length);
   if (!entry) throw notFound("not found");
+  if (entry === "live") return await liveAnswer(ctx, run.id);
 
   const arts = await ctx.db.query(
     `SELECT * FROM artifacts WHERE run_id = $1 ORDER BY created_at DESC`,
@@ -195,11 +232,41 @@ export async function runEntry(ctx: HostedDynamic) {
     return sendFile(ctx.req, ctx.res, "/playtest-run", entry, singleEntry(entry, buf, sibling.created_at));
   }
 
-  const bundle = await loadRunBundle(ctx, run.id);
-  if (!bundle) throw notFound(`run "${run.run_id}" has no bundle yet`);
   // The base arg only anchors sendFile's traversal check; bundle entry names are
   // already validated by the provider, so any absolute virtual root works.
+  const bundle = await loadRunBundle(ctx, run.id);
+  if (bundle?.provider.stat(entry)) {
+    return sendFile(ctx.req, ctx.res, "/playtest-run", entry, bundle.provider);
+  }
+  const staged = await stagedEntry(ctx, run, entry);
+  if (staged) return sendFile(ctx.req, ctx.res, "/playtest-run", entry, staged);
+  if (!bundle) throw notFound(`run "${run.run_id}" has no bundle yet`);
+  // A sealed bundle that simply lacks this entry degrades exactly as before.
   sendFile(ctx.req, ctx.res, "/playtest-run", entry, bundle.provider);
+}
+
+/**
+ * The staging rung. Two entries are virtual because their source is a row, not
+ * an object — `manifest.json` from the run row (so the viewer's first fetch
+ * works the moment the run opens) and `trajectory.jsonl` as the ordered
+ * concatenation of the ledger's line batches. Everything else is a staged step
+ * artifact, and only a `ready` row is ever served: a `pending` reservation is a
+ * byte range that may not exist yet.
+ */
+async function stagedEntry(ctx: HostedDynamic, run: HostedDynamic, entry: HostedDynamic) {
+  const mtime = run.live_activity_at || run.live_opened_at || null;
+  if (entry === "manifest.json") {
+    if (!run.live_manifest) return null;
+    return singleEntry(entry, Buffer.from(JSON.stringify(run.live_manifest)), mtime);
+  }
+  if (entry === "trajectory.jsonl") {
+    const text = await readTrajectoryText(ctx.db, run.id);
+    if (!text) return null;
+    return singleEntry(entry, Buffer.from(text, "utf8"), mtime);
+  }
+  const row = await readyArtifact(ctx.db, run.id, entry);
+  if (!row) return null;
+  return singleEntry(entry, await ctx.store.get(row.key), row.updated_at);
 }
 
 /** A one-entry provider so sibling store objects ride the same Range-capable sendFile. */

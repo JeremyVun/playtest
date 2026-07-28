@@ -21,7 +21,18 @@ const EXPECTED = path.resolve(HERE, "../fixtures/storage-baseline/expected-proje
  * next background cycle wait out a stale TTL. So it is not fixture-seeded and
  * not part of the migrate/backup projection contract.
  */
-const EPHEMERAL_TABLES = new Set(["leases"]);
+const EPHEMERAL_TABLES = new Set([
+  "leases",
+  // Open-run live staging (docs/contracts/hosted.md, "Live runs"): transient
+  // serving state for a run that has not sealed yet, deleted the moment its
+  // verified bundle lands and garbage collected otherwise. The sealed `.ptrun`
+  // is the sole authoritative artifact, so restoring staging would restore a
+  // preview of evidence the bundle already carries — or of a run that never
+  // produced one. Same reasoning as `leases`: no user or evidence data, nothing
+  // references it, and its absence costs a viewer nothing.
+  "live_trajectory",
+  "live_artifacts",
+]);
 
 /** Tables the post-0009 schema actually has: everything created, minus everything dropped. */
 function liveTables() {

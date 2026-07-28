@@ -344,9 +344,10 @@ The runner authenticates and then uses only HTTP:
 3. snapshot tree, blob, app-artifact, baseline, and session-claim reads
 4. case start
 5. case progress (optional, throttled)
-6. bundle upload
-7. case report
-8. group completion
+6. live staging (optional: open, step artifacts, trajectory batches)
+7. bundle upload
+8. case report
+9. group completion
 
 Runner routes are under `/api/v1`; the abbreviated paths above identify the
 protocol rather than a second namespace.
@@ -398,6 +399,57 @@ Case start, upload, report, and group completion are retry-safe. Completion may
 be partial when the executor approaches its runtime budget; the control plane
 dispatches only the remaining cases. A case report is accepted only for its
 group, run id, and current executor binding.
+
+### Live staging routes
+
+Three optional routes stream a case's evidence in ahead of its bundle, so the
+run is viewable while it executes ([Live runs](#live-runs)). All three ride the
+existing group-scoped runner bearer with the same run-group check the bundle PUT
+applies — no new principal and no new exchange — and all three answer refused or
+no-op once the run is terminal. A runner that never calls them is fully
+conformant; the run is then invisible until it seals, which is the older
+behavior.
+
+| Route | Meaning |
+|---|---|
+| `POST /runner/groups/:g/cases/:run_id/open` | `{ manifest }` — the placeholder manifest, and every later snapshot of it |
+| `PUT /runner/runs/:r/live/<entry-path>` | one staged step artifact, raw bytes |
+| `POST /runner/runs/:r/live/trajectory` | `{ from_line, lines }` — a batch of whole `trajectory.jsonl` lines |
+
+**Every answer is an explicit JSON ack, never a silent success**: either
+`{ accepted: true, … }` or `{ accepted: false, reason, message, … }`. A refusal
+is a normal answer the uploader acts on. The reasons are `terminal` (the run has
+finished), `not_open` (no `open` call landed for this run), `shape` (the entry
+path or a line is not a shape the route stores), `immutable` (the entry already
+holds different bytes), `budget`, `gap`, `divergent`, and `line_too_large`.
+Malformed requests — a non-integer `from_line`, `lines` that is not an array of
+strings, a missing manifest — remain ordinary `bad_request` errors.
+
+`open` is idempotent and doubles as the manifest-snapshot route: it stores the
+manifest on the run row and sets `live_opened_at`, and the returned
+`manifest_generation` advances only when the stored bytes actually change, so a
+repeated open costs nothing and never churns a watching viewer. Opening does not
+touch the status machine.
+
+`(run, entry path)` is unique and **immutable**. An identical-bytes retry (hash
+match) replays the original acknowledgement without charging budget twice;
+different bytes for a path already staged are refused. Entry paths are validated
+against the step-artifact shape — `steps/<name>`, no traversal, no nesting — so
+`manifest.json`, `trajectory.jsonl` and end-of-run artifacts are not stageable.
+
+The trajectory route holds the authoritative line count and returns it on
+**every** answer, refusals included, so one response always resynchronizes the
+uploader. A batch at the count appends. An overlapping resend is *verified* —
+the resent prefix must hash-match the stored lines — then deduplicated, so a
+divergent retry is refused rather than silently merged. A batch that would leave
+a gap is refused, and the answered count says where to rewind. The route carries
+an explicit body cap set comfortably above the practical envelope maximum; a
+single line over the line cap is refused with its own reason rather than
+truncated.
+
+The group spec advertises the live URL templates and every cap under
+`uploads.live`, so a runner sizes its batches from the deployment rather than
+from a constant it compiled in.
 
 ## Runner pool
 
@@ -1040,6 +1092,71 @@ pending candidates: it proves the current baseline still replays, so accepting
 an older healed trajectory would regress the baseline. A fresh recording
 supersedes the same way. Both emit `candidate.superseded`.
 
+### Live runs
+
+**A run may be viewer-visible before its bundle exists.** From its `open` call
+until its case report lands, an open run serves `manifest.json`,
+`trajectory.jsonl` and the step artifacts that have arrived, and the viewer
+streams them through the [`live` route](interfaces.md#live-runs). This changes
+nothing about the seal: **the sealed `.ptrun` and the case report are byte-for-byte
+what they were**, they remain the sole authoritative artifact, and verdicts,
+retention decisions, review and export never read live state. No live failure
+may change a run's status, ordering, timing, or sealed artifacts.
+
+A run is **open** exactly while `live_opened_at` is set and its status is still
+non-terminal (`queued`, `running`, `uploading`). Openness is explicit state and
+is never inferred from manifest contents: the placeholder manifest carries a
+terminal-looking status from the first instant of a case. The reconciler failing
+a run ends openness the same way a report does.
+
+Staged state has **two shapes, split by transactionality** — the metadata store
+and the object store cannot share a transaction, so each side holds what it is
+good at:
+
+- **Trajectory batches and the manifest snapshot live in the metadata store**,
+  the line text in the row, keyed and ordered by line range beside the
+  authoritative line count. Accepting a batch is one transaction, reading is one
+  indexed query, cleanup is a delete, and the highest-frequency write path has no
+  object-ownership question at all.
+- **Step artifacts live in the object store** behind a **two-phase ledger row**:
+  reserve `pending` (budget charged, key and hash recorded) → write the object →
+  mark `ready`. Readers serve `ready` only. Retention treats *both* states as
+  owned, so the orphan sweep — which deletes every unowned `runs/`-prefixed
+  object in the same cycle — never sees a window in which a live object is
+  unowned. A crash between the reservation and `ready` leaves a `pending` row
+  that garbage collection reaps on the grace schedule, refunding its reservation.
+
+Staged bytes are budget-accounted per run against a deployment ceiling
+(`PLAYTEST_LIVE_BUDGET_MB`, default and maximum 512 — the sealed bundle limit,
+because staging must never cost more than the bundle it precedes). Exhausting it
+is a refusal ack, not a silent drop. Per-entry, per-body and per-line caps bound
+one request each.
+
+Entry precedence for a run becomes **sibling artifact → sealed bundle entry →
+staged live entry**. The existing sibling-over-bundle order is unchanged, so a
+generated clip still wins over the bundled original; staging is only the final
+rung. Two entries are *virtual* for a staged run because their source is a row
+rather than an object: `manifest.json` from the run row (so the viewer's first
+fetch works the moment the run opens) and `trajectory.jsonl` as the ordered
+concatenation of the ledger's batches, in append order. A sealed run serves
+exactly what it always did, byte for byte.
+
+Picker projection follows the additive wire shape in
+[interfaces.md](interfaces.md#live-runs): an open run projects `status: null`
+plus `open: true`, never the placeholder's `interrupted`, and a sealed entry
+carries no `open` key. Open runs are excluded from `/history.json` and
+`/changed.json` until they seal — a half-recorded run is neither history nor a
+review item — and completed-run projections are untouched.
+
+**Staging is deleted only when a verified sealed bundle exists.** On the case
+report that follows a successful bundle upload, the ledger rows go in the report
+transaction and the staged objects immediately after it commits; a failed object
+delete leaves an object with no owning row, which the orphan sweep collects. A
+terminal report *without* a bundle — the runner reports `infra` when the bundle
+upload itself fails, and the reconciler fails runs whose runner died — keeps its
+staging through the retention grace window, because staging is then the only
+evidence the run produced.
+
 ## Events and long polling
 
 State changes write platform events transactionally with their owning database
@@ -1674,6 +1791,17 @@ tiers to `meta`, alongside the rest of that run's evidence. Regenerating a clip
 overwrites the previous clip at its deterministic object key, so superseded
 copies do not accumulate, and orphan-object cleanup removes any clip object no
 longer referenced by an artifact row.
+
+Live staging ([Live runs](#live-runs)) is transient serving state, not evidence
+retention decides about: it is deleted the moment a verified bundle lands. What
+the retention cycle collects is therefore only what the seal could not — the
+ledger rows and staged objects of a **terminal run with no bundle**, once a grace
+window (a day) has passed; `pending` reservations older than that window, whose
+upload crashed, refunded with the row; and any row whose run row is gone.
+Rows and objects go together, and deleting a row deliberately re-exposes its
+object to the orphan sweep as the backstop. That sweep counts a live staging row
+in *either* state as an owner, which is what lets it run mid-stream without
+touching a run's staged bytes.
 
 Content-addressed blobs (`blobs/<sha256>`) are reclaimed by their own sweep, and
 every referrer counts: a suite snapshot's tree, an environment's `app_artifact`,

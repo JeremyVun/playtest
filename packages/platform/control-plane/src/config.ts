@@ -132,6 +132,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     uploads: {
       appArtifactMaxBytes: num(env.PLAYTEST_APP_ARTIFACT_MAX_MB, 512) * 1024 * 1024,
     },
+    // Open-run live staging (docs/contracts/hosted.md, "Live runs"). The per-run
+    // budget bounds transient serving state a run holds before it seals; the
+    // sealed bundle limit is its ceiling, because staging can never be allowed
+    // to cost more than the bundle it precedes. Exhausting it is an explicit
+    // refusal ack the uploader acts on — the recording never notices.
+    live: {
+      runBudgetBytes: num(env.PLAYTEST_LIVE_BUDGET_MB, 512) * 1024 * 1024,
+    },
     dispatch: {
       maxActivePerProject: Number(env.PLAYTEST_DISPATCH_MAX_ACTIVE_PER_PROJECT || 4),
       // How long the reconciler waits for GitHub's 204 dispatch response to be
@@ -324,6 +332,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     throw new ServerConfigError(
       `PLAYTEST_APP_ARTIFACT_MAX_MB must be a whole number of megabytes between 1 and 4096 ` +
         `(got ${JSON.stringify(env.PLAYTEST_APP_ARTIFACT_MAX_MB)}); leave it unset for 512`,
+    );
+  }
+  const liveBudgetMb = config.live.runBudgetBytes / (1024 * 1024);
+  if (!Number.isInteger(liveBudgetMb) || liveBudgetMb < 1 || liveBudgetMb > 512) {
+    throw new ServerConfigError(
+      `PLAYTEST_LIVE_BUDGET_MB must be a whole number of megabytes between 1 and 512 — the sealed bundle ` +
+        `limit is its ceiling (got ${JSON.stringify(env.PLAYTEST_LIVE_BUDGET_MB)}); leave it unset for 512`,
     );
   }
   if (!Number.isFinite(config.retention.intervalMs) || config.retention.intervalMs < 0) {

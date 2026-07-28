@@ -48,7 +48,7 @@ import { launchLimitPlaceholders } from "../lib/launch-limits.js";
 import { canRetryRun, retryableStoryCount } from "../lib/run-retry.js";
 import { placementReadiness } from "../lib/runners.js";
 import { appSourceWords, appTargetProblem } from "../lib/suite-target.js";
-import { fmtBytes } from "../lib/env-config.js";
+import { fmtBytes, environmentDriver } from "../lib/env-config.js";
 
 export async function runsPage(projectKey: WebDynamic, groupId: WebDynamic = null, query: WebDynamic = null) {
   const main = renderFrame({ projectKey, nav: "runs" });
@@ -1289,6 +1289,7 @@ export function launchModal(projectKey: WebDynamic, suites: WebDynamic = null, p
         // preview only once envs are in — before that the env select's
         // "Loading…" placeholder would ride the request as an environment id
         if (envs.length) {
+          await loadSuiteDefaults(suite.value);
           if (!envTouched) paintEnvs();
           preview();
         }
@@ -1308,10 +1309,9 @@ export function launchModal(projectKey: WebDynamic, suites: WebDynamic = null, p
         envs = items;
         groups = recent.items || [];
         runners = fleet.items || [];
-        paintEnvs();
-        preview();
         await loadSuiteDefaults(suite.value);
         paintEnvs();
+        preview();
       } catch (err: WebDynamic) { toastError(err); }
     }
 
@@ -1337,7 +1337,11 @@ export function launchModal(projectKey: WebDynamic, suites: WebDynamic = null, p
      * the server refuses it, and offering it would be offering a mistake.
      */
     function visibleEnvs() {
-      return envs.filter((e: WebDynamic) => !e.suite_id || e.suite_id === suite.value);
+      const app = defaultsBySuite.get(suite.value);
+      if (!app) return [];
+      const driver = app.driver || "web";
+      return envs.filter((e: WebDynamic) =>
+        environmentDriver(e) === driver && (!e.suite_id || e.suite_id === suite.value));
     }
 
     /**

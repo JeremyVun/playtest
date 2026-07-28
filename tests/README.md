@@ -1,18 +1,28 @@
 # Test map
 
-Tests are grouped first by the project they exercise, then by execution tier.
+Tests live with the package they exercise, grouped by execution tier.
 
 ```
-tests/
-  core/
+packages/
+  core/tests/
     unit/          pure engine, configuration, schema, and driver-contract tests
     integration/   core components working together without simulated model behavior
     browser/       real Chromium tests
     mobile/        real Appium / iOS Simulator tests
-  cli/             local commands
-  run-viewer/
+  cli/tests/       local commands
+  run-viewer/tests/
     node/          viewer server and artifact projections
     browser/       real Chromium rendering
+  platform/
+    control-plane/tests/
+      unit/        dependency-free hosted logic
+      integration/ complete control plane against temporary storage
+      browser/     hosted console smoke coverage in real Chromium
+      mobile/      hosted mobile pool flow
+    runner-agent/tests/unit/
+                    runner execution, isolation, and upload protocol
+    web/tests/     browser-independent hosted UI logic and build shape
+tests/
   fixtures/        test-owned applications and Playtest suites
     todo-app/      the web journey app
     todos/         its Playtest suite
@@ -74,10 +84,8 @@ minutes) inside webdriverio's own session timeout; if that first run times out,
 rerun it — the build is cached afterwards. The suite shuts down any simulator it
 booted and kills the server it spawned.
 
-Hosted packages own their tests:
-
-- `packages/platform/control-plane/tests/{unit,integration}`
-- `packages/platform/runner-agent/tests/unit`
+Control-plane integration tests remain an explicit tier because they require
+their integration dependencies; `npm test` runs its unit suite only.
 
 The archived July 2026 hill-climb project owns historical standalone suites
 under `studies/archive/hillclimb-2026-07/{tests,bench/tests}`. They are not part

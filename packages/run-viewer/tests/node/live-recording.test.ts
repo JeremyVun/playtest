@@ -1,6 +1,6 @@
 // End to end, hermetically: a real recording run writing a real run directory
 // in this process, while a fetch-based client follows the live endpoint the way
-// the viewer will (docs/backlog/live-runs/DESIGN.md).
+// the viewer will (docs/contracts/interfaces.md "Live runs").
 //
 // What it pins: the follower observes every envelope exactly once and in append
 // order — ordering is sacred — sees them while the run is still executing rather

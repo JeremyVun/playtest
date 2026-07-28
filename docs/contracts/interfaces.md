@@ -51,8 +51,8 @@ export is a public contract change.
 ## CLI conventions
 
 The bin is `playtest`. The human-facing commands are `new`, `view`, `clip`,
-`install-skill`, the `findings` ledger group, and the
-`baseline accept|reject|refresh` lifecycle. `run` is the hidden default
+`export`, `install-skill`, `script author`, the `findings` ledger group, and
+the `baseline accept|reject|refresh` lifecycle. `run` is the hidden default
 command:
 
 ```text
@@ -66,6 +66,11 @@ form `playtest run view`.
 Agent commands `list`, `lint`, and `personas` are supported but hidden from
 top-level help. `run` is hidden because it implements the default command.
 `grade <runDir>` is a hidden single-run repair command.
+
+`playtest script author <job> [--out <dir>] [--prepare]` runs the authoring job
+defined in [Script contracts](scripts.md#the-authoring-job-file). `--prepare`
+writes the handout without a model call or target execution. There are no
+`script run` or `script review` commands.
 
 ### Exit codes and errors
 

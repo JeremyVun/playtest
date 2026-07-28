@@ -135,7 +135,8 @@ Every YAML document is validated at load against `case.schema.json` or
 `defaults.schema.json`. Unknown keys, missing required fields, invalid enums,
 duplicate/minimum violations, and malformed YAML are `DummyConfigError`s that
 name the file and actionable field. A bare key parsed as `null` is treated as
-absent. A top-level `env` key is rejected with the migration to `app`.
+absent. A top-level `env` key is invalid; the message directs the author to
+`app`.
 
 Relative paths resolve against the YAML file that declared them. This applies
 to `app.compose`, `app.init`, `app.storage_state`, each `app.auth_states` value,
@@ -813,10 +814,6 @@ return is infrastructure failure. Hook provenance is stored in
 }
 ```
 
-`opts.driverFactory` is a test seam: it replaces the driver factory so the
-hermetic engine tests can run record/act/heal against a scripted in-memory
-driver. Production callers never pass it.
-
 The execution strategy is:
 
 | Case and state | Strategy |
@@ -991,8 +988,7 @@ writing the drift report's narrative. It has no authority over the
 classification, the gate, the status, or the exit code, and no confidence score
 exists that could acquire any.
 
-`changed` remains a display and lifecycle term. There is no new result status and
-no consumer migration.
+`changed` is a display and lifecycle term, not a result status.
 
 ### Post-execution phases
 
@@ -1109,8 +1105,9 @@ end of a run.
 - `accessibility_violations`: total axe WCAG violation-node count summed across
   web envelopes at or below the configured number.
 - `assert`: model judgment over the final state and trajectory, with bounded
-  intermediate-snapshot fetches; missing model is a failed check, not
-  infrastructure failure.
+  intermediate-snapshot fetches and an ordinary-language reasonable-person
+  standard; routine qualifications do not by themselves negate a positive
+  result. A missing model is a failed check, not infrastructure failure.
 - `lcp_ms` / `input_to_paint_ms`: comparison against the worst recorded value.
 
 Performance thresholds accept `<`, `<=`, `>`, or `>=`; a bare number means
@@ -1318,9 +1315,6 @@ rest to one operation. The Tier-2 metamorphic policies need *sequences*, and a
 web story only produces the sequence its clicks produce — declaring one the
 journey does not exercise is a failure, not a pass.
 
-`tests/fixtures/web-invariants/` is a committed web suite exercising this shape
-against the todo-app fixture's UI.
-
 Declared exceptions are how a policy stays sound rather than universal: soft
 delete declares `after:` and `state:`, an eventually-consistent enumeration
 declares `consistency: eventual`, an idempotent replay that refreshes a
@@ -1328,8 +1322,6 @@ timestamp declares `ignore:`, an API whose auth responses are not enveloped
 relies on `error_shape`'s default `exclude_status`, and `round_trip` compares
 only the fields the case names — generated, defaulted, computed, redacted, and
 write-only fields are excluded by declaration, never by inference.
-
-`tests/fixtures/api-example/` is a committed suite exercising the shape.
 
 ## Grading
 
@@ -1392,8 +1384,8 @@ uses 2048.
 The trajectory digest includes normalized actor raises. The grader may promote,
 refine, or discard those notes when producing its run-local `findings`.
 Grader findings cover UX and quality observations and do not create durable
-hosted findings or assign cross-run identity. Discovery study synthesis may
-later group those observations, but grading remains one-run analysis.
+hosted findings or assign cross-run identity. Hosted discovery synthesis may
+group those observations; grading remains one-run analysis.
 
 ### Cross-run finding identity and lifecycle
 
@@ -1409,35 +1401,28 @@ physical databases with the same semantics.
   model-chosen category never enter a key. A candidate with no deterministic
   signal has no exact keys.
 - Algorithms are versioned and frozen: `key-v1`, `locus-norm-v1`,
-  `match-text-v1`, retrieval `shortlist-v1`. The reference spec is
-  `tests/support/findings/spec.ts`; the core and hosted implementations are
-  independently pinned to it byte for byte, so the same defect keys identically
-  on both sides. Every stored row carries its algorithm versions so a bump can
+  `match-text-v1`, retrieval `shortlist-v1`. Core and hosted use the same
+  functions, and every stored row carries its algorithm versions so a bump can
   recompute.
 - The scope id differs by deployment: the hosted `project_id`, the local
-  ledger's `workspace_id`. Keys therefore never transfer between them; a
-  local→hosted import recomputes.
+  ledger's `workspace_id`. Keys therefore never transfer between them.
 - The recurrence semantics are shared: a strict-key recurrence appends
   evidence with no review, a resolved finding returns to work, a rejected
   finding absorbs matching evidence silently and counts the recurrence, a
   loose-key hit is a suggestion and never auto-appends or auto-merges, and
-  merges leave tombstones that lookups follow. The lifecycles diverge in
-  shape (2026-07-26): the hosted control plane collapsed bug candidates into
-  findings — a machine-filed claim is a finding in state `new` (needs
-  review), and there is no candidate object. The local ledger still models the
-  intake stage as a candidate (`unassigned`/`assigned`/`dismissed`) ahead of
-  findings (`new`/`accepted`/`rejected`/`resolved`/`reopened`); mirroring the
-  collapse locally is the listed follow-up. A dismissed local candidate's
-  exact recurrence is absorbed and counted, matching the hosted rejected-`new`
-  behavior.
-- Auto-resolve is hosted-only (2026-07-26): the control plane retires a
+  merges leave tombstones that lookups follow. Hosted machine-filed claims are
+  findings in state `new`; there is no hosted candidate object. The local
+  ledger uses candidates (`unassigned`/`assigned`/`dismissed`) before findings
+  (`new`/`accepted`/`rejected`/`resolved`/`reopened`). A dismissed local
+  candidate's exact recurrence is absorbed and counted, matching hosted
+  rejected-`new` behavior.
+- Auto-resolve is hosted-only: the control plane retires a
   finding when a newer run on every affected (suite, environment, case)
   disproves it — same gate check passing, recomputed anomaly signal absent
   under locus coverage, or (for key-less findings) a suggestion on an
   outright pass — with recurrence destinations split by confirmation
   (confirmed → `reopened`, unconfirmed → `new`). The local ledger has no
-  resolution stamps and its resolved findings always reopen on recurrence;
-  mirroring auto-resolve locally joins the collapse-mirror follow-up above.
+  resolution stamps and its resolved findings always reopen on recurrence.
 - Evidence is append-only references to runs and steps. The engine never copies
   artifact bytes into a findings database, and no findings operation modifies a
   run directory.

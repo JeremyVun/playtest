@@ -18,7 +18,7 @@
     "test:cli": "npm test --workspace=@playtest/cli",
     "test:viewer": "npm test --workspace=@playtest/run-viewer",
     "test:repository": "node --import ./tests/support/hermetic.ts --test tests/repository/*.test.ts",
-    "test:browser": "npm run build:web && npm run test:browser --workspace=@playtest/core && npm run test:browser --workspace=@playtest/run-viewer",
+    "test:browser": "npm run build:web && npm run test:browser --workspace=@playtest/core && npm run test:browser --workspace=@playtest/run-viewer && npm run test:browser --workspace=@playtest/control-plane",
     "test:mobile": "npm run test:mobile --workspace=@playtest/core && npm run test:mobile --workspace=@playtest/control-plane",
     "test:all": "npm test && npm run test:browser",
     "hosted": "bash scripts/hosted-server.sh",

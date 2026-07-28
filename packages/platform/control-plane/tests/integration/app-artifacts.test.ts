@@ -67,7 +67,7 @@ async function runnerToken(api: HostedDynamic, groupId: string) {
 test("app artifact: upload is content-addressed, replace supersedes, delete clears, and re-uploading the same bytes is a no-op", async () => {
   await withApp(async ({ api, storeRoot }: HostedDynamic) => {
     await api.post("/projects", { key: "p", name: "P" });
-    const env = (await api.post("/projects/p/environments", { name: "sim" })).body;
+    const env = (await api.post("/projects/p/environments", { name: "sim", driver: "mobile" })).body;
     assert.equal(env.app_artifact, null, "an environment ships no binary until someone uploads one");
 
     const v1 = build("BUILD-1");
@@ -114,7 +114,7 @@ test("app artifact: a build over the deployment cap is refused with the cap name
   await withApp(
     async ({ api, storeRoot }: HostedDynamic) => {
       await api.post("/projects", { key: "p", name: "P" });
-      const env = (await api.post("/projects/p/environments", { name: "sim" })).body;
+      const env = (await api.post("/projects/p/environments", { name: "sim", driver: "mobile" })).body;
 
       const tooBig = Buffer.alloc(2 * 1024 * 1024, 7);
       const res = await api.putRaw(`/environments/${env.id}/app-artifact?filename=todo-release.apk`, tooBig);
@@ -139,7 +139,7 @@ test("app artifact: a build over the deployment cap is refused with the cap name
 test("app artifact: the upload names its file, and only kinds the runner can materialize", async () => {
   await withApp(async ({ api }: HostedDynamic) => {
     await api.post("/projects", { key: "p", name: "P" });
-    const env = (await api.post("/projects/p/environments", { name: "sim" })).body;
+    const env = (await api.post("/projects/p/environments", { name: "sim", driver: "mobile" })).body;
     const bytes = build("BUILD");
 
     const unnamed = await api.putRaw(`/environments/${env.id}/app-artifact`, bytes);
@@ -168,7 +168,7 @@ test("app artifact: the upload names its file, and only kinds the runner can mat
 test("app artifact: uploading takes the environment role, and a viewer token cannot", async () => {
   await withApp(async ({ api }: HostedDynamic) => {
     await api.post("/projects", { key: "p", name: "P" });
-    const env = (await api.post("/projects/p/environments", { name: "sim" })).body;
+    const env = (await api.post("/projects/p/environments", { name: "sim", driver: "mobile" })).body;
     const viewer = (await api.post("/projects/p/tokens", { name: "read-only", role: "viewer" })).body;
     const asViewer = api.withToken(viewer.token);
 
@@ -183,7 +183,7 @@ test("app artifact: a launch pins the hash, and a re-upload mid-flight never cha
     async ({ api, app }: HostedDynamic) => {
       await api.post("/projects", { key: "p", name: "P" });
       const suite = await seedMobileSuite(api, "p");
-      const env = (await api.post("/projects/p/environments", { name: "sim" })).body;
+      const env = (await api.post("/projects/p/environments", { name: "sim", driver: "mobile" })).body;
       const v1 = build("BUILD-1");
       await api.putRaw(`/environments/${env.id}/app-artifact?filename=todo-release.apk`, v1);
 
@@ -222,7 +222,7 @@ test("app artifact: the runner route serves this group's pinned bytes and nothin
     async ({ api, storeRoot }: HostedDynamic) => {
       await api.post("/projects", { key: "p", name: "P" });
       const suite = await seedMobileSuite(api, "p");
-      const env = (await api.post("/projects/p/environments", { name: "sim" })).body;
+      const env = (await api.post("/projects/p/environments", { name: "sim", driver: "mobile" })).body;
       const bytes = build("BUILD-1");
       await api.putRaw(`/environments/${env.id}/app-artifact?filename=TodoFixture.app.zip`, bytes);
 
@@ -273,7 +273,7 @@ test("app artifact: a group with no pinned artifact says so rather than serving 
       await api.post("/projects", { key: "p", name: "P" });
       const suite = await seedMobileSuite(api, "p");
       const env = (
-        await api.post("/projects/p/environments", { name: "sim", config: { app: { app: "/Users/dev/build/Todo.app" } } })
+        await api.post("/projects/p/environments", { name: "sim", driver: "mobile", config: { app: { app: "/Users/dev/build/Todo.app" } } })
       ).body;
       const launch = await api.post("/projects/p/run-groups", { suite_id: suite.id, environment_id: env.id, selection: {} });
       const runner = await runnerToken(api, launch.body.run_group.id);
@@ -304,7 +304,7 @@ test("app artifact: the launch preview says which of the three sources supplies 
         appLine: "  app: builds/app.apk",
         files: { "builds/app.apk": "PRETEND-APK" },
       });
-      const bare = (await api.post("/projects/p/environments", { name: "bare" })).body;
+      const bare = (await api.post("/projects/p/environments", { name: "bare", driver: "mobile" })).body;
       const fromSuite = await preview(committed, bare);
       assert.equal(fromSuite.source, "suite");
       assert.equal(fromSuite.resolved, "builds/app.apk");
@@ -312,7 +312,7 @@ test("app artifact: the launch preview says which of the three sources supplies 
 
       // 2. The environment — a path on the runner's own disk beats the suite's.
       const local = (
-        await api.post("/projects/p/environments", { name: "laptop", config: { app: { app: "/Users/dev/build/Todo.app" } } })
+        await api.post("/projects/p/environments", { name: "laptop", driver: "mobile", config: { app: { app: "/Users/dev/build/Todo.app" } } })
       ).body;
       const fromEnv = await preview(committed, local);
       assert.equal(fromEnv.source, "environment");
@@ -320,7 +320,7 @@ test("app artifact: the launch preview says which of the three sources supplies 
       assert.equal(fromEnv.suite_app, "builds/app.apk", "the losing values stay visible, the way base_url's do");
 
       // 2. …and an uploaded artifact is the environment's other form.
-      const shipped = (await api.post("/projects/p/environments", { name: "shipped" })).body;
+      const shipped = (await api.post("/projects/p/environments", { name: "shipped", driver: "mobile" })).body;
       const bytes = build("BUILD-1");
       await api.putRaw(`/environments/${shipped.id}/app-artifact?filename=TodoFixture.app.zip`, bytes);
       const fromArtifact = await preview(committed, shipped);
@@ -344,10 +344,13 @@ test("app artifact: the launch preview says which of the three sources supplies 
 
       // A web target still reports the URL resolution beside it, unchanged.
       const web = (await api.post("/projects/p/environments", { name: "staging", config: { app: { base_url: "https://staging.test" } } })).body;
-      const target = (await api.post("/projects/p/run-groups/preview", { suite_id: committed.id, environment_id: web.id, selection: {} })).body.target;
-      assert.equal(target.resolved_base_url, "https://staging.test");
-      assert.equal(target.source, "environment");
-      assert.equal(target.app.source, "suite");
+      const mismatch = await api.post("/projects/p/run-groups/preview", {
+        suite_id: committed.id,
+        environment_id: web.id,
+        selection: {},
+      });
+      assert.equal(mismatch.status, 400, JSON.stringify(mismatch.body));
+      assert.match(mismatch.body.error.message, /environment "staging" is for "web" suites/);
     },
     {},
     { github: GITHUB_STUB },
@@ -361,7 +364,7 @@ test("app artifact: a launch whose binary is a suite path the snapshot does not 
       // The placeholder every hosted mobile suite carries so it can be listed at
       // all: harmless until someone launches against a ring that supplies nothing.
       const suite = await seedMobileSuite(api, "p", { appLine: "  app: ./placeholder.app" });
-      const bare = (await api.post("/projects/p/environments", { name: "bare" })).body;
+      const bare = (await api.post("/projects/p/environments", { name: "bare", driver: "mobile" })).body;
 
       const refused = await api.post("/projects/p/run-groups", { suite_id: suite.id, environment_id: bare.id, selection: {} });
       assert.equal(refused.status, 400, JSON.stringify(refused.body));
@@ -377,7 +380,7 @@ test("app artifact: a launch whose binary is a suite path the snapshot does not 
       assert.equal((await api.post("/projects/p/run-groups", { suite_id: suite.id, environment_id: bare.id, selection: {} })).status, 200);
 
       const laptop = (
-        await api.post("/projects/p/environments", { name: "laptop", config: { app: { app: "/Users/dev/build/Todo.app" } } })
+        await api.post("/projects/p/environments", { name: "laptop", driver: "mobile", config: { app: { app: "/Users/dev/build/Todo.app" } } })
       ).body;
       assert.equal((await api.post("/projects/p/run-groups", { suite_id: suite.id, environment_id: laptop.id, selection: {} })).status, 200);
 
@@ -386,7 +389,7 @@ test("app artifact: a launch whose binary is a suite path the snapshot does not 
         appLine: "  app: builds/app.apk",
         files: { "builds/app.apk": "PRETEND-APK" },
       });
-      const bare2 = (await api.post("/projects/p/environments", { name: "bare2" })).body;
+      const bare2 = (await api.post("/projects/p/environments", { name: "bare2", driver: "mobile" })).body;
       assert.equal((await api.post("/projects/p/run-groups", { suite_id: committed.id, environment_id: bare2.id, selection: {} })).status, 200);
     },
     {},
@@ -399,7 +402,7 @@ test("app artifact: retention reclaims a blob nothing names, and keeps one a run
     async ({ api, app, storeRoot }: HostedDynamic) => {
       await api.post("/projects", { key: "p", name: "P" });
       const suite = await seedMobileSuite(api, "p");
-      const env = (await api.post("/projects/p/environments", { name: "sim" })).body;
+      const env = (await api.post("/projects/p/environments", { name: "sim", driver: "mobile" })).body;
       const blobPath = (b: Buffer) => path.join(storeRoot, "blobs", sha(b));
 
       // An upload nobody launched against and then cleared: unreferenced.

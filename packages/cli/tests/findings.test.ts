@@ -204,8 +204,6 @@ test("user-input failures exit 2 with an actionable message and no stack", () =>
 });
 
 test("findings appears in help with its lifecycle subcommands", () => {
-  const top = runCli(["--help"]);
-  assert.match(top.stdout, /^ {2}findings(?: |$)/m);
   const help = runCli(["findings", "--help"]);
   assert.equal(help.status, 0, output(help));
   for (const command of ["list", "show", "consolidate", "accept", "reject", "resolve", "export"]) {

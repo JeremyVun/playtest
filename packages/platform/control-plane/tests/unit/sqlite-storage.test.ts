@@ -148,6 +148,14 @@ test("foreign keys, cascades, and referential actions are enforced by the databa
 test("uniqueness constraints, including the partial active-fingerprint index, hold", async () => {
   const { db } = await freshDb();
   await db.query("INSERT INTO projects (id, key, name) VALUES ($1, $2, $3)", ["p1", "proj", "Proj"]);
+  await assert.rejects(
+    () => db.query(
+      "INSERT INTO environments (id, project_id, name, driver) VALUES ($1, $2, $3, $4)",
+      ["e-bad", "p1", "staging", "desktop"],
+    ),
+    /CHECK constraint failed/,
+    "an environment belongs to one supported driver",
+  );
 
   await assert.rejects(
     () => db.query("INSERT INTO projects (id, key, name) VALUES ($1, $2, $3)", ["p2", "proj", "Other"]),

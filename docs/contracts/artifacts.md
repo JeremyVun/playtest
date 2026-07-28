@@ -192,8 +192,8 @@ actions normally persist a resolution with `locator: null` and `bbox: null` so
 they remain replayable. Terminal, error, and failed-execution envelopes may
 omit `resolution`.
 
-`result.url` retains its historical name across drivers. It contains a URL for
-web, a screen or route identifier for mobile, and a path for API.
+`result.url` is driver-neutral despite its name: it contains a URL for web, a
+screen or route identifier for mobile, and a path for API.
 
 `perf` may be `null` on drivers that cannot measure it. `axe` is best-effort and
 web-only; it contains at most 25 violations and its `counts.total` is the total
@@ -312,13 +312,9 @@ values:
 | `core` (default) | Everything the actor, the gate, the grader, and the viewer read: accessibility text (`steps/NNN.a11y.txt`, `final.a11y.txt`), step screenshots, the video and its captions, `har.json`, `trajectory.jsonl`, `manifest.json`, `events.jsonl`, `context.jsonl`, and the baseline/grade/drift files. |
 | `debug` | `core` plus the browser-forensics extras: the Playwright trace (`trace.zip`), per-step and final MHTML, and the driver's native accessibility tree (`steps/NNN.pw-a11y.txt`). |
 
-Every artifact only `debug` writes is one **nothing in the product reads back**:
-the harness, the gate, the grader, and the viewer never open a trace or an
-MHTML file, and the native tree feeds one optional side-by-side diff the viewer
-hides when the artifact is absent. They exist for a human debugging a specific
-run, and they dominate what a run costs — on a representative web run
-`trace.zip` alone is about 70% of the bytes and its close-time flush is about
-90% of `driver.close()`.
+Debug-only artifacts are not harness, gate, or grader inputs. The viewer never
+opens a trace or MHTML file; the native tree feeds an optional side-by-side diff
+that stays hidden when absent. These artifacts exist for manual diagnosis.
 
 The profile is enforced at capture, not at cleanup: under `core` the tracing
 session is never started and the MHTML and native-tree round-trips are never
@@ -425,15 +421,12 @@ typed claims that the application malfunctioned, kept separate from the UX/quali
 }
 ```
 
-The field is optional and backward-compatible: it is absent on journey grades,
-on any discovery grade that found no malfunction, and on every `grade.json`
-written before it existed. `kind` is a broad comparison label, not identity — the
-same defect may be labeled differently across runs. The grader assigns no durable
-id and no exact key: the deterministic `signal_type` and normalized locus that
-key cross-run recurrence (DESIGN D4) are derived later, server-side, from trusted
-recorded context, never from this model-authored output. Promotion of a candidate
-to a durable platform finding is a hosted concern in a later phase; a candidate in
-`grade.json` is a potential defect for review, not a platform finding.
+The field is absent on journey grades and on discovery grades that found no
+malfunction. `kind` is a broad comparison label, not identity: the same defect
+may be labeled differently across runs. The grader assigns no durable id or
+exact key. Findings intake derives cross-run identity from trusted recorded
+context, never from model-authored output; a candidate in `grade.json` remains
+a run-local claim until intake processes it.
 
 Readers must tolerate optional fields being absent. Adding a new persisted
 grader output requires a compatible schema and reader change; model-generated
@@ -467,16 +460,12 @@ nevertheless sensitive and untracked: it still contains session cookies,
 server-issued tokens core cannot recognize, and application data.
 
 A committed baseline carries neither raw response bodies nor injected
-credentials, but — for the API driver — it does carry request headers and
-bodies, as the redacted request program described under
-[Baseline files](#baseline-files). The older blanket rule ("baselines never
-include headers or bodies") could not be honored by a driver whose action *is* a
-request: stripping the payload would destroy creates, idempotency keys, and
-conditional headers, and acting the baseline would stop working. Web and mobile
-envelopes still carry no headers or bodies, because their actions do not have
-any.
+credentials. API baselines do carry request headers and bodies as the redacted
+request program described under [Baseline files](#baseline-files), because the
+request is the replayable action. Web and mobile envelopes carry no headers or
+bodies.
 
-New runs do not record a live screencast. The runner always attempts to write
+Runs do not record a live screencast. The runner always attempts to write
 `video.vtt`; when ffmpeg is available it builds a paced slideshow from step
 stills as `video.mp4`. `manifest.artifacts.video` remains `null` when the build
 cannot run. A non-null `manifest.video_started_at` identifies a legacy
@@ -520,7 +509,7 @@ wall-clock `video.webm`, which consumers must continue to support.
     harness_version,
     actor_model,
     grader_model,
-    step_schema_version: 7,
+    step_schema_version: 8,
     snapshot_format,
     driver: "web" | "mobile" | "api",
     settle,
@@ -728,10 +717,9 @@ layout and how the pieces relate.
 ```
 
 One execution writes exactly those two files plus an exit status; nothing else.
-The script itself is a plain ESM file owned by the suite (locally a file in the
-repository, hosted a versioned blob), and its sha256 — the same fingerprint the
-leak scan returns — is recorded in the report as `script.sha256`. That
-fingerprint is what an approval covers, so any edit invalidates it.
+The script itself is a plain ESM file supplied by the caller. Its SHA-256 — the
+same fingerprint the leak scan returns — is recorded in the report as
+`script.sha256`.
 
 `har.json` here is **HAR 1.2** (`log.version`, `log.creator`, `headers` as
 name/value pairs, `postData.text`, `response.content.text`), not the reduced
@@ -765,82 +753,11 @@ Report-to-HAR linkage is by **entry index**: `checks[].evidence.har_entries` and
 `har.json`. The runner drops a citation that does not resolve and raises it as a
 defect, so a persisted report never carries a dangling index at write time.
 
-Retention treats the HAR as a sensitive payload and the report as durable
-evidence. After the HAR expires or is deleted, the report still carries each
-check's obligation trace, its expected/observed strings, and the cited entry
-metadata; raw request and response bodies are gone, and evidence citations
-render as unresolvable rather than as if the payload were still present
+If the HAR is deleted, the report still carries each check's obligation trace,
+expected/observed strings, and cited entry metadata. Raw request and response
+bodies are gone, and evidence citations render as unresolvable rather than as
+if the payload were present
 ([Script contracts: HAR lifecycle](scripts.md#har-lifecycle)).
-
-### Script versions and approval records
-
-The bundle is content; a **version** is that content's place in a lifecycle
-(`DESIGN` N9, [Script contracts: approval
-lifecycle](scripts.md#approval-lifecycle)). Every version is one immutable
-record of bytes:
-
-```js
-{
-  lifecycle_version: 1,
-  number, parent,                      // 1, 2, 3 … and what it was edited from
-  origin: "authored" | "edit" | "revision",
-  state: "pending" | "approved" | "rejected",
-  fingerprint,                         // sha256 of exactly the script's bytes
-  bytes, created_at, authored_by, note,
-  approval: {
-    state, fingerprint,                // the sha256 the reviewer had on screen
-    approver, at, review, reason?      // review = the reference the decision cites
-  } | null
-}
-```
-
-`fingerprint` is the same value three other places already carry: the leak
-scan's return, the report's `script.sha256`, and the bundle manifest's
-`script.sha256`. It is what an approval covers, which is why any edit produces a
-new pending version rather than mutating one — a version number never changes
-meaning, and `approval.fingerprint !== fingerprint` is the persisted shape of
-"this was approved and has since moved".
-
-A **pending revision** is an ordinary version with `origin: "revision"`, carrying
-its drift report as the evidence for the change it proposes. It is never
-executed against the target on the strength of being proposed
-([Hosted: Drift as a revision](hosted.md#drift-as-a-revision)).
-
-### Script drift report
-
-A red replay writes `drift-report.json` beside its `har.json` and
-`script-report.json`. It is the same artifact family as the heal drift report
-above and the same discipline — everything except `narrative` is computed from
-recorded evidence — with a different `mode` and a script's evidence instead of a
-journey's:
-
-```js
-{
-  schema_version: 1,
-  mode: "script_replay",
-  run_id, suite, script, version,
-  classification: "regression" | "contract_drift",
-  signals: [{ kind, detail }],
-  spec_diff: {                          // what moved in the OpenAPI surface
-    changed, operations_added, operations_removed,
-    operations_changed: [{ operation, statuses_added, statuses_removed,
-                           fields_renamed: [{ from, to }],
-                           fields_removed, fields_added }],
-    touched
-  },
-  failing: { checks, gate, explained, unexplained },
-  replay: { … } | null,
-  revision: { proposed, reason },
-  narrative: { what_changed, why_valid, consumer_impact } | null,
-  narrated_by
-}
-```
-
-`revision.proposed` is `false` for every regression, with the reason stated in
-the artifact rather than left to a reader: revising a suite that caught a real
-break would delete the evidence. The narrative is advisory and is read back by
-nothing — not the classification, not the gate, not the verdict, not whether a
-revision is offered.
 
 ## Baseline files
 
@@ -1122,23 +1039,20 @@ The portable form is the document written by `playtest findings export`:
 }
 ```
 
-Rules a consumer, including a future hosted importer, must obey:
+Consumers must obey:
 
 - Evidence is references only — run id, run directory, case id, and step
   numbers. No artifact bytes, `grade.json` copies, screenshots, or HAR content
   cross this boundary; run bundles remain the evidence.
 - `strict_key` and `loose_key` are scoped to `workspace.id` and are **not**
-  transferable. An importer recomputes them under its own project scope from
-  `signal_type`, `locus`, and `story_id`, using the stated algorithm versions.
+  transferable. A consumer using a different scope must recompute them from
+  `signal_type`, `locus`, and `story_id` with the stated algorithm versions.
 - Records correlate by opaque provenance (`workspace.id` plus `source_id`),
   never by mutable `title`. Two records are the same defect only when their
   recomputed keys or an explicit human decision say so.
 - Readers tolerate absent optional fields. `format_version` is bumped for any
   incompatible change; a reader that does not recognize the version refuses the
   document rather than guessing.
-
-Import is deliberately not implemented: this contract exists so hosted
-interoperability is built against a frozen format rather than a live database.
 
 ## Compatibility rules
 

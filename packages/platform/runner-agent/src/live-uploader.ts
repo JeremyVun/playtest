@@ -1,5 +1,4 @@
-// The live uploader (docs/backlog/live-runs/DESIGN.md "The upload queue";
-// docs/contracts/hosted.md "Live staging routes").
+// The live uploader (docs/contracts/hosted.md "Live staging routes").
 //
 // One serialized, single-flight queue per case, ticking beside the progress
 // reporter at the same ~2 s coalescing floor. Each tick ships, in run-dir order:

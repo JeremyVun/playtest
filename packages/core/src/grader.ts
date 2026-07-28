@@ -506,13 +506,16 @@ const VERDICT_TOOL: ToolDefinition = {
   type: "function",
   function: {
     name: "verdict",
-    description: "Your yes/no verdict on whether the run supports the claim. Call this once you have enough evidence.",
+    description: "Your yes/no verdict under the reasonable-person test in the system prompt. Call this once you have enough evidence.",
     parameters: {
       type: "object",
       additionalProperties: false,
       required: ["pass", "detail"],
       properties: {
-        pass: { type: "boolean", description: "true only if the evidence clearly supports the claim." },
+        pass: {
+          type: "boolean",
+          description: "true when a reasonable person reading the evidence in ordinary language would agree it supports the claim; false when a material part is contradicted or genuinely unresolved.",
+        },
         detail: { type: "string", description: "One sentence: the evidence for or against the claim." },
       },
     },

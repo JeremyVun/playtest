@@ -115,7 +115,7 @@ explicit permission.
 ## Test
 
 ```sh
-npm test                              # every hermetic workspace suite + repository gate
+npm test                              # dependency-free workspace suites + repository gate
 npm run test:core
 npm run test:cli
 npm run test:viewer
@@ -130,8 +130,9 @@ npm run runner:test
 
 `npm test` must remain offline, Node-only, and independent of browsers, model
 credentials, databases, and Docker, with zero skipped tests. Control-plane
-integration tests need no database service either: each boots the whole control
-plane against its own temporary SQLite data root. Their clip case does need
+integration tests intentionally remain an explicit tier because they require
+integration dependencies; each boots the whole control plane against its own
+temporary SQLite data root. Their clip case does need
 `PLAYTEST_FFMPEG` pointed at an ffmpeg built with the `drawtext` and `subtitles`
 filters.
 

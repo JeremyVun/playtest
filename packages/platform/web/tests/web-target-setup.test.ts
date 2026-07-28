@@ -8,11 +8,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   readEnvApp, applyEnvApp, hasMobileConfig, fmtBytes, artifactSummary,
-  appArtifactProblem, APP_ARTIFACT_EXTENSIONS,
+  appArtifactProblem, APP_ARTIFACT_EXTENSIONS, environmentDriver,
 } from "../src/lib/env-config.js";
 import {
   BINARY_SOURCES, targetQuestion, ringNameProblem, ringPlan, existingRingPlan,
-  appSourceWords, appTargetProblem,
+  appSourceWords, appTargetProblem, compatibleRings,
 } from "../src/lib/suite-target.js";
 import { initialDefaultsYaml } from "../src/lib/defaults-form.js";
 
@@ -54,6 +54,18 @@ test("environment: a ring is offered the device fields when it already has one",
   assert.equal(hasMobileConfig({ app: { appium_url: "http://127.0.0.1:4723" } }), true);
   assert.equal(hasMobileConfig({ app: { base_url: "https://x.test" } }), false, "a web ring keeps the device fields folded away");
   assert.equal(hasMobileConfig(null), false);
+});
+
+test("environment: explicit driver wins; the restart fallback matches the migration", () => {
+  assert.equal(environmentDriver({ driver: "api", config: { app: { base_url: "https://api.test" } } }), "api");
+  assert.equal(
+    environmentDriver({ config: { app: { base_url: "https://web.test", platform: "ios" } } }),
+    "web",
+    "a URL-bearing ring polluted by the old mobile setup bug remains web",
+  );
+  assert.equal(environmentDriver({ config: { app: { platform: "ios" } } }), "mobile");
+  assert.equal(environmentDriver({ app_artifact: { filename: "app.apk" } }), "mobile");
+  assert.equal(environmentDriver({ config: {} }), "web");
 });
 
 test("environment: the app-artifact cap is stated up front, in the server's words", () => {
@@ -120,15 +132,38 @@ test("target card: a name that collides says which one is in the way", () => {
   assert.match(String(ringNameProblem("staging", envs)), /already a shared environment/);
   assert.match(String(ringNameProblem("checkout-local", envs)), /Checkout/);
   assert.match(String(ringNameProblem("STAGING", envs)), /already a shared environment/, "case is not a difference here");
+  assert.match(
+    String(ringNameProblem("staging", [{ name: "staging", driver: "web" }], "mobile")),
+    /already a web environment/,
+    "an incompatible ring is named as a type collision, not offered as something the suite can reuse",
+  );
   assert.match(String(ringNameProblem("my ring", envs)), /letters, digits, dots and dashes/);
   assert.match(String(ringNameProblem("", envs)), /Give this environment a name/);
+});
+
+test("target card: a suite sees only environments for its own driver", () => {
+  const envs = [
+    { id: "prod-web", name: "prod", driver: "web", suite_id: null },
+    { id: "sim-mobile", name: "sim", driver: "mobile", suite_id: null },
+    { id: "mine-mobile", name: "mine", driver: "mobile", suite_id: "s1" },
+    { id: "theirs-mobile", name: "theirs", driver: "mobile", suite_id: "s2" },
+  ];
+  assert.deepEqual(
+    compatibleRings(envs, "mobile", "s1").map((e: WebDynamic) => e.id),
+    ["sim-mobile", "mine-mobile"],
+  );
+  assert.deepEqual(
+    compatibleRings(envs, "web", "s1").map((e: WebDynamic) => e.id),
+    ["prod-web"],
+    "creating a mobile suite never makes the existing web prod ring selectable",
+  );
 });
 
 test("target card: each answer writes to whichever owner it belongs to", () => {
   // A web ring made inline is suite-owned by default, and the URL is the
   // SUITE's inside it — never the ring's, which every other suite would inherit.
   const web: WebDynamic = ringPlan({ driver: "web", name: "preview", scope: "suite", url: "https://preview.test " }, { suiteId: "s1" });
-  assert.deepEqual(web.environment, { name: "preview", suite_id: "s1", runner_labels: [], config: {} });
+  assert.deepEqual(web.environment, { name: "preview", driver: "web", suite_id: "s1", runner_labels: [], config: {} });
   assert.deepEqual(web.write, { kind: "suite-env-url", env: "preview", value: "https://preview.test" });
   assert.equal(web.upload, false);
   // Promoting it drops the suite ownership and nothing else.
@@ -141,6 +176,7 @@ test("target card: each answer writes to whichever owner it belongs to", () => {
     source: "runner-path", path: "/Users/ada/build/app.ipa", platform: "ios", appiumUrl: "http://127.0.0.1:4723",
   }, { suiteId: "s1" });
   assert.deepEqual(local.environment?.runner_labels, ["macos", "ios-sim"]);
+  assert.equal(local.environment?.driver, "mobile");
   assert.deepEqual(local.environment?.config, {
     app: { platform: "ios", appium_url: "http://127.0.0.1:4723", app: "/Users/ada/build/app.ipa" },
   });

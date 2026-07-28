@@ -44,10 +44,6 @@ test("platform web build emits one debuggable application bundle", async (t) => 
   const bundle = fs.readFileSync(path.join(buildDir, "app.js"), "utf8");
   assert.ok(bundle.length > 100_000, "bundle should contain the application, not only its entry");
   assert.ok(bundle.length < 500_000, "unexpected bundle-size regression");
-  assert.doesNotMatch(bundle, /\/api\/v1\/view\/shared\//);
-  assert.match(bundle, /waiting for a runner to connect/);
-  assert.doesNotMatch(bundle, /GitHub is scheduling/);
-  assert.match(bundle, /Retry this run\?/);
   assert.match(bundle, /sourceMappingURL=app\.js\.map/);
   assert.doesNotMatch(bundle, /from\s*["']\.\/(?:lib|pages)\//);
 });

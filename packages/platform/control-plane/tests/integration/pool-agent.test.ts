@@ -49,6 +49,7 @@ async function setUp(api: HostedDynamic, { key, baseUrl, labels = ["macos"], sto
   const env = (
     await api.post(`/projects/${key}/environments`, {
       name: "laptop",
+      driver: "api",
       runner_labels: labels,
       // The whole point: the target is loopback on the RUNNER's machine, which
       // a remotely hosted control plane could never reach itself.

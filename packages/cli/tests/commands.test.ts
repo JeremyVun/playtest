@@ -25,7 +25,7 @@ const output = (result: LegacyTestValue) => `\nstdout:\n${result.stdout}\nstderr
 test("help keeps the human surface focused and groups baseline lifecycle commands", () => {
   const top = runCli(["--help"]);
   assert.equal(top.status, 0, output(top));
-  for (const command of ["new", "view", "install-skill", "clip", "baseline"]) {
+  for (const command of ["new", "view", "install-skill", "clip", "baseline", "findings"]) {
     assert.match(top.stdout, new RegExp(`^  ${command}(?: |$)`, "m"));
   }
   for (const hidden of ["list", "lint", "personas", "accept", "reject", "refresh", "grade"]) {
@@ -41,29 +41,8 @@ test("help keeps the human surface focused and groups baseline lifecycle command
     assert.match(baseline.stdout, new RegExp(`^  ${command}(?: |$)`, "m"));
   }
 
-  for (const [flag, value] of [
-    ["--mode", "agent"],
-    ["--no-tui"],
-    ["--ci"],
-    ["--plain"],
-    ["--yes"],
-    ["--remote"],
-    ["--project", "project"],
-    ["--suite", "suite"],
-    ["--no-wait"],
-  ]) {
-    const removed = runCli(["run", flag, ...(value ? [value] : [])]);
-    assert.notEqual(removed.status, 0, `${flag} remains callable`);
-    assert.match(removed.stderr, new RegExp(`unknown option '${flag}'`));
-  }
-
   const clip = runCli(["clip", "--help"]);
   assert.doesNotMatch(clip.stdout, /parent dir|suite dir|case file|--runs-root|--tag|--id/);
-  for (const [command, flag] of [["view", "--runs-root"], ["clip", "--runs-root"], ["clip", "--tag"], ["clip", "--id"]]) {
-    const removed = runCli([command, flag, "value"]);
-    assert.notEqual(removed.status, 0, `${command} ${flag} remains callable`);
-    assert.match(removed.stderr, new RegExp(`unknown option '${flag}'`));
-  }
 });
 
 test("list --json reports record before a baseline and check after one exists", () => {

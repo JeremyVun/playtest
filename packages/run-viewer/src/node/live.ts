@@ -1,6 +1,5 @@
 // The live protocol on the local viewer host: GET <run base>/live.
-// See docs/contracts/interfaces.md#viewer-server and
-// docs/backlog/live-runs/DESIGN.md.
+// See docs/contracts/interfaces.md#live-runs.
 //
 // Two facts the run directory already carries make this possible, and neither
 // is new: trajectory.jsonl is append-only while a run executes (rewriteLast on

@@ -72,9 +72,9 @@ export async function createEnvironment(ctx: HostedDynamic) {
     let rows;
     try {
       ({ rows } = await tx.query(
-        `INSERT INTO environments (id, project_id, suite_id, name, config, discovery_allowed, runner_labels)
-           VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-        [id, project.id, suite?.id ?? null, fields.name, fields.config, fields.discovery_allowed, fields.runner_labels],
+        `INSERT INTO environments (id, project_id, suite_id, name, driver, config, discovery_allowed, runner_labels)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+        [id, project.id, suite?.id ?? null, fields.name, fields.driver, fields.config, fields.discovery_allowed, fields.runner_labels],
       ));
     } catch (e: HostedDynamic) {
       // Pre-check races: a concurrent create can slip past it and hit the unique
@@ -90,7 +90,7 @@ export async function createEnvironment(ctx: HostedDynamic) {
       entityType: "environment",
       entityId: id,
       projectId: project.id,
-      detail: { name: fields.name, discovery_allowed: fields.discovery_allowed, suite_id: suite?.id ?? null },
+      detail: { name: fields.name, driver: fields.driver, discovery_allowed: fields.discovery_allowed, suite_id: suite?.id ?? null },
     });
     return rows[0];
   });
@@ -143,16 +143,22 @@ export async function updateEnvironment(ctx: HostedDynamic) {
   // overlay or the runner labels.
   const fields = validateEnvFields({
     name: env.name,
+    driver: "driver" in body ? body.driver : env.driver,
     config: "config" in body ? body.config : env.config,
     runner_labels: "runner_labels" in body ? body.runner_labels : env.runner_labels,
     discovery_allowed: "discovery_allowed" in body ? body.discovery_allowed : env.discovery_allowed,
   }, { nameRequired: false });
+  if (fields.driver !== "mobile" && env.app_artifact) {
+    throw badRequest(
+      `"${env.name}" still has an uploaded app binary — remove it before changing this environment to ${fields.driver}`,
+    );
+  }
 
   const updated = await ctx.db.withTx(async (tx: HostedDynamic) => {
     const { rows } = await tx.query(
-      `UPDATE environments SET config = $2, discovery_allowed = $3, runner_labels = $4, updated_at = now()
+      `UPDATE environments SET driver = $2, config = $3, discovery_allowed = $4, runner_labels = $5, updated_at = now()
          WHERE id = $1 RETURNING *`,
-      [env.id, fields.config, fields.discovery_allowed, fields.runner_labels],
+      [env.id, fields.driver, fields.config, fields.discovery_allowed, fields.runner_labels],
     );
     await audit(tx, {
       actor: actorOf(p),
@@ -160,7 +166,7 @@ export async function updateEnvironment(ctx: HostedDynamic) {
       entityType: "environment",
       entityId: env.id,
       projectId: env.project_id,
-      detail: { name: env.name, discovery_allowed: fields.discovery_allowed },
+      detail: { name: env.name, driver: fields.driver, discovery_allowed: fields.discovery_allowed },
     });
     return rows[0];
   });
@@ -229,6 +235,11 @@ export async function putAppArtifact(ctx: HostedDynamic) {
   const p = requireAuth(ctx);
   const env = await getEnv(ctx);
   guard(ctx, env.project_id, "developer");
+  if (env.driver !== "mobile") {
+    throw badRequest(
+      `"${env.name}" is a ${env.driver} environment — upload app binaries only to mobile environments`,
+    );
+  }
   const filename = appArtifactFilename(ctx.query.get("filename"));
   const limit = ctx.config.uploads.appArtifactMaxBytes;
   let bytes;
@@ -339,11 +350,25 @@ async function getEnv(ctx: HostedDynamic) {
 
 function validateEnvFields(body: HostedDynamic, { nameRequired }: HostedDynamic) {
   const name = stringField(body, "name", { required: nameRequired, max: 63 });
+  const driver = body.driver == null ? "web" : String(body.driver).trim();
+  if (!["web", "api", "mobile"].includes(driver)) {
+    throw badRequest(`"driver" must be one of "web", "api", or "mobile"`);
+  }
   const config = body.config ?? {};
   if (typeof config !== "object" || Array.isArray(config)) throw badRequest(`"config" must be an object`);
   for (const k of ["app", "auth", "secret_env"]) {
     if (config[k] != null && (typeof config[k] !== "object" || Array.isArray(config[k]))) {
       throw badRequest(`"config.${k}" must be an object`);
+    }
+  }
+  if (driver !== "mobile") {
+    const mobileKeys = ["platform", "app", "appium_url", "device"]
+      .filter((key) => config.app?.[key] != null && config.app[key] !== "");
+    if (mobileKeys.length) {
+      throw badRequest(
+        `"config.app.${mobileKeys[0]}" is mobile device configuration, but this is a ${driver} environment — ` +
+          `remove mobile fields or change "driver" to "mobile"`,
+      );
     }
   }
   // Stored as a JSON array (never NULL): absent labels normalize to [] here, so
@@ -352,7 +377,7 @@ function validateEnvFields(body: HostedDynamic, { nameRequired }: HostedDynamic)
   // label a runner is not allowed to advertise.
   const runner_labels = normalizeLabels(body.runner_labels, "runner_labels");
   const discovery_allowed = body.discovery_allowed === true;
-  return { name, config, runner_labels, discovery_allowed };
+  return { name, driver, config, runner_labels, discovery_allowed };
 }
 
 const envView = (r: HostedDynamic) => ({
@@ -362,6 +387,7 @@ const envView = (r: HostedDynamic) => ({
   suite_id: r.suite_id ?? null,
   suite: r.suite_id ? { id: r.suite_id, slug: r.suite_slug ?? null, name: r.suite_name ?? null } : null,
   name: r.name,
+  driver: r.driver ?? "web",
   config: r.config,
   discovery_allowed: r.discovery_allowed,
   runner_labels: r.runner_labels,

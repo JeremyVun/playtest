@@ -31,27 +31,6 @@ Plan: [`docs/backlog/api-testing/BUILD_PLAN.md`](backlog/api-testing/BUILD_PLAN.
       authorized stakeholder API and publish the preregistered regression,
       authored-suite, and total-cost-of-ownership verdicts.
 
-### Live runs: open runs streaming into the viewer
-
-Design: [`docs/backlog/live-runs/DESIGN.md`](backlog/live-runs/DESIGN.md).
-Plan: [`docs/backlog/live-runs/BUILD_PLAN.md`](backlog/live-runs/BUILD_PLAN.md).
-
-- [x] **L0 — Viewer live mode:** liveness from the persisted event stream,
-      the long-poll `live` route on the local viewer host, live picker and
-      history projections, and the viewer's live mode (follow mode,
-      progress-driven pending step, seal transition), hermetic against a
-      locally recording run; interfaces.md gains the route contract.
-- [x] **L1 — Control-plane open runs:** `open` + acked, idempotent
-      `live/*` runner routes; trajectory staging in SQLite and two-phase
-      ledger-owned step artifacts served through the `runEntry` fallback;
-      the hosted live endpoint; verified-seal cleanup and retention GC;
-      hosted.md gains the staging lifecycle.
-- [x] **L2 — Runner-agent live uploader:** best-effort coalesced streaming
-      beside the progress reporter, end to end on `npm run hosted`; sealed
-      bundles byte-identical to non-live runs.
-- [x] **L3 — Console polish:** the run page streams in the embedded viewer,
-      the runs list gains a watch affordance, ux-lab covers the live page.
-
 ### Seeded-fault hill-climb rerun
 
 Plan: [`docs/backlog/hillclimb-rerun.md`](backlog/hillclimb-rerun.md).
@@ -72,6 +51,32 @@ Prior evidence:
       with `studies/hosted-ux/study-report.md`. Commit a report with evidence
       links. Every core journey must complete without a confusion event, or the
       report must name the residual as an accepted trade-off.
+
+### Runner refactor: applications, rings, one placement model
+
+Design: [`docs/backlog/runner-refactor/DESIGN.md`](backlog/runner-refactor/DESIGN.md).
+Plan: [`docs/backlog/runner-refactor/BUILD_PLAN.md`](backlog/runner-refactor/BUILD_PLAN.md).
+Greenfield replacement — no migration.
+
+- [ ] **R0 — Core seams:** checkpoint the tree, add the `runtimeTarget`
+      override to core resolution, move the mobile preflight into a core
+      export.
+- [ ] **R1 — Applications and rings:** replace environments with
+      project-owned applications and application-owned rings (web/API rings
+      hold the base URL); bind suites to applications; delete app artifacts
+      and binary-source precedence.
+- [ ] **R2 — One placement model:** delete GitHub and local dispatch; the
+      claim board (with a bounded offer page and offer target block) is the
+      only placement; `npm run hosted` runs a peer local runner; insecure
+      exchange removed.
+- [ ] **R3 — Mobile via runner config:** runner config file v1 with mobile
+      bindings, claim compatibility, managed/external Appium, post-claim
+      preflight, and the runtime target override end to end.
+- [ ] **R4 — Console and guides:** Applications-first product surfaces;
+      operational runner setup lives only in
+      `docs/guidance/hosted-runners.md`.
+- [ ] **R5 — Contracts and sweep:** rewrite the owning contracts, prove the
+      deletions, map every acceptance gate to a named test.
 
 ## Polish backlog
 

@@ -47,6 +47,7 @@ export async function createRunGroup(ctx: HostedDynamic, { principal, project, s
   const resolved = await resolveSnapshotCases(snapshot.id, () => loadTreeFiles(ctx.store, snapshot.tree));
   const cases = selectCases(resolved.cases, selection);
   if (!cases.length) throw badRequest("run selection matched no cases");
+  requireEnvironmentDriver(cases, environment);
   requireDiscoveryAllowed(cases, environment);
   // Which of the three sources supplies the app binary, decided HERE so a
   // configuration the runner could never satisfy is refused at the click
@@ -188,6 +189,7 @@ export async function previewRunGroup(ctx: HostedDynamic, { project, suite, envi
   const snapshot = await latestSnapshot(ctx, suite.id);
   const resolved = await resolveSnapshotCases(snapshot.id, () => loadTreeFiles(ctx.store, snapshot.tree));
   const cases = selectCases(resolved.cases, selection);
+  requireEnvironmentDriver(cases, environment);
   const baselineStories = new Set(
     (
       await ctx.db.query(
@@ -240,6 +242,23 @@ export async function previewRunGroup(ctx: HostedDynamic, { project, suite, envi
     },
     models: resolveModels(resolved.defaults, project),
   };
+}
+
+/**
+ * An environment is a target for one driver, never a bag of web and device
+ * settings that changes meaning according to the last suite that edited it.
+ * Enforce this at preview and launch as well as in the console: stale clients
+ * and hand-written API calls must not be able to cross the boundary.
+ */
+function requireEnvironmentDriver(cases: HostedDynamic[], environment: HostedDynamic) {
+  const drivers = [...new Set(cases.map((c: HostedDynamic) => c.driver ?? "web"))];
+  const wrong = drivers.filter((driver) => driver !== environment.driver);
+  if (!wrong.length) return;
+  const suiteDrivers = drivers.map((driver) => `"${driver}"`).join(", ");
+  throw badRequest(
+    `this selection uses the ${suiteDrivers} driver, but environment "${environment.name}" is for ` +
+      `"${environment.driver}" suites — choose or create a matching environment`,
+  );
 }
 
 /**

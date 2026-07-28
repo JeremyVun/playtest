@@ -178,6 +178,7 @@ async function setUp(api: HostedDynamic, key: string, { withApp = true }: Hosted
   const env = (
     await api.post(`/projects/${key}/environments`, {
       name: "sim",
+      driver: "mobile",
       runner_labels: LABELS,
       // The whole point: a device target that only exists on the runner's own
       // machine — a simulator, a locally spawned Appium server, and a build

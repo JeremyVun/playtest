@@ -44,6 +44,7 @@ test("environments: a new project is born with one URL-less `default` target, ow
     assert.equal(body.items.length, 1, JSON.stringify(body.items));
     const [def] = body.items;
     assert.equal(def.name, "default");
+    assert.equal(def.driver, "web");
     // It deliberately carries no base_url: a launch against it resolves to
     // whichever suite is running, so a first suite is runnable before anyone
     // visits Settings. A URL here would silently override every suite's own.
@@ -53,6 +54,48 @@ test("environments: a new project is born with one URL-less `default` target, ow
     assert.equal(def.suite, null);
     assert.equal(def.discovery_allowed, false);
     assert.deepEqual(def.runner_labels, []);
+  });
+});
+
+test("environments: driver is explicit, validated, and cannot hide an uploaded mobile build", async () => {
+  await withApp(async ({ api }: HostedDynamic) => {
+    await api.post("/projects", { key: "p", name: "P" });
+
+    const bad = await api.post("/projects/p/environments", { name: "bad", driver: "desktop" });
+    assert.equal(bad.status, 400, JSON.stringify(bad.body));
+    assert.match(bad.body.error.message, /web.*api.*mobile/);
+
+    const polluted = await api.post("/projects/p/environments", {
+      name: "polluted",
+      driver: "web",
+      config: { app: { base_url: "https://example.test", platform: "ios" } },
+    });
+    assert.equal(polluted.status, 400, JSON.stringify(polluted.body));
+    assert.match(polluted.body.error.message, /mobile device configuration/);
+
+    const mobile = (await api.post("/projects/p/environments", { name: "sim", driver: "mobile" })).body;
+    assert.equal(mobile.driver, "mobile");
+    await api.putRaw(`/environments/${mobile.id}/app-artifact?filename=fixture.apk`, Buffer.from("apk"));
+
+    const hidden = await api.put(`/environments/${mobile.id}`, { driver: "web" });
+    assert.equal(hidden.status, 400, JSON.stringify(hidden.body));
+    assert.match(hidden.body.error.message, /remove it before changing/);
+
+    await api.del(`/environments/${mobile.id}/app-artifact`);
+    const repaired = await api.put(`/environments/${mobile.id}`, {
+      driver: "web",
+      config: { app: { base_url: "https://example.test" } },
+    });
+    assert.equal(repaired.status, 200, JSON.stringify(repaired.body));
+    assert.equal(repaired.body.driver, "web");
+    assert.equal(repaired.body.app_artifact, null);
+
+    const uploadToWeb = await api.putRaw(
+      `/environments/${mobile.id}/app-artifact?filename=fixture.apk`,
+      Buffer.from("apk"),
+    );
+    assert.equal(uploadToWeb.status, 400, JSON.stringify(uploadToWeb.body));
+    assert.match(uploadToWeb.body.error.message, /web environment/);
   });
 });
 

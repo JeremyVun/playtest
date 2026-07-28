@@ -10,14 +10,14 @@ import { toast, toastError, confirmModal, formModal, emptyState, formField, enha
 import { visibleSections } from "../lib/settings-sections.js";
 import { modelField } from "../lib/model-select.js";
 import { MASK, maskSecretEnv, literalSecretKeys } from "../lib/secret-mask.js";
-import { parseCookieList, formatCookieList } from "../lib/defaults-form.js";
+import { parseCookieList, formatCookieList, DRIVERS, driverLabel } from "../lib/defaults-form.js";
 import { humanize as words, categoryLabel } from "../lib/vocab.js";
 import { startCommand, oneShot, runnerLabelsText, runnerPresence, labelProblem, parseLabels } from "../lib/runners.js";
 import { subscribeFeed } from "../lib/feed.js";
 import { ago } from "../lib/labels.js";
 import {
   PLATFORMS, readEnvApp, applyEnvApp, hasMobileConfig,
-  artifactSummary, appArtifactProblem, APP_ARTIFACT_EXTENSIONS, fmtBytes,
+  artifactSummary, appArtifactProblem, APP_ARTIFACT_EXTENSIONS, fmtBytes, environmentDriver,
 } from "../lib/env-config.js";
 
 const RENDER: WebDynamic = {
@@ -513,6 +513,7 @@ async function environmentsTab(projectKey: WebDynamic, project: WebDynamic, slot
     ? h("div", { style: "display:flex;flex-direction:column;gap:12px" }, ...items.map((e: WebDynamic) => h("div.card.pad", {},
         h("div", { style: "display:flex;align-items:center;gap:10px" },
           h("span.id", {}, e.name),
+          h("span.chip", {}, environmentDriver(e)),
           e.discovery_allowed ? h("span.chip", {}, "discovery allowed") : null,
           // A suite's own environment is listed here — an admin should see
           // everything the project holds — but never anonymously: only that
@@ -599,6 +600,9 @@ function envModal(projectKey: WebDynamic, existing: WebDynamic, refresh: WebDyna
     let current = existing;
     const name = h("input", { type: "text", value: existing?.name || "", placeholder: "staging" });
     if (existing) name.disabled = true;
+    const driver = h("select", { "aria-label": "Driver" },
+      ...DRIVERS.map((d: WebDynamic) =>
+        h("option", { value: d, selected: (existing ? environmentDriver(existing) : "web") === d || undefined }, driverLabel(d))));
     const baseUrl = h("input", { type: "text", value: existing?.config?.app?.base_url || "", placeholder: "https://staging.example.com", onchange: flush });
     // Cookies are first-class ring config: a blue/green slot or feature-flag
     // cookie is often the whole difference between two rings.
@@ -612,13 +616,13 @@ function envModal(projectKey: WebDynamic, existing: WebDynamic, refresh: WebDyna
     // --- the device half of a ring, for mobile. First-class, because a
     // benchmark mobile ring should never require hand-written JSON.
     const platform = h("select", { "aria-label": "Device platform", onchange: flush },
-      h("option", { value: "" }, "— not a mobile environment"),
+      h("option", { value: "" }, "— choose later"),
       ...PLATFORMS.map((p: WebDynamic) => h("option", { value: p, selected: existing?.config?.app?.platform === p || undefined },
         p === "ios" ? "iOS — simulator or device" : "Android — emulator or device")));
     const appPath = h("input", { type: "text", value: existing?.config?.app?.app || "", placeholder: "/Users/you/builds/app-release.apk", onchange: flush });
     const appiumUrl = h("input", { type: "text", value: existing?.config?.app?.appium_url || "", placeholder: "http://127.0.0.1:4723", onchange: flush });
     const artifactSlot = h("div");
-    const openDevice = hasMobileConfig(existing?.config) || !!existing?.app_artifact;
+    const openDevice = driver.value === "mobile" && (hasMobileConfig(existing?.config) || !!existing?.app_artifact);
 
     config.addEventListener("input", () => {
       let parsed: WebDynamic = null;
@@ -644,6 +648,8 @@ function envModal(projectKey: WebDynamic, existing: WebDynamic, refresh: WebDyna
     paintArtifact();
     return h("form", { onsubmit: submit },
       fld("Name", name),
+      fld("Driver", driver,
+        "Only suites using this driver can select the environment. Use separate environments for browser, API, and native-app targets."),
       fld("Runner labels", labels,
         "Runs against this environment go to runners advertising ALL of these labels — that is the whole matching rule. Comma separated, using letters, digits, “.”, “_” and “-”; leave blank to let any runner in this project take them."),
       fld("Cookies", cookies,
@@ -801,6 +807,16 @@ function envModal(projectKey: WebDynamic, existing: WebDynamic, refresh: WebDyna
       flush();
       let cfg;
       try { cfg = JSON.parse(config.value); } catch { return toast("Config isn't valid JSON", "", "err"); }
+      if (driver.value !== "mobile") {
+        if (current?.app_artifact) {
+          return toast(
+            "Remove the uploaded build first",
+            `A ${driver.value} environment cannot keep a mobile app binary.`,
+            "err",
+          );
+        }
+        cfg = applyEnvApp(cfg, { platform: null, app: null, appium_url: null, device: null });
+      }
       // An untouched mask keeps the stored value; the browser never round-trips
       // the literal through the textarea.
       for (const [k, v] of Object.entries(cfg?.secret_env || {})) {
@@ -812,7 +828,13 @@ function envModal(projectKey: WebDynamic, existing: WebDynamic, refresh: WebDyna
       const runnerLabels = parseLabels(labels.value);
       const labelIssue = labelProblem(runnerLabels);
       if (labelIssue) return toast("Check the runner labels", labelIssue, "err");
-      const payload: WebDynamic = { name: name.value.trim(), config: cfg, runner_labels: runnerLabels, discovery_allowed: disc.checked };
+      const payload: WebDynamic = {
+        name: name.value.trim(),
+        driver: driver.value,
+        config: cfg,
+        runner_labels: runnerLabels,
+        discovery_allowed: disc.checked,
+      };
       try {
         if (existing) await api.put(`/environments/${existing.id}`, payload);
         else await api.post(`/projects/${projectKey}/environments`, payload);

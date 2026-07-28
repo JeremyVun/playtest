@@ -36,6 +36,24 @@ export interface EnvConfig {
   [key: string]: unknown;
 }
 
+/**
+ * The explicit driver, with the same one-release fallback as migration 0020
+ * for a console briefly talking to a pre-migration server during a restart.
+ */
+export function environmentDriver(environment: {
+  driver?: string;
+  config?: EnvConfig | null;
+  app_artifact?: unknown;
+}): "web" | "api" | "mobile" {
+  if (environment.driver === "api" || environment.driver === "mobile") return environment.driver;
+  if (environment.driver === "web") return "web";
+  const baseUrl = environment.config?.app?.base_url;
+  return !(typeof baseUrl === "string" && baseUrl.trim()) &&
+    (hasMobileConfig(environment.config) || !!environment.app_artifact)
+    ? "mobile"
+    : "web";
+}
+
 /** The named fields' current values, as strings a form input can hold. */
 export function readEnvApp(config: EnvConfig | null | undefined): Record<EnvAppField, string> {
   const app: Record<string, unknown> = (config?.app as Record<string, unknown>) || {};

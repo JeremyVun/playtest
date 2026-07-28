@@ -1,5 +1,5 @@
-// Phase L1: control-plane open runs — ingest, staging, serving, seal and GC
-// (docs/backlog/live-runs/BUILD_PLAN.md, docs/contracts/hosted.md "Live runs").
+// Control-plane open runs — ingest, staging, serving, seal and GC
+// (docs/contracts/hosted.md "Live runs").
 //
 // Each test boots a whole control plane against its own temporary SQLite data
 // root and drives the runner protocol over real HTTP, exactly as a runner-agent

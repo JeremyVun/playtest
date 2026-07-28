@@ -573,12 +573,14 @@ have never recorded a saved path.
 
 ## Development
 
-`npm test` is the hermetic Node-only gate: no browser, external network, model credentials,
-database, or Docker. It runs separately named core, CLI, run-viewer, and repository suites;
+`npm test` is the dependency-free Node-only gate: no browser, external network,
+model credentials, database, or Docker. It runs the workspace unit/hermetic
+suites and repository gates; control-plane integration remains an explicit tier.
 those groups can also be run directly with `npm run test:core`, `test:cli`, `test:viewer`,
 or `test:repository`. `npm run typecheck` checks every strict TypeScript project,
 and `npm run build:web` runs both package-local Vite builds, then embeds the
-completed viewer under the hosted console's `/viewer/` path. `npm run test:browser` runs the explicit Playwright suites;
+completed viewer under the hosted console's `/viewer/` path. `npm run test:browser`
+runs the explicit core, viewer, and hosted-console Playwright suites;
 install its browser once with `npx playwright install chromium`. `npm run test:all` runs
 both tiers. The example app runs with
 `PORT=4173 node examples/todo-app/server.js`. Hosted control plane (not in the published package):

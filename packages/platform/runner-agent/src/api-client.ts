@@ -27,7 +27,7 @@ export class ApiClient {
   }
 
   /** `signal` is the live uploader's abort seam: a case ending must not wait on
-   * a held request (docs/backlog/live-runs/DESIGN.md). Every other caller omits it. */
+   * a held request (docs/contracts/hosted.md "Live staging routes"). Every other caller omits it. */
   async json(method: string, path: string, body: RunnerDynamic = undefined, { signal }: RunnerDynamic = {}): Promise<RunnerDynamic> {
     const headers: Record<string, string> = {};
     if (this.token) headers.authorization = `Bearer ${this.token}`;

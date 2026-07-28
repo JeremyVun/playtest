@@ -1,5 +1,5 @@
 // Open-run staging: the shared vocabulary of the live path
-// (docs/contracts/hosted.md "Live runs", docs/backlog/live-runs/DESIGN.md).
+// (docs/contracts/hosted.md "Live runs").
 //
 // Ingest (api/live-ingest.ts), serving (api/viewer-adapter.ts and
 // api/live-view.ts), the seal (api/executor-api.ts) and the retention GC

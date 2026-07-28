@@ -16,6 +16,7 @@
 // the writes each choice produces without a browser.
 
 import { DEFAULT_ENV_NAME, ENV_NAME_RE } from "./defaults-form.js";
+import { environmentDriver, type EnvConfig } from "./env-config.js";
 
 export interface BinarySource {
   id: "runner-path" | "artifact" | "suite-file";
@@ -82,7 +83,8 @@ export function targetQuestion(driver: string): { title: string; sub: string; ki
  */
 export function ringNameProblem(
   name: string,
-  envs: { name?: string; suite_id?: string | null; suite?: { name?: string | null } | null }[] = [],
+  envs: { name?: string; driver?: string; suite_id?: string | null; suite?: { name?: string | null } | null }[] = [],
+  driver?: string,
 ): string | null {
   const value = String(name || "").trim();
   if (!value) return "Give this environment a name — it is how it reads at launch and in the CLI.";
@@ -91,6 +93,9 @@ export function ringNameProblem(
   }
   const taken = envs.find((e) => (e.name || "").toLowerCase() === value.toLowerCase());
   if (!taken) return null;
+  if (driver && taken.driver && taken.driver !== driver) {
+    return `“${value}” is already a ${taken.driver} environment. Give this ${driver} environment a distinct name.`;
+  }
   return taken.suite_id
     ? `“${value}” is already taken by ${taken.suite?.name ? `the suite “${taken.suite.name}”` : "another suite"}. Names are unique across the whole project, so pick another.`
     : `“${value}” is already a shared environment in this project — pick it above instead of creating a second one.`;
@@ -111,6 +116,21 @@ export interface RingDraft {
   appiumUrl?: string;
 }
 
+/** Rings a suite may select: matching driver, then project-owned or its own. */
+export function compatibleRings<T extends {
+  driver?: string;
+  suite_id?: string | null;
+  config?: EnvConfig;
+  app_artifact?: unknown;
+}>(
+  envs: T[],
+  driver: string,
+  suiteId: string,
+): T[] {
+  return envs.filter((e) =>
+    environmentDriver(e) === driver && (!e.suite_id || e.suite_id === suiteId));
+}
+
 /** Where the chosen answer is written. Exactly one of these per plan. */
 export type TargetWrite =
   | { kind: "suite-default-url"; value: string }
@@ -120,7 +140,7 @@ export type TargetWrite =
 
 export interface TargetPlan {
   /** The environment to create, or null when an existing one was chosen. */
-  environment: { name: string; suite_id?: string; runner_labels: string[]; config: Record<string, unknown> } | null;
+  environment: { name: string; driver: string; suite_id?: string; runner_labels: string[]; config: Record<string, unknown> } | null;
   /** What to write into the suite's playtest.yaml. */
   write: TargetWrite;
   /** Whether the card still owes an app-artifact upload after creating it. */
@@ -149,7 +169,7 @@ export function ringPlan(draft: RingDraft, { suiteId }: { suiteId?: string } = {
     if (draft.source === "runner-path" && draft.path?.trim()) app.app = draft.path.trim();
     if (Object.keys(app).length) config.app = app;
     return {
-      environment: { name, ...owned, runner_labels: labels, config },
+      environment: { name, driver: draft.driver, ...owned, runner_labels: labels, config },
       // A committed fixture app is the SUITE's file, so it goes in the suite's
       // own defaults, where core resolves it against playtest.yaml.
       write: draft.source === "suite-file" && draft.path?.trim()
@@ -160,7 +180,7 @@ export function ringPlan(draft: RingDraft, { suiteId }: { suiteId?: string } = {
   }
   const url = String(draft.url || "").trim();
   return {
-    environment: { name, ...owned, runner_labels: labels, config: {} },
+    environment: { name, driver: draft.driver, ...owned, runner_labels: labels, config: {} },
     write: url ? { kind: "suite-env-url", env: name, value: url } : { kind: "none" },
     upload: false,
   };

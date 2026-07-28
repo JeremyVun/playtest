@@ -25,6 +25,7 @@ import {
   DEFAULT_ENV_NAME, ENV_NAME_RE, DRIVERS, driverLabel,
 } from "../lib/defaults-form.js";
 import { modelField } from "../lib/model-select.js";
+import { environmentDriver } from "../lib/env-config.js";
 import { getSuiteBySlug, exportSuite, importSuite } from "./suite.js";
 
 const DEFAULTS_PATH = "playtest.yaml";
@@ -419,9 +420,11 @@ function render(main: WebDynamic, st: WebDynamic) {
    * exactly (lib/defaults-form.js resolveEnvTarget).
    */
   function targetsCard(app: WebDynamic) {
-    const mine = st.envs.filter((e: WebDynamic) => e.suite_id === st.suite.id);
-    const shared = st.envs.filter((e: WebDynamic) => !e.suite_id && e.name !== DEFAULT_ENV_NAME);
-    const defaultTarget = st.envs.find((e: WebDynamic) => !e.suite_id && e.name === DEFAULT_ENV_NAME) || null;
+    const suiteDriver = app.driver || "web";
+    const compatible = st.envs.filter((e: WebDynamic) => environmentDriver(e) === suiteDriver);
+    const mine = compatible.filter((e: WebDynamic) => e.suite_id === st.suite.id);
+    const shared = compatible.filter((e: WebDynamic) => !e.suite_id && e.name !== DEFAULT_ENV_NAME);
+    const defaultTarget = compatible.find((e: WebDynamic) => !e.suite_id && e.name === DEFAULT_ENV_NAME) || null;
     const canManage = hasRole(st.project.id, "developer");
     // Cookies are a web-driver key (set on the browser context before the first
     // navigation) — an api suite's rows stay URL-only.
@@ -498,7 +501,7 @@ function render(main: WebDynamic, st: WebDynamic) {
         : null,
       h("div.env-section", {},
         group("This suite only", canManage
-          ? h("button.btn.btn-sm", { type: "button", onclick: addEnvironment }, "+ Add environment")
+          ? h("button.btn.btn-sm", { type: "button", onclick: () => addEnvironment(suiteDriver) }, "+ Add environment")
           : h("span.faint", { style: "font-size:12px" }, "needs the developer role")),
         ...(myRows.length
           ? myRows
@@ -606,7 +609,7 @@ function render(main: WebDynamic, st: WebDynamic) {
    * file and lands with Save, like every other URL on this page. The toast says
    * so, because a half-applied change nobody mentions is how people lose work.
    */
-  function addEnvironment() {
+  function addEnvironment(suiteDriver: WebDynamic) {
     const close = formModal("Add an environment", () => {
       const name = h("input", { type: "text", placeholder: "checkout-local" });
       const url = h("input", { type: "text", placeholder: "http://127.0.0.1:4173" });
@@ -636,7 +639,10 @@ function render(main: WebDynamic, st: WebDynamic) {
         if (bad) return fail(bad);
         try {
           const created = await api.post(`/projects/${projectKey}/environments`, {
-            name: nm, suite_id: st.suite.id, discovery_allowed: disc.checked,
+            name: nm,
+            driver: suiteDriver,
+            suite_id: st.suite.id,
+            discovery_allowed: disc.checked,
           });
           st.envs = [...st.envs, created];
         } catch (err: WebDynamic) { return fail(String(err.message || err)); }

@@ -7,15 +7,11 @@ lifecycle, and the trust boundaries each guarantee rests on.
 
 A script is a plain Node ESM module a human can read, edit, and export. It runs
 in its own process against one authorized target, records everything it does,
-and produces a report a reviewer and a gate both consume. The design rationale
-lives in `docs/backlog/api-testing/DESIGN.md`; this file specifies the behavior
-implementations and consumers may rely on.
+and produces a report a reviewer and a gate both consume.
 
 ## Versions
 
-Six independent version numbers. The first three are carried in every report;
-the last three belong to the authoring path and are carried in the handout
-manifest, the transcript, and the bundle manifest.
+Eight independent version numbers. Each appears in the record it governs.
 
 | Version | Covers | Current |
 |---|---|---|
@@ -26,6 +22,7 @@ manifest, the transcript, and the bundle manifest.
 | `authoring_transcript_version` | the persisted transcript ([The authoring loop](#the-authoring-loop)) | 1 |
 | `authoring_bundle_version` | the bundle layout ([The authoring bundle](#the-authoring-bundle)) | 1 |
 | `lifecycle_version` | the version and approval record ([Approval lifecycle](#approval-lifecycle)) | 1 |
+| drift `schema_version` | the object returned by `buildScriptDriftReport` ([Replay and drift](#replay-and-drift)) | 1 |
 
 A change that would make an existing script stop running, or make an existing
 reader misread a report, bumps the owning version in the same change as the
@@ -100,7 +97,7 @@ wire by the proxy, which is the authority:
 
 | Guard | Rule |
 |---|---|
-| origin | the resolved origin must be `base_url`'s origin or an entry in the run's `allowed_origins`. The same P0 egress semantics as the API driver ([Engine: API driver](engine.md#api-driver)): entries are bare http(s) origins, a different port or scheme is a different origin, and non-http(s) resolutions have no admissible origin. |
+| origin | the resolved origin must be `base_url`'s origin or an entry in the run's `allowed_origins`. The API-driver egress semantics apply ([Engine: API driver](engine.md#api-driver)): entries are bare http(s) origins, a different port or scheme is a different origin, and non-http(s) resolutions have no admissible origin. |
 | mode | in `read-only`, only `GET` and `HEAD` are forwarded. |
 | budget | past `budget.limit` nothing is forwarded and nothing is recorded, so the recorded trace **is** the budget. Exhaustion throws `BudgetExhausted` and is a defect. |
 | secrets | `{ $secret: NAME }` resolves only for a NAME the run declared, and only on a request to the target's own origin. A credential is bound to the target, not to the run, so an allow-listed auxiliary origin is reachable and receives no credential — the allowlist can never become an exfiltration channel. |
@@ -121,10 +118,9 @@ discloses nothing to the script. The script can cause an authenticated request;
 it can never read the credential.
 
 **Mode is authorization, never code.** `client.mode` is derived from
-`target.write_grant` in run configuration — the recorded answer to "safe to write
-test data to this environment?" (`DESIGN.md` §4 step 2). Targets are read-only
-until that grant exists, the grant must name the same origin the run resolves,
-and nothing a script does can widen it.
+`target.write_grant` in run configuration. Targets are read-only until that
+grant exists, the grant must name the same origin the run resolves, and nothing
+a script does can widen it.
 
 ## The check channel
 
@@ -189,9 +185,8 @@ separate all the way to the report.
 
 ## Coverage-obligation manifest
 
-Authoring terminates on soundness, and soundness includes sufficiency (`DESIGN`
-N5). The manifest is the mechanism, and it is derived **mechanically** — no model
-and no script input:
+Authoring terminates on soundness, which includes sufficiency. The manifest is
+derived mechanically, with no model or script input:
 
 | Source | Obligation id | Derived from |
 |---|---|---|
@@ -216,8 +211,7 @@ operations and 6 of 6 rules", not "23 checks".
 
 ## Verdict
 
-Two columns (`DESIGN` N10), because P1 showed one column is biased in whichever
-direction its applicability window points (`studies/api-probe/REPORT.md` §3):
+The verdict has two independent columns:
 
 - **the HAR column** — the shipped Tier-1/2 invariant policies
   ([Engine: Invariant policies](engine.md#invariant-policies)) evaluated over the
@@ -269,8 +263,8 @@ check and raised as an `evidence_unresolvable` defect.
 ## Risk profile
 
 Mechanical, from the static script text plus a recorded HAR, with **no model
-call**. One module (`packages/core/src/public/api-suite-scripts.ts` → `profileScript`) feeds both the
-CLI and the hosted script page, so a reviewer sees the same numbers everywhere.
+call**. `profileScript` is exported from
+`packages/core/src/public/api-suite-scripts.ts`.
 
 ```
 profile_version
@@ -290,8 +284,8 @@ or matching a numeric / uuid / ulid / `prefix_handle` shape, collapses to `{id}`
 
 ## Leak scan
 
-The P2 baseline leak scan (`packages/core/src/baseline-scan.ts`) applied to script text,
-with the same rules and the same consequence — findings **block**:
+`scanScriptText` applies the baseline leak rules
+(`packages/core/src/baseline-scan.ts`) to script text:
 
 | Rule | Finding |
 |---|---|
@@ -300,20 +294,17 @@ with the same rules and the same consequence — findings **block**:
 | `entropy` | a credential-shaped token in a string literal |
 | `data` | an email address in a string literal |
 
-Two enforcement points: the **save** path blocks on any finding before the script
-reaches review, and the **runner** refuses to execute a script with a `secret` or
-`redaction` finding at all — the alternative is writing the credential into the
-HAR. The scan also returns the sha256 fingerprint of exactly the bytes scanned,
-which is the content fingerprint an approval covers (`DESIGN` N9).
+The scan returns every finding plus the SHA-256 fingerprint of exactly the
+bytes scanned. `runScript` refuses to execute when a `secret` or `redaction`
+finding exists; the alternative is writing a known credential into the HAR.
+`entropy` and `data` findings are recorded in `hygiene.leak_findings` and do not
+affect soundness or the verdict. There is no separate CLI save gate.
 
 **Scope, stated plainly.** Both the runner's pre-flight scan and
-`script.sha256` cover the **entry module**. Hosted authoring emits a single
-module, so there they cover the whole script. A multi-file script — permitted on
-the CLI path, where a suite may import siblings under its own root — has its
-siblings covered by the save path (which scans each file as it is saved) and by
-the team's own code review, not by the entry module's fingerprint. Extending the
-fingerprint over the statically imported sibling set is the obvious next step and
-is deliberately not v1.
+`script.sha256` cover the **entry module**. The authoring loop emits a single
+module, so they cover its whole script. A caller-provided multi-file script may
+import siblings under its own root; those siblings are not covered by the
+runner's scan or the entry module's fingerprint.
 
 ## HAR lifecycle
 
@@ -331,9 +322,9 @@ sensitive at the same time:
 - **Flush per exchange.** A killed or timed-out script still leaves a scorable
   trace.
 - **Sensitive and untracked.** `har.json` may still contain credentials a server
-  invented and core cannot recognize. It lives with the run artifacts, is never
-  committed, and is subject to the hosted retention window like any other
-  sensitive payload ([Hosted: Retention](hosted.md#retention-and-deletion)).
+  invented and core cannot recognize. It lives with the run artifacts and must
+  remain untracked. No script-specific retention job exists; the caller owns
+  deletion.
 - **What survives payload deletion.** When the HAR is deleted or expires, the
   report remains usable: each check keeps its obligation trace, its
   expected/observed strings, and the cited entry **metadata** the report already
@@ -380,36 +371,16 @@ therefore unavailable, as is any bare dependency specifier, any `data:` or
 
 ## Trust model
 
-**Locally the trust model is stated, not engineered.** The client guards
-accident; review guards malice. A script is source code a team runs against its
-own environment — exactly the trust a committed test suite already has — and the
-substrate's job is to make that trust legible: read-only until authorized, a
-mechanical risk profile before approval, a leak scan on save, and a recorded
-trace of everything that happened. Interactive per-action permissioning and
-OS-level sandbox research are explicitly not built (`DESIGN` N8).
+The client guards accidents; review guards malice. A script is source code a
+team runs against its own environment. The parent process holds resolved
+secrets, owns the socket to the target, enforces the wire tier, and produces the
+report. The child holds no credential and reaches the target only through the
+parent's authenticated loopback channel.
 
-**Hosted, the boundary is a contract with escape tests.** The credential-bearing
-process and the script process are different processes:
-
-- the **proxy process** (the runner-agent job) holds the resolved secrets, owns
-  the only socket to the target, and enforces the wire tier;
-- the **script process** holds no credential, has no ambient network, and reaches
-  the target only through the proxy's loopback control channel, authenticated by a
-  per-run token;
-- **network isolation of the script process** — that it cannot bypass the proxy
-  and open its own socket to the target or the internet — is the runner-agent
-  sandbox's responsibility (its container network policy), not an in-process
-  claim. What the substrate guarantees unconditionally is that such an escape
-  yields **no credential**: there is none in the process to steal, and the
-  proxy's guards are unaffected by anything happening inside the child.
-
-The adversarial battery proving this lives with the package that owns the
-boundary (`packages/platform/runner-agent/tests/unit/script-boundary.test.ts`) and
-covers: ambient `fetch`, `node:http`/`node:net`, alternate-origin and DNS
-access, `process.env` reads, filesystem escape, `child_process`, direct report
-fabrication, and credential exfiltration through URLs, bodies, logs, and thrown
-exceptions. Each attempt must be blocked or provably credential-free
-([Hosted: Script execution boundary](hosted.md#script-execution-boundary)).
+The in-process restrictions above are defense in depth, not OS-level isolation.
+Local execution does not provide per-action permission prompts or a container
+network policy. An escape from the child still yields no harness-provided
+credential because none is present in that process.
 
 ## Run configuration
 
@@ -434,18 +405,14 @@ out_dir           where har.json and script-report.json are written
 ```
 
 Only human-approved rule statements reach `rules`; the platform never turns an
-observation into a rule (`DESIGN` N6). The CLI surface is
-[Interfaces: script suites](interfaces.md#script-suites); the hosted lifecycle is
-[Hosted: The script page](hosted.md#the-script-page).
+observation into a rule. The CLI authoring surface is documented under
+[Interface contracts](interfaces.md#cli-conventions).
 
 ## Test-data lifecycle
 
-A mutating suite creates resources on every replay, forever (`DESIGN` §6). Two
-failure modes follow, and both are quiet until they are expensive: two
-concurrent replays collide on the same fixture name, and a year of nightly
-replays silts up an environment nobody is watching. So neither half is
-advisory — the namespace is on the client, and the accounting is computed by
-the parent from the recorded traffic.
+Mutating suites namespace created resources and account for cleanup from the
+recorded traffic. This prevents concurrent runs from sharing fixture names and
+makes accumulated test data visible.
 
 **The run namespace.** Every execution gets `client.namespace`: `pt` plus eight
 base-36 characters of clock and eight of CSPRNG. The clock half keeps namespaces
@@ -481,19 +448,15 @@ answered 503, or a teardown past the cap, makes the execution **unsound** — ex
 than a pass with a footnote. The alternative is a green run and an environment
 filling up, which is the outcome the policy exists to prevent.
 
-Scoped authorization — method/path scope, tenant scope, write and request caps —
-is a roadmap seam (`DESIGN` §10) and is deliberately not built. What v1 records
-is origin-wide, plus an optional `expires_at` the hosted dispatcher checks, and
-that is the whole of it.
+Authorization is origin-wide and may carry `expires_at`; it has no method,
+path, tenant, write-count, or request-count scope.
 
 ## Approval lifecycle
 
-`DESIGN` N9: approval is an **artifact lifecycle state**, the platform's third
-instance of a pattern it already runs twice (healed baselines held for review,
-findings review). It is not a permission framework, and nothing here is a role
-system — `packages/core/src/public/api-suite-scripts.ts` owns the shape and the one question
-dispatch asks, and the hosted side owns storage and the surface
-([Hosted: The script page](hosted.md#the-script-page)).
+Approval is an **artifact lifecycle state**, not a permission framework.
+`packages/core/src/public/api-suite-scripts.ts` exports the pure lifecycle
+helpers and record shape; no local CLI command persists or reviews these
+records.
 
 A **version** is one immutable content record:
 
@@ -523,25 +486,25 @@ Four rules, and they are the whole lifecycle:
   assistant, or arriving as a proposed revision. There is no difference between
   the three, by construction: each produces new bytes, and new bytes have no
   approval.
-- **Dispatch asks one question.** `scriptDispatchLicense(version)` answers from
+- **The dispatch helper asks one question.** `scriptDispatchLicense(version)` answers from
   the version alone — no caller-supplied flag can make an unapproved script
   runnable — and `assertScriptDispatchable` raises the actionable
   `DummyConfigError` rather than returning a boolean, because the only correct
   response to an unapproved script is to stop. Its four refusals are
   `no_version`, `pending`, `rejected`, and `invalidated` (approved once, and the
-  content has since moved).
+  content has since moved). These helpers are not invoked by the current CLI or
+  `replayScriptBundle`.
 
-`diffScriptText(before, after)` is the line diff the script page and the CLI
-both render — plain LCS, `{ op, a, b, text }` triples grouped into hunks, the
-same shape the existing review surfaces already draw.
+`diffScriptText(before, after)` returns a plain LCS line diff as
+`{ op, a, b, text }` triples grouped into hunks.
 
 ## Replay and drift
 
-An approved script's replay is `replayScriptBundle` ([The authoring
-bundle](#the-authoring-bundle)) or an ordinary `runScript` against the same
-configuration: the same two columns, the same obligation accounting, the same
-artifacts. Replay is licensed by the approval of that exact content, so it does
-not need a target authorization and runs read-only without one.
+`replayScriptBundle` ([The authoring bundle](#the-authoring-bundle)) verifies
+the bundle hashes and runs it against caller-supplied target configuration,
+with the same columns, obligation accounting, and artifacts as `runScript`.
+Without target authorization it runs read-only. It does not consult an approval
+lifecycle record, and no current CLI command exposes replay.
 
 When a replay goes red, `triageScriptReplay` classifies it — from the two
 reports, the two resolved OpenAPI documents, and the recorded traffic. **No
@@ -551,10 +514,9 @@ already red before it started, and all it decides is what to offer.
 | Classification | Meaning | What is offered |
 |---|---|---|
 | `regression` | the API broke its own promise | **nothing**. Red, loudly. A revision here would delete the evidence |
-| `contract_drift` | the document moved under a suite that was right when it was approved | a proposed revision + a drift report, as a **pending** version |
+| `contract_drift` | the document moved under a suite that was right when recorded | a revision may be proposed from the drift report |
 
-The rules, in priority order — redder wins, as in P4's heal triage
-([Engine: Act and heal](engine.md#act-and-heal)):
+The rules run in priority order, with regression taking precedence:
 
 1. a defect (the replay was unsound) → `regression`;
 2. a failing `no_server_error` gate check → `regression`;
@@ -573,29 +535,25 @@ path parameter's *name* is not part of it (`{widgetId}` and `{id}` are the same
 hole), and a removal plus an addition under one parent is read as a rename
 rather than as two unrelated changes.
 
-The drift report (`drift-report.json`, `schema_version: 1`, `mode:
-"script_replay"`) sits beside the replay's HAR and report and mirrors the heal
-report's discipline ([Artifacts: Drift report](artifacts.md#drift-report)):
-everything except `narrative` is computed evidence, and the narrative is read
-back by nothing.
+`triageScriptReplay` returns the classification and evidence.
+`buildScriptDriftReport` projects it into a schema-version-1 object with
+`mode: "script_replay"`, following the same computed-evidence discipline as the
+[heal drift report](artifacts.md#drift-report). Neither function writes a file;
+callers choose whether and where to persist the returned object.
 
 **A proposed revision is one model call and no execution.**
 `proposeScriptRevision` has no client, no target, and no runner: it is a prompt
 (pinned at `script-revision-v1`) over the current script, the surface diff, and
 the failing checks, and it returns source text. That is the whole answer to
 "does a pending revision run before somebody says yes?" — it cannot, because the
-function that writes it has nothing to run it with. Where the environment
-declares a **disposable** target, the hosted side may then dispatch an ordinary
-validation replay against that target and nothing else; otherwise the revision
-is approved-then-run
-([Hosted: Drift as a revision](hosted.md#drift-as-a-revision)).
+function proposing it has nothing to run it with.
 
 ## Target authorization
 
 One recorded fact licenses execution against a target: the owner's answer to
-*"safe to write test data to this environment?"* (`DESIGN` §4 step 2, N8). It is
-the same record everywhere — run configuration's `target.write_grant`, an
-authoring job's `target.authorization` — and it is resolved by one module
+*"safe to write test data to this environment?"*. It is the same record
+everywhere — run configuration's `target.write_grant`, an authoring job's
+`target.authorization` — and it is resolved by one module
 (`packages/core/src/api-suite-scripts/license.ts`).
 
 ```
@@ -609,24 +567,21 @@ authoring job's `target.authorization` — and it is resolved by one module
 | `approved_by` is required | an authorization records a person, never a flag |
 | `write: false` | the run is `read-only`: only `GET`/`HEAD` are forwarded, at the wire |
 | absent | **authoring refuses to start** — no handout is built, no model is called, and nothing reaches the target |
-| `expires_at` in the past | the grant is not live: hosted dispatch refuses a mutating suite against it, naming when it lapsed |
-| `disposable: true` | this target may be rebuilt at will, which is what lets a **pending** revision be validated before approval ([Replay and drift](#replay-and-drift)) |
+| `expires_at` in the past | the grant is not live and authoring refuses it, naming when it lapsed |
+| `disposable: true` | preserved in the resolved authorization as metadata; it does not itself license execution or dispatch |
 | `reset` | the affordance a `cleanup: { policy: "reset" }` declaration names |
 
-Replaying an already-approved script is licensed by the approval of that exact
-content, so replay accepts a target with no authorization and runs it read-only.
-Authoring has no approved content yet, which is exactly why it needs the
-declaration instead.
+Bundle replay accepts a target with no authorization and runs it read-only.
+Authoring requires the declaration before it builds a handout, calls a model, or
+reaches the target.
 
-`expires_at` is a single timestamp, not the beginning of a scope language. The
-scoped authorization of `DESIGN` §10 — method and path scope, tenant scope,
-write and request caps — stays a named seam.
+`expires_at` is a single timestamp. Authorization has no method, path, tenant,
+write-count, or request-count scope.
 
 ## Spec provisioning
 
-An authored suite needs the OpenAPI document — every `operation` obligation
-comes from it, and three of the four Level 0 policies read it — so provisioning
-has four inputs and no fifth "without one" mode (`DESIGN` §4 step 1):
+An authored suite needs the OpenAPI document because every `operation`
+obligation and three Level 0 policies depend on it. Provisioning accepts:
 
 | Declaration | Behavior |
 |---|---|
@@ -658,8 +613,8 @@ the vacuity the manifest exists to prevent.
 
 ## Invariant levels
 
-What a suite is judged against comes from two levels, and the ladder is the
-whole of `DESIGN` N6: **invariants are approved, never demanded.**
+What a suite is judged against comes from two levels: **invariants are approved,
+never demanded.**
 
 **Level 0** is the spec-derived policy set, on by default, zero user input:
 
@@ -699,24 +654,21 @@ to [Hosted: Rule cards](hosted.md#rule-cards); the engine owns three things:
   handout, no `rule:` obligation id, and no column of a verdict. This is
   structural, not advisory.
 
-Three prompt rules are S0 findings rather than taste
-(`studies/api-suite/REPORT.md` §4):
-one rule per card; an exception narrows a rule and never cancels it; the Level 0
-set is passed in as the list not to re-propose.
+The proposal prompt requires one rule per card, treats exceptions as narrowing
+rather than canceling a rule, and passes the Level 0 set as rules not to
+re-propose.
 
 An **observation pass** is the optional second input (`observeApi`): a
 mechanical read-only sweep of the `GET` operations the document itself
 parameterizes, plus one `limit=1` pagination probe per collection, through the
 ordinary proxy in `read-only` mode. There is no model in it, the wire refuses
 every mutation regardless of what it asks for, and it is bounded by the same
-wire-enforced budget as any execution (default 40 requests). S0's proposal trial
-spent 42 of 60 and one of its eight cards rested on an anomaly it saw live.
+wire-enforced budget as any execution (default 40 requests).
 
 ## The handout
 
-What an authoring job is given, and the only thing it is given (`DESIGN` §5
-item 2). Six files, all derived — the same inputs write the same bytes, with no
-model anywhere in their construction:
+An authoring job receives six derived files. The same inputs write the same
+bytes, with no model call during construction:
 
 ```text
 <out>/handout/
@@ -729,15 +681,11 @@ model anywhere in their construction:
 ```
 
 `BRIEF.md` and `CLIENT.md` are maintained assets under
-`packages/core/src/api-suite-scripts/handout/`, parameterized by target, mode, credential
-references, and budgets. They are the productized S0 protocol text
-(`studies/api-suite/BRIEF.md`), and two of their rules were earned by that
-study's transcripts rather than designed: **an approved rule beats the OpenAPI
-document** where the two disagree (two of four authors lost a real defect by
-deciding the other way), and **the first execution is a recon pass** (three of
-four did this unprompted and the fourth paid for skipping it). A change to
-either asset changes what suites get authored, so it belongs in the same review
-as the other model-facing authoring instructions.
+`packages/core/src/api-suite-scripts/handout/`, parameterized by target, mode,
+credential references, and budgets. They state that an approved rule beats the
+OpenAPI document where the two disagree and that the first execution is a recon
+pass. A change to either asset changes what suites get authored, so it belongs
+in the same review as other model-facing authoring instructions.
 
 `obligations.json` is not optional garnish. The manifest is derived
 mechanically; an author who has to guess an obligation id spends a whole turn of
@@ -756,17 +704,15 @@ Two composition rules the handout enforces:
 
 - **A declared exception narrows its rule; it never cancels it.** Where the two
   contradict each other the rule stands and the contradiction is a finding, and
-  `INVARIANTS.md` says so in its preamble. S0's proposal trial lost a real
-  detection to a card whose exceptions line overrode its own applicability line,
-  which is why the two are separate fields rather than one paragraph.
+  `INVARIANTS.md` says so in its preamble.
 - **A card's provenance does not travel.** Provenance is the model's account of
   why it proposed a sentence; the handout carries what a human approved and what
   they wrote beside it, and nothing else.
 
 ## The authoring loop
 
-No agent SDK, no multi-tool harness, no interactive permissions (`DESIGN` N4).
-One turn is:
+The authoring loop uses no agent SDK, multi-tool harness, or interactive
+permissions. One turn is:
 
 ```
 prompt(handout + last report digest + current draft) → one complete script
@@ -781,7 +727,7 @@ and the current draft in full. It returns two fenced blocks — a `json` block o
 with no usable script costs a turn and produces an objection; it never crashes
 the job.
 
-**Termination is soundness, not success** (`DESIGN` N5). The loop stops when an
+**Termination is soundness, not success.** The loop stops when an
 accepted execution is sound — no defects, every check exercised, every
 obligation accounted for — **and** every failing check cites at least one HAR
 entry that resolves. A sound suite with failing checks exits 1 and is the job's
@@ -794,9 +740,8 @@ is success, and the transcript and bundle are written either way.
 
 ### Revision discipline
 
-The one governance rule the loop enforces, mechanically, after execution
-(`DESIGN` §11's default). For every check that was **failing** in the last
-accepted execution:
+The loop mechanically enforces one revision rule after execution. For every
+check that was **failing** in the last accepted execution:
 
 | Change | What the model must record |
 |---|---|
@@ -825,17 +770,15 @@ verbatim: they are reconstructible from the handout and the reports beside them.
 
 ## Authoring budgets
 
-Three ceilings, all enforced, all overridable. The defaults are productized from
-what the S0 trials **actually used**, not from the ceilings they were given
-(`studies/api-suite/rounds/ROUND-LOG.md`; all four arms finished sound):
+Five ceilings are enforced and overridable:
 
-| Dimension | S0 ceiling | S0 usage across four arms | default |
-|---|---|---|---|
-| `iterations` (model turns) | 12 | 3, 4, 6, 3 | **8** — worst case + 2 |
-| `requests` (whole job) | 1 500 | 640, 723, 841, 1 184 | **1 500** — worst case + 27% |
-| `wall_clock_ms` | 3 h | 15, 20, 21, 21 min | **45 min** — worst case × 2 |
-| `execution_budget` (one execution) | 360 | 214–246 per execution | **400** (the runner's own default) |
-| `execution_timeout_ms` | 10 min | nothing came close | **5 min** |
+| Dimension | Default |
+|---|---|
+| `iterations` (model turns) | 8 |
+| `requests` (whole job) | 1,500 |
+| `wall_clock_ms` | 45 minutes |
+| `execution_budget` (one execution) | 400 |
+| `execution_timeout_ms` | 5 minutes |
 
 `execution_budget` may not exceed `requests`. Each execution's wire budget is
 the smaller of `execution_budget` and what the job has left, so the last
@@ -847,32 +790,21 @@ A failing check on a sound suite is a **candidate finding**
 (`packages/core/src/api-suite-scripts/findings.ts`), and so is an applicable Level 0 policy the
 traffic violated. A finding carries its obligation and the rule statement behind
 it, its expected/observed strings, and its cited HAR entries **read back as
-exchanges** — method, URL, status — which is the re-verification `DESIGN` N5
-asks for. `evidence_verified` is false when no citation resolves; the authoring
-loop will not terminate on such a check, and a reviewer sees the claim marked as
-unbacked rather than dressed as evidence.
+exchanges** — method, URL, status. `evidence_verified` is false when no citation
+resolves; the authoring loop will not terminate on such a check, and a reviewer
+sees the claim marked as unbacked rather than dressed as evidence.
 
-Findings are what the CLI prints at the end of a job and what S4's approval
-screen renders. They are never a verdict: the human decides real bug, or wrong
-rule.
+The CLI prints findings at the end of a job. They are never a verdict: a human
+decides whether each is a real bug or a wrong rule.
 
 ## The authoring bundle
 
-The script artifact of `DESIGN` N1, versioned and self-sufficient:
+`writeAuthoringBundle` writes the self-sufficient layout defined under
+[Artifact contracts](artifacts.md#script-artifact-bundle).
 
-```text
-<out>/bundle/
-  bundle.json               manifest: version, fingerprints, verdict, findings, replay config
-  suite.mjs                 the authored module
-  authoring-transcript.json how it was authored
-  har.json                  the final execution's recorded traffic
-  script-report.json        the final execution's report
-  handout/…                 the six handout files it was authored from
-```
-
-`bundle.json` records a sha256 per file, so `replayScriptBundle` refuses a
-bundle whose contents no longer match its manifest — the fingerprint is what an
-approval covers. Replay reads the spec and the obligation manifest **out of the
+`bundle.json` records a SHA-256 per file, so `replayScriptBundle` refuses a
+bundle whose contents no longer match its manifest. Replay reads the spec and
+the obligation manifest **out of the
 bundle's own handout**, so a replayed verdict cannot drift from what the suite
 was judged against; the caller supplies only the target and where to write. A
 bundle replayed against a fresh instance of the same build reproduces the same
@@ -880,8 +812,8 @@ verdict, the same failing checks, and the same obligation accounting.
 
 ## The authoring job file
 
-`packages/core/src/schemas/authoring-job.schema.json` is authoritative, and the same
-shape backs the CLI and the hosted job:
+`packages/core/src/schemas/authoring-job.schema.json` is authoritative for the
+CLI job:
 
 ```
 target    { base_url, allowed_origins, authorization }   (required)

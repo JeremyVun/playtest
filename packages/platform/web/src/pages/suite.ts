@@ -13,7 +13,9 @@ import { didNotRunLabel } from "../lib/vocab.js";
 import { parseYaml } from "../lib/caseform.js";
 import { setAppKey, setEnvBaseUrl, baseUrlProblem, DEFAULT_ENV_NAME } from "../lib/defaults-form.js";
 import { PLATFORMS, APP_ARTIFACT_EXTENSIONS, appArtifactProblem, fmtBytes } from "../lib/env-config.js";
-import { BINARY_SOURCES, targetQuestion, ringNameProblem, ringPlan, existingRingPlan } from "../lib/suite-target.js";
+import {
+  BINARY_SOURCES, targetQuestion, ringNameProblem, ringPlan, existingRingPlan, compatibleRings,
+} from "../lib/suite-target.js";
 import { storyFindingSummary, findingChipDescriptors } from "../lib/finding-chips.js";
 import { newSuiteModal } from "./projects.js";
 import { launchModal } from "./runs.js";
@@ -259,8 +261,8 @@ function whereDoesItRunCard({ projectKey, project, suite, app, envs, driver, rel
   const suiteSays = mobile
     ? !!app?.app || Object.values(overlays).some((e: WebDynamic) => e?.app)
     : !!app?.base_url || Object.values(overlays).some((e: WebDynamic) => e?.base_url);
-  const ringSays = mobile && envs.some((e: WebDynamic) =>
-    (e.app_artifact || e.config?.app?.app) && (!e.suite_id || e.suite_id === suite.id));
+  const ringSays = mobile && compatibleRings<WebDynamic>(envs, "mobile", suite.id)
+    .some((e: WebDynamic) => e.app_artifact || e.config?.app?.app);
   const skipKey = `pt.target-skipped.${suite.id}`;
   let skipped = false;
   try { skipped = sessionStorage.getItem(skipKey) === "1"; } catch { /* private mode: ask again */ }
@@ -272,7 +274,7 @@ function whereDoesItRunCard({ projectKey, project, suite, app, envs, driver, rel
   const card = h("div.card.pad.target-card", { style: "margin-bottom:14px" });
   // Rings this suite may use: the project's, plus its own. Another suite's is
   // not a choice — the server refuses it, and offering it offers a mistake.
-  const usable = envs.filter((e: WebDynamic) => !e.suite_id || e.suite_id === suite.id);
+  const usable = compatibleRings<WebDynamic>(envs, driver, suite.id);
   const NEW = "__new";
   const ring = h("select", { "aria-label": "Environment", onchange: paint },
     ...usable.map((e: WebDynamic) => h("option", { value: e.id }, e.suite_id ? `${e.name} — this suite only` : e.name)),
@@ -441,7 +443,7 @@ function whereDoesItRunCard({ projectKey, project, suite, app, envs, driver, rel
       source, path: path.value, platform: platform.value, appiumUrl: appium.value,
     };
     if (making) {
-      const collision = ringNameProblem(draft.name, envs);
+      const collision = ringNameProblem(draft.name, envs, driver);
       if (collision) { newName.focus(); return fail(collision); }
     }
 
@@ -459,6 +461,7 @@ function whereDoesItRunCard({ projectKey, project, suite, app, envs, driver, rel
         if (source !== "suite-file") {
           await api.put(`/environments/${target.id}`, {
             name: target.name,
+            driver: target.driver,
             discovery_allowed: target.discovery_allowed,
             runner_labels: draft.labels.length ? draft.labels : target.runner_labels || [],
             config: { ...target.config, ...added, app: { ...(target.config?.app || {}), ...(added.app || {}) } },

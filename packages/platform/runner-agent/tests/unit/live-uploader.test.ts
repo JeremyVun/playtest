@@ -1,6 +1,5 @@
-// Phase L2: the runner-agent live uploader
-// (docs/backlog/live-runs/BUILD_PLAN.md, docs/contracts/hosted.md "Live staging
-// routes").
+// The runner-agent live uploader
+// (docs/contracts/hosted.md "Live staging routes").
 //
 // Every test drives the real uploader against a fake control plane that speaks
 // the real ack vocabulary over real HTTP on loopback — so single-flight

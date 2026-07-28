@@ -1,5 +1,4 @@
--- Live runs: open-run staging (docs/contracts/hosted.md "Live runs",
--- docs/backlog/live-runs/DESIGN.md).
+-- Live runs: open-run staging (docs/contracts/hosted.md "Live runs").
 --
 -- A run becomes viewable while it executes. Its evidence streams in ahead of the
 -- sealed bundle and lives in two shapes, split by transactionality — SQLite and

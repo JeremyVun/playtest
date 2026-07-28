@@ -59,9 +59,7 @@ executor protocol. `PLAYTEST_DISPATCH=pool` places work on self-hosted runners
 that claim it outbound (see "Runner pool"). All three implement one adapter
 interface, so run-group lifecycle, the dispatch ledger, and the reconciler do
 not vary by adapter. Dispatch is placement; it is not the system of record or an
-artifact store. Mixing adapters within one deployment is deliberately deferred:
-if it ever lands, the seam is an environment-level placement field, and schema
-decisions should not paint over that.
+artifact store. One deployment cannot mix adapters.
 
 ## Storage, deployment topology, and transactions
 
@@ -78,7 +76,8 @@ working directory. Within it:
   objects/             # default filesystem object store
 ```
 
-`OBJECT_STORE_URL` remains the expert override for S3 or a separate mount, and
+`OBJECT_STORE_URL` selects a separate filesystem mount. An S3 or HTTP URL
+selects the reserved, nonfunctional S3 adapter and fails when used.
 `PLAYTEST_DB_FILE` overrides the database path. Overriding either splits durable
 state across locations; a backup is then incomplete unless it covers both.
 
@@ -108,7 +107,7 @@ foreign keys, a busy timeout, or `synchronous = FULL`.
    See "Background cycles and leases".
 
 **Stored representations.** JSON columns hold canonical JSON text (keys sorted
-recursively, no insignificant whitespace); two logically equal documents are now
+recursively, no insignificant whitespace); logically equal documents are
 byte-equal. Timestamps are UTC epoch-millisecond integers and are rendered as
 ISO-8601 `…Z` strings at the API boundary. Per-day aggregation buckets are UTC.
 Booleans are constrained `0`/`1`. Identifiers remain server-generated ULIDs, so
@@ -120,7 +119,7 @@ feed cursors and audit keyset pagination stay time-ordered.
    core discovery, resolution, validation, and linting code used by the CLI
    processes hosted suites.
 2. Every committed suite mutation creates an immutable snapshot. A run group
-   pins one snapshot, so later edits cannot change an in-flight or historical
+   pins one snapshot, so later edits cannot change an in-flight or completed
    run.
 3. The runner materializes snapshots into the normal CLI directory layout.
    Core never knows whether a suite originated in the hosted database.
@@ -158,7 +157,7 @@ and nothing crashed, so reporting a deployment choice as "Internal Server Error"
 would send people hunting a bug that does not exist. The message names the
 environment variable that switches the capability on. `GET /api/v1/me` reports
 the same thing ahead of time as `capabilities`, a description of the SERVER and
-never an authorization signal — today `capabilities.llm`, the platform LLM
+never an authorization signal — `capabilities.llm`, the platform LLM
 gateway behind story drafting, study synthesis, and candidate consolidation,
 and `capabilities.auto_dedupe`, whether that gateway plus the
 `PLAYTEST_AUTO_DEDUPE` toggle has automatic post-run finding dedupe on. The
@@ -196,7 +195,7 @@ admin >= developer >= reviewer >= editor >= viewer
 - `admin` manages membership and project-wide administration, including
   permanent project deletion (`DELETE /api/v1/projects/:p`). Retention is a
   deployment-wide policy set by operators, not configured per project; legal
-  holds no longer exist.
+  holds do not exist.
 
 API tokens have a role and are scoped to one project unless explicitly
 site-scoped. Development auth is an admin bypass for local use only.
@@ -476,7 +475,7 @@ sealed artifacts.
 Under `PLAYTEST_DISPATCH=pool` the control plane never starts or contacts an
 executor. A self-hosted runner — long-lived on a developer machine, or ephemeral
 inside a CI job — authenticates outbound, advertises labels, and claims work.
-**No inbound connection to a runner exists anywhere in this design.** The pool is
+**No inbound connection to a runner exists.** The pool is
 a third implementation of the placement-adapter interface: dispatch rows, the
 reconciler, and run-group lifecycle are the same ones every other adapter uses.
 
@@ -694,39 +693,6 @@ executor → complete → poll again.
   completion carrying the error; the agent reports one actionable line — never a
   stack — and returns to the board.
 
-## Script authoring jobs
-
-Authoring is a **runner-agent job type**, dispatched like a run group and
-isolated by the same boundary. It is not a run: it produces no trajectory, no
-baseline, and no grade — it produces one script artifact bundle
-([Script contracts: the authoring bundle](scripts.md#the-authoring-bundle)).
-
-| Property | Value |
-|---|---|
-| dispatch | one job per suite, never concurrent with another authoring job for the same suite |
-| input | the resolved environment (target + secret references), the recorded target authorization, the spec provisioning declaration, the approved rule statements with their notes, and the budgets |
-| model | the environment's configured actor model, reached through the ordinary gateway; no agent SDK, no tools ([Model selection](#model-selection)) |
-| output | the bundle, uploaded whole: script, transcript, final HAR, final report, and the handout it was authored from |
-| terminal states | `sound` — the suite is sound and ready for review — or one of `iterations`, `requests`, `wall_clock`, `model_error`, each naming the budget it hit |
-| events | turn, rejection, and completion arrive on the feed like any other job progress; no polling |
-
-Three refusals belong to the control plane, before any job is dispatched:
-
-- **no recorded target authorization for the exact resolved origin** — the job
-  is refused with the actionable configuration error, and nothing reaches the
-  target ([Script contracts: target authorization](scripts.md#target-authorization));
-- **no resolvable OpenAPI document** — spec provisioning is a configuration
-  error, never a degraded job
-  ([Script contracts: spec provisioning](scripts.md#spec-provisioning));
-- **an unapproved rule statement** — only human-approved sentences reach a
-  handout, enforced structurally rather than by prompt (`DESIGN` N6; see
-  [Rule cards](#rule-cards)).
-
-The authored suite arrives **pending**, never approved: authoring produces
-content for review, and the approval lifecycle (S4) is what licenses it to run
-again. A failing check in the bundle is a candidate finding for the reviewer,
-not a failed job.
-
 ## Rule cards
 
 Level 1 of the invariant ladder
@@ -735,13 +701,8 @@ state and a review surface. Level 0 has no storage and no switch: the four
 default policies are code, always on, and reported here read-only so a person
 can see what their suite is judged against before deciding anything.
 
-**The shipped claim is assisted authoring, not zero input.** S0's proposal trial
-cleared precision and detection but its suite found 8 of 13 sealed faults
-against 11–12 for suites given the rules (`DESIGN` §7.1), so the surface says
-*"review and confirm your API's rules"* and never that the platform discovered
-them. The console's copy lives DOM-free in `packages/platform/web/src/lib/rule-cards.ts`
-and the offline gate asserts the sentences that carry that promise — a change
-that re-inflates the claim fails a test rather than a review.
+The surface presents assisted authoring: *"review and confirm your API's
+rules"*. It never claims the platform discovered authoritative rules.
 
 ### Storage
 
@@ -760,9 +721,9 @@ One row per card in `rule_cards`, suite-scoped:
 
 ### Governance
 
-**Only human-approved sentences are enforced, and the rule is a query rather
-than a convention** (`DESIGN` N6). `approvedRuleCards(db, suiteId)` is the only
-path from this table to an authoring handout; its predicate is
+**Only human-approved sentences are enforced.**
+`approvedRuleCards(db, suiteId)` is the only path from this table to an
+authoring handout; its predicate is
 `state = 'approved'`, and it returns its rows through the engine's
 `approvedCardRules`, which filters again in its own body. Two independent
 filters: breaking one leaves the other.
@@ -784,7 +745,7 @@ Three consequences the API must preserve:
 | Route | Role | Notes |
 |---|---|---|
 | `GET /suites/:s/rule-cards` | viewer | the Level 0 set, every card, counts, and whether this deployment can propose |
-| `GET /suites/:s/rule-cards/handout` | viewer | the approved statements exactly as an authoring job will receive them — the same function, not a parallel rendering |
+| `GET /suites/:s/rule-cards/handout` | viewer | the approved statements in the core authoring-handout shape |
 | `POST /suites/:s/rule-cards/propose` | editor | the model call; drafting, so it is an editor act |
 | `POST /suites/:s/rule-cards` | reviewer | add-your-own: a sentence a person wrote lands `approved`, because writing it is approving it |
 | `PATCH /rule-cards/:rc` | reviewer | statement, applicability, exceptions, note |
@@ -794,47 +755,10 @@ Three consequences the API must preserve:
 Every mutation writes its audit row and its `rule_card.*` platform event inside
 the same transaction, and the console repaints off the feed — no polling.
 
-The proposal call takes the OpenAPI document as an upload or a paste. **The
-control plane does not fetch a spec URL and does not auto-discover:** reaching a
-user's target belongs behind the runner-agent boundary, and spec provisioning
-from environment configuration arrives with the hosted authoring job. A
-deployment without the LLM gateway answers `503 not_configured` and the console
-says so while still offering write-your-own.
-
-## Script execution boundary
-
-Script suites ([Script contracts](scripts.md)) execute in the runner-agent, and
-their isolation is a contract with escape tests rather than an assumption. Two
-processes, and the split is the whole guarantee:
-
-- The **proxy process** is the runner-agent job itself. It resolves the
-  environment's secret references, owns the only socket to the target, and
-  enforces the wire tier — origin lock, the read-only default, the request
-  budget, secret substitution, and HAR recording.
-- The **script process** is a child with no credential in its environment, no
-  ambient network, no filesystem, no subprocess, and no dependency resolution.
-  It reaches the target only through the proxy's loopback control channel,
-  authenticated with a per-run token, and it writes no artifact: the HAR and the
-  report are produced by the proxy process.
-
-Network isolation of the script process — that it cannot bypass the proxy and
-open its own socket — is the runner-agent sandbox's responsibility, delivered by
-the same per-case container isolation the [Runner protocol](#runner-protocol)
-already requires. The substrate's unconditional guarantee is narrower and
-stronger: such an escape yields no credential, because none is present in the
-child, and the proxy's guards are unaffected by anything happening inside it.
-
-A mutating script suite is dispatched only against a target whose write grant is
-recorded and current; without one the client refuses every non-`GET`/`HEAD`
-request at the wire. The grant is target authorization, never script content.
-
-The adversarial battery that proves this boundary ships with the package that
-owns it (`packages/platform/runner-agent/tests/unit/`) and covers ambient `fetch`,
-`node:http`/`node:net`, alternate-origin and DNS access, `process.env` reads,
-filesystem escape, `child_process`, direct report fabrication, and credential
-exfiltration through URLs, bodies, logs, and thrown exceptions. Each attempt
-must be blocked or provably credential-free; a change that weakens one is a
-contract change here.
+The proposal call takes the OpenAPI document as an upload or paste. The control
+plane does not fetch a spec URL or auto-discover one. A deployment without the
+LLM gateway answers `503 not_configured`; the console still offers
+write-your-own.
 
 ## Model selection
 
@@ -875,7 +799,7 @@ that escalated to a heal does not inflate the next clean replay estimate.
 
 Control-plane LLM jobs split: authoring and synthesis remain deployment-level
 operator configuration (`PLAYTEST_*_MODEL` env), unaffected by project or
-suite settings. Consolidation — which now also runs automatically per project
+suite settings. Consolidation — which also runs automatically per project
 (auto-dedupe) — resolves per project: `projects.models.consolidation_model`,
 else `PLAYTEST_CONSOLIDATION_MODEL`, else the `gpt5_6_terra` tier. The plan
 row records the model actually used.
@@ -963,8 +887,8 @@ dropped connection: the remainder of the request is drained and discarded so the
 refusal actually reaches the client.
 
 A launch **pins** the artifact reference onto the run group when the artifact is
-what it resolved to, so a re-upload cannot change what an in-flight or
-historical group tested — the same immutability rule the suite snapshot follows.
+what it resolved to, so a re-upload cannot change an existing group's input —
+the same immutability rule the suite snapshot follows.
 The group spec serves the pinned reference, never the environment's current one.
 The pin is also what keeps the blob alive: retention's blob GC deletes a
 `blobs/<sha256>` object only when no suite snapshot, no environment, and no run
@@ -1001,11 +925,20 @@ A mobile environment whose binary is a runner-local path is only launchable on a
 runner whose labels reach the machine holding that build; one that ships an
 artifact is launchable on any runner in the project.
 
+An environment has exactly one driver (`web`, `api`, or `mobile`). Only suites
+using that driver may select it; preview and launch enforce the same boundary as
+the console, so a stale client cannot turn a web ring into a mobile one. The
+driver is explicit environment state rather than inferred from `config.app`:
+device fields and an uploaded app artifact do not redefine a ring. Uploading an
+app artifact is accepted only for a mobile environment, and changing a mobile
+environment to another driver requires removing its uploaded artifact first.
+
 An environment is owned either by the project or by one suite. A project-owned
 environment (`suite_id` null) is a deployment ring every suite may launch
-against. A suite-owned environment is visible and launchable from its own suite
-only, is refused for any other suite at launch and at preview, and is deleted
-with the suite. Both are the same row, the same API, and the same
+against when the drivers match. A suite-owned environment is visible and
+launchable from its own suite only when its driver matches, is refused for any
+other suite at launch and at preview, and is deleted with the suite. Both are
+the same row, the same API, and the same
 `run_groups.environment_id`: ownership decides who may choose it, never how it
 is materialized. Names are unique per project across both scopes, because the
 name is the `app.envs.<name>` overlay key and the CLI's `--env` argument, and
@@ -1329,9 +1262,8 @@ Intake resolves against live findings (merge tombstones followed), in order:
 Reviewer verbs on a `new` finding are the ordinary finding transitions:
 **accept** confirms it, **reject** dismisses it (reason vocabulary
 `not_a_bug`, `wont_fix`, `duplicate`), and **merge** resolves a suggestion
-into the finding it duplicates. There are no candidate routes: the former
-`/api/v1/bug-candidates/*` and `.../confirm-suggestion` endpoints are removed,
-and the console reaches unreviewed findings as a filter of the Findings list
+into the finding it duplicates. There are no candidate routes. The console
+reaches unreviewed findings as a filter of the Findings list
 (`state=new`), not a separate page. A finding may never cite another project's
 run, and a merge may never cross a project boundary. Every intake, transition,
 and merge writes an audit row naming the actor, in the same transaction as the
@@ -1394,10 +1326,7 @@ three steps is a guarantee, not an implementation detail:
    call and the number of clusters in one run; an over-large component is split
    into capped calls and the split is recorded, never silently truncated.
 
-Retrieval thresholds are server configuration, not constants: the right value is
-a property of a project's candidate corpus, not of the algorithm. The defaults
-below were measured against the fixture corpus
-(`tests/support/findings/README.md` records the scored pairs and the baseline).
+Retrieval thresholds are server configuration rather than algorithm constants.
 The verification model resolves per project — see "Model selection"
 (`consolidation_model` policy, `PLAYTEST_CONSOLIDATION_MODEL` env, then the
 `gpt5_6_terra` tier). Startup rejects an out-of-range value, or an auto-suggest
@@ -1412,16 +1341,10 @@ threshold below the floor, with a `ServerConfigError`.
 | per-cluster prompt-byte cap | 24000 | `PLAYTEST_CONSOLIDATION_MAX_PROMPT_BYTES` |
 | clusters per run | 20 | `PLAYTEST_CONSOLIDATION_MAX_CLUSTERS` |
 
-Two of those carry rationale worth keeping. The **floor** is the midpoint of the
-measured gap between duplicates and everything else on the P0 corpus (weakest
-duplicate 0.316, strongest unrelated pair 0.175), so it holds the same margin
-against a slightly weaker duplicate as against a slightly stronger coincidence.
-The **auto-suggest threshold** deliberately sits above every measured duplicate
-(maximum 0.495): in the first release, word overlap alone never bypasses
-verification — a duplicate either matched a deterministic exact key at intake or
-it goes to a reviewed cluster call. Changing either is a measurement rather than
-a guess, because `consolidation_labels` records every reviewer confirmation,
-edit, and rejection together with the deterministic score that produced it.
+Word overlap alone never bypasses verification: a duplicate either matched a
+deterministic exact key at intake or goes to a reviewed cluster call.
+`consolidation_labels` records every reviewer confirmation, edit, and rejection
+with the deterministic score that produced it.
 
 **A consolidation plan is a proposal, never a write.** The model may reference
 only ids the server put in that cluster's prompt. Before a plan is persisted the
@@ -1680,8 +1603,7 @@ authenticated endpoints:
 - **Copy for tracker** remains the default human handoff into an issue tracker.
 
 Every transition through these APIs is authorized by role and recorded in the
-audit log exactly as its console equivalent. A concrete first-party tracker
-integration may return later only with measured demand and its own design.
+audit log exactly as its console equivalent.
 
 ## Authoring and study synthesis
 
@@ -1713,8 +1635,8 @@ Rule-card proposal is the assistant's second call and the one durable-writing
 one ([Rule cards](#rule-cards)): it persists `candidate` rows, an audit entry,
 and a feed event. Its prompt, forced-tool schema, validation, and normalization
 are owned by the engine
-(`packages/core/src/public/api-suite-scripts.ts`) so the CLI and a future runner-agent job share
-one instrument. Like every other model call here it decides nothing:
+(`packages/core/src/public/api-suite-scripts.ts`) so all callers share one
+instrument. Like every other model call here it decides nothing:
 a proposed card is always a candidate.
 
 Discovery study synthesis is a findings operation, not a stored report.
@@ -1748,8 +1670,7 @@ guards.
    cycle runs, so a legitimately long cycle is not interrupted.
 3. **Crash recovery.** A process that dies mid-cycle renews nothing. Once the
    expiry passes, the next scheduled cycle claims the lease and proceeds without
-   operator action. This is the property the removed in-process flag could not
-   provide.
+   operator action.
 4. **Prompt release.** A cycle that finishes or throws releases its lease
    immediately rather than making the next one wait out the expiry.
 5. **Advisory, not a correctness barrier.** Every step inside a cycle is already
@@ -1829,21 +1750,6 @@ and a run group's pinned `app_artifact`. A build an environment has replaced
 therefore survives while any group that ran with it can still be re-run, and a
 build nobody ever launched against is reclaimed on the next cycle.
 
-Objects whose owning rows were dropped by a schema migration are **not** covered
-by that cleanup, and no shipped tool enumerates or retires them. The
-simplification dropped the `insights` table, so any Markdown report object a
-pre-simplification deployment stored under an `insights.report_key` is now
-unreferenced and stays in the object store. Retiring those keys is an operator
-responsibility: enumerate the keys from
-a pre-migration database dump and delete them individually. Blind prefix deletion
-of the object store is never acceptable.
-
-The same conservatism binds the migration that creates such orphans: never
-silently drop a non-empty feature table or the objects it references. Census
-first. The simplification's unconditional drops were permitted only by an
-explicit operator waiver of data preservation for one deployment, which is not
-precedent for the next.
-
 Bundle rewriting and reads are buffered and therefore subject to the
 safe-integer and upload limits enforced by the implementation. Larger artifacts
 require a different streaming contract rather than silently bypassing those
@@ -1869,8 +1775,8 @@ author stories, run them, inspect evidence, make a human decision.
   run count; journey stories pick one.
 - Suites is the project landing page and the only suite index. It carries Needs
   attention, a compact 7-day pass-rate summary with its graded-story denominator,
-  and a suite table showing latest result and open-finding count. The legacy
-  suites-index URL redirects to this project home;
+  and a suite table showing latest result and open-finding count.
+  `/p/:key/suites` redirects to this project home;
   suite-detail, story, run, finding, and viewer deep links stay stable.
 - Runs is a triage surface, not a list of identifiers, and it is sized for a
   busy console rather than for one run at a time. It is **one table** — one
@@ -1912,9 +1818,8 @@ author stories, run them, inspect evidence, make a human decision.
   progress events on the feed (the server keeps only the latest snapshot; model
   and token telemetry ride the tooltip). Queued stories are summarised on one
   line rather than given a row each — a queued story has no vitals, no evidence
-  and nowhere to go. The narration that used to open the dashboard
-  ("provisioning capacity…", "executor connected…", the plain-words verdict
-  once it ends) heads the expanded stories. A run's own URL
+  and nowhere to go. Current progress or the plain-language final verdict heads
+  the expanded stories. A run's own URL
   (`/p/:key/runs/:group`) still resolves: it opens the index with that run
   expanded and scrolled into view.
 - The replay is a destination the interface names. Every story row offers
@@ -1931,7 +1836,7 @@ author stories, run them, inspect evidence, make a human decision.
   offers "Review all changed stories" only when several candidates are pending,
   and it is not on the rail. A single pending candidate is decidable from its own
   run page.
-- Settings exposes exactly six sections: **Test targets** (environments —
+- Settings defines six sections: **Test targets** (environments —
   discovery permission, runner labels, browser cookies (`config.app.cookies`,
   sent on every web run against the ring), auth identities, and secret
   references, with the fallback base URL, provider, and raw environment JSON
@@ -1957,7 +1862,10 @@ author stories, run them, inspect evidence, make a human decision.
   event feed and re-reads the clock on a slow local interval that makes no
   request, so a laptop that closed its lid goes quiet on the page without
   anything having reported it. Nothing on this surface polls.
-- **Test targets** carries a ring's device as first-class fields — platform,
+- **Test targets** carries the ring's driver as a first-class field. Suite
+  setup, Suite settings, and the launch dialog show only environments matching
+  the suite's driver.
+- A mobile **Test target** carries its device as first-class fields — platform,
   the app-binary path on the runner's own disk, and the Appium server — folded
   away until a ring has one, so a mobile ring never requires hand-written JSON.
   The named fields and the raw config document are two views of ONE document
@@ -2002,11 +1910,8 @@ author stories, run them, inspect evidence, make a human decision.
   footer (`packages/platform/web/src/lib/statusbar.ts`) states whether this console is
   live and — for developers — dispatch depth against the cap, GHA queue wait,
   reconciler liveness, and model spend; the dispatch ledger opens in a drawer
-  over the page. It replaces the folded "Operations" section that used to sit
-  under the Runs table, because health that has to be opened is health nobody is
-  watching, and it is needed wherever a person happens to be when a run feels
-  slow. The words and tones are DOM-free in `lib/ops-status.ts`. Nothing here is
-  a new API surface: the bar reads `GET /projects/:p/ops` and
+  over the page. The words and tones are DOM-free in `lib/ops-status.ts`. The
+  bar reads `GET /projects/:p/ops` and
   `GET /projects/:p/dispatches`, both still developer-only, and non-developers
   see only the feed indicator. It stays live off the event feed (§ Events and
   long polling) — a refetch when anything moves, plus a slow safety refresh,
@@ -2016,21 +1921,20 @@ author stories, run them, inspect evidence, make a human decision.
 - Below the supported minimum width the console shows a desktop-requirement
   message instead of a clipped rail and tables. It keeps the top bar and offers
   "Continue anyway", which sets `data-scope="wide"` and renders the console at
-  that width. Responsive/mobile redesign of the admin console remains out of
-  scope; the applications Playtest tests may still be mobile.
+  that width.
 - The console authors stories and the suite's shared defaults; it is not a file
   manager. A suite's `playtest.yaml` is edited on **Suite settings**
   (`/p/:key/suites/:slug/settings`) as a form with a YAML view of the identical
   bytes — the same discipline as the story editor, applied through
   `packages/platform/web/src/lib/defaults-form.ts`, so comments and unedited keys survive.
   Personas, hooks and assertions are code-tier files: they arrive and leave as a
-  `.tar` (Import/Export) and are edited with the CLI. The raw file tree
-  (`/p/:key/suites/:slug/files`) is gone and redirects to Suite settings.
+  `.tar` (Import/Export) and are edited with the CLI.
+  `/p/:key/suites/:slug/files` redirects to Suite settings.
 - **API rules** (`/p/:key/suites/:slug/rules`) is the suite's rule cards
   ([Rule cards](#rule-cards)), reached from the suite's overflow menu. It is not
   gated on anyone having approved a card: every suite already has the Level 0
-  set, and the page's first job is to say so. The page opens with what is
-  enforced today, then the cards to review, then approved, then denied — the
+  set, and the page's first job is to say so. The page opens with the enforced
+  rules, then the cards to review, then approved, then denied — the
   order a person reads them in — and each card carries its one-line provenance,
   approve / not-a-rule / edit, and a note field that travels to the test author.
 - A suite declares where it runs; an environment declares the ring it runs in.
@@ -2112,8 +2016,9 @@ author stories, run them, inspect evidence, make a human decision.
   confirming a finding says it is real, not that it is done.
   `?filter=dismissed` still resolves to the Rejected bucket.
 - A baseline change awaiting a decision is a **changed story** on screen (its
-  API resource stays `candidates`). "Suspected bugs" and "bug candidate" are
-  retired words: a machine-filed defect claim is a finding that needs review.
+  API resource stays `candidates`). The UI does not call machine-filed defect
+  claims "suspected bugs" or "bug candidates"; they are findings that need
+  review.
 
 ## Web experience invariants
 
@@ -2231,52 +2136,6 @@ author stories, run them, inspect evidence, make a human decision.
   each instance names its object with an `aria-label`. Every input has an
   accessible name from a `<label>` or an `aria-label`; a placeholder is never
   the only name.
-
-These invariants are authored and reviewed by hand. The repository has no
-browser harness that loads the hosted SPA and no accessibility (axe) harness, so
-nothing here about rendering, keyboard operation, contrast, or focus is
-machine-verified. What *is* asserted hermetically, in
-`packages/platform/web/tests/web-ia.test.ts`, is the information
-architecture above: the four nav items and their targets, the rail item every
-page's `nav:` value resolves to, the Settings sections and their role
-disclosure, the finding buckets and their state mapping, the display vocabulary
-for every engine enum a person can see, redirect targets for removed surfaces,
-and secret masking. `tests/unit/web-run-stats.test.ts` asserts the run
-arithmetic and its words: that the three payload shapes agree on the same run,
-that a changed pass is counted once rather than twice, that an unsettled run
-reports no wall clock, and that a run holding a failure never reads as a plain
-"done". `tests/unit/web-statusbar.test.ts` does the same for the
-status bar's vocabulary — including the rule that every unhealthy state (a
-silent reconciler, a queue at its cap) is legible as words and not only as a
-colour. `tests/web-runners.test.ts` pins the runner surface's load-bearing
-properties: the exact start command (credential in the environment, never in an
-argument), the one-time reveal, presence derived from the last check-in against
-the server's published window rather than asked for, the claim board's subset
-matching, the no-matching-runner launch warning in the words the failure would
-have used, and which placement failures earn the runner remedy.
-`tests/web-run-live.test.ts` pins the live half of the run page without a
-browser: which feed events it acts on (its own run's status and progress, and
-nothing else), that a progress snapshot patches rather than reloads, that the
-seal arrives as one status event, and that the words it says are only ever what
-the runner reported — a step number never invented from a budget, an action
-never carried over into a phase that has none.
-`tests/web-target-setup.test.ts` pins where an app runs: that the environment
-form's fields and its raw document are one document, that the artifact cap and
-accepted extensions are stated before an upload, that a new suite commits
-identity only, and that each answer on the empty suite's target card writes to
-whichever owner it belongs to — including the name collisions the form must
-surface. Treat any claim of verified accessibility as unmade until such a
-harness exists.
-
-`tools/ux-lab` is the manual counterpart: it boots the control plane against a
-throwaway data root, seeds it through the public API and the real runner
-protocol, and walks every surface with Playwright in both themes. It is a
-workbench for looking at the console, not a gate — nothing in CI runs it.
-
-That inventory is assertable only because the IA is DOM-free by design: nav,
-Settings sections, redirects, finding buckets, display vocabulary, status-bar
-vocabulary, and secret masking live in plain modules under
-`packages/platform/web/src/lib/`. Keep them there.
 
 ## Contract changes
 

@@ -1,5 +1,5 @@
-// Phase L2: the live uploader, end to end
-// (docs/backlog/live-runs/BUILD_PLAN.md "Phase L2").
+// The live uploader, end to end
+// (docs/contracts/hosted.md "Live staging routes").
 //
 // L1 proved the platform side against a hand-written runner; the unit tests
 // beside the uploader prove its queue against a fake control plane. This is the
@@ -42,6 +42,7 @@ async function setUp(api: HostedDynamic, { key, baseUrl }: HostedDynamic) {
   const env = (
     await api.post(`/projects/${key}/environments`, {
       name: "laptop",
+      driver: "api",
       runner_labels: ["self-hosted", "playtest"],
       config: { app: { base_url: baseUrl } },
     })

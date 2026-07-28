@@ -104,6 +104,7 @@ and exits. Restarting a runner that was mid-group resumes the same group.
 | `--isolation process\|container` | `process` runs cases directly (a laptop, an ephemeral CI machine); `container` runs each case in its own container. Runs record which one produced them. |
 | `--work-dir <dir>` | Where suites are materialized. Cleaned up after each group. |
 | `--credential-file <path>` | Read the credential from a file instead of the environment. Also `PLAYTEST_RUNNER_CREDENTIAL_FILE`. |
+| `--config <path>` | This machine's own facts: mobile builds, Appium backends, devices, and optionally labels ([§7](#7-mobile-the-runner-supplies-the-build)). Also `PLAYTEST_RUNNER_CONFIG`. |
 
 A credential passed as an argument is refused, not accepted quietly.
 
@@ -137,9 +138,10 @@ What it does for you, under `PLAYTEST_AUTH=dev` only:
 - `scripts/hosted-server.sh` starts `runner-agent pool` against that credential
   file, restarts it if it stops, and stops it when the server stops. The agent's
   own backoff covers the boot order;
-- it seeds `$PLAYTEST_DATA_DIR/runner.yaml`, a commented placeholder for the
-  machine-local facts a mobile run will need. Nothing reads it yet (see
-  [Mobile](#7-mobile-coming-with-runner-configuration)).
+- it seeds `$PLAYTEST_DATA_DIR/runner.yaml` with the runner configuration schema
+  commented out, and starts the agent with `--config` pointing at it. Web and API
+  runs need nothing in it; uncommenting it is the whole of mobile setup (see
+  [Mobile](#7-mobile-the-runner-supplies-the-build)).
 
 A first web run locally is therefore: create an application, create a ring
 `local` with `http://127.0.0.1:4173`, launch. No runner file is touched and no
@@ -266,19 +268,151 @@ One secret remains a secret: launching a run needs a project API token with the
 `editor` role, because OIDC registers a runner — it does not authorize starting
 work. Scope that token to the one project the pipeline gates.
 
-## 7. Mobile: coming with runner configuration
+## 7. Mobile: the runner supplies the build
 
-Hosted mobile runs are being rebuilt around a runner-side configuration file.
-The reason is the boundary this whole page is about: a mobile build's path on
-disk, the Appium server that drives it, and the device it targets are facts only
-the runner can know, and no platform record should ever hold them. A ring for a
-mobile application therefore carries no URL, no binary, and no device — the
-claiming runner supplies all three.
+A mobile build's path on disk, the Appium server that drives it, and the device
+it targets are facts only the runner can know, and no platform record holds any
+of them. A ring for a mobile application therefore carries no URL, no binary and
+no device: the claiming runner supplies all three, from a file on its own disk.
 
-Until that lands, a mobile launch is refused at the console with a message saying
-so, and the seeded `runner.yaml` is a placeholder. The runner will read its
-bindings from that file, keyed by the immutable application and ring keys you see
-in the console, and will start and supervise Appium itself.
+That file is the runner configuration file, and `--config` is how the agent finds
+it:
+
+```sh
+./node_modules/.bin/runner-agent pool --server https://playtest.example.com \
+  --credential-file ~/.playtest/runner-credential --config ~/.playtest/runner.yaml
+```
+
+`npm run hosted` already passes it: the peer runner reads
+`$PLAYTEST_DATA_DIR/runner.yaml`, which is seeded with this schema commented out.
+Uncommenting it is the whole of mobile setup.
+
+### The file
+
+```yaml
+version: 1
+
+targets:
+  todo-ios:                          # the application key, from the console
+    local:                           # the ring key
+      platform: ios                  # ios | android
+      app: /Users/ada/build/Todo.app # your build; relative paths resolve here
+      backend: local-ios
+      device: iPhone 16              # optional — omit for Appium's default
+
+mobile:
+  backends:
+    local-ios:
+      platform: ios
+      appium:
+        mode: managed
+```
+
+Three things about the keys, because they are the join between two places:
+they are the **immutable** keys the console shows on the application and the
+ring, not their display names; they never change once created; and nothing else
+in the file is visible to the platform. Rename an application freely — the
+binding holds.
+
+The runner validates the whole file at startup and refuses to run on a problem it
+can see from here: a target naming a backend you never declared, a platform that
+disagrees with its backend, a build that is not on this disk, a duplicate entry,
+a credential written as a value. Each refusal names the position in the file. Its
+banner then states what it bound:
+
+```text
+Playtest runner "adas-laptop" — project acme
+  server     https://playtest.example.com
+  labels     macbook, ios
+  isolation  process — cases run directly on this machine
+  work dir   /tmp/playtest-runner
+  config     /Users/ada/.playtest/runner.yaml
+  targets    todo-ios/local — ios via backend "local-ios"
+  backends   local-ios — ios, managed Appium (started here)
+waiting for work — launch a run against a ring whose runner labels this runner advertises
+```
+
+Build paths and devices are deliberately absent from that banner, and from
+everything this runner sends. They stay in the file.
+
+### Managed or external Appium
+
+**`mode: managed`** is the default and the one to start with. The runner picks an
+unused port, starts Appium on **loopback only**, health-checks it, uses it for
+the group, and stops it afterwards. You never hand-start anything. It does check
+that Appium and the platform driver are installed, and refuses with the exact
+command when they are not:
+
+```sh
+npm i -g appium                                     # or use this checkout's copy
+APPIUM_HOME="$HOME/.appium" appium driver install xcuitest      # or uiautomator2
+```
+
+It never installs them for you. A runner that silently mutates its own toolchain
+is a runner nobody can reason about.
+
+**`mode: external`** dials an Appium that already runs — a shared grid, a device
+cloud, a server you supervise yourself:
+
+```yaml
+mobile:
+  backends:
+    grid:
+      platform: android
+      appium:
+        mode: external
+        url: https://grid.internal:4723
+        credential_file: /etc/playtest/grid.credential   # 0600, this user only
+```
+
+**Credential values are never written in this file.** A `password:` key, or a
+`https://user:pass@grid/` URL, is refused with the indirection to use instead:
+`credential_file` names a file, or `credential_env` names an environment variable
+already set for the agent. The credential reaches the WebDriver client through a
+local-only driver input and appears in no run, manifest, or error — the same
+boundary as everything else on this page.
+
+The file's contents (`user:key`, or a bare token) become basic auth or a bearer
+header respectively.
+
+### Labels, and how CI interacts with this
+
+A config file may declare the runner's labels:
+
+```yaml
+labels: [macbook, ios]
+```
+
+Labels then come from **exactly one place**. Declaring them in the file *and*
+passing `--labels` (or setting `PLAYTEST_RUNNER_LABELS`) is a startup error, not
+a merge — "what does this runner advertise" must never be a question you answer
+by reading two files and a shell history.
+
+That matters for the CI recipe in §6, whose whole mechanism is a per-job
+`--labels ci-run-<run_id>`: a CI runner with mobile bindings must leave `labels`
+out of its config file and keep passing the flag. A standing machine is the
+opposite — put its labels in the file beside its bindings, and the start command
+stays short.
+
+### What a mobile run does on the runner
+
+After it wins a claim, and before any case starts, the runner checks what only it
+can check: the build is on this disk, the Appium client is importable, the
+backend answers, the platform driver is installed. A failure ends the group with
+one infrastructure error naming the remedy — not a driver stack forty steps into
+a story. The message on the run page names the config key to fix; the path itself
+stays in the runner's own log.
+
+Two behaviors worth knowing:
+
+- **mobile cases run one at a time**, whatever the suite's `parallel` says. Two
+  cases cannot share a simulator.
+- **container isolation refuses mobile offers**, with that reason, rather than
+  failing strangely: a container reaches neither the device, nor a loopback
+  Appium, nor a build outside the workspace. Run mobile on `--isolation process`.
+
+A first mobile run is therefore: create the application and its ring in the
+console, add the three lines above to this file, restart the runner, launch.
 
 ## 8. Revoking a runner
 
@@ -300,7 +434,11 @@ heartbeats included — revoking never kills work you are waiting on.
 | `runner "…" claimed this run and stopped checking in` | The runner process died, slept, or lost the network mid-group. The story is reported as an infrastructure failure and the remainder is placed once more. |
 | `this runner credential is not registered` | The credential was revoked, or belongs to another deployment or another data root. Register the runner again. |
 | The runner is quiet after `waiting for work` | That is the steady state. It prints when it claims something. |
-| `skipping run group …: this runner has no configuration binding …` | The offer needs a machine-local binding this runner does not hold. Another runner can claim it; the offer is untouched. |
+| `skipping run group …: this runner has no configuration binding …` | The offer needs a machine-local binding this runner does not hold. Add it under `--config`, or let a runner that has it claim the offer — the offer is untouched either way. |
+| `skipping run group …: … the Appium backend "…" cannot start here` | Appium or its platform driver is missing, or an external backend is not answering. The reason names which; the install command is in it. |
+| `skipping run group …: this runner runs cases in containers` | Mobile needs `--isolation process`. |
+| `this runner is site-scoped … move "targets.x.y"` | A site runner takes work from every project, so its targets must name theirs: `projects.<project-key>.targets.x.y`. |
+| `the app build this runner binds to "…" is not on the runner's disk` | The claim succeeded and the preflight did not. Rebuild, or correct the `app` path in that runner's config file. |
 | A CI registration answers `503 not_configured` | The deployment has not named the repository allowed to register runners (`PLAYTEST_POOL_OIDC_REPOSITORY`). |
 | `registered for one CI job and that registration expired` | The ephemeral credential outlived its window (`PLAYTEST_POOL_OIDC_TTL_S`). Register again from the job that needs it; a group already running is unaffected. |
 | `this action needs a site administrator` | Site-scoped runners exist only under `PLAYTEST_AUTH=dev` today. Register a project-scoped runner instead. |

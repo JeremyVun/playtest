@@ -113,7 +113,8 @@ fi
 # after: a web or API ring needs nothing in here, because its URL is evaluated
 # from this machine's own network position and travels with the job. What only
 # this machine can know — a mobile build's path, its Appium backend, its device —
-# is what the file is for, and that schema lands with mobile support.
+# is what the file is for, and uncommenting three lines is the whole of mobile
+# setup. An all-comments file is a valid empty configuration.
 if [ ! -f "$RUNNER_CONFIG_FILE" ]; then
   cat > "$RUNNER_CONFIG_FILE" <<'RUNNER_CONFIG'
 # Playtest runner configuration — this machine's own facts, never uploaded.
@@ -124,11 +125,36 @@ if [ ! -f "$RUNNER_CONFIG_FILE" ]; then
 #
 # What belongs here is what no platform record may hold: where a mobile build
 # lives on this disk, which Appium backend runs it, and which device it targets,
-# keyed by the application and ring keys you see in the console. That schema
-# arrives with hosted mobile support; until then this file is deliberately
-# empty, and the runner does not read it.
+# keyed by the application and ring keys you see in the console.
 #
-# See docs/guidance/hosted-runners.md.
+# To run a mobile suite, uncomment everything below and set `app` to your build.
+# The peer runner started by `npm run hosted` is SITE-scoped — it takes work from
+# every project — so its targets name their project. See
+# docs/guidance/hosted-runners.md.
+#
+# version: 1
+#
+# projects:
+#   <project-key>:                  # the key in the console URL, e.g. "acme"
+#     targets:
+#       todo-ios:                   # Applications → the application's key
+#         local:                    # …→ the ring's key
+#           platform: ios           # ios | android
+#           app: /Users/you/build/Todo.app
+#           backend: local-ios
+#           # device: iPhone 16     # optional; Appium's default otherwise
+#
+# mobile:
+#   backends:
+#     local-ios:
+#       platform: ios
+#       appium:
+#         mode: managed             # this runner starts and stops Appium itself
+#         # mode: external          # …or dial one you already run:
+#         # url: http://127.0.0.1:4723
+#         # credential_file: /path/to/credential   # never a literal value here
+#
+# labels: [macbook, ios]            # optional; replaces --labels, never merged
 RUNNER_CONFIG
   echo "hosted-server: seeded a runner config file → $RUNNER_CONFIG_FILE" >&2
 fi
@@ -251,6 +277,7 @@ if [ "$PLAYTEST_AUTH" = dev ]; then
       node "$REPO/packages/platform/runner-agent/src/cli.ts" pool \
         --server "http://$HOST:$PORT" \
         --credential-file "$RUNNER_CRED_FILE" \
+        --config "$RUNNER_CONFIG_FILE" \
         --work-dir "$RUNNER_WORK_DIR" &
       child=$!
       wait "$child" 2>/dev/null || true

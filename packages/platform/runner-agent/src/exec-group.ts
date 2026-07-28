@@ -12,6 +12,10 @@ import { liveUploader } from "./live-uploader.ts";
 import { cleanupWorkspace, sweepDocker } from "./janitor.ts";
 import { runMintScript } from "./mint.ts";
 import { makeRedactor, collectSecretValues } from "./redact.ts";
+import { AppiumBackends } from "./appium.ts";
+import { bindingFor } from "./runner-config.ts";
+import { mobileRuntimeTarget, preflightMobile } from "./mobile.ts";
+import type { AppiumHandle } from "./appium.ts";
 import { discoverCases } from "@playtest/core/suite";
 import { resolveBudget, schedulePool, willRecord } from "@playtest/core/run";
 import { writeBundle, baselinePaths } from "@playtest/core/artifacts";
@@ -33,6 +37,13 @@ export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
   const warnings: string[] = [];
   const results: RunnerDynamic[] = [];
   let workspace: RunnerDynamic = null;
+  // A mobile group runs against this machine's own binding and its own Appium.
+  // Both are opened after the claim and torn down with the group, whatever it
+  // ends as.
+  const mobile = spec.application?.driver === "mobile";
+  const log = opts.log || (() => {});
+  const backends: AppiumBackends = opts.backends ?? new AppiumBackends({ log });
+  let backend: AppiumHandle | null = null;
   // The catch below posts errors through the redactor; it must exist before the
   // claim/materialize steps that could throw (secrets arrive with the claims).
   let redactor = (s: RunnerDynamic): string => String(s);
@@ -49,24 +60,70 @@ export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
   process.on("SIGINT", onSignal);
   opts.signal?.addEventListener?.("abort", onSignal);
   try {
+    // Mobile setup comes FIRST, before sessions and before a snapshot is
+    // downloaded: everything it can fail on is this machine's own setup, and
+    // diagnosing it is cheaper than materializing a workspace to throw away.
+    let binding = null;
+    if (mobile) {
+      binding = requireMobileBinding(spec, opts);
+      backend = await backends.open(binding.backend);
+      const failure = await preflightMobile(binding, backend, {
+        statusOk: (url: string, timeoutMs: number) => backends.statusOk(url, timeoutMs),
+        // An external Appium's drivers are its own business; only a backend
+        // this runner starts can be asked what it has installed.
+        installedDrivers: binding.backend.mode === "managed" ? () => backends.driverNames() : undefined,
+      });
+      if (failure) {
+        // Gate 10: ONE actionable infra error per case, before anything starts
+        // a driver. The path that produced it stays in this runner's own log.
+        log(failure.detail);
+        for (const item of spec.cases || []) {
+          const report = { status: "infra", error: failure.error };
+          await api.json("POST", `/runner/groups/${spec.run_group_id}/cases/${item.run_id}/report`, report);
+          results.push(report);
+        }
+        await api.json("POST", `/runner/groups/${spec.run_group_id}/complete`, {
+          summary: { cases: results.map((r) => ({ status: r.status })) },
+          janitor: warnings,
+        });
+        return { exitCode: 2, results };
+      }
+    }
     // Inside the try: a claim/materialize failure must still post `complete`
     // with the real error — dying here used to leave the group to the
     // reconciler's anonymous "runner died before case started".
     const { sessions: claimed, failed: failedSessions, secretValues: mintSecrets } =
       await claimGroupSessions(api, spec, opts);
-    redactor = makeRedactor([...collectSecretValues(spec, claimed), ...mintSecrets]);
+    // The external-Appium credential joins the redactor's needles: it is not a
+    // ring secret, so nothing else would catch it if an Appium error ever echoed
+    // it back. Only the VALUE form — a credential_file's path is not a secret.
+    redactor = makeRedactor([
+      ...collectSecretValues(spec, claimed),
+      ...mintSecrets,
+      backend?.credentialEnv?.PLAYTEST_APPIUM_CREDENTIAL,
+    ]);
     const failedByLabel = failedSessionLabels(spec, failedSessions);
     workspace = await materializeWorkspace({ api, spec, sessions: claimed, failedSessions, workDir: opts.workDir });
-    // Hosted physical precedence runs through core's runtime target: the ring's
-    // URL is applied AFTER the complete authored merge, so an authored
-    // `base_url` (top level, case, or `app.envs.<ring key>`) is inert here and
-    // cannot redirect a placed run. Web/API rings always carry a URL; the mobile
-    // target is assembled from a runner binding and lands with R3.
-    const runtimeTarget = spec.ring?.base_url ? { base_url: spec.ring.base_url } : null;
+    // Hosted physical precedence runs through core's runtime target: it is
+    // applied AFTER the complete authored merge, so an authored `base_url` or
+    // `app` (top level, case, or `app.envs.<ring key>`) is inert here and cannot
+    // redirect a placed run.
+    //
+    // A web/API ring always carries its URL. A mobile target is assembled from
+    // the binding and the backend that is now running: the build path on THIS
+    // disk, the platform, the device the binding names (omitted means Appium's
+    // default, never the suite's authored one), and the loopback URL of the
+    // Appium this runner just started. None of it came from the platform and
+    // none of it goes back.
+    const runtimeTarget = binding && backend
+      ? mobileRuntimeTarget(binding, backend)
+      : spec.ring?.base_url
+        ? { base_url: spec.ring.base_url }
+        : null;
     const resolved = await discoverCases([workspace.suiteDir], { env: spec.ring.key, runtimeTarget });
     const byId = new Map(resolved.map((c) => [c.id, c]));
     const selectedResolved = spec.cases.map((item: RunnerDynamic) => byId.get(item.case_id)).filter(Boolean);
-    const budget = resolveHostedBudget(selectedResolved, spec.parallel);
+    const budget = resolveHostedBudget(selectedResolved, spec.parallel, undefined, { serial: mobile });
     const work = spec.cases.map((item: RunnerDynamic, index: number) => {
       const resolvedCase = byId.get(item.case_id);
       return {
@@ -94,6 +151,16 @@ export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
           status: "infra",
           error: `case "${item.case_id}" was not resolved in materialized snapshot`,
         };
+        await api.json("POST", `/runner/groups/${spec.run_group_id}/cases/${item.run_id}/report`, report);
+        orderedResults[index] = report;
+        return;
+      }
+      // A managed Appium that died takes the rest of the group with it, but as
+      // a stated infra failure rather than a driver stack per case. The
+      // diagnostic is already redacted of paths (appium.ts).
+      const death = backend?.died() ?? null;
+      if (death) {
+        const report = { status: "infra", error: redactor(death) };
         await api.json("POST", `/runner/groups/${spec.run_group_id}/cases/${item.run_id}/report`, report);
         orderedResults[index] = report;
         return;
@@ -137,7 +204,11 @@ export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
           mode: item.options?.mode || "auto",
           refresh: item.options?.refresh === true,
           grade: item.options?.grade !== false,
-          env: workspace.env,
+          // The external-Appium credential rides the case process's environment
+          // as a FILE PATH (or, when the operator named an environment variable,
+          // its value) — core's local-only driver input. It is not part of the
+          // runtime target, so it cannot reach a manifest or an error response.
+          env: { ...workspace.env, ...(backend?.credentialEnv ?? {}) },
           allowDocker: (spec.ring?.runner_labels || []).includes("docker"),
           onEvent: (ev: RunnerDynamic) => {
             progress.onEvent(ev);
@@ -160,6 +231,10 @@ export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
         // docker-stopped container under cancel reports canceled.
         report = { status: canceled ? "canceled" : "infra", error: redactor(firstLine(e)) };
       } finally {
+        // A backend that died DURING the case explains that case better than
+        // whatever the driver managed to say about a socket that went away.
+        const diedDuring = report && report.status !== "pass" ? backend?.died() : null;
+        if (diedDuring) report = { ...report, status: "infra", error: redactor(diedDuring) };
         // Shutdown is the scheduler's, not the uploader's: stop both live
         // consumers here — before the final report and before the workspace is
         // cleaned up — so no background read races the teardown and no timer or
@@ -190,9 +265,48 @@ export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
     process.removeListener("SIGTERM", onSignal);
     process.removeListener("SIGINT", onSignal);
     opts.signal?.removeEventListener?.("abort", onSignal);
+    // The backend's lifetime is the group's: a managed Appium never outlives
+    // the work it was started for, however that work ended.
+    await backend?.close().catch(() => {});
     warnings.push(...(await cleanupWorkspace(workspace)));
   }
   return { exitCode: results.some((r) => r.status === "fail") ? 1 : results.some((r) => r.status === "infra") ? 2 : 0, results };
+}
+
+/**
+ * The binding this runner holds for the group's `(application key, ring key)`.
+ *
+ * The claim already checked this, so reaching either throw means the config
+ * changed under a running agent or a group was placed on a runner that cannot
+ * serve it; both are infra failures with the remedy in them rather than a
+ * driver error forty steps into a case.
+ */
+export function requireMobileBinding(spec: RunnerDynamic, opts: RunnerDynamic): RunnerDynamic {
+  const bound = `${spec.application?.key ?? "?"}/${spec.ring?.key ?? "?"}`;
+  if (opts.isolation !== "process") {
+    throw new Error(
+      `this runner runs cases in containers, and a mobile case cannot: the device, the Appium server on loopback and ` +
+        `the build outside the workspace are all unreachable from one. Start a runner with --isolation process.`,
+    );
+  }
+  const binding = bindingFor(opts.config ?? null, {
+    projectKey: spec.project?.key ?? null,
+    applicationKey: spec.application?.key ?? null,
+    ringKey: spec.ring?.key ?? null,
+  });
+  if (!binding) {
+    throw new Error(
+      `this runner has no configuration binding for the mobile target "${bound}" — the claiming runner supplies the ` +
+        `build, its Appium backend and its device from its own config file (--config)`,
+    );
+  }
+  if (spec.application?.platform && binding.platform !== spec.application.platform) {
+    throw new Error(
+      `this runner binds the mobile target "${bound}" to ${binding.platform}, but that application is ` +
+        `${spec.application.platform} — correct the platform in the runner's config file`,
+    );
+  }
+  return binding;
 }
 
 /**
@@ -200,7 +314,16 @@ export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
  * playtest.yaml wins as one run-wide value, then the project policy from the
  * group spec, then the historical serial fallback.
  */
-export function resolveHostedBudget(resolvedCases: RunnerDynamic[], projectParallel: RunnerDynamic, auto = Math.min(4, os.availableParallelism())): RunnerDynamic {
+export function resolveHostedBudget(
+  resolvedCases: RunnerDynamic[],
+  projectParallel: RunnerDynamic,
+  auto = Math.min(4, os.availableParallelism()),
+  { serial = false }: { serial?: boolean } = {},
+): RunnerDynamic {
+  // One backend serves one session at a time: two concurrent cases cannot share
+  // a simulator or a device, so a mobile group is serial whatever the suite's
+  // `parallel` says. Stated here rather than left to the operator.
+  if (serial) return resolveBudget({ total: 1, record: 1 }, auto);
   const suiteParallel = resolvedCases.find((rc) => rc.parallel != null)?.parallel ?? null;
   return resolveBudget(suiteParallel ?? projectParallel ?? { total: 1, record: 1 }, auto);
 }

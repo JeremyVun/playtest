@@ -869,8 +869,11 @@ The ensure is **idempotent**: a second boot reuses the same runner row and the
 same credential. Only a hash is stored, so a credential file that no longer
 matches its row cannot be recovered — boot re-issues one on the same row, which
 keeps the runner's identity and history and kills the old value. The script also
-seeds `$PLAYTEST_DATA_DIR/runner.yaml` when absent: a comment-only placeholder
-for the machine-local facts hosted mobile will need. Nothing reads it yet.
+seeds `$PLAYTEST_DATA_DIR/runner.yaml` when absent — the runner configuration
+schema, commented out — and starts the agent with `--config` pointing at it. Web
+and API runs need nothing in it (an all-comments file is a valid empty
+configuration); uncommenting it is the whole of mobile setup
+([Interfaces](interfaces.md#runner-configuration-file)).
 
 The result is that `npm run hosted` gives launch-to-verdict web and API runs with
 zero runner ceremony, over exactly the placement path CI and a fleet use.
@@ -900,8 +903,9 @@ complete → poll again.
 - **One group at a time**, and a runner restarted mid-group resumes the claim the
   board still says it holds instead of abandoning it.
 - **It claims the first offer on the page it can execute.** Anything it cannot —
-  a driver it does not run, or (with runner configuration) a mobile target it
-  holds no binding for — is skipped LOCALLY: one deduplicated, actionable reason
+  a driver it does not run, or a mobile target its configuration file does not
+  bind ([Interfaces](interfaces.md#claim-compatibility)) — is skipped LOCALLY:
+  one deduplicated, actionable reason
   in its own log, the dispatch ids named in the next poll's `skip` list, and
   nothing else sent. It clears that list whenever a long-poll comes back empty,
   and past the skip cap it backs off explicitly rather than re-polling in a

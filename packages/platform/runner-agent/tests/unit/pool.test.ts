@@ -14,6 +14,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { runPool, parsePoolArgs, backoffDelayMs, startupLines, resolveCredential, defaultCompatibility } from "../../src/pool.ts";
+import { loadRunnerConfig } from "../../src/runner-config.ts";
 
 const CREDENTIAL = "ptr_test-credential";
 
@@ -61,8 +62,12 @@ const options = (server: string, extra: LegacyTestValue = {}) => ({
   workDir: path.join(os.tmpdir(), "pool-test"),
   credential: CREDENTIAL,
   pollWaitS: 1,
+  config: null,
   ...extra,
 });
+
+/** The compatibility context, with the backend probe faked and counted. */
+const ctx = (startable: LegacyTestValue = async () => null) => ({ startable });
 
 /** One web-application group offer, the shape the board serves. */
 const offer = (over: LegacyTestValue = {}) => ({
@@ -238,17 +243,161 @@ test("pool: past the skip cap the runner backs off explicitly instead of looping
   assert.equal(complaints.length, 1, "said once, not once per poll");
 });
 
-test("pool: mint compatibility is labels only, and an unknown driver is refused by name", () => {
+test("pool: mint compatibility is labels only, and an unknown driver is refused by name", async () => {
   const opts = options("http://127.0.0.1:1") as LegacyTestValue;
-  assert.equal(defaultCompatibility(offer(), opts), null);
-  assert.equal(defaultCompatibility(offer({ target: { ...offer().target, driver: "api" } }), opts), null);
+  assert.equal(await defaultCompatibility(offer(), opts, ctx()), null);
+  assert.equal(await defaultCompatibility(offer({ target: { ...offer().target, driver: "api" } }), opts, ctx()), null);
   // A mint carries no target when its provider is project-wide, and needs none.
-  assert.equal(defaultCompatibility(offer({ kind: "mint", target: null }), opts), null);
+  assert.equal(await defaultCompatibility(offer({ kind: "mint", target: null }), opts, ctx()), null);
   assert.match(
-    defaultCompatibility(offer({ target: { ...offer().target, driver: "mobile", application_key: "todo-ios", ring_key: "local" } }), opts)!,
+    (await defaultCompatibility(mobileOffer(), opts, ctx()))!,
     /no configuration binding for the mobile target "todo-ios\/local"/,
   );
-  assert.match(defaultCompatibility(offer({ target: { ...offer().target, driver: "desktop" } }), opts)!, /cannot execute the "desktop" driver/);
+  assert.match((await defaultCompatibility(offer({ target: { ...offer().target, driver: "desktop" } }), opts, ctx()))!, /cannot execute the "desktop" driver/);
+});
+
+// ---------- mobile: bindings, backends, and the refusals around them ----------
+
+/** One iOS group offer for `todo-ios/local` in project `acme`. */
+const mobileOffer = (over: LegacyTestValue = {}) =>
+  offer({
+    dispatch_id: "d-ios",
+    ref_id: "g-ios",
+    run_group_id: "g-ios",
+    target: { application_id: "a2", application_key: "todo-ios", ring_id: "r2", ring_key: "local", driver: "mobile", platform: "ios", base_url: null },
+    ...over,
+  });
+
+/** A config file binding `todo-ios/local` to a build that exists on this disk. */
+function mobileConfig(body?: string) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pool-config-"));
+  fs.mkdirSync(path.join(dir, "Todo.app"), { recursive: true });
+  const file = path.join(dir, "runner.yaml");
+  fs.writeFileSync(
+    file,
+    body ??
+      `version: 1
+targets:
+  todo-ios:
+    local: { platform: ios, app: Todo.app, backend: local-ios }
+mobile:
+  backends:
+    local-ios: { platform: ios, appium: { mode: managed } }
+`,
+  );
+  return { dir, file, config: loadRunnerConfig(file), cleanup: () => fs.rmSync(dir, { recursive: true, force: true }) };
+}
+
+test("pool: a mobile offer is claimable only with a binding whose platform matches and whose backend can start", async () => {
+  const c = mobileConfig();
+  try {
+    const bound = options("http://127.0.0.1:1", { config: c.config }) as LegacyTestValue;
+    assert.equal(await defaultCompatibility(mobileOffer(), bound, ctx()), null, "a bound runner takes it");
+
+    // The same offer, the same file, a backend that cannot start here.
+    assert.match(
+      (await defaultCompatibility(mobileOffer(), bound, ctx(async () => "the Appium server is not installed on this runner")))!,
+      /binds "todo-ios\/local" to the Appium backend "local-ios", which cannot start here: the Appium server is not installed/,
+    );
+    // A ring this file says nothing about.
+    assert.match(
+      (await defaultCompatibility(mobileOffer({ target: { ...mobileOffer().target, ring_key: "staging" } }), bound, ctx()))!,
+      /no configuration binding for the mobile target "todo-ios\/staging"/,
+    );
+    // A binding that disagrees with the application's platform.
+    assert.match(
+      (await defaultCompatibility(mobileOffer({ target: { ...mobileOffer().target, platform: "android" } }), bound, ctx()))!,
+      /binds the mobile target "todo-ios\/local" to ios, but that application is android/,
+    );
+  } finally {
+    c.cleanup();
+  }
+});
+
+test("pool: a container-isolation runner refuses mobile offers with the reason, and still takes web ones", async () => {
+  const c = mobileConfig();
+  try {
+    const contained = options("http://127.0.0.1:1", { config: c.config, isolation: "container" }) as LegacyTestValue;
+    const reason = (await defaultCompatibility(mobileOffer(), contained, ctx()))!;
+    assert.match(reason, /this runner runs cases in containers, and a mobile case cannot/);
+    assert.match(reason, /--isolation process/);
+    assert.equal(await defaultCompatibility(offer(), contained, ctx()), null, "web work is unaffected");
+  } finally {
+    c.cleanup();
+  }
+});
+
+test("pool: a bound runner claims the very offer an unbound one skipped", async () => {
+  const c = mobileConfig();
+  const stub = await board([{ offers: [mobileOffer()] }]);
+  const lines: string[] = [];
+  try {
+    // Unbound: skipped locally, nothing sent, nothing claimed.
+    await runPool(options(stub.url), {
+      execGroupImpl: async () => assert.fail("an unbound runner executes no mobile group"),
+      log: (line) => lines.push(line),
+      sleep: async () => {},
+      maxPolls: 1,
+    });
+    assert.equal(stub.requests.some((r: LegacyTestValue) => r.method === "POST"), false);
+    assert.match(lines.join("\n"), /skipping run group g-ios: this runner has no configuration binding/);
+
+    // Bound: the same advertisement, claimed and executed. The offer was never
+    // mutated, which is the whole point of skipping locally.
+    const groups: LegacyTestValue[] = [];
+    await runPool(options(stub.url, { config: c.config }), {
+      execGroupImpl: async (o: LegacyTestValue) => { groups.push(o); return { exitCode: 0 }; },
+      backends: { startable: async () => null } as LegacyTestValue,
+      log: () => {},
+      maxIterations: 1,
+    });
+    assert.equal(groups.length, 1);
+    assert.equal(groups[0].group, "g-ios");
+    assert.equal(groups[0].config, c.config, "the executor is handed this machine's own bindings");
+  } finally {
+    await stub.close();
+    c.cleanup();
+  }
+});
+
+test("pool: a site-scoped runner with flat target keys stops with the qualification it needs", async () => {
+  const c = mobileConfig();
+  const stub = await board([{ runner: { id: "rn1", name: "local", labels: [], scope: "site", project_key: null }, offers: [] }]);
+  try {
+    await assert.rejects(
+      () => runPool(options(stub.url, { config: c.config }), { log: () => {}, sleep: async () => {}, maxPolls: 1 }),
+      /this runner is site-scoped/,
+    );
+  } finally {
+    await stub.close();
+    c.cleanup();
+  }
+});
+
+test("pool: --config validates at startup, and labels come from exactly one place", () => {
+  const c = mobileConfig();
+  const env = { PLAYTEST_RUNNER_CREDENTIAL: CREDENTIAL };
+  try {
+    const opts = parsePoolArgs(["--config", c.file], env);
+    assert.equal(opts.config!.bindings.length, 1);
+    assert.deepEqual(opts.labels, [], "this file declares no labels, so the flag/environment forms still decide");
+
+    fs.writeFileSync(c.file, `version: 1\nlabels: [macbook, ios]\n`);
+    assert.deepEqual(parsePoolArgs(["--config", c.file], env).labels, ["macbook", "ios"]);
+    assert.deepEqual(parsePoolArgs([], { ...env, PLAYTEST_RUNNER_CONFIG: c.file }).labels, ["macbook", "ios"]);
+    // Both is a startup error, not a merge: "what does this runner advertise"
+    // must never be a question you answer by reading two files.
+    assert.throws(() => parsePoolArgs(["--config", c.file, "--labels", "macos"], env), /labels are declared twice: --labels/);
+    assert.throws(
+      () => parsePoolArgs(["--config", c.file], { ...env, PLAYTEST_RUNNER_LABELS: "macos" }),
+      /labels are declared twice: PLAYTEST_RUNNER_LABELS/,
+    );
+
+    fs.writeFileSync(c.file, `version: 2\n`);
+    assert.throws(() => parsePoolArgs(["--config", c.file], env), /must start with "version: 1"/);
+  } finally {
+    c.cleanup();
+  }
 });
 
 test("pool: a lost claim race is not an error — the loser goes straight back to the board", async () => {

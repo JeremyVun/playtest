@@ -34,6 +34,9 @@ import path from "node:path";
 import { ApiClient, RunnerApiError } from "./api-client.ts";
 import { execGroup } from "./exec-group.ts";
 import { execMint } from "./exec-mint.ts";
+import { AppiumBackends } from "./appium.ts";
+import { assertConfigScope, bindingFor, configBannerLines, loadRunnerConfig } from "./runner-config.ts";
+import type { AppiumBackend, RunnerConfig } from "./runner-config.ts";
 
 /** How long a single check-in may hold, matching the board's own cap. */
 const POLL_WAIT_S = 25;
@@ -57,6 +60,11 @@ export interface PoolOptions {
   workDir: string;
   credential: string;
   pollWaitS: number;
+  /**
+   * This machine's own configuration file, already validated (`--config`).
+   * Null when none was given: web and API runs need none.
+   */
+  config: RunnerConfig | null;
 }
 
 /**
@@ -100,12 +108,15 @@ export interface PoolDeps {
   execGroupImpl?: typeof execGroup;
   execMintImpl?: typeof execMint;
   /**
-   * Can this runner execute this offer? Returns null when it can, or ONE
+   * Can this runner execute this offer? Resolves null when it can, or ONE
    * actionable sentence saying why not. Labels are the server's filter; this is
-   * the half only the machine knows (which drivers it can run, and — with
-   * runner configuration — which application/ring bindings it holds).
+   * the half only the machine knows (which drivers it can run, which
+   * application/ring bindings its config file holds, and whether the Appium
+   * backend behind such a binding can start here at all).
    */
-  compatibility?: (offer: ClaimOffer) => string | null;
+  compatibility?: (offer: ClaimOffer) => string | null | Promise<string | null>;
+  /** The Appium backends this runner can start; the probe seam for tests. */
+  backends?: AppiumBackends;
   log?: (line: string) => void;
   sleep?: (ms: number) => Promise<void>;
   random?: () => number;
@@ -123,13 +134,16 @@ export async function runPool(opts: PoolOptions, deps: PoolDeps = {}): Promise<{
   const {
     execGroupImpl = execGroup,
     execMintImpl = execMint,
-    compatibility = (offer: ClaimOffer) => defaultCompatibility(offer, opts),
     log = (line: string) => process.stdout.write(`${line}\n`),
     sleep = defaultSleep,
     random = Math.random,
     maxIterations = Infinity,
     maxPolls = Infinity,
   } = deps;
+  const backends = deps.backends ?? new AppiumBackends({ log });
+  const compatibility =
+    deps.compatibility ??
+    ((offer: ClaimOffer) => defaultCompatibility(offer, opts, { startable: (backend) => backends.startable(backend) }));
   const api = new ApiClient(opts.server, opts.credential);
 
   let stopping = false;
@@ -181,7 +195,15 @@ export async function runPool(opts: PoolOptions, deps: PoolDeps = {}): Promise<{
       }
 
       if (!announced) {
-        for (const line of startupLines(opts, answer.runner)) log(line);
+        // Identity is the CONTROL PLANE's answer and arrives with this first
+        // check-in, so everything that depends on it is decided here. A
+        // site-scoped runner with flat target keys stops rather than executing
+        // anything: the check needs the scope the board just told us, and it is
+        // still a startup error in every way that matters to whoever is
+        // watching the terminal.
+        const identity: RunnerIdentity | null = answer.runner ?? null;
+        assertConfigScope(opts.config, { siteScoped: identity?.scope === "site" });
+        for (const line of startupLines(opts, identity)) log(line);
         announced = true;
       }
 
@@ -209,7 +231,8 @@ export async function runPool(opts: PoolOptions, deps: PoolDeps = {}): Promise<{
         // Judge the whole page, not just up to the first taker: an offer this
         // runner cannot execute is named in the next poll's `skip` list either
         // way, so the server holds instead of handing back the same entries.
-        const judged = page.map((o) => [o, compatibility(o)] as const);
+        const judged: Array<readonly [ClaimOffer, string | null]> = [];
+        for (const o of page) judged.push([o, await compatibility(o)] as const);
         const takeable = judged.find(([, reason]) => !reason)?.[0] ?? null;
         // Say each distinct reason once per session, not once per poll, and send
         // nothing but the ids: the advertisement is never mutated, so a capable
@@ -266,7 +289,7 @@ export async function runPool(opts: PoolOptions, deps: PoolDeps = {}): Promise<{
 
       busy = true;
       try {
-        await executeClaim(api, opts, offer, intervalS, { execGroupImpl, execMintImpl, log });
+        await executeClaim(api, opts, offer, intervalS, { execGroupImpl, execMintImpl, log, backends });
       } finally {
         busy = false;
         executed += 1;
@@ -280,27 +303,68 @@ export async function runPool(opts: PoolOptions, deps: PoolDeps = {}): Promise<{
   return { executed };
 }
 
+export interface CompatibilityContext {
+  /** Can this Appium backend start here? Cached per backend for a session. */
+  startable: (backend: AppiumBackend) => Promise<string | null>;
+}
+
 /**
  * What this runner can execute without any local configuration: web and API
  * groups, and every mint (mint compatibility is labels only — no binding is
- * required to claim one). A mobile group needs a binding in the runner's own
- * configuration file naming the offered application and ring, which is the
- * machine-local fact no platform record may hold.
+ * required to claim one). A mobile group needs three things this machine alone
+ * can answer, and each of them says so in its own words:
+ *
+ *   1. process isolation, because a container reaches neither the simulator,
+ *      nor a loopback Appium, nor a build outside the workspace;
+ *   2. a binding in this runner's config file for the offered
+ *      `(application key, ring key)`, on the offered platform;
+ *   3. a STARTABLE backend behind that binding — the Appium binary and platform
+ *      driver present (managed), or an endpoint that answers (external). Real
+ *      health is only knowable after the claim; this is the cheap half.
+ *
+ * Every refusal is local. It is logged once, it names the offer in the next
+ * poll's `skip` list, and nothing about it is ever sent: the advertisement is
+ * untouched, so a runner that DOES bind the target claims it unaffected.
  */
-export function defaultCompatibility(offer: ClaimOffer, opts: PoolOptions): string | null {
+export async function defaultCompatibility(
+  offer: ClaimOffer,
+  opts: PoolOptions,
+  ctx: CompatibilityContext,
+): Promise<string | null> {
   if (offer.kind !== "group") return null;
   const driver = offer.target?.driver ?? null;
   if (driver === "web" || driver === "api") return null;
-  if (driver === "mobile") {
-    const bound = `${offer.target?.application_key ?? "?"}/${offer.target?.ring_key ?? "?"}`;
+  if (driver !== "mobile") return `this runner cannot execute the "${driver ?? "unknown"}" driver`;
+
+  const applicationKey = offer.target?.application_key ?? null;
+  const ringKey = offer.target?.ring_key ?? null;
+  const bound = `${applicationKey ?? "?"}/${ringKey ?? "?"}`;
+  if (opts.isolation !== "process") {
+    return (
+      `this runner runs cases in containers, and a mobile case cannot: the device, the Appium server on loopback and ` +
+      `the build outside the workspace are all unreachable from one. Start a runner with --isolation process to take "${bound}".`
+    );
+  }
+  const binding = bindingFor(opts.config, { projectKey: offer.project_key ?? null, applicationKey, ringKey });
+  if (!binding) {
     return (
       `this runner has no configuration binding for the mobile target "${bound}" — a mobile build, its ` +
       `Appium backend and its device are machine-local facts, declared in the runner's own config file ` +
       `(--config). Another runner that binds "${bound}" can take this.`
     );
   }
-  void opts;
-  return `this runner cannot execute the "${driver ?? "unknown"}" driver`;
+  const platform = offer.target?.platform ?? null;
+  if (platform && binding.platform !== platform) {
+    return (
+      `this runner binds the mobile target "${bound}" to ${binding.platform}, but that application is ${platform} — ` +
+      `correct the platform in the runner's config file, or unbind the target`
+    );
+  }
+  const reason = await ctx.startable(binding.backend);
+  if (reason) {
+    return `this runner binds "${bound}" to the Appium backend "${binding.backend.name}", which cannot start here: ${reason}`;
+  }
+  return null;
 }
 
 /**
@@ -314,7 +378,7 @@ async function executeClaim(
   opts: PoolOptions,
   offer: ClaimOffer,
   intervalS: number,
-  { execGroupImpl, execMintImpl, log }: { execGroupImpl: typeof execGroup; execMintImpl: typeof execMint; log: (line: string) => void },
+  { execGroupImpl, execMintImpl, log, backends }: { execGroupImpl: typeof execGroup; execMintImpl: typeof execMint; log: (line: string) => void; backends: AppiumBackends },
 ): Promise<void> {
   const canceler = new AbortController();
   const heartbeat = startHeartbeat(api, offer.dispatch_id, intervalS, {
@@ -343,6 +407,12 @@ async function executeClaim(
         workDir: opts.workDir,
         credential: opts.credential,
         signal: canceler.signal,
+        // A mobile group is executed against THIS machine's binding: the build
+        // path, the device and the Appium backend never travelled with the
+        // offer, because no platform record may hold them.
+        config: opts.config,
+        backends,
+        log,
       });
     }
     log(`finished ${describe(offer)} in ${Math.round((Date.now() - started) / 1000)}s`);
@@ -418,6 +488,11 @@ export function startupLines(opts: PoolOptions, runner: RunnerIdentity | null): 
     `  labels     ${labels}`,
     `  isolation  ${opts.isolation}${opts.isolation === "process" ? " — cases run directly on this machine" : " — one container per case"}`,
     `  work dir   ${opts.workDir}`,
+    // What this machine binds, said out loud for the same reason the rest of the
+    // banner is: a mobile launch that nothing claims is otherwise diagnosed by
+    // reading a YAML file and guessing. Keys and backends only — the build
+    // paths and devices behind them stay in the file.
+    ...configBannerLines(opts.config),
     "waiting for work — launch a run against a ring whose runner labels this runner advertises",
   ];
 }
@@ -479,8 +554,14 @@ export function parsePoolArgs(argv: string[], env: NodeJS.ProcessEnv): PoolOptio
     isolation: env.PLAYTEST_RUNNER_ISOLATION || "process",
     workDir: env.PLAYTEST_RUNNER_WORKDIR || path.join(os.tmpdir(), "playtest-runner"),
     pollWaitS: POLL_WAIT_S,
+    config: null,
   };
+  // Where the labels this runner advertises came from. Labels have exactly one
+  // source per invocation (see below), so this has to be tracked, not guessed
+  // from whether the list is empty.
+  let labelsFrom: string | null = env.PLAYTEST_RUNNER_LABELS?.trim() ? "PLAYTEST_RUNNER_LABELS" : null;
   let credentialFile: string | null = null;
+  let configFile: string | null = env.PLAYTEST_RUNNER_CONFIG || null;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     // A flag whose value is missing is a typo, not an empty value: say which.
@@ -490,10 +571,13 @@ export function parsePoolArgs(argv: string[], env: NodeJS.ProcessEnv): PoolOptio
       return v;
     };
     if (a === "--server") opts.server = value();
-    else if (a === "--labels") opts.labels = splitLabels(value());
-    else if (a === "--isolation") opts.isolation = value();
+    else if (a === "--labels") {
+      opts.labels = splitLabels(value());
+      labelsFrom = "--labels";
+    } else if (a === "--isolation") opts.isolation = value();
     else if (a === "--work-dir") opts.workDir = value();
     else if (a === "--credential-file") credentialFile = value();
+    else if (a === "--config") configFile = value();
     else if (a === "--help" || a === "-h") {
       process.stdout.write(POOL_USAGE);
       process.exit(0);
@@ -507,13 +591,31 @@ export function parsePoolArgs(argv: string[], env: NodeJS.ProcessEnv): PoolOptio
     }
   }
   if (!["process", "container"].includes(opts.isolation)) throw new Error("--isolation must be process or container");
+  if (configFile) {
+    opts.config = loadRunnerConfig(configFile, env);
+    // Labels come from exactly ONE place per invocation. Merging two sources
+    // would make "what does this runner advertise" a question you answer by
+    // reading two files and a shell history; a file that says nothing about
+    // labels (the seeded, all-comments one) is not a source at all.
+    if (opts.config.labels) {
+      if (labelsFrom) {
+        throw new Error(
+          `labels are declared twice: ${labelsFrom} and "labels" in ${opts.config.path} — keep one. ` +
+            `A config file's labels replace the flag; they are never merged with it.`,
+        );
+      }
+      opts.labels = opts.config.labels;
+    }
+  }
   opts.credential = resolveCredential(env, credentialFile);
   return opts as PoolOptions;
 }
 
 export const POOL_USAGE =
-  "usage: runner-agent pool --server <url> [--labels a,b] [--isolation process|container] [--work-dir <dir>] [--credential-file <path>]\n" +
-  "       the credential comes from PLAYTEST_RUNNER_CREDENTIAL (or --credential-file), never from an argument\n";
+  "usage: runner-agent pool --server <url> [--labels a,b] [--isolation process|container] [--work-dir <dir>]\n" +
+  "                         [--credential-file <path>] [--config <path>]\n" +
+  "       the credential comes from PLAYTEST_RUNNER_CREDENTIAL (or --credential-file), never from an argument\n" +
+  "       --config names this machine's own runner.yaml: mobile builds, Appium backends, devices\n";
 
 const splitLabels = (raw: string) => [...new Set(String(raw || "").split(",").map((l) => l.trim()).filter(Boolean))];
 

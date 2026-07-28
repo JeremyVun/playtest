@@ -532,7 +532,7 @@ mode. There is one placement model — the claim board
 
 ```text
 runner-agent pool --server <url> [--labels a,b] [--isolation process|container]
-                  [--work-dir <dir>] [--credential-file <path>]
+                  [--work-dir <dir>] [--credential-file <path>] [--config <path>]
 ```
 
 `pool` is accepted as a leading word so the start command the console hands over
@@ -548,14 +548,138 @@ executors remain internal modules the pool loop calls after winning a claim.
   of a process list or a CI log of the command line.
 - Other defaults come from the environment: `PLAYTEST_SERVER_URL` /
   `PLAYTEST_HOSTED_URL`, `PLAYTEST_RUNNER_LABELS`, `PLAYTEST_RUNNER_ISOLATION`,
-  `PLAYTEST_RUNNER_WORKDIR`. A flag missing its value, an unknown flag, and an
-  isolation outside `process|container` are all startup errors naming the
-  problem.
+  `PLAYTEST_RUNNER_WORKDIR`, `PLAYTEST_RUNNER_CONFIG`. A flag missing its value,
+  an unknown flag, and an isolation outside `process|container` are all startup
+  errors naming the problem.
 - Exit behavior: a refused credential (401/403) or a refused request (400) stops
   the process with one actionable line, never a stack and never a retry loop.
   Anything else that fails to reach the control plane is retried with
   exponential backoff and jitter. A failed run group never takes the process
   down.
+
+The startup banner states who the control plane thinks this runner is, its
+project or site scope, its labels, its isolation, its work directory, and — when
+`--config` was given — the file's path, its target keys, and its backends. The
+banner never prints a build path, a device, or a credential.
+
+### Runner configuration file
+
+`--config <path>` names this machine's own facts: where a mobile build lives on
+this disk, which Appium backend drives it, and which device it targets. The file
+is read once at startup, validated whole, and **never uploaded**; the control
+plane is never told it exists. Reload is a restart.
+
+```yaml
+version: 1
+
+labels: [macbook, ios]
+
+targets:
+  todo-ios:                          # immutable application key
+    local:                           # immutable ring key
+      platform: ios                  # ios | android
+      app: /Users/ada/build/Todo.app # absolute, or relative to this file
+      backend: local-ios
+      device: iPhone 16              # optional; Appium's default otherwise
+
+mobile:
+  backends:
+    local-ios:
+      platform: ios
+      appium:
+        mode: managed                # or: external, with url + credential_file
+```
+
+- **Schema version.** A non-empty file must begin `version: 1`. A file that
+  parses to nothing — the seeded, all-comments `runner.yaml` — is a valid EMPTY
+  configuration: no targets, no backends, and **no labels declaration**.
+- **Targets** are keyed by immutable application key, then ring key. v1 declares
+  mobile targets only, with a local filesystem `app` path; web and API rings need
+  no entry, because a ring's URL travels with the job and is evaluated from the
+  runner's own network position.
+- **Project qualification.** A **site-scoped** runner must qualify every target
+  (`projects.<project-key>.targets.<app>.<ring>`) — a flat key would silently
+  rebind if another project later created an application with the same key. Flat
+  `targets` are the form for project-scoped runners, whose scope makes them
+  unambiguous. Declaring both forms in one file is refused. Scope is the control
+  plane's answer and arrives with the first check-in, so a site-scoped runner
+  holding flat keys stops there, with the qualification it needs in the message.
+- **Backends.** `mode: managed` (the default) means this runner starts, health
+  checks, supervises and stops an Appium of its own; `mode: external` dials one
+  that already runs and takes `url` plus an optional `credential_file` or
+  `credential_env`. A managed backend refuses `url` and the credential keys; an
+  external one requires an `http(s)` `url`.
+- **Credentials are never values in this file.** A credential-shaped key, and a
+  `user:password@` in a URL, are both refused with the indirection to use
+  instead. `credential_file` names a file; `credential_env` names an environment
+  variable that must already be set.
+- **Labels have exactly one source per invocation**: the file's `labels`, or the
+  `--labels` / `PLAYTEST_RUNNER_LABELS` forms. Supplying both is a startup error,
+  never a merge. A file that declares no `labels` is not a source.
+- **Startup validation** is whole-file and actionable: an unparseable file
+  (including a duplicate application, ring or backend key), a missing `version`,
+  an unknown key, a target naming an undeclared backend, a target whose platform
+  disagrees with its backend's, a build path that is not on this machine, and a
+  credential file or environment variable that is not there — each names the
+  position in the file and what to do about it.
+
+### Claim compatibility
+
+Labels are the server's filter. Beyond them, a runner decides locally, sends
+nothing, and never mutates the advertisement — an offer it refuses is logged once
+per session with its reason and named in the next poll's `skip` list, and a
+capable runner claims it unaffected ([Hosted contracts](hosted.md#runner-pool)).
+
+Web and API groups, and every mint, need no local configuration. A **mobile**
+group is claimable only when all of the following hold:
+
+1. this runner uses `--isolation process`. A container reaches neither the
+   device, nor an Appium on loopback, nor a build outside the workspace, so a
+   container-isolation runner refuses mobile offers with that stated reason;
+2. its configuration file binds the offered `(application key, ring key)` —
+   project-qualified for a site-scoped runner, using the offer envelope's
+   `project_key`;
+3. the binding's platform equals the offered application's platform;
+4. the binding's backend is **startable**. Managed: the Appium server and the
+   platform driver (`xcuitest` / `uiautomator2`) are present. External: a
+   reachability probe of `<url>/status` answers. Both answers are cached per
+   backend for a session window, because this runs against every offer on every
+   page; real health is only knowable after the claim.
+
+### Appium backends
+
+A backend's lifetime is one run group. Managed mode picks an unused port, binds
+**loopback only**, health-checks `/status`, and verifies the platform driver is
+installed — refusing with the exact `appium driver install …` command when it is
+not. It never installs or mutates Appium drivers itself. The server is torn down
+with the group however the group ends; a server that dies mid-group turns the
+remaining cases into infra failures carrying a diagnostic with an exit status and
+at most one line of output, absolute paths replaced.
+
+Mobile execution is **serial per backend** whatever the suite's `parallel` says:
+two concurrent cases cannot share a simulator or a device.
+
+### Mobile preflight
+
+After the claim and before any case starts, the runner checks what only it can
+check: the build exists on this disk, the Appium client (`webdriverio`) imports,
+the backend answers `/status`, and — for a managed backend — the platform driver
+is installed. A failure reports every case in the group as **infra** with one
+actionable line naming the runner-local remedy, never a mid-case driver stack.
+
+That line carries no physical fact: no build path, no device, no Appium
+endpoint. The same finding with the path in it goes to the runner's own log,
+where it is the answer to "which file did you mean".
+
+Preflight deliberately stops short of creating a session. An Appium session is
+not a harmless probe — creating one installs and launches the app — so the first
+real execution session is the final preflight boundary, its failure classified
+infra, and a one-case group creates exactly one Appium session.
+
+The runtime target the runner then hands core is assembled from the binding and
+the live backend: `{ app, platform, appium_url, device? }`. A binding that omits
+`device` omits it from the target, which means Appium's default and never the
+suite's authored device ([Engine contracts](engine.md#runtime-target)).
 
 ## Reporting API
 

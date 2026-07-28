@@ -572,6 +572,27 @@ predicates. Settle requires the accessibility tree to remain stable for its
 quiet window. Mobile v1 records neither network nor web-vital performance.
 `preserve_session` maps to Appium `noReset`.
 
+**External-Appium credentials are a local-only driver input.** An Appium that
+demands authentication (a shared grid, a device cloud) is reached with a
+credential taken from the process environment at launch:
+
+| Variable | Meaning |
+|---|---|
+| `PLAYTEST_APPIUM_CREDENTIAL_FILE` | Path to a file whose trimmed contents are the credential. Wins over the value form. |
+| `PLAYTEST_APPIUM_CREDENTIAL` | The credential value itself. |
+
+A value containing a colon is `user:key` and becomes WebDriver basic auth;
+anything else becomes an `Authorization: Bearer …` header. Neither is set, or an
+unreadable file, means no credential — the ordinary case, since a locally managed
+Appium wants none.
+
+This is deliberately **not** a configuration key. It is never part of
+`app.*`, never part of a [runtime target](#runtime-target), and never read out of
+`appium_url`'s userinfo — so it cannot enter a resolved environment, a manifest
+pin, an artifact, or an error shape, and a host that places runs (the hosted
+runner) can supply it without it ever reaching a platform record. The credential
+never displaces the capabilities the driver pins.
+
 An element's rendered name is its human-readable text, not its identifier: iOS
 `label` is preferred over `name`, which XCUITest reports as the accessibility
 identifier whenever the app sets one; Android reads `content-desc` then `text`.

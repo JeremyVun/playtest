@@ -66,6 +66,36 @@ async function defaultConnect(opts: RemoteOptions): Promise<WebdriverBrowser> {
   return (wdio.remote ?? wdio.default?.remote)(opts);
 }
 
+/**
+ * The external-Appium credential, if this process was given one
+ * (docs/contracts/engine.md#mobile-driver). It is a LOCAL-ONLY driver input:
+ * it arrives in the process environment — as a file path, or as the value
+ * itself — and is never a resolved-configuration key, so it cannot travel in a
+ * runtime target, a recorded `app` block, a manifest pin, or an error shape.
+ * Nothing here reads or writes `env.appium_url`'s userinfo either; a credential
+ * in a URL would be exactly the recorded shape this avoids.
+ *
+ * A value containing a colon is `user:key` and becomes WebDriver basic auth;
+ * anything else is a bearer token. Unreadable or empty means "no credential",
+ * silently: an Appium that wants none must not be blocked by a stale file.
+ */
+export function appiumCredentialOptions(env: NodeJS.ProcessEnv = process.env): Record<string, unknown> {
+  let raw = "";
+  const file = env.PLAYTEST_APPIUM_CREDENTIAL_FILE;
+  if (file) {
+    try {
+      raw = fs.readFileSync(file, "utf8").trim();
+    } catch {
+      raw = "";
+    }
+  }
+  if (!raw) raw = String(env.PLAYTEST_APPIUM_CREDENTIAL || "").trim();
+  if (!raw) return {};
+  const colon = raw.indexOf(":");
+  if (colon > 0) return { user: raw.slice(0, colon), key: raw.slice(colon + 1) };
+  return { headers: { Authorization: `Bearer ${raw}` } };
+}
+
 // Exported for unit test (offline; no device). The app.preserve_session config
 // key maps 1:1 onto Appium's `noReset`: default (false) preinstalls the binary
 // and wipes its data before every session — a clean install each run — while
@@ -154,6 +184,9 @@ export class MobileDriver implements Driver {
       path: url.pathname && url.pathname !== "/" ? url.pathname : "/",
       protocol: url.protocol.replace(":", ""),
       logLevel: "silent",
+      // Spread before `capabilities` so a credential can never displace the
+      // capabilities this driver pins.
+      ...appiumCredentialOptions(),
       capabilities: capabilitiesFor(env),
     });
     return new MobileDriver({ client, runDir, settle: env.settle, perf, artifacts });

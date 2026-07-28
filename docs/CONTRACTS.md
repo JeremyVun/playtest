@@ -8,7 +8,7 @@ relevant to the change:
 | [Artifact contracts](contracts/artifacts.md) | Persisted run formats, manifests, trajectories, baselines, pins, compatibility, storage providers, and `.ptrun` bundles |
 | [Engine contracts](contracts/engine.md) | Configuration resolution, drivers, model protocols, execution modes, gates, grading, hooks, events, and concurrency |
 | [Hosted platform contracts](contracts/hosted.md) | Hosted system boundaries, authorization, snapshots, dispatch, runner protocol, review, findings, external automation, events, retention, and web invariants |
-| [Interface contracts](contracts/interfaces.md) | Supported package imports, CLI behavior and JSON, reporting, viewer HTTP routes, URL parameters, and degradation |
+| [Interface contracts](contracts/interfaces.md) | Supported package imports, CLI behavior and JSON, the runner agent CLI and its configuration file, reporting, viewer HTTP routes, URL parameters, and degradation |
 | [Script contracts](contracts/scripts.md) | Script suites: the entry contract, the injected client, the check report, runner semantics, the coverage-obligation manifest, the two-column verdict, the risk profile, the leak scan, the HAR lifecycle, and the execution trust boundaries |
 
 `docs/playtest-design.md` explains product concepts and rationale. The contract

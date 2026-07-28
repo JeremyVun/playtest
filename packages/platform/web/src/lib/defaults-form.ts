@@ -17,22 +17,6 @@ const EMIT_OPTS: WebDynamic = { lineWidth: 0 };
 /** Transports a suite can target, in the order the form offers them. */
 export const DRIVERS: WebDynamic = ["web", "api", "mobile"];
 
-/**
- * The environment every project starts with. It carries no URL of its own, so a
- * launch against it resolves to whatever base URL each suite declares — which
- * is how `app.base_url` becomes selectable at launch instead of being a
- * fourth thing to reason about. Its row edits `app.base_url` itself, never an
- * `app.envs.default` overlay: core resolves a case with no `--env` at all, so
- * the suite's own URL has to live at the top level to be found.
- */
-export const DEFAULT_ENV_NAME = "default";
-
-/**
- * An environment name is the `app.envs.<name>` overlay key and the CLI's
- * `--env` argument, so it stays a plain YAML-safe token, not a sentence.
- */
-export const ENV_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,62}$/;
-
 const DRIVER_LABELS: WebDynamic = {
   web: "web — a browser app (Chromium)",
   api: "api — an HTTP API",
@@ -186,26 +170,6 @@ export function setModelKey(text: WebDynamic, key: WebDynamic, value: WebDynamic
 }
 
 /**
- * Set (or delete, with `value === null`) `app.envs.<name>.base_url` — the
- * suite's own URL for one project environment. This overlay is what makes an
- * environment a RING (credentials, runner pool, discovery permission) rather
- * than a single host: two suites in the same project can point "staging" at two
- * different services. It outranks the environment's own URL at dispatch
- * (dispatcher.js resolveTarget).
- *
- * Deleting prunes upward — an emptied env map, an emptied `envs`, an emptied
- * `app` — so removing an override leaves no `envs: { staging: {} }` residue for
- * the next reader to wonder about.
- * @param {string} text
- * @param {string} envName  a project environment's name
- * @param {string|null} value
- * @returns {string}
- */
-export function setEnvBaseUrl(text: WebDynamic, envName: WebDynamic, value: WebDynamic) {
-  return setEnvKey(text, envName, "base_url", value);
-}
-
-/**
  * Set (or delete, with `value === null`) `app.envs.<name>.cookies` — the
  * suite's own cookies inside one ring. Core applies an env overlay's cookies
  * wholesale (no merge with the top-level `app.cookies`), so this is a true
@@ -268,77 +232,37 @@ export function formatCookieList(cookies: WebDynamic) {
 }
 
 /**
- * Which cookies a launch against `envName` actually carries, and why — the
- * same three-way precedence as resolveEnvTarget, because the runner merges the
- * environment record under the suite's own `app.envs.<name>` keys and core
- * applies an overlay's cookies wholesale over the suite default.
+ * Which cookies a launch against `envName` actually carries, and why. The
+ * runner materializes the RING's logical overlay as `app.envs.<ring key>` and
+ * core applies an overlay's cookies wholesale over the suite default, so the
+ * three-way order is: this suite's own value for the ring, the ring's own, the
+ * suite's default.
  * @param {{cookies?: object, envs?: object}} app  the parsed `app` block
- * @param {string} envName
- * @param {Record<string,string>|null} envCookies  the environment record's own cookies
- * @returns {{cookies: Record<string,string>|null, source: "suite-env"|"environment"|"suite"|null}}
+ * @param {string} envName  a ring key
+ * @param {Record<string,string>|null} envCookies  the ring's own cookies
+ * @returns {{cookies: Record<string,string>|null, source: "suite-ring"|"ring"|"suite"|null}}
  */
 export function resolveEnvCookies(app: WebDynamic, envName: WebDynamic, envCookies: WebDynamic) {
   const map = (v: WebDynamic) => (v && typeof v === "object" && !Array.isArray(v) && Object.keys(v).length ? v : null);
-  const suiteEnv = map(app?.envs?.[envName]?.cookies);
-  const env = map(envCookies);
+  const suiteRing = map(app?.envs?.[envName]?.cookies);
+  const ring = map(envCookies);
   const suite = map(app?.cookies);
-  if (suiteEnv) return { cookies: suiteEnv, source: "suite-env" };
-  if (env) return { cookies: env, source: "environment" };
+  if (suiteRing) return { cookies: suiteRing, source: "suite-ring" };
+  if (ring) return { cookies: ring, source: "ring" };
   if (suite) return { cookies: suite, source: "suite" };
   return { cookies: null, source: null };
 }
 
 /**
- * Where a launch against `envName` will actually point, and why — the browser's
- * copy of the dispatcher's precedence (suite's env overlay → the environment's
- * own URL → the suite's default). Suite settings shows this per environment so
- * "what happens if I leave this blank" is answered on the page rather than
- * discovered in the launch dialog.
- * @param {{base_url?: string, envs?: object}} app  the parsed `app` block
- * @param {string} envName
- * @param {string|null} envBaseUrl  the environment record's own base URL
- * @returns {{url: string|null, source: "suite-env"|"environment"|"suite"|null}}
- */
-export function resolveEnvTarget(app: WebDynamic, envName: WebDynamic, envBaseUrl: WebDynamic) {
-  const str = (v: WebDynamic) => (typeof v === "string" && v.trim() ? v.trim() : null);
-  const suiteEnv = str(app?.envs?.[envName]?.base_url);
-  const env = str(envBaseUrl);
-  const suite = str(app?.base_url);
-  if (suiteEnv) return { url: suiteEnv, source: "suite-env" };
-  if (env) return { url: env, source: "environment" };
-  if (suite) return { url: suite, source: "suite" };
-  return { url: null, source: null };
-}
-
-/**
- * The playtest.yaml a newly created suite starts with. A suite with no defaults
- * file cannot resolve a single story (core requires app.base_url for web/api),
- * so the New suite dialog collects the target up front and commits this.
- * @param {{driver?: string, baseUrl?: string, appBinary?: string}} opts
+ * The playtest.yaml a newly created suite starts with: the transport, and
+ * nothing else. A physical target is never written here — the ring owns the
+ * URL, and hosted execution applies it after the authored merge — and a web
+ * suite gets NO file at all, which is exactly what "not set up yet" means to
+ * core.
+ * @param {{driver?: string}} opts
  * @returns {string} YAML bytes, or "" when there is nothing to write
  */
-export function initialDefaultsYaml({ driver = "web", baseUrl = "", appBinary = "" }: WebDynamic = {}) {
-  const app: WebDynamic = {};
-  if (driver && driver !== "web") app.driver = driver;
-  if (driver === "mobile") {
-    if (appBinary.trim()) app.app = appBinary.trim();
-  } else if (baseUrl.trim()) {
-    app.base_url = baseUrl.trim();
-  }
-  return Object.keys(app).length ? stringify({ app }, EMIT_OPTS) : "";
-}
-
-/**
- * Is this a usable app URL? The form asks for one before a suite exists, so the
- * check is the browser's own parser plus the two schemes the drivers speak —
- * core's own error arrives much later, at first save.
- * @returns {string|null} the reason it is unusable, or null when it is fine
- */
-export function baseUrlProblem(value: WebDynamic) {
-  const v = String(value || "").trim();
-  if (!v) return "Add the URL where this app runs.";
-  let u;
-  try { u = new URL(v); } catch { return "That isn't a URL — it needs a scheme and a host, e.g. https://staging.example.com."; }
-  if (u.protocol !== "http:" && u.protocol !== "https:") return "The URL must start with http:// or https://.";
-  return null;
+export function initialDefaultsYaml({ driver = "web" }: WebDynamic = {}) {
+  if (!driver || driver === "web") return "";
+  return stringify({ app: { driver } }, EMIT_OPTS);
 }

@@ -173,7 +173,7 @@ export function requireProposerConfigured(env = process.env) {
  * The control plane accepts an uploaded or pasted document only. It does not
  * fetch a URL and it does not auto-discover: reaching the user's target is the
  * runner-agent's job behind the escape-tested boundary, and spec provisioning
- * from environment config lands with the hosted authoring job (S4). Until then
+ * from ring config lands with the hosted authoring job (S4). Until then
  * the console asks for the document, which is one of the three supported ways
  * to supply one either way.
  */
@@ -182,7 +182,7 @@ export async function resolveProposalSpec(declaration: HostedDynamic) {
   if (declaration.url || declaration.discover) {
     throw badRequest(
       "the control plane does not fetch an OpenAPI document from a URL — paste or upload the document " +
-        "(a spec URL becomes environment configuration when hosted authoring jobs land)",
+        "(a spec URL becomes ring configuration when hosted authoring jobs land)",
     );
   }
   const workDir = await fsp.mkdtemp(path.join(os.tmpdir(), "pt-spec-"));

@@ -16,6 +16,12 @@ export const RAIL: WebDynamic = [
     icon: '<circle cx="8" cy="8" r="5.6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M6.7 5.7 10.2 8l-3.5 2.3Z" fill="currentColor"/>' },
   { nav: "findings", label: "Findings", to: (k: WebDynamic) => `/p/${k}/findings`,
     icon: '<path d="M4.2 2.5v11M4.2 3.2h7.3L9.7 5.7l1.8 2.5H4.2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>' },
+  // Applications is where a project says what it tests and where each surface
+  // is deployed. It is a first-class section, not a settings tab: creating the
+  // first application is the first step of the first run, and the launch dialog
+  // offers only the rings this section defines.
+  { nav: "applications", label: "Applications", to: (k: WebDynamic) => `/p/${k}/applications`,
+    icon: '<rect x="2.4" y="2.4" width="5" height="5" rx="1" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="8.6" y="2.4" width="5" height="5" rx="1" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="2.4" y="8.6" width="5" height="5" rx="1" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="11.1" cy="11.1" r="2.5" fill="none" stroke="currentColor" stroke-width="1.4"/>' },
   // Appended before Settings rather than slotted next to Suites: the three
   // items people already navigate by keep their position.
   { nav: "personas", label: "Personas", to: (k: WebDynamic) => `/p/${k}/personas`,

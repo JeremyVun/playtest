@@ -7,7 +7,7 @@
 // the deployment pins a repository at all; ephemeral runners never listed as
 // standing; expiry refused at poll, claim AND exchange; the registration flagged
 // in audit with its verified provenance; and per-launch label pinning —
-// authorization, precedence over the environment, the record on the group, and
+// authorization, precedence over the ring, the record on the group, and
 // the concurrency trap it exists to prevent (two pipelines must not claim each
 // other's builds).
 //
@@ -17,7 +17,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import http from "node:http";
-import { withApp, loadSuiteDir, REPO_ROOT } from "./helpers.ts";
+import { withApp, createTarget, loadSuiteDir, REPO_ROOT } from "./helpers.ts";
 import { writeTar } from "../../src/suites/tar.ts";
 
 /** A loopback issuer that signs tokens the way GitHub's does. */
@@ -70,20 +70,19 @@ const ciEnv = (issuerUrl: string, over: HostedDynamic = {}) => ({
   ...over,
 });
 
-/** A project with the todos suite committed and one environment. */
+/** A project with the todos suite committed and one labelled ring. */
 async function setUp(api: HostedDynamic, { key, labels = [] }: HostedDynamic) {
   const project = (await api.post("/projects", { key, name: key })).body;
+  const { application, ring } = await createTarget(api, project, {
+    key: "todos",
+    ringKey: "ci",
+    baseUrl: "http://127.0.0.1:9",
+    runnerLabels: labels,
+  });
   const suite = (await api.post(`/projects/${key}/suites`, { slug: "todos", name: "Todos" })).body;
   const tar = writeTar(loadSuiteDir(`${REPO_ROOT}/tests/fixtures/todos`));
   assert.equal((await api.postTar(`/suites/${suite.id}/import`, tar)).status, 200);
-  const env = (
-    await api.post(`/projects/${key}/environments`, {
-      name: "ci",
-      runner_labels: labels,
-      config: { app: { base_url: "http://127.0.0.1:9" } },
-    })
-  ).body;
-  return { project, suite, env };
+  return { project, suite, application, ring };
 }
 
 /** A scripted runner: nothing but its credential and fetch, dialling out. */
@@ -120,7 +119,7 @@ test("ci: an OIDC token registers an ephemeral runner that can take work at once
   const gh = await issuer();
   try {
     await withApp(async ({ api, base, app }: HostedDynamic) => {
-      const { project, suite, env } = await setUp(api, { key: "ci1" });
+      const { project, suite, ring } = await setUp(api, { key: "ci1" });
       const label = "ci-run-900100";
 
       const registered = await registerOidc(base, {
@@ -158,7 +157,7 @@ test("ci: an OIDC token registers an ephemeral runner that can take work at once
       const ci = runner(base, registered.body.credential);
       const launched = await api.post(`/projects/${project.key}/run-groups`, {
         suite_id: suite.id,
-        environment_id: env.id,
+        ring_id: ring.id,
         selection: { ids: ["add-todo"] },
         runner_labels: [label],
       });
@@ -251,7 +250,7 @@ test("ci: an expired ephemeral credential is refused at poll, claim and exchange
   const gh = await issuer();
   try {
     await withApp(async ({ api, base, app }: HostedDynamic) => {
-      const { project, suite, env } = await setUp(api, { key: "ci5" });
+      const { project, suite, ring } = await setUp(api, { key: "ci5" });
       const label = "ci-run-900200";
       const registered = await registerOidc(base, {
         github_oidc_token: ciToken(gh.sign, { runId: "900200" }),
@@ -263,7 +262,7 @@ test("ci: an expired ephemeral credential is refused at poll, claim and exchange
 
       const launched = await api.post(`/projects/${project.key}/run-groups`, {
         suite_id: suite.id,
-        environment_id: env.id,
+        ring_id: ring.id,
         selection: { ids: ["add-todo"] },
         runner_labels: [label],
       });
@@ -297,7 +296,7 @@ test("ci: a registration that expires mid-group does not interrupt the group it 
   const gh = await issuer();
   try {
     await withApp(async ({ api, base, app }: HostedDynamic) => {
-      const { project, suite, env } = await setUp(api, { key: "ci6" });
+      const { project, suite, ring } = await setUp(api, { key: "ci6" });
       const label = "ci-run-900300";
       const registered = await registerOidc(base, {
         github_oidc_token: ciToken(gh.sign, { runId: "900300" }),
@@ -309,7 +308,7 @@ test("ci: a registration that expires mid-group does not interrupt the group it 
 
       const launched = await api.post(`/projects/${project.key}/run-groups`, {
         suite_id: suite.id,
-        environment_id: env.id,
+        ring_id: ring.id,
         selection: { ids: ["add-todo"] },
         runner_labels: [label],
       });
@@ -399,29 +398,37 @@ test("ci: one workflow run cannot fill the table with registrations", async () =
   }
 });
 
-test("launch: pinned labels override the environment's, are recorded, and survive a retry", async () => {
+test("launch: pinned labels override the ring's, are recorded, and survive a retry", async () => {
   await withApp(async ({ api, base, app }: HostedDynamic) => {
-    const { project, suite, env } = await setUp(api, { key: "pin1", labels: ["staging-box"] });
+    const { project, suite, ring } = await setUp(api, { key: "pin1", labels: ["staging-box"] });
 
     // The preview says placement out loud before anyone commits to it.
     const preview = await api.post(`/projects/${project.key}/run-groups/preview`, {
       suite_id: suite.id,
-      environment_id: env.id,
+      ring_id: ring.id,
       selection: { ids: ["add-todo"] },
       runner_labels: ["ci-run-42"],
     });
     assert.equal(preview.status, 200, JSON.stringify(preview.body));
-    assert.deepEqual(preview.body.placement, { runner_labels: ["ci-run-42"], labels_source: "launch" });
+    assert.deepEqual(preview.body.placement, {
+      runner_labels: ["ci-run-42"],
+      labels_source: "launch",
+      runner_online: false,
+    });
     const unpinned = await api.post(`/projects/${project.key}/run-groups/preview`, {
       suite_id: suite.id,
-      environment_id: env.id,
+      ring_id: ring.id,
       selection: { ids: ["add-todo"] },
     });
-    assert.deepEqual(unpinned.body.placement, { runner_labels: ["staging-box"], labels_source: "environment" });
+    assert.deepEqual(unpinned.body.placement, {
+      runner_labels: ["staging-box"],
+      labels_source: "ring",
+      runner_online: false,
+    });
 
     const launched = await api.post(`/projects/${project.key}/run-groups`, {
       suite_id: suite.id,
-      environment_id: env.id,
+      ring_id: ring.id,
       selection: { ids: ["add-todo"] },
       runner_labels: ["ci-run-42"],
     });
@@ -429,14 +436,14 @@ test("launch: pinned labels override the environment's, are recorded, and surviv
     const groupId = launched.body.run_group.id;
 
     // The pin rides the group, and the board entry carries it instead of the
-    // environment's label.
+    // ring's label.
     const group = await api.get(`/run-groups/${groupId}`);
     assert.deepEqual(group.body.runner_labels, ["ci-run-42"]);
     assert.deepEqual(group.body.placement.labels, ["ci-run-42"]);
     assert.equal(group.body.placement.labels_source, "launch");
 
     // The concurrency trap this exists to prevent: the staging runner this
-    // environment normally uses must NOT be able to take this build's job.
+    // ring normally uses must NOT be able to take this build's job.
     const standing = (await api.post(`/projects/${project.key}/runners`, {
       name: "staging-box",
       labels: ["staging-box"],
@@ -456,9 +463,9 @@ test("launch: pinned labels override the environment's, are recorded, and surviv
     const mine = runner(base, ci.credential);
     assert.equal((await mine.poll()).body.claim.dispatch_id, dispatchId);
 
-    // A retry of a pinned group is placed the same way, even after the
-    // environment's own labels move on.
-    await api.put(`/environments/${env.id}`, { runner_labels: ["somewhere-else"] });
+    // A retry of a pinned group is placed the same way, even after the ring's
+    // own labels move on.
+    assert.equal((await api.put(`/rings/${ring.id}`, { runner_labels: ["somewhere-else"] })).status, 200);
     await app.db.query(`UPDATE run_groups SET status = 'done' WHERE id = $1`, [groupId]);
     await app.db.query(
       `UPDATE runs SET status = 'infra', started_at = NULL WHERE run_group_id = $1`,
@@ -473,14 +480,14 @@ test("launch: pinned labels override the environment's, are recorded, and surviv
 
 test("launch: pinning is a launch decision — a viewer cannot make it, and nonsense is refused", async () => {
   await withApp(async ({ api }: HostedDynamic) => {
-    const { project, suite, env } = await setUp(api, { key: "pin2", labels: ["staging-box"] });
+    const { project, suite, ring } = await setUp(api, { key: "pin2", labels: ["staging-box"] });
 
     // Same role that can launch, no more and no less: labels route work, they
     // confer no authority, and a runner only ever reaches its own project.
     const viewer = (await api.post(`/projects/${project.key}/tokens`, { role: "viewer", name: "ci-read" })).body.token;
     const denied = await api.withToken(viewer).post(`/projects/${project.key}/run-groups`, {
       suite_id: suite.id,
-      environment_id: env.id,
+      ring_id: ring.id,
       selection: { ids: ["add-todo"] },
       runner_labels: ["ci-run-42"],
     });
@@ -489,7 +496,7 @@ test("launch: pinning is a launch decision — a viewer cannot make it, and nons
     const editor = (await api.post(`/projects/${project.key}/tokens`, { role: "editor", name: "ci-write" })).body.token;
     const allowed = await api.withToken(editor).post(`/projects/${project.key}/run-groups`, {
       suite_id: suite.id,
-      environment_id: env.id,
+      ring_id: ring.id,
       selection: { ids: ["add-todo"] },
       runner_labels: ["ci-run-42"],
     });
@@ -497,7 +504,7 @@ test("launch: pinning is a launch decision — a viewer cannot make it, and nons
 
     const bad = await api.post(`/projects/${project.key}/run-groups`, {
       suite_id: suite.id,
-      environment_id: env.id,
+      ring_id: ring.id,
       selection: { ids: ["add-todo"] },
       runner_labels: ["", "ok"],
     });
@@ -508,7 +515,7 @@ test("launch: pinning is a launch decision — a viewer cannot make it, and nons
     // is not the same as leaving it out.
     const anywhere = await api.post(`/projects/${project.key}/run-groups`, {
       suite_id: suite.id,
-      environment_id: env.id,
+      ring_id: ring.id,
       selection: { ids: ["add-todo"] },
       runner_labels: [],
     });

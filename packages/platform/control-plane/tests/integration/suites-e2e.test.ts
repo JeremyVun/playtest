@@ -11,7 +11,7 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { writeTar, readTar } from "../../src/suites/tar.ts";
 import { ulid } from "../../src/ulid.ts";
-import { withApp, loadSuiteDir, REPO_ROOT } from "./helpers.ts";
+import { withApp, createTarget, loadSuiteDir, REPO_ROOT } from "./helpers.ts";
 
 const TODOS = path.join(REPO_ROOT, "tests/fixtures/todos");
 const CLI_PACKAGE = path.join(REPO_ROOT, "packages/cli");
@@ -39,7 +39,12 @@ async function extractTar(buf: HostedDynamic) {
 test("exit gate: import → edit → commit → export → CLI parity", async () => {
   await withApp(async ({ api }: HostedDynamic) => {
     // --- import the test-owned todo suite via the API ---
-    assert.equal((await api.post("/projects", { key: "todos-co", name: "Todos Co" })).status, 201);
+    const created = await api.post("/projects", { key: "todos-co", name: "Todos Co" });
+    assert.equal(created.status, 201);
+    // A suite binds to an application, so the project's one application comes
+    // first; the imported tree's own `app.base_url` is preserved verbatim and is
+    // exactly what makes the CLI parity check below meaningful.
+    await createTarget(api, created.body, { key: "todos", name: "Todos" });
     const suite = (await api.post("/projects/todos-co/suites", { slug: "todos", name: "Todos" })).body;
     const tar = writeTar(loadSuiteDir(TODOS));
     const imported = await api.postTar(`/suites/${suite.id}/import`, tar);
@@ -102,7 +107,8 @@ test("exit gate: import → edit → commit → export → CLI parity", async ()
 
 test("commit: content-addressed snapshots, monotonic seq, resolved cases returned", async () => {
   await withApp(async ({ api }: HostedDynamic) => {
-    await api.post("/projects", { key: "p", name: "P" });
+    const project = (await api.post("/projects", { key: "p", name: "P" })).body;
+    await createTarget(api, project);
     const suite = (await api.post("/projects/p/suites", { slug: "s", name: "S" })).body;
     const c1 = await api.post(`/suites/${suite.id}/commit`, {
       changes: [
@@ -140,7 +146,8 @@ test("commit: content-addressed snapshots, monotonic seq, resolved cases returne
 // person undo the undo.
 test("versions: restore = export one snapshot → import, as a new version", async () => {
   await withApp(async ({ api }: HostedDynamic) => {
-    await api.post("/projects", { key: "p", name: "P" });
+    const project = (await api.post("/projects", { key: "p", name: "P" })).body;
+    await createTarget(api, project);
     const suite = (await api.post("/projects/p/suites", { slug: "s", name: "S" })).body;
     const v1 = await api.post(`/suites/${suite.id}/commit`, {
       changes: [
@@ -181,7 +188,8 @@ test("versions: restore = export one snapshot → import, as a new version", asy
 
 test("suites projection: by-slug GET + story_count, no tree resolution", async () => {
   await withApp(async ({ api }: HostedDynamic) => {
-    await api.post("/projects", { key: "p", name: "P" });
+    const project = (await api.post("/projects", { key: "p", name: "P" })).body;
+    await createTarget(api, project);
     const suite = (await api.post("/projects/p/suites", { slug: "s", name: "S" })).body;
     await api.post(`/suites/${suite.id}/commit`, {
       changes: [
@@ -210,7 +218,8 @@ test("suites projection: by-slug GET + story_count, no tree resolution", async (
 // exactly as dispatch plans run modes.
 test("cases: next_run comes from the baselines table, not the materialized tree", async () => {
   await withApp(async ({ api, app }: HostedDynamic) => {
-    await api.post("/projects", { key: "p", name: "P" });
+    const project = (await api.post("/projects", { key: "p", name: "P" })).body;
+    await createTarget(api, project);
     const suite = (await api.post("/projects/p/suites", { slug: "s", name: "S" })).body;
     const seeded = await api.post(`/suites/${suite.id}/commit`, {
       changes: [
@@ -236,7 +245,6 @@ test("cases: next_run comes from the baselines table, not the materialized tree"
       "export-study@tester": "explore",
     });
 
-    const { rows: [project] } = await app.db.query(`SELECT id FROM projects WHERE key = 'p'`);
     const baseline = (storyId: HostedDynamic, { version = 1, supersededBy = null }: HostedDynamic = {}) =>
       app.db.query(
         `INSERT INTO baselines (id, project_id, suite_id, story_id, version, trajectory_key, meta, superseded_by)
@@ -259,7 +267,8 @@ test("cases: next_run comes from the baselines table, not the materialized tree"
 
 test("lifecycle: archive hides from the default list; delete is runless-only", async () => {
   await withApp(async ({ api, app }: HostedDynamic) => {
-    await api.post("/projects", { key: "p", name: "P" });
+    const project = (await api.post("/projects", { key: "p", name: "P" })).body;
+    const { application, ring } = await createTarget(api, project);
     const suite = (await api.post("/projects/p/suites", { slug: "s", name: "S" })).body;
     // archive: gone from the live list, present under ?archived=1, still fetchable by slug
     assert.equal((await api.patch(`/suites/${suite.id}`, { archived: true })).body.archived, true);
@@ -274,16 +283,11 @@ test("lifecycle: archive hides from the default list; delete is runless-only", a
       changes: [{ path: "stories/a.yaml", content: "story: a\napp:\n  base_url: http://x\nsuccess:\n  - assert: ok\n" }],
       note: "v1",
     });
-    const { rows: [proj] } = await app.db.query(`SELECT id FROM projects WHERE key = 'p'`);
     const { rows: [snap] } = await app.db.query(`SELECT id FROM suite_snapshots WHERE suite_id = $1`, [suite.id]);
     await app.db.query(
-      `INSERT INTO environments (id, project_id, name) VALUES ('env1', $1, 'staging')`,
-      [proj.id],
-    );
-    await app.db.query(
-      `INSERT INTO run_groups (id, project_id, suite_id, snapshot_id, environment_id, trigger, selection, status)
-        VALUES ('rg1', $1, $2, $3, 'env1', '{}', '{}', 'queued')`,
-      [proj.id, suite.id, snap.id],
+      `INSERT INTO run_groups (id, project_id, suite_id, snapshot_id, application_id, ring_id, trigger, selection, status)
+        VALUES ('rg1', $1, $2, $3, $4, $5, '{}', '{}', 'queued')`,
+      [project.id, suite.id, snap.id, application.id, ring.id],
     );
     const blocked = await api.del(`/suites/${suite.id}`);
     assert.equal(blocked.status, 409);
@@ -297,7 +301,8 @@ test("lifecycle: archive hides from the default list; delete is runless-only", a
 
 test("commit: base_seq conflict returns 409, never a silent overwrite", async () => {
   await withApp(async ({ api }: HostedDynamic) => {
-    await api.post("/projects", { key: "p", name: "P" });
+    const project = (await api.post("/projects", { key: "p", name: "P" })).body;
+    await createTarget(api, project);
     const suite = (await api.post("/projects/p/suites", { slug: "s", name: "S" })).body;
     await api.post(`/suites/${suite.id}/commit`, {
       changes: [
@@ -321,7 +326,8 @@ test("commit: base_seq conflict returns 409, never a silent overwrite", async ()
 
 test("import: macOS AppleDouble/Finder junk is skipped, a real NUL-containing file is rejected friendly", async () => {
   await withApp(async ({ api }: HostedDynamic) => {
-    await api.post("/projects", { key: "p", name: "P" });
+    const project = (await api.post("/projects", { key: "p", name: "P" })).body;
+    await createTarget(api, project);
     const suite = (await api.post("/projects/p/suites", { slug: "s", name: "S" })).body;
     const base = loadSuiteDir(TODOS);
 
@@ -354,7 +360,8 @@ test("import: macOS AppleDouble/Finder junk is skipped, a real NUL-containing fi
 
 test("export/import: tar round-trips a suite between hosted DB and disk", async () => {
   await withApp(async ({ api }: HostedDynamic) => {
-    await api.post("/projects", { key: "p", name: "P" });
+    const project = (await api.post("/projects", { key: "p", name: "P" })).body;
+    await createTarget(api, project);
     const suite = (await api.post("/projects/p/suites", { slug: "s", name: "S" })).body;
     await api.postTar(`/suites/${suite.id}/import`, writeTar(loadSuiteDir(TODOS)));
     const exported = readTar((await api.get(`/suites/${suite.id}/export`)).body);

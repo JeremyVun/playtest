@@ -1,6 +1,6 @@
 // The auto-resolve sweep end to end (docs/contracts/hosted.md, "Findings"):
 // fail → finding → passing rerun → resolved with provenance; recurrence
-// destinations by confirmation; per-(suite, environment, case) stamping that
+// destinations by confirmation; per-(suite, ring, case) stamping that
 // refuses to close over a triple whose evidence is newer; the deterministic
 // "looks fixed" suggestion on judgment calls; and the retention grace pin.
 // Real database, real object store, real sealed bundles for the signal tier.
@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { withApp } from "./helpers.ts";
+import { createTarget, withApp } from "./helpers.ts";
 import { ulid } from "../../src/ulid.ts";
 import { writeBundle } from "@playtest/core/artifacts";
 import { extractFindingFromReport } from "../../src/findings/extractor.ts";
@@ -21,27 +21,36 @@ import { runRetentionCycle } from "../../src/retention/worker.ts";
 
 const MIN = 60_000;
 
+/** Project, its one application, its `staging` ring, and a suite bound to that
+ * application. The suite is created after the application so it binds to it. */
 async function seedProject(app: HostedDynamic, api: HostedDynamic, key: HostedDynamic) {
   const project = (await api.post("/projects", { key, name: key })).body;
+  const { application, ring } = await createTarget(api, project, { ringKey: "staging" });
   const suite = (await api.post(`/projects/${key}/suites`, { slug: "s", name: "S" })).body;
   const snapshotId = ulid();
   await app.db.query(
     `INSERT INTO suite_snapshots (id, suite_id, seq, tree, created_by) VALUES ($1,$2,1,'{}',$3)`,
     [snapshotId, suite.id, app.ctx.devUserId],
   );
-  return { project, suite, snapshotId };
+  return { project, suite, snapshotId, application, ring };
 }
 
-async function seedEnv(app: HostedDynamic, api: HostedDynamic, projectKey: HostedDynamic, name: HostedDynamic) {
-  return (await api.post(`/projects/${projectKey}/environments`, { name })).body;
+/** A second deployment target for the SAME application — a suite runs against
+ * one application, so two rings is what "two targets" means here. */
+async function seedRing(api: HostedDynamic, application: HostedDynamic, key: HostedDynamic) {
+  const res = await api.post(`/applications/${application.id}/rings`, {
+    key, name: key, base_url: `http://127.0.0.1:4173/${key}`,
+  });
+  assert.equal(res.status, 201, JSON.stringify(res.body));
+  return res.body;
 }
 
-async function seedGroup(app: HostedDynamic, { project, suite, snapshotId, envId }: HostedDynamic) {
+async function seedGroup(app: HostedDynamic, { project, suite, snapshotId, application, ringId }: HostedDynamic) {
   const id = ulid();
   await app.db.query(
-    `INSERT INTO run_groups (id, project_id, suite_id, snapshot_id, environment_id, trigger, selection, status)
-       VALUES ($1,$2,$3,$4,$5,'{}','{}','done')`,
-    [id, project.id, suite.id, snapshotId, envId],
+    `INSERT INTO run_groups (id, project_id, suite_id, snapshot_id, application_id, ring_id, trigger, selection, status)
+       VALUES ($1,$2,$3,$4,$5,$6,'{}','{}','done')`,
+    [id, project.id, suite.id, snapshotId, application.id, ringId],
   );
   return id;
 }
@@ -105,9 +114,8 @@ const auditRows = async (app: HostedDynamic, id: HostedDynamic, action: HostedDy
 
 test("gate tier: fail → accept → passing rerun resolves with provenance; recurrence reopens a confirmed finding", async () => {
   await withApp(async ({ app, api }: HostedDynamic) => {
-    const { project, suite, snapshotId } = await seedProject(app, api, "ar1");
-    const env = await seedEnv(app, api, "ar1", "staging");
-    const groupA = await seedGroup(app, { project, suite, snapshotId, envId: env.id });
+    const { project, suite, snapshotId, application, ring } = await seedProject(app, api, "ar1");
+    const groupA = await seedGroup(app, { project, suite, snapshotId, application, ringId: ring.id });
     const runA = await seedRun(app, { groupId: groupA, status: "fail", finishedAt: Date.now() - MIN });
     const { finding } = await fileGateFinding(app, { project, groupId: groupA, run: runA });
     assert.equal(finding.state, "new");
@@ -118,7 +126,7 @@ test("gate tier: fail → accept → passing rerun resolves with provenance; rec
     assert.equal(accepted.state, "accepted");
 
     // A newer run FAILED at a later step, but this check passed: still retires.
-    const groupB = await seedGroup(app, { project, suite, snapshotId, envId: env.id });
+    const groupB = await seedGroup(app, { project, suite, snapshotId, application, ringId: ring.id });
     const runB = await seedRun(app, {
       groupId: groupB, status: "fail", finishedAt: Date.now() + MIN,
       gate: { checks: [{ ...CHECK, pass: true }, { spec: "assert: receipt renders", pass: false }] },
@@ -135,7 +143,7 @@ test("gate tier: fail → accept → passing rerun resolves with provenance; rec
     const stamps = await stampsFor(app, finding.id);
     assert.equal(stamps.length, 1);
     assert.equal(stamps[0].method, "gate_pass");
-    assert.equal(stamps[0].environment_id, env.id);
+    assert.equal(stamps[0].ring_id, ring.id, "the stamp is keyed on the ring the run targeted");
     assert.equal((await auditRows(app, finding.id, "finding.auto_resolved")).length, 1);
 
     // The run page's chip data: the resolving run lists the finding.
@@ -147,7 +155,7 @@ test("gate tier: fail → accept → passing rerun resolves with provenance; rec
 
     // Recurrence of a CONFIRMED finding is the alarm state, and the stamp
     // survives as history while going stale.
-    const groupC = await seedGroup(app, { project, suite, snapshotId, envId: env.id });
+    const groupC = await seedGroup(app, { project, suite, snapshotId, application, ringId: ring.id });
     const runC = await seedRun(app, { groupId: groupC, status: "fail", finishedAt: Date.now() + 2 * MIN });
     const rec = await fileGateFinding(app, { project, groupId: groupC, run: runC });
     assert.equal(rec.action, "reopened");
@@ -173,14 +181,13 @@ test("gate tier: fail → accept → passing rerun resolves with provenance; rec
 
 test("recurrence of an UNCONFIRMED auto-resolved finding returns to `new`, not the alarm state", async () => {
   await withApp(async ({ app, api }: HostedDynamic) => {
-    const { project, suite, snapshotId } = await seedProject(app, api, "ar2");
-    const env = await seedEnv(app, api, "ar2", "staging");
-    const groupA = await seedGroup(app, { project, suite, snapshotId, envId: env.id });
+    const { project, suite, snapshotId, application, ring } = await seedProject(app, api, "ar2");
+    const groupA = await seedGroup(app, { project, suite, snapshotId, application, ringId: ring.id });
     const runA = await seedRun(app, { groupId: groupA, status: "fail", finishedAt: Date.now() - MIN });
     const { finding } = await fileGateFinding(app, { project, groupId: groupA, run: runA });
     assert.equal(finding.state, "new", "no person has acted");
 
-    const groupB = await seedGroup(app, { project, suite, snapshotId, envId: env.id });
+    const groupB = await seedGroup(app, { project, suite, snapshotId, application, ringId: ring.id });
     await seedRun(app, {
       groupId: groupB, status: "pass", finishedAt: Date.now() + MIN,
       gate: { checks: [{ ...CHECK, pass: true }] },
@@ -188,7 +195,7 @@ test("recurrence of an UNCONFIRMED auto-resolved finding returns to `new`, not t
     const swept = await runAutoResolve(app.ctx, { project });
     assert.equal(swept.resolved, 1, "`new` findings are eligible — a fixed claim must not sit in review going stale");
 
-    const groupC = await seedGroup(app, { project, suite, snapshotId, envId: env.id });
+    const groupC = await seedGroup(app, { project, suite, snapshotId, application, ringId: ring.id });
     const runC = await seedRun(app, { groupId: groupC, status: "fail", finishedAt: Date.now() + 2 * MIN });
     const rec = await fileGateFinding(app, { project, groupId: groupC, run: runC });
     assert.equal(rec.action, "recurred", "back to quiet triage, never to reopened");
@@ -198,34 +205,33 @@ test("recurrence of an UNCONFIRMED auto-resolved finding returns to `new`, not t
   });
 });
 
-test("multi-triple: a pass on one environment stamps but cannot resolve while the other environment's evidence is newer", async () => {
+test("multi-triple: a pass on one ring stamps but cannot resolve while the other ring's evidence is newer", async () => {
   await withApp(async ({ app, api }: HostedDynamic) => {
-    const { project, suite, snapshotId } = await seedProject(app, api, "ar3");
-    const staging = await seedEnv(app, api, "ar3", "staging");
-    const prod = await seedEnv(app, api, "ar3", "prod");
-    const gStaging = await seedGroup(app, { project, suite, snapshotId, envId: staging.id });
-    const gProd = await seedGroup(app, { project, suite, snapshotId, envId: prod.id });
+    const { project, suite, snapshotId, application, ring: staging } = await seedProject(app, api, "ar3");
+    const prod = await seedRing(api, application, "prod");
+    const gStaging = await seedGroup(app, { project, suite, snapshotId, application, ringId: staging.id });
+    const gProd = await seedGroup(app, { project, suite, snapshotId, application, ringId: prod.id });
     const runS = await seedRun(app, { groupId: gStaging, status: "fail", finishedAt: Date.now() - MIN });
     const { finding } = await fileGateFinding(app, { project, groupId: gStaging, run: runS });
     // Prod evidence appends onto the same finding (same fingerprint via the
     // extractor path).
     const runP = await seedRun(app, { groupId: gProd, status: "fail", finishedAt: Date.now() - MIN / 2 });
     const rec = await fileGateFinding(app, { project, groupId: gProd, run: runP });
-    assert.equal(rec.finding.id, finding.id, "one finding, two environments");
+    assert.equal(rec.finding.id, finding.id, "one finding, two rings");
 
     // Staging passes; prod has not re-run.
-    const gStaging2 = await seedGroup(app, { project, suite, snapshotId, envId: staging.id });
+    const gStaging2 = await seedGroup(app, { project, suite, snapshotId, application, ringId: staging.id });
     await seedRun(app, {
       groupId: gStaging2, status: "pass", finishedAt: Date.now() + MIN,
       gate: { checks: [{ ...CHECK, pass: true }] },
     });
     let swept = await runAutoResolve(app.ctx, { project });
-    assert.equal(swept.resolved, 0, "the casual environment passing cannot stamp out the other's evidence");
+    assert.equal(swept.resolved, 0, "the casual ring passing cannot stamp out the other's evidence");
     assert.equal(swept.stamped, 1, "…but its own triple is stamped");
     assert.equal((await findingRow(app, finding.id)).state, "new");
 
     // Prod passes too — every triple fresh, the finding closes.
-    const gProd2 = await seedGroup(app, { project, suite, snapshotId, envId: prod.id });
+    const gProd2 = await seedGroup(app, { project, suite, snapshotId, application, ringId: prod.id });
     await seedRun(app, {
       groupId: gProd2, status: "pass", finishedAt: Date.now() + 2 * MIN,
       gate: { checks: [{ ...CHECK, pass: true }] },
@@ -241,9 +247,8 @@ test("signal tier: a rerun whose recomputed anomalies lack the signal resolves; 
   const tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), "pt-ar-signal-"));
   try {
     await withApp(async ({ app, api }: HostedDynamic) => {
-      const { project, suite, snapshotId } = await seedProject(app, api, "ar4");
-      const env = await seedEnv(app, api, "ar4", "staging");
-      const groupA = await seedGroup(app, { project, suite, snapshotId, envId: env.id });
+      const { project, suite, snapshotId, application, ring } = await seedProject(app, api, "ar4");
+      const groupA = await seedGroup(app, { project, suite, snapshotId, application, ringId: ring.id });
       const runA = await seedRun(app, { groupId: groupA, status: "fail", finishedAt: Date.now() - MIN });
 
       // A signal-keyed finding, exactly as run_grade intake derives identity:
@@ -266,7 +271,7 @@ test("signal tier: a rerun whose recomputed anomalies lack the signal resolves; 
 
       // The rerun passes; its sealed bundle's trajectory reaches the route and
       // the 500 is gone.
-      const groupB = await seedGroup(app, { project, suite, snapshotId, envId: env.id });
+      const groupB = await seedGroup(app, { project, suite, snapshotId, application, ringId: ring.id });
       const runB = await seedRun(app, { groupId: groupB, status: "pass", storyId: "checkout", finishedAt: Date.now() + MIN });
       const runDir = path.join(tmpDir, "runB");
       await fsp.mkdir(runDir, { recursive: true });
@@ -298,9 +303,8 @@ test("signal tier: a rerun whose recomputed anomalies lack the signal resolves; 
 
 test("key-less findings get the deterministic suggestion, one-click verbs, and 'not fixed' sticks per run", async () => {
   await withApp(async ({ app, api }: HostedDynamic) => {
-    const { project, suite, snapshotId } = await seedProject(app, api, "ar5");
-    const env = await seedEnv(app, api, "ar5", "staging");
-    const groupA = await seedGroup(app, { project, suite, snapshotId, envId: env.id });
+    const { project, suite, snapshotId, application, ring } = await seedProject(app, api, "ar5");
+    const groupA = await seedGroup(app, { project, suite, snapshotId, application, ringId: ring.id });
     const runA = await seedRun(app, { groupId: groupA, status: "fail", finishedAt: Date.now() - MIN });
     let finding: HostedDynamic;
     await app.db.withTx(async (tx: HostedDynamic) => {
@@ -319,7 +323,7 @@ test("key-less findings get the deterministic suggestion, one-click verbs, and '
 
     // A GRADED pass (grade.json in the sealed bundle) is what may suggest
     // without a verifier; an ungraded checked run would prove nothing.
-    const groupB = await seedGroup(app, { project, suite, snapshotId, envId: env.id });
+    const groupB = await seedGroup(app, { project, suite, snapshotId, application, ringId: ring.id });
     const runB = await seedRun(app, { groupId: groupB, status: "pass", finishedAt: Date.now() + MIN });
     await seedRunBundle(app, { projectKey: "ar5", runId: runB.id, files: GRADED });
     let swept = await runAutoResolve(app.ctx, { project });
@@ -349,7 +353,7 @@ test("key-less findings get the deterministic suggestion, one-click verbs, and '
 
     // …but a newer pass may — though an UNGRADED one (no bundle at all, the
     // checked-run shape) proves nothing about a judgment call first.
-    const groupC = await seedGroup(app, { project, suite, snapshotId, envId: env.id });
+    const groupC = await seedGroup(app, { project, suite, snapshotId, application, ringId: ring.id });
     const runC = await seedRun(app, { groupId: groupC, status: "pass", finishedAt: Date.now() + 2 * MIN });
     swept = await runAutoResolve(app.ctx, { project });
     assert.equal(swept.suggested, 0, "an ungraded pass never testifies about a judgment call");
@@ -375,9 +379,8 @@ test("key-less findings get the deterministic suggestion, one-click verbs, and '
 
 test("verified tier: the sweep re-checks the claim against page content — semi suggests, full resolves, not-fixed memoizes", async () => {
   await withApp(async ({ app, api }: HostedDynamic) => {
-    const { project, suite, snapshotId } = await seedProject(app, api, "ar8");
-    const env = await seedEnv(app, api, "ar8", "staging");
-    const groupA = await seedGroup(app, { project, suite, snapshotId, envId: env.id });
+    const { project, suite, snapshotId, application, ring } = await seedProject(app, api, "ar8");
+    const groupA = await seedGroup(app, { project, suite, snapshotId, application, ringId: ring.id });
     const runA = await seedRun(app, { groupId: groupA, status: "fail", finishedAt: Date.now() - MIN });
     const intake = (claim: HostedDynamic) => app.db.withTx(async (tx: HostedDynamic) => (await intakeFinding(tx, {
       projectId: project.id, source: "run_grade", actor: { system: "findings" },
@@ -398,7 +401,7 @@ test("verified tier: the sweep re-checks the claim against page content — semi
     });
 
     // The newer graded pass carries the page content the verifier reads.
-    const groupB = await seedGroup(app, { project, suite, snapshotId, envId: env.id });
+    const groupB = await seedGroup(app, { project, suite, snapshotId, application, ringId: ring.id });
     const runB = await seedRun(app, { groupId: groupB, status: "pass", finishedAt: Date.now() + MIN });
     await seedRunBundle(app, {
       projectKey: "ar8", runId: runB.id,
@@ -459,12 +462,11 @@ test("verified tier: the sweep re-checks the claim against page content — semi
 
 test("acknowledge quiets the badge and is refused on a finding nobody auto-resolved", async () => {
   await withApp(async ({ app, api }: HostedDynamic) => {
-    const { project, suite, snapshotId } = await seedProject(app, api, "ar6");
-    const env = await seedEnv(app, api, "ar6", "staging");
-    const groupA = await seedGroup(app, { project, suite, snapshotId, envId: env.id });
+    const { project, suite, snapshotId, application, ring } = await seedProject(app, api, "ar6");
+    const groupA = await seedGroup(app, { project, suite, snapshotId, application, ringId: ring.id });
     const runA = await seedRun(app, { groupId: groupA, status: "fail", finishedAt: Date.now() - MIN });
     const { finding } = await fileGateFinding(app, { project, groupId: groupA, run: runA });
-    const groupB = await seedGroup(app, { project, suite, snapshotId, envId: env.id });
+    const groupB = await seedGroup(app, { project, suite, snapshotId, application, ringId: ring.id });
     await seedRun(app, {
       groupId: groupB, status: "pass", finishedAt: Date.now() + MIN,
       gate: { checks: [{ ...CHECK, pass: true }] },
@@ -487,9 +489,8 @@ test("retention: an auto-resolved finding pins its evidence run inside the grace
   const tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), "pt-ar-pin-"));
   try {
     await withApp(async ({ app, api }: HostedDynamic) => {
-      const { project, suite, snapshotId } = await seedProject(app, api, "ar7");
-      const env = await seedEnv(app, api, "ar7", "staging");
-      const groupA = await seedGroup(app, { project, suite, snapshotId, envId: env.id });
+      const { project, suite, snapshotId, application, ring } = await seedProject(app, api, "ar7");
+      const groupA = await seedGroup(app, { project, suite, snapshotId, application, ringId: ring.id });
       // Old enough for the core→meta cutoff (2 days with core_days: 1).
       const runA = await seedRun(app, { groupId: groupA, status: "fail", finishedAt: Date.now() - 2 * 86_400_000 });
       const { finding } = await fileGateFinding(app, { project, groupId: groupA, run: runA });
@@ -508,7 +509,7 @@ test("retention: an auto-resolved finding pins its evidence run inside the grace
       );
       await app.db.query(`UPDATE runs SET artifact_tier = 'core' WHERE id = $1`, [runA.id]);
 
-      const groupB = await seedGroup(app, { project, suite, snapshotId, envId: env.id });
+      const groupB = await seedGroup(app, { project, suite, snapshotId, application, ringId: ring.id });
       await seedRun(app, {
         groupId: groupB, status: "pass", finishedAt: Date.now() + MIN,
         gate: { checks: [{ ...CHECK, pass: true }] },

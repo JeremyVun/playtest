@@ -9,10 +9,10 @@
 // judgment-call findings get an affirmative re-check of their own claim
 // (verify-fix.ts) rather than an inference from a pass verdict.
 //
-// Resolution is per (suite, environment, case). One finding's evidence
-// legitimately spans suites and environments, and one story fans out into one
+// Resolution is per (suite, ring, case). One finding's evidence
+// legitimately spans suites and rings, and one story fans out into one
 // case per persona, so the affected set is DERIVED from evidence — the
-// distinct (run_groups.suite_id, run_groups.environment_id, runs.case_id)
+// distinct (run_groups.suite_id, run_groups.ring_id, runs.case_id)
 // triples reached through finding_evidence — never hand-maintained. Each
 // triple gets a resolution stamp when a newer run on it disproves the finding
 // under the finding's tier; the finding resolves only when EVERY triple
@@ -146,7 +146,7 @@ export function tierOf(finding: HostedDynamic) {
  * @param {object} finding the findings row (state, strict_key, signal_type,
  *   external_ref, summary, last_seen)
  * @param {Array<{
- *   suiteId: string, environmentId: string, caseId: string,
+ *   suiteId: string, ringId: string, caseId: string,
  *   lastEvidenceAt: number,             // ms — newest evidence in this triple
  *   stamp: {run_id: string|null, stamped_at: number, method: string}|null,
  *   candidate: {                        // newest pass/fail run on the triple, or null
@@ -162,9 +162,9 @@ export function tierOf(finding: HostedDynamic) {
  *   }|null,
  * }>} triples
  * @param {{mode?: "semi"|"full"}} [opts] what a verified fix may do (autoResolveModeFor)
- * @returns {{stamps: Array<{suiteId, environmentId, caseId, runId, method, stampedAt, note}>,
+ * @returns {{stamps: Array<{suiteId, ringId, caseId, runId, method, stampedAt, note}>,
  *   action: "resolve"|"suggest"|"clear_suggestion"|"none",
- *   resolveRunId: string|null, checked: Array<{suiteId, environmentId, caseId, runId}>,
+ *   resolveRunId: string|null, checked: Array<{suiteId, ringId, caseId, runId}>,
  *   verified: {note: string|null}|null}}  // every covering stamp is a verified absence
  */
 export function resolveDecisions(finding: HostedDynamic, triples: HostedDynamic, { mode = "semi" } = {}) {
@@ -187,7 +187,7 @@ export function resolveDecisions(finding: HostedDynamic, triples: HostedDynamic,
       if (verdict.stamp) {
         stamp = { run_id: c.runId, stamped_at: c.finishedAt, method: verdict.method, note: verdict.note ?? null };
         stamps.push({
-          suiteId: t.suiteId, environmentId: t.environmentId, caseId: t.caseId,
+          suiteId: t.suiteId, ringId: t.ringId, caseId: t.caseId,
           runId: c.runId, method: verdict.method, stampedAt: c.finishedAt, note: verdict.note ?? null,
         });
       } else if (verdict.checked) {
@@ -195,7 +195,7 @@ export function resolveDecisions(finding: HostedDynamic, triples: HostedDynamic,
         // reached it) — remember, so a green-elsewhere nightly does not re-pay
         // the read for the same run forever. Never evidence: citing a passing
         // run as defect evidence would corrupt last_seen and reopen from a pass.
-        checked.push({ suiteId: t.suiteId, environmentId: t.environmentId, caseId: t.caseId, runId: c.runId });
+        checked.push({ suiteId: t.suiteId, ringId: t.ringId, caseId: t.caseId, runId: c.runId });
       }
     }
     const fresh = stamp && stamp.stamped_at > t.lastEvidenceAt;
@@ -257,7 +257,7 @@ export function resolveDecisions(finding: HostedDynamic, triples: HostedDynamic,
 export function autoResolveReason(finding: HostedDynamic, triples: HostedDynamic, decision: HostedDynamic = null) {
   const tier = tierOf(finding);
   const n = triples.length;
-  const scope = n > 1 ? `, everywhere it was seen (${n} suite/environment combinations)` : "";
+  const scope = n > 1 ? `, everywhere it was seen (${n} suite/ring combinations)` : "";
   if (tier === "gate") {
     const spec = finding.summary?.gate?.spec;
     return spec
@@ -381,7 +381,7 @@ export async function runAutoResolve(ctx: HostedDynamic, { project, callModel = 
 async function triplesOf(ctx: HostedDynamic, finding: HostedDynamic, io: HostedDynamic) {
   const { bundles } = io;
   const { rows: triples } = await ctx.db.query(
-    `SELECT g.suite_id, g.environment_id, r.case_id,
+    `SELECT g.suite_id, g.ring_id, r.case_id,
             MAX(fe.created_at) AS last_evidence_at,
             json_group_array(DISTINCT fe.run_id) AS evidence_run_ids,
             json_group_array(DISTINCT fe.step_from) AS evidence_steps
@@ -389,7 +389,7 @@ async function triplesOf(ctx: HostedDynamic, finding: HostedDynamic, io: HostedD
        JOIN runs r ON r.id = fe.run_id
        JOIN run_groups g ON g.id = r.run_group_id
       WHERE fe.finding_id = $1
-      GROUP BY g.suite_id, g.environment_id, r.case_id`,
+      GROUP BY g.suite_id, g.ring_id, r.case_id`,
     [finding.id],
   );
 
@@ -398,7 +398,7 @@ async function triplesOf(ctx: HostedDynamic, finding: HostedDynamic, io: HostedD
     [finding.id],
   );
   const stampOf: HostedDynamic = new Map(stamps.rows.map((s: HostedDynamic) => [
-    `${s.suite_id}${s.environment_id}${s.case_id}`,
+    `${s.suite_id}${s.ring_id}${s.case_id}`,
     { run_id: s.run_id, stamped_at: ms(s.stamped_at), method: s.method },
   ]));
   const checkedMemo = finding.summary?.auto_resolve?.checked || {};
@@ -406,16 +406,16 @@ async function triplesOf(ctx: HostedDynamic, finding: HostedDynamic, io: HostedD
   const out: HostedDynamic[] = [];
   for (const t of triples) {
     const evidenceRunIds = new Set(JSON.parse(t.evidence_run_ids || "[]"));
-    const key = `${t.suite_id}${t.environment_id}${t.case_id}`;
+    const key = `${t.suite_id}${t.ring_id}${t.case_id}`;
     const { rows: newest } = await ctx.db.query(
       `SELECT r.id, r.status, r.gate, r.story_id, r.manifest, r.finished_at
          FROM runs r
          JOIN run_groups g ON g.id = r.run_group_id
-        WHERE g.suite_id = $1 AND g.environment_id = $2 AND r.case_id = $3
+        WHERE g.suite_id = $1 AND g.ring_id = $2 AND r.case_id = $3
           AND r.status IN ('pass','fail') AND r.finished_at IS NOT NULL
         ORDER BY r.finished_at DESC, r.id DESC
         LIMIT 1`,
-      [t.suite_id, t.environment_id, t.case_id],
+      [t.suite_id, t.ring_id, t.case_id],
     );
     const run = newest[0] || null;
     let candidate: HostedDynamic = null;
@@ -454,7 +454,7 @@ async function triplesOf(ctx: HostedDynamic, finding: HostedDynamic, io: HostedD
     }
     out.push({
       suiteId: t.suite_id,
-      environmentId: t.environment_id,
+      ringId: t.ring_id,
       caseId: t.case_id,
       lastEvidenceAt: ms(t.last_evidence_at),
       stamp: stampOf.get(key) || null,
@@ -566,17 +566,17 @@ async function applyDecision(ctx: HostedDynamic, { project, finding, decision, r
     for (const s of stamps) {
       await tx.query(
         `INSERT INTO finding_resolution_stamps
-           (finding_id, suite_id, environment_id, case_id, run_id, method, stamped_at)
+           (finding_id, suite_id, ring_id, case_id, run_id, method, stamped_at)
          VALUES ($1,$2,$3,$4,$5,$6,$7)
-         ON CONFLICT (finding_id, suite_id, environment_id, case_id)
+         ON CONFLICT (finding_id, suite_id, ring_id, case_id)
          DO UPDATE SET run_id = excluded.run_id, method = excluded.method, stamped_at = excluded.stamped_at`,
-        [finding.id, s.suiteId, s.environmentId, s.caseId, s.runId, s.method, s.stampedAt],
+        [finding.id, s.suiteId, s.ringId, s.caseId, s.runId, s.method, s.stampedAt],
       );
     }
     if (checked.length) {
       // "Still present / not covered" memo — a note in the summary, NEVER an
       // evidence row (a passing run must not corrupt last_seen or reopen).
-      const memo = Object.fromEntries(checked.map((c: HostedDynamic) => [`${c.suiteId}${c.environmentId}${c.caseId}`, c.runId]));
+      const memo = Object.fromEntries(checked.map((c: HostedDynamic) => [`${c.suiteId}${c.ringId}${c.caseId}`, c.runId]));
       await tx.query(
         `UPDATE findings
             SET summary = json_patch(summary, json_object('auto_resolve', json_object('checked', json($2)))),

@@ -1,6 +1,10 @@
-// Settings — role-gated project policy. Test targets is developer-facing;
-// Runs, Models, Team, and Audit are admin-facing. Plugins, Integrations, and
+// Settings — role-gated project policy. Runners is developer-facing; Runs,
+// Models, Team, and Audit are admin-facing. Plugins, Integrations, and
 // Retention were removed from the UI in the P1 simplification.
+//
+// What a project tests, and where each surface is deployed, is NOT here: that
+// is Applications, a first-class project section, because creating the first
+// application is the first step of the first run rather than a policy tab.
 import { api } from "../lib/api.js";
 import { h, mount } from "../lib/dom.js";
 import { link, navigate, onPageLeave } from "../lib/router.js";
@@ -9,19 +13,12 @@ import { state, hasRole, loadMe, loadProjects } from "../lib/state.js";
 import { toast, toastError, confirmModal, formModal, emptyState, formField, enhanceSelect, copyText } from "../lib/ui.js";
 import { visibleSections } from "../lib/settings-sections.js";
 import { modelField } from "../lib/model-select.js";
-import { MASK, maskSecretEnv, literalSecretKeys } from "../lib/secret-mask.js";
-import { parseCookieList, formatCookieList, DRIVERS, driverLabel } from "../lib/defaults-form.js";
 import { humanize as words, categoryLabel } from "../lib/vocab.js";
 import { startCommand, oneShot, runnerLabelsText, runnerPresence, labelProblem, parseLabels } from "../lib/runners.js";
 import { subscribeFeed } from "../lib/feed.js";
 import { ago } from "../lib/labels.js";
-import {
-  PLATFORMS, readEnvApp, applyEnvApp, hasMobileConfig,
-  artifactSummary, appArtifactProblem, APP_ARTIFACT_EXTENSIONS, fmtBytes, environmentDriver,
-} from "../lib/env-config.js";
 
 const RENDER: WebDynamic = {
-  "test-targets": testTargetsTab,
   runners: runnersTab,
   runs: runsTab,
   models: modelsTab,
@@ -104,48 +101,11 @@ async function runsTab(projectKey: WebDynamic, project: WebDynamic, slot: WebDyn
   }
 }
 
-// ---------- test targets ----------
-// One section combines environments (the primary target list) with the auth
-// providers and secrets they reference. Provider JSON and raw environment JSON
-// are advanced disclosure, not sibling tabs. Secret values are never rendered
-// (masking lives in lib/secret-mask.ts).
-async function testTargetsTab(projectKey: WebDynamic, project: WebDynamic, slot: WebDynamic) {
-  const canAdmin = hasRole(project.id, "admin");
-  const envSlot = h("div");
-  const authSlot = h("div");
-  const secretSlot = h("div");
-  mount(slot, h("div.stack", {},
-    h("section", {},
-      h("h3.section-title", { style: "margin-top:0" }, "Environments"),
-      h("p.dim", { style: "font-size:12.5px;margin:-4px 0 12px" },
-        "A deployment ring suites can run against: its credentials, runner pool, and whether discovery studies are allowed there. Each suite sets its own URL for a ring in Suite settings — where a suite can also add an environment of its own, listed here under the suite that owns it."),
-      envSlot,
-    ),
-    h("details.advanced", { style: "margin-top:8px" },
-      h("summary", {}, "Authentication identities"),
-      h("p.dim", { style: "font-size:12.5px;margin:8px 0 12px" },
-        "Providers mint short-lived sessions for the identities an environment references. Provider config JSON is edited here."),
-      authSlot,
-    ),
-    canAdmin
-      ? h("details.advanced", { style: "margin-top:8px" },
-          h("summary", {}, "Secret references"),
-          h("p.dim", { style: "font-size:12.5px;margin:8px 0 12px" },
-            "Write-only named secrets that environments reference by name. Values are encrypted at rest and never shown again."),
-          secretSlot,
-        )
-      : null,
-  ));
-  environmentsTab(projectKey, project, envSlot);
-  authProvidersTab(projectKey, project, authSlot);
-  if (canAdmin) secretsTab(projectKey, project, secretSlot);
-}
-
 // ---------- runners ----------
 // A self-hosted runner is the machine a run actually happens on. Everything it
 // does is outbound (docs/contracts/hosted.md, "Runner pool"), so this surface
 // hands out an identity and never reaches back: register → paste one command on
-// that machine → give an environment the labels it advertises.
+// that machine → give a ring the labels it advertises.
 //
 // The section is LIVE, and it is live the way the rest of the console is: the
 // event feed carries the edges (a runner arriving, coming back, taking a claim,
@@ -237,7 +197,7 @@ async function runnersTab(projectKey: WebDynamic, project: WebDynamic, slot: Web
       h("section", {},
         h("h3.section-title", { style: "margin-top:0" }, "Runners"),
         h("p.dim", { style: "font-size:12.5px;margin:-4px 0 12px" },
-          "Machines that execute this project's runs. Register one here, start it with the command shown, then give an environment the same labels under Test targets — a run is placed on a runner advertising every label its environment asks for."),
+          "Machines that execute this project's runs. Register one here, start it with the command shown, then give a ring the same labels under Applications — a run is placed on a runner advertising every label its ring asks for."),
         h("div", { style: "display:flex;justify-content:flex-end;margin-bottom:12px" }, add),
         body,
         rows.length && !here
@@ -271,7 +231,7 @@ function registerRunnerModal(projectKey: WebDynamic, refresh: WebDynamic) {
     const submitBtn = h("button.btn.primary", { type: "submit" }, "Register");
     return h("form", { onsubmit: submit },
       fld("Name", name, "How this machine appears in run history. Unique among this project's live runners — a revoked machine's name is free again."),
-      fld("Labels", labels, "What this machine can do — an environment asking for these labels places its runs here. Comma separated, using letters, digits, “.”, “_” and “-”; leave blank to take any of this project's runs."),
+      fld("Labels", labels, "What this machine can do — a ring asking for these labels places its runs here. Comma separated, using letters, digits, “.”, “_” and “-”; leave blank to take any of this project's runs."),
       h("div.modal-actions", {}, h("button.btn.ghost", { type: "button", onclick: () => close() }, "Cancel"), submitBtn),
     );
     async function submit(e: WebDynamic) {
@@ -333,12 +293,12 @@ function revealRunnerCredential(runner: WebDynamic, refresh: WebDynamic) {
         "aria-label": "Runner start command",
       }, command),
       h("p.faint", { style: "font-size:11.5px;margin:10px 0 0" },
-        "Run it from your Playtest checkout. The credential travels in the environment, never as an argument, so it stays out of your process list. The runner then waits for work and prints what it is doing."),
+        "Run it from your Playtest checkout. The credential travels in the process environment, never as an argument, so it stays out of your process list. The runner then waits for work and prints what it is doing."),
       h("p.faint", { style: "font-size:11.5px;margin:6px 0 0" },
         "Pasted this way it also lands in your shell history. On a machine you share, put the credential in a file only you can read and start the runner with ",
         h("span.mono", {}, "--credential-file <path>"), " instead."),
       h("p.faint", { style: "font-size:11.5px;margin:6px 0 0" },
-        `Give an environment the ${(runner.labels || []).length ? `labels ${runnerLabelsText(runner.labels)}` : "runner labels you want"} under Test targets to place its runs here.`),
+        `Give a ring the ${(runner.labels || []).length ? `labels ${runnerLabelsText(runner.labels)}` : "runner labels you want"} under Applications to place its runs here.`),
       guard,
       h("div.modal-actions", {}, copyBtn, h("button.btn.ghost", { onclick: leave }, "Done")),
     );
@@ -504,486 +464,7 @@ async function modelsTab(projectKey: WebDynamic, project: WebDynamic, slot: WebD
   }
 }
 
-// ---------- environments ----------
-async function environmentsTab(projectKey: WebDynamic, project: WebDynamic, slot: WebDynamic) {
-  let items: WebDynamic = [];
-  try { ({ items } = await api.cached(`/projects/${projectKey}/environments`)); } catch (err: WebDynamic) { return toastError(err); }
-  const add = h("button.btn.primary", { onclick: () => envModal(projectKey, null, () => environmentsTab(projectKey, project, slot)) }, "+ New environment");
-  const body = items.length
-    ? h("div", { style: "display:flex;flex-direction:column;gap:12px" }, ...items.map((e: WebDynamic) => h("div.card.pad", {},
-        h("div", { style: "display:flex;align-items:center;gap:10px" },
-          h("span.id", {}, e.name),
-          h("span.chip", {}, environmentDriver(e)),
-          e.discovery_allowed ? h("span.chip", {}, "discovery allowed") : null,
-          // A suite's own environment is listed here — an admin should see
-          // everything the project holds — but never anonymously: only that
-          // suite can launch against it, and only its settings page adds one.
-          e.suite_id
-            ? h("span.chip", {}, e.suite?.name ? `${e.suite.name} only` : "one suite only")
-            : null,
-          h("div", { style: "flex:1" }),
-          // Every row repeats "Edit"/"Delete", so the accessible name has to carry
-          // the object — a screen reader must never offer four identical buttons.
-          h("button.btn.btn-sm", { "aria-label": `Edit environment ${e.name}`, onclick: () => envModal(projectKey, e, () => environmentsTab(projectKey, project, slot)) }, "Edit"),
-          h("button.btn.btn-sm.danger", { "aria-label": `Delete environment ${e.name}`, onclick: () => delEnv(e, () => environmentsTab(projectKey, project, slot)) }, "Delete"),
-        ),
-        // Readable fields first — the config JSON is an escape hatch behind Advanced.
-        fieldLine("fallback URL", e.config?.app?.base_url || "— suites set their own"),
-        Object.keys(e.config?.app?.cookies || {}).length
-          ? fieldLine("cookies", formatCookieList(e.config.app.cookies))
-          : null,
-        e.suite_id ? fieldLine("owned by", e.suite?.name || e.suite_id) : null,
-        fieldLine("discovery", e.discovery_allowed ? "allowed" : "not allowed"),
-        // What a run against this ring installs, when it installs anything. An
-        // uploaded build wins over a path the ring names, exactly as at launch.
-        e.app_artifact
-          ? fieldLine("app binary", `${artifactSummary(e.app_artifact, ago)} (uploaded)`)
-          : e.config?.app?.app
-            ? fieldLine("app binary", `${e.config.app.app} — on the runner's own disk`)
-            : null,
-        e.config?.app?.platform || e.config?.app?.appium_url
-          ? fieldLine("device", [e.config?.app?.platform, e.config?.app?.appium_url].filter(Boolean).join(" · "))
-          : null,
-        fieldLine("runner labels", runnerLabelsText(e.runner_labels)),
-        fieldLine("secret references", secretRefSummary(e.config) || "—"),
-        h("details.advanced", { style: "margin-top:8px" },
-          h("summary", {}, "Advanced — raw config JSON"),
-          h("pre.mono", { style: "margin-top:8px;background:var(--bg2);padding:10px;border-radius:6px;overflow:auto;font-size:12px" }, JSON.stringify(maskSecretEnv(e.config), null, 2)),
-        ),
-      )))
-    : emptyState("No environments", "An environment is a deployment ring — the credentials, runner pool and discovery permission a run uses. Suites declare where their app lives inside it.");
-  mount(slot, h("div", {}, h("div", { style: "display:flex;justify-content:flex-end;margin-bottom:12px" }, add), body));
-}
-
 const fieldLine = (k: WebDynamic, v: WebDynamic) => h("div.dim", { style: "margin-top:6px;font-size:12px" }, `${k}: `, h("span.mono", {}, v));
-
-/**
- * Set a select's value from code without firing `change`.
- *
- * Two reasons it moves the `selected` ATTRIBUTE rather than only the property:
- * the themed dropdown (lib/ui.ts enhanceSelect) relabels its button from a
- * mutation observer, which a property assignment never trips; and a `change`
- * event here would be the document writing back into the field that is writing
- * into the document.
- */
-function setSelect(sel: WebDynamic, value: WebDynamic) {
-  sel.value = value;
-  for (const option of sel.options) {
-    if (option.value === sel.value) option.setAttribute("selected", "");
-    else option.removeAttribute("selected");
-  }
-}
-
-/** Readable one-liner of an environment's secret_env references (never values). */
-function secretRefSummary(config: WebDynamic) {
-  const entries = Object.entries(config?.secret_env || {});
-  if (!entries.length) return null;
-  return entries.map(([k, v]: WebDynamic) =>
-    typeof v === "object" && v !== null
-      ? `${k}=${v.$secret ? `$secret:${v.$secret}` : v.$session ? `$session:${v.$session}` : "ref"}`
-      : `${k}=${MASK}`).join(", ");
-}
-
-/**
- * One environment, as a form.
- *
- * The named fields and the raw document are two views of ONE document, the way
- * the suite-defaults editor treats YAML: every field writes into the JSON, the
- * JSON is what saves, and a key no field knows about survives verbatim. They
- * therefore cannot disagree — there is no second source of truth to reconcile
- * at save time, and opening Advanced always shows what the fields above just did.
- */
-function envModal(projectKey: WebDynamic, existing: WebDynamic, refresh: WebDynamic) {
-  const close = formModal(existing ? `Edit ${existing.name}` : "New environment", () => {
-    // `current` is the environment as the server last confirmed it — replaced
-    // wholesale by an artifact upload, which returns the full view.
-    let current = existing;
-    const name = h("input", { type: "text", value: existing?.name || "", placeholder: "staging" });
-    if (existing) name.disabled = true;
-    const driver = h("select", { "aria-label": "Driver" },
-      ...DRIVERS.map((d: WebDynamic) =>
-        h("option", { value: d, selected: (existing ? environmentDriver(existing) : "web") === d || undefined }, driverLabel(d))));
-    const baseUrl = h("input", { type: "text", value: existing?.config?.app?.base_url || "", placeholder: "https://staging.example.com", onchange: flush });
-    // Cookies are first-class ring config: a blue/green slot or feature-flag
-    // cookie is often the whole difference between two rings.
-    const cookies = h("input", { type: "text", value: formatCookieList(existing?.config?.app?.cookies), placeholder: "slot=blue; feature_x=on", onchange: flush });
-    const config = h("textarea.code", { style: "min-height:160px" }, JSON.stringify(maskSecretEnv(existing?.config) || { app: { base_url: "https://staging.example.com" } }, null, 2));
-    const labels = h("input", { type: "text", value: (existing?.runner_labels || []).join(", "), placeholder: "macos, ios-sim" });
-    const disc = h("input", { type: "checkbox", checked: existing?.discovery_allowed || false });
-    const literalWarn = h("div.preview-warn", { style: "display:none;margin:-6px 0 10px" });
-    const jsonWarn = h("div.preview-warn", { style: "display:none;margin:-6px 0 10px" });
-
-    // --- the device half of a ring, for mobile. First-class, because a
-    // benchmark mobile ring should never require hand-written JSON.
-    const platform = h("select", { "aria-label": "Device platform", onchange: flush },
-      h("option", { value: "" }, "— choose later"),
-      ...PLATFORMS.map((p: WebDynamic) => h("option", { value: p, selected: existing?.config?.app?.platform === p || undefined },
-        p === "ios" ? "iOS — simulator or device" : "Android — emulator or device")));
-    const appPath = h("input", { type: "text", value: existing?.config?.app?.app || "", placeholder: "/Users/you/builds/app-release.apk", onchange: flush });
-    const appiumUrl = h("input", { type: "text", value: existing?.config?.app?.appium_url || "", placeholder: "http://127.0.0.1:4723", onchange: flush });
-    const artifactSlot = h("div");
-    const openDevice = driver.value === "mobile" && (hasMobileConfig(existing?.config) || !!existing?.app_artifact);
-
-    config.addEventListener("input", () => {
-      let parsed: WebDynamic = null;
-      try { parsed = JSON.parse(config.value); } catch { /* mid-edit — submit reports it */ }
-      jsonWarn.style.display = parsed ? "none" : "";
-      jsonWarn.textContent = parsed ? "" : "This isn't valid JSON yet — the fields above can't write into it until it is.";
-      if (!parsed) return;
-      // The document moved, so the fields re-read it. One direction each way,
-      // and both through the same helpers, so neither view can drift.
-      const app = readEnvApp(parsed);
-      baseUrl.value = app.base_url;
-      appPath.value = app.app;
-      appiumUrl.value = app.appium_url;
-      setSelect(platform, PLATFORMS.includes(app.platform) ? app.platform : "");
-      cookies.value = formatCookieList(parsed?.app?.cookies);
-      const keys = literalSecretKeys(parsed);
-      literalWarn.style.display = keys.length ? "" : "none";
-      literalWarn.textContent = keys.length
-        ? `${keys.join(", ")}: pasted values are stored readable by anyone with this page. Prefer {"$secret": "name"} — add the name under Settings → Secrets.`
-        : "";
-    });
-
-    paintArtifact();
-    return h("form", { onsubmit: submit },
-      fld("Name", name),
-      fld("Driver", driver,
-        "Only suites using this driver can select the environment. Use separate environments for browser, API, and native-app targets."),
-      fld("Runner labels", labels,
-        "Runs against this environment go to runners advertising ALL of these labels — that is the whole matching rule. Comma separated, using letters, digits, “.”, “_” and “-”; leave blank to let any runner in this project take them."),
-      fld("Cookies", cookies,
-        "Browser cookies set before the first navigation, on every web run against this environment — name=value pairs separated by semicolons. A suite can override them on its own settings page."),
-      h("label.check", { style: "margin:6px 0 12px" }, disc, "Allow discovery studies on this environment"),
-      // The device belongs to the ring, not the suite: which simulator, which
-      // build, which Appium server are all facts about the machine the device
-      // is attached to. Folded away until a ring actually has one.
-      h("details.advanced", { open: openDevice || undefined },
-        h("summary", {}, "Mobile device — platform, app binary, Appium"),
-        h("div", { style: "margin-top:10px" },
-          h("p.dim", { style: "font-size:12.5px;margin:0 0 10px" },
-            "For a suite driven by Appium. The runner that takes this environment's runs is the machine holding the simulator or device."),
-          fld("Platform", platform, "Which mobile driver core starts."),
-          fld("App binary path", appPath,
-            "An absolute path on the runner's own disk — the usual answer when the runner is the machine that built the app. Nothing is uploaded."),
-          fld("Appium server", appiumUrl, "Where Appium listens on that machine. Blank uses core's default."),
-          artifactSlot,
-        ),
-      ),
-      // An environment is a RING: credentials, runner pool and discovery
-      // permission, shared by every suite in the project. WHERE a given suite's
-      // app lives inside that ring belongs to the suite (Suite settings →
-      // per-environment URLs), which also outranks this field at dispatch. It
-      // survives as the fallback for the common case — one project, one app —
-      // but it is no longer the headline question.
-      h("details.advanced", {},
-        h("summary", {}, "Advanced — fallback URL, auth / secret_env"),
-        h("div", { style: "margin-top:10px" },
-          fld("Fallback base URL", baseUrl,
-            "Used by any suite that doesn't set its own URL for this environment. Leave blank when suites declare their own."),
-          fld("Config JSON", config),
-          jsonWarn,
-          literalWarn,
-          h("div.faint", { style: "font-size:11.5px;margin:-6px 0 10px" },
-            'Reference stored secrets instead of pasting values: "secret_env": { "TOKEN": { "$secret": "secret-name" } } — add names under Secret references. Stored values show as ' + MASK + " and are kept unless you replace them.",
-          ),
-        ),
-      ),
-      h("div.modal-actions", {}, h("button.btn.ghost", { type: "button", onclick: () => close() }, "Cancel"), h("button.btn.primary", { type: "submit" }, "Save")),
-    );
-
-    /** The named fields, written into the one document they are views of. */
-    function flush() {
-      let cfg: WebDynamic;
-      try { cfg = JSON.parse(config.value); } catch { return; }
-      let parsedCookies;
-      try { parsedCookies = parseCookieList(cookies.value); }
-      catch (err: WebDynamic) { return toast("Cookies don't parse", String(err.message || err), "err"); }
-      const next = applyEnvApp(cfg, {
-        base_url: baseUrl.value.trim(),
-        platform: platform.value,
-        app: appPath.value.trim(),
-        appium_url: appiumUrl.value.trim(),
-      });
-      if (parsedCookies) next.app = { ...(next.app || {}), cookies: parsedCookies };
-      else if (next.app) delete next.app.cookies;
-      if (next.app && !Object.keys(next.app).length) delete next.app;
-      config.value = JSON.stringify(next, null, 2);
-    }
-
-    /**
-     * The uploaded build: what is stored, how to replace it, how to remove it —
-     * and the cap said UP FRONT, because finding out after a 400 MB upload is
-     * the one failure this control exists to prevent.
-     */
-    function paintArtifact() {
-      const maxMb = state.me?.capabilities?.app_artifact_max_mb ?? 512;
-      const maxBytes = maxMb * 1024 * 1024;
-      const picker: WebDynamic = h("input", {
-        type: "file",
-        accept: APP_ARTIFACT_EXTENSIONS.join(","),
-        style: "display:none",
-        onchange: () => upload(picker.files?.[0] || null),
-      });
-      const uploadBtn = h("button.btn.btn-sm", {
-        type: "button",
-        disabled: current ? undefined : true,
-        title: current ? undefined : "Save this environment first — an upload needs somewhere to go",
-        onclick: () => picker.click(),
-      }, current?.app_artifact ? "Replace…" : "Upload a build…");
-      const summary = current?.app_artifact
-        ? h("div.dim", { style: "font-size:12px" },
-            h("span.mono", {}, artifactSummary(current.app_artifact, ago)),
-            h("div.faint", { style: "font-size:11.5px;margin-top:2px" },
-              "Every run installs exactly these bytes until you replace them; a run already in flight keeps the build it started with."))
-        : h("div.faint", { style: "font-size:11.5px" },
-            current
-              ? `No build uploaded. Use this when the runner is not the machine that built the app — ${APP_ARTIFACT_EXTENSIONS.join(", ")}, up to ${maxMb} MB. An iOS .app is a directory, so zip it first.`
-              : "Save this environment, then upload a build here.");
-      mount(artifactSlot, h("div.field", {},
-        h("div.field-label", {}, "Uploaded build"),
-        // The rest of this form is Save/Cancel; the build is not. Say so where
-        // the buttons are, rather than letting Cancel look like it undoes an
-        // upload it cannot reach.
-        h("div.faint", { style: "font-size:11.5px;margin-bottom:6px" },
-          "Uploading or removing a build applies immediately — Cancel does not undo it."),
-        summary,
-        h("div", { style: "display:flex;gap:8px;margin-top:8px" },
-          uploadBtn,
-          current?.app_artifact
-            ? h("button.btn.btn-sm.danger", { type: "button", onclick: clearArtifact }, "Remove")
-            : null,
-          picker),
-      ));
-
-      async function upload(file: WebDynamic) {
-        picker.value = "";
-        if (!file) return;
-        const problem = appArtifactProblem(file, maxBytes);
-        if (problem) return toast("That file can't be uploaded", problem, "err");
-        uploadBtn.disabled = true;
-        uploadBtn.textContent = `Uploading ${fmtBytes(file.size)}…`;
-        try {
-          current = await api.putRaw(
-            `/environments/${current.id}/app-artifact?filename=${encodeURIComponent(file.name)}`,
-            // The File itself, never a copy of it: fetch streams a Blob body off
-            // disk, where `await file.arrayBuffer()` would first pull a 400 MB
-            // build through the tab's JS heap.
-            file,
-            "application/octet-stream",
-          );
-          toast("Build uploaded", `${file.name} — runs against ${current.name} install it`, "ok");
-          refresh();
-        } catch (err: WebDynamic) {
-          // The 413 already names the cap, the variable that raises it, and the
-          // runner-local alternative — show it, never "upload failed".
-          toastError(err);
-        }
-        paintArtifact();
-      }
-
-      async function clearArtifact() {
-        const ok = await confirmModal({
-          title: "Remove the uploaded build?",
-          body: `Runs against ${current.name} stop installing it. Runs that already used it keep their evidence, and this environment falls back to the app path below — or to whatever the suite declares.`,
-          confirmLabel: "Remove build",
-          danger: true,
-        });
-        if (!ok) return;
-        try {
-          await api.del(`/environments/${current.id}/app-artifact`);
-          current = { ...current, app_artifact: null };
-          toast("Build removed", current.name, "ok");
-          refresh();
-        } catch (err: WebDynamic) { return toastError(err); }
-        paintArtifact();
-      }
-    }
-
-    async function submit(e: WebDynamic) {
-      e.preventDefault();
-      // The fields are views of the document; make sure the last one edited has
-      // landed in it before the document is what we save.
-      flush();
-      let cfg;
-      try { cfg = JSON.parse(config.value); } catch { return toast("Config isn't valid JSON", "", "err"); }
-      if (driver.value !== "mobile") {
-        if (current?.app_artifact) {
-          return toast(
-            "Remove the uploaded build first",
-            `A ${driver.value} environment cannot keep a mobile app binary.`,
-            "err",
-          );
-        }
-        cfg = applyEnvApp(cfg, { platform: null, app: null, appium_url: null, device: null });
-      }
-      // An untouched mask keeps the stored value; the browser never round-trips
-      // the literal through the textarea.
-      for (const [k, v] of Object.entries(cfg?.secret_env || {})) {
-        if (v !== MASK) continue;
-        const stored = existing?.config?.secret_env?.[k];
-        if (stored === undefined) return toast(`"${k}" is ${MASK}`, "that key has no stored value to keep — paste a value or a {\"$secret\": …} reference", "err");
-        cfg.secret_env[k] = stored;
-      }
-      const runnerLabels = parseLabels(labels.value);
-      const labelIssue = labelProblem(runnerLabels);
-      if (labelIssue) return toast("Check the runner labels", labelIssue, "err");
-      const payload: WebDynamic = {
-        name: name.value.trim(),
-        driver: driver.value,
-        config: cfg,
-        runner_labels: runnerLabels,
-        discovery_allowed: disc.checked,
-      };
-      try {
-        if (existing) await api.put(`/environments/${existing.id}`, payload);
-        else await api.post(`/projects/${projectKey}/environments`, payload);
-        close(); toast("Environment saved", payload.name, "ok"); refresh();
-      } catch (err: WebDynamic) { toastError(err); }
-    }
-  });
-}
-
-async function delEnv(env: WebDynamic, refresh: WebDynamic) {
-  if (!(await confirmModal({ title: `Delete ${env.name}?`, body: "This can't be undone.", confirmLabel: "Delete", danger: true }))) return;
-  try { await api.del(`/environments/${env.id}`); toast("Deleted", env.name, "ok"); refresh(); } catch (err: WebDynamic) { toastError(err); }
-}
-
-// ---------- auth providers ----------
-async function authProvidersTab(projectKey: WebDynamic, project: WebDynamic, slot: WebDynamic) {
-  let items: WebDynamic = [];
-  try { ({ items } = await api.cached(`/projects/${projectKey}/auth-providers`)); } catch (err: WebDynamic) { return toastError(err); }
-  const add = h("button.btn.primary", { onclick: () => authProviderModal(projectKey, null, () => authProvidersTab(projectKey, project, slot)) }, "+ New provider");
-  const body = items.length
-    ? h("div", { style: "display:flex;flex-direction:column;gap:12px" }, ...items.map((p: WebDynamic) => h("div.card.pad", {},
-        h("div", { style: "display:flex;align-items:center;gap:10px" },
-          h("span.id", {}, p.name),
-          h("span.chip", {}, p.kind),
-          p.enabled ? null : h("span.chip", {}, "disabled"),
-          h("div", { style: "flex:1" }),
-          // Four verbs per provider, repeated per row — each one names its provider.
-          h("button.btn.btn-sm", { "aria-label": `Mint a session for ${p.name}`, onclick: () => mintProvider(p, () => authProvidersTab(projectKey, project, slot)) }, "Mint"),
-          h("button.btn.btn-sm", { "aria-label": `Sessions minted by ${p.name}`, onclick: () => sessionsModal(p) }, "Sessions"),
-          h("button.btn.btn-sm", { "aria-label": `Edit auth provider ${p.name}`, onclick: () => authProviderModal(projectKey, p, () => authProvidersTab(projectKey, project, slot)) }, "Edit"),
-          h("button.btn.btn-sm.danger", { "aria-label": `Delete auth provider ${p.name}`, onclick: () => delProvider(p, () => authProvidersTab(projectKey, project, slot)) }, "Delete"),
-        ),
-        h("div.dim", { style: "margin-top:6px;font-size:12px" }, `ttl: ${p.ttl_minutes}m · identities: ${Object.keys(p.identities || {}).join(", ") || "—"}`),
-        h("pre.mono", { style: "margin-top:8px;background:var(--bg2);padding:10px;border-radius:6px;overflow:auto;font-size:12px" }, JSON.stringify(p.config, null, 2)),
-      )))
-    : emptyState("No auth providers", "A provider mints short-lived storage-state artifacts for app identities.");
-  mount(slot, h("div", {}, h("div", { style: "display:flex;justify-content:flex-end;margin-bottom:12px" }, add), body));
-}
-
-function authProviderModal(projectKey: WebDynamic, existing: WebDynamic, refresh: WebDynamic) {
-  const close = formModal(existing ? `Edit ${existing.name}` : "New auth provider", () => {
-    const name = h("input", { type: "text", value: existing?.name || "", placeholder: "sso" });
-    const kind = h("select", {},
-      ...["token_endpoint", "storage_state_secret", "script"].map((k) => h("option", { value: k, selected: existing?.kind === k }, k)));
-    const config = h("textarea.code", { style: "min-height:120px" }, JSON.stringify(existing?.config || { url: "http://127.0.0.1:0/session" }, null, 2));
-    const identities = h("textarea.code", { style: "min-height:110px" }, JSON.stringify(existing?.identities || { member: {} }, null, 2));
-    const ttl = h("input", { type: "number", min: "1", max: "1440", value: existing?.ttl_minutes || 60 });
-    const enabled = h("input", { type: "checkbox", checked: existing?.enabled !== false });
-    return h("form", { onsubmit: submit },
-      fld("Name", name),
-      fld("Kind", kind),
-      fld("Config JSON", config),
-      fld("Identities JSON", identities),
-      fld("TTL minutes", ttl),
-      h("label.check", { style: "margin:6px 0 12px" }, enabled, "Enabled"),
-      h("div.modal-actions", {}, h("button.btn.ghost", { type: "button", onclick: () => close() }, "Cancel"), h("button.btn.primary", { type: "submit" }, "Save")),
-    );
-    async function submit(e: WebDynamic) {
-      e.preventDefault();
-      let cfg, ids;
-      try { cfg = JSON.parse(config.value || "{}"); ids = JSON.parse(identities.value || "{}"); }
-      catch { return toast("JSON isn't valid", "", "err"); }
-      const payload: WebDynamic = { name: name.value.trim(), kind: kind.value, config: cfg, identities: ids, ttl_minutes: Number(ttl.value), enabled: enabled.checked };
-      try {
-        if (existing) await api.put(`/auth-providers/${existing.id}`, payload);
-        else await api.post(`/projects/${projectKey}/auth-providers`, payload);
-        close(); toast("Auth provider saved", payload.name, "ok"); refresh();
-      } catch (err: WebDynamic) { toastError(err); }
-    }
-  });
-}
-
-async function mintProvider(provider: WebDynamic, refresh: WebDynamic) {
-  try {
-    const out = await api.post(`/auth-providers/${provider.id}/mint`, {});
-    // `script` providers mint on a runner: the 202 body carries the dispatched
-    // claim; the session shows up in the sessions list when the workflow lands.
-    if (out.mint) toast("Mint dispatched", "a runner is minting this session — check Sessions shortly", "ok");
-    else toast("Session minted", `${out.session.identity} until ${new Date(out.session.expires_at).toLocaleTimeString()}`, "ok");
-    refresh();
-  } catch (err: WebDynamic) { toastError(err); }
-}
-
-async function sessionsModal(provider: WebDynamic) {
-  const close = formModal(`${provider.name} sessions`, () => h("div.dim", {}, "Loading…"));
-  const root = document.querySelector("#modal-root .modal");
-  try {
-    const { items } = await api.get(`/auth-providers/${provider.id}/sessions`);
-    mount(root, h("h3", {}, `${provider.name} sessions`),
-      items.length ? h("table.rows", {},
-        h("thead", {}, h("tr", {}, h("th", {}, "Identity"), h("th", {}, "Expires"), h("th", {}, "Minted by"))),
-        h("tbody", {}, ...items.map((s: WebDynamic) => h("tr", {}, h("td", {}, s.identity), h("td.dim", {}, new Date(s.expires_at).toLocaleString()), h("td", {}, s.minted_by_job || "—")))),
-      ) : emptyState("No sessions", "No derived sessions have been minted yet."),
-      h("div.modal-actions", {}, h("button.btn.primary", { onclick: () => close() }, "Close")));
-  } catch (err: WebDynamic) { toastError(err); close(); }
-}
-
-async function delProvider(provider: WebDynamic, refresh: WebDynamic) {
-  if (!(await confirmModal({ title: `Delete ${provider.name}?`, body: "Cached sessions for this provider will be removed.", confirmLabel: "Delete", danger: true }))) return;
-  try { await api.del(`/auth-providers/${provider.id}`); toast("Deleted", provider.name, "ok"); refresh(); } catch (err: WebDynamic) { toastError(err); }
-}
-
-// ---------- secrets ----------
-async function secretsTab(projectKey: WebDynamic, project: WebDynamic, slot: WebDynamic) {
-  let items: WebDynamic = [];
-  try { ({ items } = await api.cached(`/projects/${projectKey}/secrets`)); } catch (err: WebDynamic) { return toastError(err); }
-  const add = h("button.btn.primary", { onclick: () => secretModal(projectKey, () => secretsTab(projectKey, project, slot)) }, "+ Add secret");
-  const body = h("div", {},
-    h("div.card.pad", { style: "margin-bottom:12px;color:var(--dim);font-size:12.5px" }, "⚠ Secrets are write-only. Values are encrypted at rest and never shown again after you save them."),
-    items.length
-      ? h("div.card", {}, h("table.rows", {},
-          h("thead", {}, h("tr", {}, h("th", {}, "Name"), h("th", {}, "Updated"), h("th", {}))),
-          h("tbody", {}, ...items.map((s: WebDynamic) => h("tr", {},
-            h("td.mono", {}, s.name),
-            h("td.dim", {}, new Date(s.updated_at).toLocaleDateString()),
-            h("td", { style: "text-align:right" },
-              h("button.btn.btn-sm", { style: "margin-right:6px", "aria-label": `Rotate secret ${s.name}`, onclick: () => secretModal(projectKey, () => secretsTab(projectKey, project, slot), s.name) }, "Rotate"),
-              h("button.btn.btn-sm.danger", { "aria-label": `Delete secret ${s.name}`, onclick: () => delSecret(projectKey, s, () => secretsTab(projectKey, project, slot)) }, "Delete")),
-          ))),
-        ))
-      : emptyState("No secrets", "Add API tokens, storage-state blobs, or env cookies here."),
-  );
-  mount(slot, h("div", {}, h("div", { style: "display:flex;justify-content:flex-end;margin-bottom:12px" }, add), body));
-}
-
-// Saving under an existing name replaces the value (the API is an upsert) —
-// "Rotate" on a row opens this dialog with the name locked in.
-function secretModal(projectKey: WebDynamic, refresh: WebDynamic, rotateName: WebDynamic = null) {
-  const close = formModal(rotateName ? `Rotate ${rotateName}` : "Add secret", () => {
-    const name = h("input", { type: "text", value: rotateName || "", placeholder: "staging-seed-token" });
-    if (rotateName) name.disabled = true;
-    const value = h("textarea", { placeholder: rotateName ? "the new value (the old one is replaced on save)" : "the secret value", style: "min-height:80px" });
-    return h("form", { onsubmit: submit },
-      fld("Name", name, "letters, digits and _ . -"),
-      fld("Value", value),
-      h("div.modal-actions", {}, h("button.btn.ghost", { type: "button", onclick: () => close() }, "Cancel"), h("button.btn.primary", { type: "submit" }, rotateName ? "Rotate" : "Save")),
-    );
-    async function submit(e: WebDynamic) {
-      e.preventDefault();
-      try { await api.post(`/projects/${projectKey}/secrets`, { name: name.value.trim(), value: value.value }); close(); toast("Secret saved", name.value.trim(), "ok"); refresh(); }
-      catch (err: WebDynamic) { toastError(err); }
-    }
-  });
-}
-
-async function delSecret(projectKey: WebDynamic, s: WebDynamic, refresh: WebDynamic) {
-  if (!(await confirmModal({ title: `Delete secret ${s.name}?`, body: "Environments referencing it will fail until replaced.", confirmLabel: "Delete", danger: true }))) return;
-  try { await api.del(`/projects/${projectKey}/secrets/${encodeURIComponent(s.name)}`); toast("Deleted", s.name, "ok"); refresh(); } catch (err: WebDynamic) { toastError(err); }
-}
 
 // ---------- members ----------
 async function membersTab(projectKey: WebDynamic, project: WebDynamic, slot: WebDynamic) {
@@ -1011,7 +492,7 @@ async function membersTab(projectKey: WebDynamic, project: WebDynamic, slot: Web
         h("div", { style: "flex:1;min-width:200px" },
           h("div", { style: "font-weight:500" }, "Delete this project"),
           h("p.dim", { style: "font-size:12.5px;margin:4px 0 0" },
-            "Permanently removes the project, its suites, runs, findings, environments, secrets, and membership. The key becomes free to reuse."),
+            "Permanently removes the project, its suites, runs, findings, applications, rings, secrets, and membership. The key becomes free to reuse."),
         ),
         h("button.btn.danger", { onclick: () => deleteProjectFlow(projectKey, project) }, "Delete project…"),
       ),
@@ -1068,7 +549,7 @@ async function deleteProjectFlow(projectKey: WebDynamic, project: WebDynamic) {
   const ok = await confirmModal({
     title: `Delete “${project.name}”?`,
     body: h("div", {},
-      h("p.dim", {}, "Permanently deletes this project and everything in it: suites, stories, runs, findings, environments, secrets, and membership."),
+      h("p.dim", {}, "Permanently deletes this project and everything in it: suites, stories, runs, findings, applications, rings, secrets, and membership."),
       h("p.dim", {}, "This cannot be undone. The project key becomes free to use again."),
     ),
     confirmLabel: "Delete project",
@@ -1162,8 +643,8 @@ function entityHref(projectKey: WebDynamic, a: WebDynamic) {
     if (a.entity_type === "consolidation_plan") return `/p/${projectKey}/consolidation/${a.entity_id}`;
   }
   // Suites route by slug, not id, so only the rows that record one can link.
-  // Runs need their group id (the row has neither), and environments, secrets
-  // and providers live on this page — none of those get a link.
+  // Runs need their group id (the row has neither), and applications, rings,
+  // secrets and providers live on Applications — none of those get a link.
   if (a.entity_type === "suite" && a.detail?.slug) return `/p/${projectKey}/suites/${a.detail.slug}`;
   return null;
 }
@@ -1202,10 +683,14 @@ function auditSentence(a: WebDynamic, who: WebDynamic) {
 // control plane — keep it in step when a new one lands; anything missing falls
 // back to the verb above.
 const AUDIT_SENTENCES: WebDynamic = {
-  // Test targets — this page's own objects. The detail carries the human name.
-  "environment.created": (d: WebDynamic) => `created environment ${nameOf(d)}${d.discovery_allowed ? ", discovery allowed" : ""}`,
-  "environment.updated": (d: WebDynamic) => `updated environment ${nameOf(d)} — discovery ${d.discovery_allowed ? "allowed" : "not allowed"}`,
-  "environment.deleted": (d: WebDynamic) => `deleted environment ${nameOf(d)}`,
+  // Applications and their rings. Both are addressed by key, which is what
+  // runner configuration binds, so the sentence says the key, not the name.
+  "application.created": (d: WebDynamic) => `created application ${d.key || nameOf(d)}${d.driver ? ` — a ${[d.driver, d.platform].filter(Boolean).join(" ")} surface` : ""}`,
+  "application.updated": (d: WebDynamic) => `renamed application ${d.key || nameOf(d)} to ${nameOf(d)}`,
+  "application.deleted": (d: WebDynamic) => `deleted application ${d.key || nameOf(d)}`,
+  "ring.created": (d: WebDynamic) => `created ring ${ringOf(d)}${d.base_url ? ` → ${d.base_url}` : ""}${d.discovery_allowed ? ", discovery allowed" : ""}`,
+  "ring.updated": (d: WebDynamic) => `updated ring ${ringOf(d)}${d.base_url ? ` → ${d.base_url}` : ""} — discovery ${d.discovery_allowed ? "allowed" : "not allowed"}`,
+  "ring.deleted": (d: WebDynamic) => `deleted ring ${ringOf(d)}`,
   "auth_provider.created": (d: WebDynamic) => `added auth provider ${nameOf(d)}${d.kind ? ` (${words(d.kind)})` : ""}`,
   "auth_provider.updated": (d: WebDynamic) => `updated auth provider ${nameOf(d)}${d.enabled === false ? " — now disabled" : ""}`,
   "auth_provider.deleted": (d: WebDynamic) => `deleted auth provider ${nameOf(d)}`,
@@ -1245,7 +730,7 @@ const AUDIT_SENTENCES: WebDynamic = {
   "storage.integrity_failed": () => "a stored artifact no longer matches its checksum",
   "dispatch.dead": (d: WebDynamic) => `gave up on a dispatched job${d.reason ? ` — ${words(d.reason)}` : ""}${d.redispatch ? ", and queued a replacement" : ""}`,
 
-  // Auth sessions minted for the identities an environment references.
+  // Auth sessions minted for the identities a ring references.
   "session.minted": (d: WebDynamic) => `minted a session for ${identityOf(d)}`,
   "session.delivered": (d: WebDynamic) => `handed a session for ${identityOf(d)} to a run`,
   "session.mint_dispatched": (d: WebDynamic) => `asked a runner to mint a session for ${identityOf(d)}`,
@@ -1284,6 +769,8 @@ const fld = formField;
 const shortId = (id: WebDynamic) => (id.length > 10 ? id.slice(-6) : id);
 // Machine enums and system names are snake_case; humans are not.
 const nameOf = (d: WebDynamic) => (typeof d.name === "string" && d.name ? d.name : "—");
+/** A ring reads as the pair a runner binds: `todo-web/staging`. */
+const ringOf = (d: WebDynamic) => [d.application, d.key].filter(Boolean).join("/") || nameOf(d);
 const countOf = (v: WebDynamic) => (Array.isArray(v) ? v.length : Number.isFinite(v) ? v : null);
 const plural = (n: WebDynamic, one: WebDynamic, many = `${one}s`) => (Number.isFinite(n) ? `${n} ${n === 1 ? one : many}` : `some ${many}`);
 const changeCount = (d: WebDynamic) => countOf(d.changes);

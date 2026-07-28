@@ -10,7 +10,8 @@ import { state, loadProjects, hasRole } from "../lib/state.js";
 import { toast, toastError, emptyState, formModal, statusChip, sparkline, formField } from "../lib/ui.js";
 import { ago } from "../lib/labels.js";
 import { findingStateLabel } from "../lib/finding-buckets.js";
-import { DRIVERS, driverLabel, initialDefaultsYaml } from "../lib/defaults-form.js";
+import { initialDefaultsYaml } from "../lib/defaults-form.js";
+import { applicationLine, keyFromName, keyProblem, ringUrlProblem } from "../lib/rings.js";
 
 export async function projectsList() {
   const main = renderFrame({});
@@ -257,22 +258,31 @@ export async function projectHome(projectKey: WebDynamic) {
 /**
  * The path from an empty project to a first run.
  *
- * "Somewhere to point" used to be a step of its own: the target lived three
- * clicks away under Settings, nothing on this screen mentioned it, and the
- * likely next move ended in a launch dialog with no usable target. It is not a
- * step any more, because a project is created with a `default` environment that
- * takes its URL from each suite — and the New suite dialog asks for that URL. A
- * deployment ring with real credentials is a thing you add when you have one,
- * so it sits under the list as an aside rather than in front of the first run.
+ * "Somewhere to point" is a step, and the first one: a new project starts with
+ * no application, because what a suite runs against is a decision — "this web
+ * app, at this URL" — that the platform cannot guess. It is one step, not
+ * three: create the application, give ring `local` its URL, and every suite
+ * bound to it is launchable.
  */
 function firstRunChecklist(projectKey: WebDynamic, project: WebDynamic, suites: WebDynamic, canEdit: WebDynamic) {
   const firstSuite = suites[0] || null;
   const stories = suites.reduce((n: WebDynamic, s: WebDynamic) => n + (s.story_count || 0), 0);
+  const canManage = hasRole(project.id, "developer");
   const steps: WebDynamic = [
+    {
+      // Done is inferred from the suites that exist: a suite cannot be created
+      // without an application, so one suite proves one application.
+      done: suites.length > 0,
+      title: "Create an application target",
+      why: "One executable surface — a web app, an HTTP API, a mobile build — and a ring with the URL its runs point at.",
+      action: canManage
+        ? link(`/p/${projectKey}/applications`, h("span.btn.btn-sm", {}, "Applications"))
+        : h("span.faint", { style: "font-size:12px" }, "needs the developer role"),
+    },
     {
       done: suites.length > 0,
       title: "Create a suite",
-      why: "A set of user-journey stories for one app. It asks where that app runs once it exists.",
+      why: "A set of user-journey stories, bound to one of those applications.",
       action: canEdit ? h("button.btn.btn-sm", { onclick: () => newSuiteModal(projectKey) }, "New suite") : null,
     },
     {
@@ -301,10 +311,10 @@ function firstRunChecklist(projectKey: WebDynamic, project: WebDynamic, suites: 
       : null,
     // Not a step: runs work without it. It is the answer to the question the
     // list raises next — "what about the one that needs a login?".
-    hasRole(project.id, "developer")
+    canManage
       ? h("div.faint", { style: "margin-top:8px;font-size:12px" },
-          "Testing somewhere that needs sign-in or its own runners? Add a deployment ring under ",
-          link(`/p/${projectKey}/settings/test-targets`, "Settings → Test targets"), ".")
+          "Testing somewhere that needs sign-in, or its own machines? A ring carries the identities and the routing labels — set them under ",
+          link(`/p/${projectKey}/applications`, "Applications"), ".")
       : null,
   );
 }
@@ -426,39 +436,79 @@ function lastRunCell(projectKey: WebDynamic, s: WebDynamic) {
 }
 
 /**
- * New suite: identity only — what these stories are called, and what they drive.
+ * New suite: what these stories are called, and which application they run
+ * against.
  *
- * Where the app runs is deliberately NOT here. The platform's own model says a
- * deployment ring answers that, and a ring is a thing with credentials, a
- * runner pool and a discovery permission — none of which belong in a dialog
- * about naming a suite. Worse, the field this dialog used to carry ("App
- * binary") promised something hosted cannot hold: a real `.apk` is many times
- * the suite upload cap. So the target question moves one step later, to the
- * empty suite's own page, where it can be asked in the words of the driver
- * chosen here and answered with a ring — and where it is skippable, because the
- * launch dialog states the resolved target and the launch itself refuses a run
- * with no app to point at.
+ * The application is asked here because a suite belongs to exactly one and the
+ * binding is immutable — it decides the suite's driver and the rings it may
+ * ever launch against. The URL is NOT asked here: a ring owns that, and hosted
+ * execution applies it after the authored merge, so a field for it in this
+ * dialog would be a field whose value always loses.
+ *
+ * Roles split the empty-project case. A developer may create the first
+ * application inline — for web that is a name plus a ring URL, nothing more —
+ * and an editor is told, in the server's own words, that a developer has to.
  */
 export function newSuiteModal(projectKey: WebDynamic) {
+  const project = state.projectByKey.get(projectKey);
+  const canManage = hasRole(project?.id, "developer");
   const close = formModal("New suite", () => {
     const name = h("input", { type: "text", placeholder: "Checkout journeys" });
     const where = urlPreview(name, "checkout-journeys", (k: WebDynamic) => `/p/${projectKey}/suites/${k}`);
-    const driver = h("select", { "aria-label": "Driver" },
-      ...DRIVERS.map((d: WebDynamic) => h("option", { value: d }, driverLabel(d))));
+    const NEW = "__new";
+    const application = h("select", { "aria-label": "Application", onchange: paintInline },
+      h("option", { value: "" }, "Loading…"));
+    const inlineSlot = h("div");
+    const appName = h("input", { type: "text", placeholder: "Todo Web" });
+    const appUrl = h("input", { type: "text", placeholder: "http://127.0.0.1:4173" });
     const err = h("div", { style: "font-size:var(--fs-sm)" });
     const submitBtn = h("button.btn.primary", { type: "submit" }, "Create");
+    let applications: WebDynamic = null;
 
+    loadApplications();
     return h("form", { onsubmit: submit },
       field("Name", name, where),
-      field("Driver", driver, "What these stories drive. It can be changed later on Suite settings."),
-      h("p.faint", { style: "font-size:11.5px;margin:-4px 0 12px" },
-        "Where the app runs comes next, on the suite itself — and can wait until you have a story to run."),
+      field("Application", application,
+        "The surface these stories drive. A suite runs against one application for its whole life, and launches against that application's rings."),
+      inlineSlot,
       err,
       h("div.modal-actions", {},
         h("button.btn.ghost", { type: "button", onclick: () => close() }, "Cancel"),
         submitBtn,
       ),
     );
+
+    async function loadApplications() {
+      try {
+        ({ items: applications } = await api.cached(`/projects/${projectKey}/applications`));
+      } catch (loadErr: WebDynamic) { applications = []; toastError(loadErr); }
+      mount(application,
+        ...applications.map((a: WebDynamic) =>
+          h("option", { value: a.id }, `${a.name || a.key} — ${applicationLine(a)}`)),
+        canManage ? h("option", { value: NEW }, "＋ Create an application…") : null);
+      if (!applications.length && canManage) application.value = NEW;
+      paintInline();
+    }
+
+    /** Inline creation, or the reason an editor cannot do it. */
+    function paintInline() {
+      if (!applications) return;
+      if (!applications.length && !canManage) {
+        // The server's own refusal, said before the request rather than after.
+        mount(inlineSlot, h("div.preview-warn", {},
+          "This project has no application yet, and a developer has to create the first one — what a suite runs against is a decision, so nothing is guessed for you."));
+        submitBtn.disabled = true;
+        return;
+      }
+      submitBtn.disabled = false;
+      mount(inlineSlot, application.value === NEW
+        ? h("div", {},
+            field("Application name", appName, "A web surface. For an API or a mobile build, create it under Applications instead."),
+            field("Ring URL", appUrl,
+              "Ring “local” gets this URL. It is read from the claiming runner's network position, so a loopback URL means that runner's own machine."))
+        : null);
+    }
+
     async function submit(e: WebDynamic) {
       e.preventDefault();
       if (!name.value.trim()) {
@@ -467,13 +517,23 @@ export function newSuiteModal(projectKey: WebDynamic) {
       }
       clear(err);
       submitBtn.disabled = true;
+      let applicationId = application.value;
+      let driver = applications?.find((a: WebDynamic) => a.id === applicationId)?.driver || "web";
       try {
+        if (applicationId === NEW) {
+          const created = await createApplicationInline();
+          if (!created) return;
+          applicationId = created.id;
+          driver = created.driver;
+        }
         const s = await createUnique(slugify(name.value) || "suite",
-          (slug: WebDynamic) => api.post(`/projects/${projectKey}/suites`, { slug, name: name.value.trim() }));
+          (slug: WebDynamic) => api.post(`/projects/${projectKey}/suites`, {
+            slug, name: name.value.trim(), application_id: applicationId,
+          }));
         // Only a non-default driver is worth committing here; a web suite with
         // nothing configured yet is better off with NO defaults file than with
         // an empty one, which is exactly what "not set up yet" means to core.
-        const content = initialDefaultsYaml({ driver: driver.value });
+        const content = initialDefaultsYaml({ driver });
         if (content) {
           // The suite exists either way; a failed defaults commit must not read
           // as a failed create, so it lands the person on Settings with the reason.
@@ -489,6 +549,19 @@ export function newSuiteModal(projectKey: WebDynamic) {
         toast("Suite created", s.name, "ok");
         navigate(`/p/${projectKey}/suites/${s.slug}`);
       } catch (err2: WebDynamic) { submitBtn.disabled = false; toastError(err2); }
+    }
+
+    /** A web application and its `local` ring, in one gesture. */
+    async function createApplicationInline() {
+      const label = appName.value.trim() || name.value.trim();
+      const key = keyFromName(label);
+      const keyBad = keyProblem(key, applications || [], { kind: "application" });
+      if (keyBad) { submitBtn.disabled = false; appName.focus(); mount(err, h("span.status.fail", {}, h("span.glyph", {}, "✗"), keyBad)); return null; }
+      const urlBad = ringUrlProblem(appUrl.value, "web");
+      if (urlBad) { submitBtn.disabled = false; appUrl.focus(); mount(err, h("span.status.fail", {}, h("span.glyph", {}, "✗"), urlBad)); return null; }
+      const created = await api.post(`/projects/${projectKey}/applications`, { key, name: label, driver: "web" });
+      await api.post(`/applications/${created.id}/rings`, { key: "local", name: "Local", base_url: appUrl.value.trim() });
+      return created;
     }
   });
 }

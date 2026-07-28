@@ -9,7 +9,7 @@
 //
 // The system prompt is derived from core's package-owned story-authoring guide
 // at build-of-prompt time plus the suite's
-// live resolved case list + defaults + personas + environment names/URLs (never
+// live resolved case list + defaults + personas + ring keys/URLs (never
 // secrets or auth values). The model gets three server-executed tools —
 // validate_case / lint_case (the SAME core validators the CLI and suite editor
 // use) and the terminal propose_draft — under auto tool choice: it interviews in
@@ -119,10 +119,10 @@ const skillText = storyAuthoringGuide;
 /**
  * Build the per-request system prompt: hosted preamble + the playtest-stories
  * skill verbatim + a hosted addendum overriding its CLI-specific steps + the
- * suite's live context (defaults, resolved cases, personas, environments). Pure
- * given its inputs — unit-testable without a database.
+ * suite's live context (defaults, resolved cases, personas, rings). Pure given
+ * its inputs — unit-testable without a database.
  */
-export function composeSystemPrompt({ skill, suiteSlug, defaultsYaml, cases, personaFiles, environments = [] }: HostedDynamic) {
+export function composeSystemPrompt({ skill, suiteSlug, defaultsYaml, cases, personaFiles, rings = [] }: HostedDynamic) {
   const caseLines = cases.length
     ? cases.map((c: HostedDynamic) =>
         `- ${c.id} (${c.mode}${c.persona ? `, persona ${c.persona}` : ""}) — ${c.description || firstLine(c.story || "") || "no description"}`,
@@ -131,9 +131,9 @@ export function composeSystemPrompt({ skill, suiteSlug, defaultsYaml, cases, per
   const personaLines = personaFiles.length
     ? personaFiles.map((p: HostedDynamic) => `- ${p}`).join("\n")
     : "- (none beyond the built-ins tester / exploratory)";
-  const envLines = environments.length
-    ? environments.map((e: HostedDynamic) =>
-        `- ${e.name}${e.base_url ? ` — ${e.base_url}` : " — no base URL declared (runs use the suite's own)"}${e.discovery_allowed ? " (discovery allowed)" : ""}`,
+  const ringLines = rings.length
+    ? rings.map((r: HostedDynamic) =>
+        `- ${r.key}${r.base_url ? ` — ${r.base_url}` : " — the claiming runner supplies the build"}${r.discovery_allowed ? " (discovery allowed)" : ""}`,
       ).join("\n")
     : "- (none configured yet)";
   return [
@@ -183,27 +183,27 @@ export function composeSystemPrompt({ skill, suiteSlug, defaultsYaml, cases, per
     "Persona files in this suite:",
     personaLines,
     "",
-    // Names + URLs only — credentials, auth sessions and secret_env live on the
-    // environment record and must never be echoed into suite files or chat.
-    "Environments this project can launch against (each is a name + base URL; credentials",
-    "and secrets belong to the environment and are never written into suite files):",
-    envLines,
+    // Keys + URLs only — credentials, auth sessions and secret_env live on the
+    // ring and must never be echoed into suite files or chat.
+    "Rings this suite's application can launch against (each is a key + base URL; credentials",
+    "and secrets belong to the ring and are never written into suite files):",
+    ringLines,
     "",
-    "Target precedence at launch: the suite's own `app.envs.<name>` keys override the",
-    "environment's declared keys, which override the suite's top-level `app.base_url`.",
-    "Only draft `app.envs` entries when THIS suite must pin something for a specific",
-    "environment; otherwise leave per-environment targeting to the environment records.",
+    "The ring supplies the physical target: under hosted execution its URL replaces any",
+    "`app.base_url` a suite authors, at every level. Draft `app.envs.<ring key>` entries only",
+    "for LOGICAL per-ring settings (an identity, a cookie, a settle time) — never a URL, and",
+    "never a mobile build path, device or Appium endpoint.",
   ].join("\n");
 }
 
-async function buildSystemPrompt(suite: HostedDynamic, files: HostedDynamic, cases: HostedDynamic, environments: HostedDynamic) {
+async function buildSystemPrompt(suite: HostedDynamic, files: HostedDynamic, cases: HostedDynamic, rings: HostedDynamic) {
   return composeSystemPrompt({
     skill: await skillText(),
     suiteSlug: suite.slug,
     defaultsYaml: files["playtest.yaml"] ?? "",
     cases,
     personaFiles: Object.keys(files).filter((p) => p.startsWith("personas/")).sort(),
-    environments,
+    rings,
   });
 }
 
@@ -292,18 +292,20 @@ export async function draftStory(ctx: HostedDynamic, { suite, project, goal, tra
   const model = ctx.config.llm.authoringModel;
   const files = await loadWorkingFiles(ctx.db, suite.id);
   const { cases } = await resolvedOrEmpty(files);
-  // Environments ride the prompt as name + base URL + discovery flag only — the
-  // config's auth/secret_env keys never leave the server.
-  const envRows = await ctx.db.query(
-    `SELECT name, config, discovery_allowed FROM environments WHERE project_id = $1 ORDER BY name`,
-    [project.id],
+  // Rings ride the prompt as key + base URL + discovery flag only — the config's
+  // auth/secret_env keys never leave the server. Only the suite's OWN
+  // application's rings: another surface's deployment is not something this
+  // suite can launch against, so naming it would only invite a wrong overlay.
+  const ringRows = await ctx.db.query(
+    `SELECT key, base_url, discovery_allowed FROM rings WHERE application_id = $1 ORDER BY key`,
+    [suite.application_id],
   );
-  const environments = envRows.rows.map((e: HostedDynamic) => ({
-    name: e.name,
-    base_url: typeof e.config?.app?.base_url === "string" ? e.config.app.base_url : null,
-    discovery_allowed: e.discovery_allowed === true,
+  const rings = ringRows.rows.map((r: HostedDynamic) => ({
+    key: r.key,
+    base_url: r.base_url ?? null,
+    discovery_allowed: r.discovery_allowed === true,
   }));
-  const system = await buildSystemPrompt(suite, files, cases, environments);
+  const system = await buildSystemPrompt(suite, files, cases, rings);
 
   // The path we pin the draft to when improving an existing story — the person
   // opened THAT file, so a draft must land back on it, never a new one.

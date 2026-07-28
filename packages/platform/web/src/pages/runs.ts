@@ -41,14 +41,11 @@ import {
   runStats, outcomeParts, outcomeChip, outcomeWords, progressWords, needsAttention, pipTone,
   runTitle, triggerWord, suiteOrder, soloStory, isFinishedStatus, neverRanStatus, inFlightStatus,
 } from "../lib/run-stats.js";
-import { parseYaml } from "../lib/caseform.js";
-import { resolveEnvTarget } from "../lib/defaults-form.js";
 import { subscribeFeed } from "../lib/feed.js";
 import { launchLimitPlaceholders } from "../lib/launch-limits.js";
 import { canRetryRun, retryableStoryCount } from "../lib/run-retry.js";
 import { placementReadiness } from "../lib/runners.js";
-import { appSourceWords, appTargetProblem } from "../lib/suite-target.js";
-import { fmtBytes, environmentDriver } from "../lib/env-config.js";
+import { defaultRingId, isProdRing, launchTargetWords, ringOptionLabel } from "../lib/rings.js";
 
 export async function runsPage(projectKey: WebDynamic, groupId: WebDynamic = null, query: WebDynamic = null) {
   const main = renderFrame({ projectKey, nav: "runs" });
@@ -110,7 +107,7 @@ async function runsIndex(main: WebDynamic, projectKey: WebDynamic, project: WebD
   // progress events on the feed (the server keeps only the latest snapshot; the
   // stream is the page's to remember). Newest first, capped at TRAIL_LEN.
   const ctl: WebDynamic = {
-    groups: [], suites: [], envs: [], limit: PAGE_SIZE, sig: null, q: "", liveN: null,
+    groups: [], suites: [], rings: [], limit: PAGE_SIZE, sig: null, q: "", liveN: null,
     feedNotes: new Map(), tickEls: new Map(), showAll: new Set(), trails: new Map(),
     refsMissing: "",
   };
@@ -121,16 +118,20 @@ async function runsIndex(main: WebDynamic, projectKey: WebDynamic, project: WebD
   const token: WebDynamic = {};
   const current = () => live?.token === token;
 
-  // Suite and target names move at human editing pace; the groups move at run
+  // Suite and ring names move at human editing pace; the groups move at run
   // pace. Loading them separately keeps a feed-driven refetch to ONE request
   // where it used to re-download all three collections on every event.
   async function loadRefs(force = false) {
-    const [suites, envs] = await Promise.all([
+    const [suites, applications] = await Promise.all([
       api.cached(`/projects/${projectKey}/suites`, { ttl: 15_000, force }),
-      api.cached(`/projects/${projectKey}/environments`, { force }).catch(() => ({ items: [] })),
+      api.cached(`/projects/${projectKey}/applications?include=rings`, { force }).catch(() => ({ items: [] })),
     ]);
     ctl.suites = suites.items || [];
-    ctl.envs = envs.items || [];
+    // Flattened once, with each ring carrying the application it belongs to: a
+    // run names the pair (`todo-web/staging`), never a bare ring key that two
+    // applications could both claim.
+    ctl.rings = (applications.items || []).flatMap((a: WebDynamic) =>
+      (a.rings || []).map((r: WebDynamic) => ({ ...r, application: a })));
   }
 
   async function loadGroups() {
@@ -155,11 +156,11 @@ async function runsIndex(main: WebDynamic, projectKey: WebDynamic, project: WebD
     // reference data moved under us (a suite created since load). Refresh refs
     // once per distinct gap — a deleted target stays unknown and must not spin.
     const suiteIds: WebDynamic = new Set(ctl.suites.map((s: WebDynamic) => s.id));
-    const envIds: WebDynamic = new Set(ctl.envs.map((e: WebDynamic) => e.id));
+    const ringIds: WebDynamic = new Set(ctl.rings.map((r: WebDynamic) => r.id));
     const missing = ctl.suites.length ? [
       ...new Set(ctl.groups.flatMap((g: WebDynamic) => [
         ...(suiteIds.has(g.suite_id) ? [] : [`s:${g.suite_id}`]),
-        ...(g.environment_id == null || envIds.has(g.environment_id) ? [] : [`e:${g.environment_id}`]),
+        ...(g.ring_id == null || ringIds.has(g.ring_id) ? [] : [`r:${g.ring_id}`]),
       ])),
     ].join() : "";
     if (missing && missing !== ctl.refsMissing) {
@@ -269,7 +270,7 @@ async function runsIndex(main: WebDynamic, projectKey: WebDynamic, project: WebD
 
   function paint(first = false) {
     const suiteById: WebDynamic = new Map(ctl.suites.map((s: WebDynamic) => [s.id, s]));
-    const envName: WebDynamic = new Map(ctl.envs.map((e: WebDynamic) => [e.id, e.name]));
+    const ringName: WebDynamic = new Map(ctl.rings.map((r: WebDynamic) => [r.id, `${r.application.key}/${r.key}`]));
     // Nothing moved ⇒ nothing repaints. These pages rebuild their DOM wholesale,
     // and a rebuild costs the person their scroll position, their focus, and any
     // menu they had open. `progress` is in the signature: a live row's step
@@ -348,7 +349,7 @@ async function runsIndex(main: WebDynamic, projectKey: WebDynamic, project: WebD
             emptyState("Nothing needs attention",
               "No run in this project is holding a failed check or a story that never produced a verdict.",
               h("div.empty-actions", {}, link(`/p/${projectKey}/runs`, h("span.btn.primary", {}, "See all runs")))))
-        : emptyState("No runs yet", "Launch a suite against an environment and its stories run here.",
+        : emptyState("No runs yet", "Launch a suite against one of its application's rings and its stories run here.",
             canLaunch ? h("button.btn.primary", { onclick: () => launchModal(projectKey, ctl.suites) }, "Launch") : null);
     } else if (liveOnly && !shownGroups.length) {
       body = h("div.stack", {}, filterBar,
@@ -551,7 +552,7 @@ async function runsIndex(main: WebDynamic, projectKey: WebDynamic, project: WebD
           active && !open ? nowLine(g, rows, stats) : null,
         ),
         h("td", {}, outcomeCell(g, stats)),
-        h("td.dim", {}, envName.get(g.environment_id) || "—"),
+        h("td.dim", {}, ringName.get(g.ring_id) || "—"),
         // A live run's clock ticks in place (registerTick); a duration that
         // cannot tick reads as a frozen one.
         h("td.dim", {}, active && stats.started_at
@@ -627,7 +628,7 @@ async function runsIndex(main: WebDynamic, projectKey: WebDynamic, project: WebD
           onclick: (e: WebDynamic) => retryGroup(
             projectKey,
             g,
-            envName.get(g.environment_id),
+            ringName.get(g.ring_id),
             e.currentTarget,
           ),
         }, "Retry");
@@ -724,7 +725,7 @@ async function runsIndex(main: WebDynamic, projectKey: WebDynamic, project: WebD
 
   /**
    * Mirrors the server's `outcome=attention`: a failing story is retired once
-   * a newer run of the same suite and environment passes it, so attention
+   * a newer run of the same suite and ring passes it, so attention
    * means the latest verdict is still bad. The page loads newest-first, so any
    * superseding pass is always at least as new as the failure it retires and
    * is therefore already loaded.
@@ -735,7 +736,7 @@ async function runsIndex(main: WebDynamic, projectKey: WebDynamic, project: WebD
     if (g.status === "canceled") return false;
     if (!needsAttention(runStats(g))) return false;
     const newer = ctl.groups.filter((x: WebDynamic) => x.suite_id === g.suite_id
-      && x.environment_id === g.environment_id && x.created_at > g.created_at);
+      && x.ring_id === g.ring_id && x.created_at > g.created_at);
     return (g.runs || []).some((r: WebDynamic) => ["fail", "infra", "lost"].includes(r.status)
       && !newer.some((x: WebDynamic) => (x.runs || []).some(
         (r2: WebDynamic) => r2.case_id === r.case_id && r2.status === "pass")));
@@ -1115,7 +1116,7 @@ export function launchModal(projectKey: WebDynamic, suites: WebDynamic = null, p
     const suite = h("select", { onchange: onSuiteChange },
       ...(suites ? suites.map(suiteOption) : [h("option", { value: "" }, "Loading…")]));
     if (suiteFixed && suites) suite.value = String(preselectSuiteId);
-    const env = h("select", { onchange: onEnvChange }, h("option", {}, "Loading…"));
+    const ring = h("select", { onchange: onRingChange }, h("option", {}, "Loading…"));
     const maxSteps = h("input", {
       type: "number", min: "1", step: "1", placeholder: "Default",
       oninput: onLimitInput,
@@ -1144,19 +1145,15 @@ export function launchModal(projectKey: WebDynamic, suites: WebDynamic = null, p
     }, "Launch");
     let seq = 0;
     let debounce: WebDynamic;
-    let envs: WebDynamic = [];
+    let rings: WebDynamic = [];
     let groups: WebDynamic = [];
-    let envTouched = false;
+    let ringTouched = false;
     let modeValue = "auto";
     // The fleet, for the placement line. Only on a deployment that HAS a fleet:
     // elsewhere there is no runner to be checked in and the line would be
     // machinery talking about itself. Read through the shared cache, so opening
     // the dialog twice in a minute costs one request, and never polled.
     let runners: WebDynamic = [];
-    // The chosen suite's committed defaults, so the picker can say where each
-    // target actually points. Cached per suite: switching back and forth is a
-    // normal thing to do while deciding, and this file is small.
-    const defaultsBySuite: WebDynamic = new Map();
 
     const modeBtns = MODE_OPTIONS.map((o: WebDynamic) => h("button.launch-mode", {
       type: "button", role: "radio", onclick: () => setMode(o.value), onkeydown: onModeKey,
@@ -1168,10 +1165,10 @@ export function launchModal(projectKey: WebDynamic, suites: WebDynamic = null, p
     paintMode();
     paintLimits();
     if (!suites) loadSuites();
-    loadEnvs();
+    loadRings();
     return h("form.launch-form", { onsubmit: submit },
       contextSlot,
-      suiteFixed ? fld("Environment", env) : h("div.launch-where", {}, fld("Suite", suite), fld("Environment", env)),
+      suiteFixed ? fld("Ring", ring) : h("div.launch-where", {}, fld("Suite", suite), fld("Ring", ring)),
       targetSlot,
       placementSlot,
       h("div.field", {},
@@ -1267,15 +1264,14 @@ export function launchModal(projectKey: WebDynamic, suites: WebDynamic = null, p
         : `Limits · each story's own${custom ? " · overridden" : ""}`;
     }
     function onSuiteChange() {
-      // A different suite has its own targets, its own URLs for the shared ones,
-      // and may have last run somewhere else. Repaint even when the person has
-      // already chosen: their choice can be a target this suite cannot use.
-      paintEnvs();
-      loadSuiteDefaults(suite.value).then(() => { paintEnvs(); preview(); });
+      // A different suite belongs to a different application, so its rings are
+      // different ones. Repaint even when the person has already chosen: their
+      // choice can belong to an application that no longer applies.
+      paintRings();
       schedulePreview();
     }
-    function onEnvChange() {
-      envTouched = true;
+    function onRingChange() {
+      ringTouched = true;
       schedulePreview();
     }
     async function loadSuites() {
@@ -1286,114 +1282,63 @@ export function launchModal(projectKey: WebDynamic, suites: WebDynamic = null, p
           suite.value = String(preselectSuiteId);
           paintContext();
         }
-        // preview only once envs are in — before that the env select's
-        // "Loading…" placeholder would ride the request as an environment id
-        if (envs.length) {
-          await loadSuiteDefaults(suite.value);
-          if (!envTouched) paintEnvs();
+        // preview only once the rings are in — before that the ring select's
+        // "Loading…" placeholder would ride the request as a ring id
+        if (rings.length) {
+          if (!ringTouched) paintRings();
           preview();
         }
       } catch (err: WebDynamic) { toastError(err); }
     }
-    async function loadEnvs() {
+    async function loadRings() {
       try {
         // Recent runs are how we know where this suite usually goes. Best
         // effort: without them the default falls through to the safety rules.
         const [{ items }, recent, fleet] = await Promise.all([
-          api.cached(`/projects/${projectKey}/environments`),
+          api.cached(`/projects/${projectKey}/applications?include=rings`),
           api.get(`/projects/${projectKey}/run-groups?limit=50`).catch(() => ({ items: [] })),
           state.me?.capabilities?.pool_dispatch === true
             ? api.cached(`/projects/${projectKey}/runners`, { ttl: 15_000 }).catch(() => ({ items: [] }))
             : Promise.resolve({ items: [] }),
         ]);
-        envs = items;
+        rings = (items || []).flatMap((a: WebDynamic) =>
+          (a.rings || []).map((r: WebDynamic) => ({ ...r, application: a })));
         groups = recent.items || [];
         runners = fleet.items || [];
-        await loadSuiteDefaults(suite.value);
-        paintEnvs();
+        paintRings();
         preview();
       } catch (err: WebDynamic) { toastError(err); }
     }
 
-    /**
-     * The suite's committed `playtest.yaml`, parsed — the same bytes a launch
-     * would run, not the unsaved editor buffer. Best effort: without it the
-     * options simply lose their "— host" suffix, and the preview line below
-     * (which the server resolves) still states the truth.
-     */
-    async function loadSuiteDefaults(suiteId: WebDynamic) {
-      if (!suiteId || defaultsBySuite.has(suiteId)) return;
-      let app: WebDynamic = {};
-      try {
-        const file = await api.get(`/suites/${suiteId}/files/playtest.yaml`);
-        app = parseYaml(file.content || "")?.app || {};
-      } catch { /* no defaults file yet, or unparseable — the preview reports that */ }
-      defaultsBySuite.set(suiteId, app);
+    /** The chosen suite's application — its binding, fixed at creation. */
+    function suiteApplication() {
+      return suites?.find((s: WebDynamic) => String(s.id) === String(suite.value))?.application_id ?? null;
     }
 
     /**
-     * The targets this suite may launch against: the project's rings, plus the
-     * targets this suite owns. Another suite's target is not a choice here —
-     * the server refuses it, and offering it would be offering a mistake.
+     * The rings this suite may launch against: its own application's, and only
+     * those. Another application's ring is not a choice here — the server
+     * refuses it, and offering it would be offering a mistake.
      */
-    function visibleEnvs() {
-      const app = defaultsBySuite.get(suite.value);
-      if (!app) return [];
-      const driver = app.driver || "web";
-      return envs.filter((e: WebDynamic) =>
-        environmentDriver(e) === driver && (!e.suite_id || e.suite_id === suite.value));
+    function visibleRings() {
+      const applicationId = suiteApplication();
+      if (!applicationId) return [];
+      return rings.filter((r: WebDynamic) => r.application_id === applicationId);
     }
 
-    /**
-     * Which environment opens selected.
-     *
-     * The dialog used to open on whichever environment came first, which for a
-     * project with `production` and `staging` meant it opened on production —
-     * the one place a discovery agent really clicks buy, delete and submit.
-     * Order of preference: where this suite last ran · one that allows
-     * discovery · one that isn't named like production · the first there is.
-     * Never a name matching prod* unless it is the only choice.
-     */
-    function defaultEnvId() {
-      const visible = visibleEnvs();
-      const ids: WebDynamic = new Set(visible.map((e: WebDynamic) => e.id));
-      const lastHere = groups.find((g: WebDynamic) => g.suite_id === suite.value && ids.has(g.environment_id));
-      if (lastHere) return lastHere.environment_id;
-      const safe = visible.filter((e: WebDynamic) => !isProdName(e.name));
-      // A target this suite has no URL for cannot run at all, so it is the last
-      // thing to open on — behind the ordinary safety order.
-      const runnable = safe.filter((e: WebDynamic) => targetUrl(e));
-      return (
-        runnable.find((e: WebDynamic) => e.discovery_allowed) || runnable[0] ||
-        safe.find((e: WebDynamic) => e.discovery_allowed) || safe[0] || visible[0]
-      )?.id ?? "";
-    }
-
-    /** Where a launch against this target would point, per the suite's defaults. */
-    function targetUrl(e: WebDynamic) {
-      const app = defaultsBySuite.get(suite.value);
-      if (!app) return null;
-      return resolveEnvTarget(app, e.name, e.config?.app?.base_url || null).url;
-    }
-
-    function paintEnvs() {
-      const visible = visibleEnvs();
+    function paintRings() {
+      const visible = visibleRings();
       // Keep an explicit choice when the new suite can still use it; otherwise
-      // fall back to the safe default rather than leaving a target selected
-      // that this suite would be refused for.
-      const keep = envTouched && visible.some((e: WebDynamic) => e.id === env.value);
-      const chosen = keep ? env.value : defaultEnvId();
-      // Name the host each target points at. Picking "production" when the suite
-      // targets localhost was the silent-wrong-target trap, and the name alone
-      // never carried enough to notice it. The full URL and which of the three
-      // sources won stay in the preview line below — always server-resolved.
-      mount(env, ...visible.map((e: WebDynamic) => {
-        const url = targetUrl(e);
-        const parts: WebDynamic = [e.name];
-        if (url) parts.push(hostOf(url));
-        if (e.discovery_allowed) parts.push("discovery");
-        return h("option", { value: e.id, selected: e.id === chosen || undefined }, parts.join(" · "));
-      }));
+      // fall back to the safe default rather than leaving a ring selected that
+      // belongs to an application this suite has nothing to do with.
+      const keep = ringTouched && visible.some((r: WebDynamic) => r.id === ring.value);
+      const chosen = keep ? ring.value : defaultRingId(visible, { suiteId: suite.value, groups });
+      // Name the host each ring resolves to. Picking "production" when you meant
+      // localhost was the silent-wrong-target trap, and a key alone never
+      // carried enough to notice it.
+      const driver = visible[0]?.application?.driver || "web";
+      mount(ring, ...visible.map((r: WebDynamic) =>
+        h("option", { value: r.id, selected: r.id === chosen || undefined }, ringOptionLabel(r, driver))));
     }
     function schedulePreview() {
       clearTimeout(debounce);
@@ -1401,11 +1346,11 @@ export function launchModal(projectKey: WebDynamic, suites: WebDynamic = null, p
     }
     async function preview() {
       const mySeq = ++seq;
-      if (!suite.value || !env.value) return;
+      if (!suite.value || !ring.value) return;
       try {
         const p = await api.post(`/projects/${projectKey}/run-groups/preview`, {
           suite_id: suite.value,
-          environment_id: env.value,
+          ring_id: ring.value,
           selection: selection(),
         });
         if (mySeq === seq) paintPreview(p);
@@ -1437,44 +1382,21 @@ export function launchModal(projectKey: WebDynamic, suites: WebDynamic = null, p
       if (timeoutSeconds.value === "") timeoutSeconds.placeholder = placeholders.timeoutSeconds;
       paintLimits();
 
-      // The resolved target, said immediately under the control that decides
-      // it: picking "production" while the suite says localhost was the
-      // silent-wrong-target trap. An override is stated (who won and what
-      // lost), a missing URL is a warning.
+      // Where this run points, said immediately under the control that decides
+      // it: picking "production" when you meant localhost was the
+      // silent-wrong-target trap. The ring owns the URL and the server resolves
+      // it, so there is no precedence left to explain — for mobile there is no
+      // URL at all, and the honest sentence is who supplies the build.
       const t = p.target || {};
-      const overridden = t.source === "environment" && t.suite_base_url && t.suite_base_url !== t.resolved_base_url;
-      const chosenEnv = envs.find((e: WebDynamic) => String(e.id) === String(env.value));
-      const targetSource = t.source === "environment"
-        ? overridden ? `environment override · suite: ${t.suite_base_url}` : "environment fallback"
-        : t.source === "suite-env"
-          ? `suite target${t.environment_base_url && t.environment_base_url !== t.resolved_base_url ? ` · environment: ${t.environment_base_url}` : ""}`
-          : "suite default";
-      targetSlot.className = `launch-target${!t.resolved_base_url || overridden ? " warn" : ""}`;
+      const chosenRing = rings.find((r: WebDynamic) => String(r.id) === String(ring.value));
+      const target = launchTargetWords(t);
+      targetSlot.className = `launch-target${t.resolved_base_url || t.build_supplied_by_runner ? "" : " warn"}`;
       mount(targetSlot,
         h("span.preview-key", {}, "Target"),
-        t.resolved_base_url
-          ? h("span.launch-target-main", {},
-              h("span.launch-target-url", {}, t.resolved_base_url),
-              h("span.launch-source", {}, targetSource),
-              chosenEnv?.suite_id ? h("span.launch-source", {}, "owned by this suite") : null)
-          : h("span.launch-target-main", {}, "No app URL for this environment — set one in Suite settings."),
+        h("span.launch-target-main", {},
+          h("span.launch-target-url", {}, target.where),
+          h("span.launch-source", {}, target.source)),
       );
-
-      // A mobile launch installs a file, and which of the three sources supplies
-      // it is exactly as load-bearing as which URL a web run opens — so it is
-      // said here, in the same place, with the same honesty about who won.
-      const appTarget = t.app || null;
-      const suiteDriver = defaultsBySuite.get(suite.value)?.driver || "web";
-      const appProblem = appTargetProblem(appTarget, suiteDriver);
-      if (appTarget && suiteDriver === "mobile") {
-        targetSlot.append(
-          h("span.preview-key", {}, "App"),
-          h("span.launch-target-main", {},
-            h("span.launch-target-url", {}, appTarget.resolved || "nothing resolves"),
-            h("span.launch-source", {}, appSourceWords(appTarget.source)),
-            appTarget.artifact?.size ? h("span.launch-source", {}, fmtBytes(appTarget.artifact.size)) : null),
-        );
-      }
 
       // Placement, said out loud before anyone spends money: which labels this
       // run needs, whose decision that was, and whether anything advertising
@@ -1498,7 +1420,7 @@ export function launchModal(projectKey: WebDynamic, suites: WebDynamic = null, p
                   ? `a runner advertising ${placement.runner_labels.join(", ")}`
                   : "any runner in this project"),
               h("span.launch-source", {},
-                placement.labels_source === "launch" ? "pinned by this launch" : "the environment's labels")))
+                placement.labels_source === "launch" ? "pinned by this launch" : "the ring's labels")))
         : null);
 
       // Which models the launch will use, and whose choice each one was —
@@ -1537,30 +1459,25 @@ export function launchModal(projectKey: WebDynamic, suites: WebDynamic = null, p
               ? link(`/p/${projectKey}/settings/runners`, "Set up a runner")
               : null)
         : null;
-      // A mobile launch with nothing to install cannot pass, so it stops here
-      // rather than failing on a machine the person who launched cannot see.
-      if (appProblem?.severity === "blocking") launchBtn.disabled = true;
-
       mount(warnSlot,
         placementWarn,
-        appProblem ? h("div.preview-warn", {}, appProblem.message) : null,
-        // Discovery is blocked on a non-discovery environment, but a plain
-        // journey run against production is allowed — and is worth saying out
-        // loud, because these runs really click the buttons they find.
-        chosenEnv && isProdName(chosenEnv.name) && !blocked
-          ? h("div.preview-warn", {}, `${chosenEnv.name} target — this run uses a real browser and can make real changes.`)
+        // Discovery is blocked on a non-discovery ring, but a plain journey run
+        // against production is allowed — and is worth saying out loud, because
+        // these runs really click the buttons they find.
+        chosenRing && isProdRing(chosenRing) && !blocked
+          ? h("div.preview-warn", {}, `${chosenRing.key} ring — this run uses a real browser and can make real changes.`)
           : null,
         blocked
           ? h("div.preview-warn", {},
-              `This selection includes ${p.discovery.runs} discovery ${p.discovery.runs === 1 ? "story" : "stories"}, and this environment doesn't allow discovery. ` +
-              `Discovery agents really click buy, delete and submit — pick a staging environment, or enable "Allow discovery studies" in Settings → Environments. `,
+              `This selection includes ${p.discovery.runs} discovery ${p.discovery.runs === 1 ? "story" : "stories"}, and this ring doesn't allow discovery. ` +
+              `Discovery agents really click buy, delete and submit — pick a staging ring, or enable "Allow discovery studies" for it under Applications. `,
               // one-click way out: both launch-and-follow personas read this
-              // warning and then hand-hunted the select for the allowed env
-              ...visibleEnvs().filter((e: WebDynamic) => e.discovery_allowed && String(e.id) !== env.value)
+              // warning and then hand-hunted the select for the allowed ring
+              ...visibleRings().filter((r: WebDynamic) => r.discovery_allowed && String(r.id) !== ring.value)
                 .slice(0, 2)
                 // dispatch change (not just set .value) so the enhanced
                 // dropdown's button relabels too
-                .map((e: WebDynamic) => h("button.btn.btn-sm", { type: "button", style: "margin-left:6px", onclick: () => { env.value = e.id; env.dispatchEvent(new Event("change")); preview(); } }, `Use ${e.name}`)))
+                .map((r: WebDynamic) => h("button.btn.btn-sm", { type: "button", style: "margin-left:6px", onclick: () => { ring.value = r.id; ring.dispatchEvent(new Event("change")); preview(); } }, `Use ${r.key}`)))
           : null,
         p.total_runs === 0 ? h("div.preview-warn", {}, "This selection matches no stories.") : null,
       );
@@ -1570,7 +1487,7 @@ export function launchModal(projectKey: WebDynamic, suites: WebDynamic = null, p
       try {
         const out = await api.post(`/projects/${projectKey}/run-groups`, {
           suite_id: suite.value,
-          environment_id: env.value,
+          ring_id: ring.value,
           selection: selection(),
         });
         close();
@@ -1581,24 +1498,14 @@ export function launchModal(projectKey: WebDynamic, suites: WebDynamic = null, p
   });
 }
 
-/** True for an environment named like production. Substring, deliberately
-    broad — "prod", "prod-eu", "Production" all mean the same thing to a person. */
-const isProdName = (name: WebDynamic) => /prod|live/i.test(String(name || ""));
-
-/** The part of a target URL worth reading in a dropdown: host, and port when it
-    carries the meaning (two local services differ only there). */
-function hostOf(url: WebDynamic) {
-  try { return new URL(url).host; } catch { return url; }
-}
-
 async function retryGroup(
   projectKey: WebDynamic,
   group: WebDynamic,
-  environmentName: WebDynamic,
+  ringName: WebDynamic,
   btn: WebDynamic,
 ) {
   const stories = retryableStoryCount(group);
-  const target = environmentName ? ` against ${environmentName}` : "";
+  const target = ringName ? ` against ${ringName}` : "";
   const ok = await confirmModal({
     title: "Retry this run?",
     body: `Retries the ${stories} ${stories === 1 ? "story" : "stories"} that never started${target}, inside this run. Stories that already produced a verdict stay untouched. Only one retry can be active, and it may incur model cost.`,

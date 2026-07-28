@@ -7,7 +7,7 @@
 // documented conflict for the loser — the behavior the row lock used to give.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { withApp } from "./helpers.ts";
+import { withApp, createTarget } from "./helpers.ts";
 import { ulid } from "../../src/ulid.ts";
 import { extractFindingFromReport } from "../../src/findings/extractor.ts";
 
@@ -22,8 +22,8 @@ async function race(a: HostedDynamic, b: HostedDynamic) {
 test("concurrent candidate resolutions produce exactly one winner", async () => {
   await withApp(async ({ app, api }: HostedDynamic) => {
     const project = (await api.post("/projects", { key: "conc1", name: "Conc" })).body;
-    const { suite, env, snapshot } = await seedSuite(app, api, project);
-    const { run } = await seedRun(app, { project, suite, env, snapshot });
+    const { suite, application, ring, snapshot } = await seedSuite(app, api, project);
+    const { run } = await seedRun(app, { project, suite, application, ring, snapshot });
     const candidate = await seedCandidate(app, { project, suite, run });
 
     // Two reviewers resolve the same candidate at the same moment. Accept and
@@ -51,9 +51,9 @@ test("concurrent candidate resolutions produce exactly one winner", async () => 
 test("concurrent finding transitions produce exactly one winner", async () => {
   await withApp(async ({ app, api }: HostedDynamic) => {
     const project = (await api.post("/projects", { key: "conc2", name: "Conc 2" })).body;
-    const { suite, env, snapshot } = await seedSuite(app, api, project);
-    const a = await seedFinding(app, project, { suite, env, snapshot }, "widget 1 vanished");
-    const b = await seedFinding(app, project, { suite, env, snapshot }, "sidebar 1 collapsed", "sidebar");
+    const { suite, application, ring, snapshot } = await seedSuite(app, api, project);
+    const a = await seedFinding(app, project, { suite, application, ring, snapshot }, "widget 1 vanished");
+    const b = await seedFinding(app, project, { suite, application, ring, snapshot }, "sidebar 1 collapsed", "sidebar");
 
     // Merging `a` into `b` while a reviewer accepts `a`: a merged finding is a
     // tombstone, so both cannot commit.
@@ -86,9 +86,9 @@ test("concurrent finding transitions produce exactly one winner", async () => {
 test("concurrent evidence reports keep one finding and one evidence row per report", async () => {
   await withApp(async ({ app, api }: HostedDynamic) => {
     const project = (await api.post("/projects", { key: "conc3", name: "Conc 3" })).body;
-    const { suite, env, snapshot } = await seedSuite(app, api, project);
+    const { suite, application, ring, snapshot } = await seedSuite(app, api, project);
     const runs: HostedDynamic[] = [];
-    for (let i = 0; i < 4; i += 1) runs.push((await seedRun(app, { project, suite, env, snapshot })).run);
+    for (let i = 0; i < 4; i += 1) runs.push((await seedRun(app, { project, suite, application, ring, snapshot })).run);
 
     // Four executors report the same normalized failure simultaneously. The
     // dedupe path is read-decide-write: it must converge on ONE finding.
@@ -118,6 +118,7 @@ test("concurrent evidence reports keep one finding and one evidence row per repo
 test("concurrent suite commits serialize into distinct, monotonic snapshot seqs", async () => {
   await withApp(async ({ api }: HostedDynamic) => {
     const project = (await api.post("/projects", { key: "conc4", name: "Conc 4" })).body;
+    await createTarget(api, project);
     const suite = (await api.post(`/projects/${project.key}/suites`, { slug: "s", name: "S" })).body;
     await api.post(`/suites/${suite.id}/commit`, {
       changes: [{ path: "playtest.yaml", content: "app:\n  base_url: http://127.0.0.1\n" }],
@@ -148,6 +149,9 @@ test("concurrent suite commits serialize into distinct, monotonic snapshot seqs"
 // ------------------------------------------------------------------ seeding
 
 async function seedSuite(app: HostedDynamic, api: HostedDynamic, project: HostedDynamic) {
+  // The application and its ring come first: a suite binds to an application at
+  // creation, and a run group records both.
+  const { application, ring } = await createTarget(api, project, { ringKey: "staging", baseUrl: "http://127.0.0.1" });
   const suite = (await api.post(`/projects/${project.key}/suites`, { slug: "s", name: "S" })).body;
   await api.post(`/suites/${suite.id}/commit`, {
     changes: [
@@ -157,25 +161,19 @@ async function seedSuite(app: HostedDynamic, api: HostedDynamic, project: Hosted
     note: "seed",
   });
   const snapshot = (await api.get(`/suites/${suite.id}/snapshots`)).body.items[0];
-  const env = (
-    await api.post(`/projects/${project.key}/environments`, {
-      name: "staging",
-      config: { app: { base_url: "http://127.0.0.1" } },
-    })
-  ).body;
-  return { suite, snapshot, env };
+  return { suite, snapshot, application, ring };
 }
 
-async function seedRun(app: HostedDynamic, { project, suite, env, snapshot, status = "fail", caseId = "save", storyId = "save" }: HostedDynamic) {
+async function seedRun(app: HostedDynamic, { project, suite, application, ring, snapshot, status = "fail", caseId = "save", storyId = "save" }: HostedDynamic) {
   const groupId = ulid();
   const run: HostedDynamic = { id: ulid(), run_group_id: groupId, case_id: caseId, story_id: storyId, run_id: `${caseId}-${ulid().slice(-8)}` };
   const started = new Date(Date.now() - 2000);
   const finished = new Date(Date.now() - 1000);
   await app.db.withTx(async (tx: HostedDynamic) => {
     await tx.query(
-      `INSERT INTO run_groups (id, project_id, suite_id, snapshot_id, environment_id, trigger, selection, status)
-         VALUES ($1, $2, $3, $4, $5, '{}', '{}', 'done')`,
-      [groupId, project.id, suite.id, snapshot.id, env.id],
+      `INSERT INTO run_groups (id, project_id, suite_id, snapshot_id, application_id, ring_id, trigger, selection, status)
+         VALUES ($1, $2, $3, $4, $5, $6, '{}', '{}', 'done')`,
+      [groupId, project.id, suite.id, snapshot.id, application.id, ring.id],
     );
     await tx.query(
       `INSERT INTO runs (id, run_group_id, case_id, story_id, run_id, status, mode, manifest, totals, score,

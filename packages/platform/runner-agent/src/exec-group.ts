@@ -106,7 +106,13 @@ export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
     redactor = makeRedactor([...collectSecretValues(spec, claimed), ...mintSecrets]);
     const failedByLabel = failedSessionLabels(spec, failedSessions);
     workspace = await materializeWorkspace({ api, spec, sessions: claimed, failedSessions, workDir: opts.workDir });
-    const resolved = await discoverCases([workspace.suiteDir], { env: spec.environment.name });
+    // Hosted physical precedence runs through core's runtime target: the ring's
+    // URL is applied AFTER the complete authored merge, so an authored
+    // `base_url` (top level, case, or `app.envs.<ring key>`) is inert here and
+    // cannot redirect a placed run. Web/API rings always carry a URL; the mobile
+    // target is assembled from a runner binding and lands with R3.
+    const runtimeTarget = spec.ring?.base_url ? { base_url: spec.ring.base_url } : null;
+    const resolved = await discoverCases([workspace.suiteDir], { env: spec.ring.key, runtimeTarget });
     const byId = new Map(resolved.map((c) => [c.id, c]));
     const selectedResolved = spec.cases.map((item: RunnerDynamic) => byId.get(item.case_id)).filter(Boolean);
     const budget = resolveHostedBudget(selectedResolved, spec.parallel);
@@ -181,7 +187,7 @@ export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
           refresh: item.options?.refresh === true,
           grade: item.options?.grade !== false,
           env: workspace.env,
-          allowDocker: (spec.environment?.runner_labels || []).includes("docker"),
+          allowDocker: (spec.ring?.runner_labels || []).includes("docker"),
           onEvent: (ev: RunnerDynamic) => {
             progress.onEvent(ev);
             live.onEvent(ev);
@@ -362,7 +368,7 @@ async function claimGroupSessions(api: RunnerDynamic, spec: RunnerDynamic, opts:
 /** Map failed session refs back to the abstract identity labels cases use. */
 function failedSessionLabels(spec: RunnerDynamic, failedSessions: Record<string, string>): Record<string, string> {
   const out: Record<string, string> = {};
-  const identities: Record<string, RunnerDynamic> = spec.environment?.config?.auth?.identities || {};
+  const identities: Record<string, RunnerDynamic> = spec.ring?.config?.auth?.identities || {};
   for (const [label, cfg] of Object.entries(identities)) {
     const ref = cfg && typeof cfg === "object" ? cfg.$session : null;
     if (ref && failedSessions[ref]) out[label] = `${ref}: ${failedSessions[ref]}`;

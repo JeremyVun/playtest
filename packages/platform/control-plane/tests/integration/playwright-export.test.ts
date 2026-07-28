@@ -9,10 +9,11 @@ import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { withApp } from "./helpers.ts";
+import { withApp, createTarget } from "./helpers.ts";
 import { writeBundle } from "@playtest/core/artifacts";
 import { ulid } from "../../src/ulid.ts";
 
+/** A suite that authors its own target, the way a CLI-first tree does. */
 const SUITE_FILES = [
   { path: "playtest.yaml", content: "app:\n  driver: web\n  base_url: http://shop.test\n" },
   {
@@ -66,10 +67,19 @@ async function seedBundle(app: HostedDynamic, tmp: HostedDynamic, storyId: Hoste
   return `${key}#trajectory.jsonl`;
 }
 
-async function seed(api: HostedDynamic, app: HostedDynamic, tmp: HostedDynamic) {
+/** The same suite with no authored target at all — the hosted-native shape, where
+ * the ring supplies the URL at launch and hosted reads resolve structurally. */
+const TARGET_FREE_SUITE_FILES = SUITE_FILES.map((f) =>
+  f.path === "playtest.yaml" ? { path: f.path, content: "app:\n  driver: web\n" } : f,
+);
+
+async function seed(api: HostedDynamic, app: HostedDynamic, tmp: HostedDynamic, files = SUITE_FILES) {
   const project = (await api.post("/projects", { key: "pwx", name: "Playwright export" })).body;
+  // The suite binds to an application, and the ring is what holds the URL a
+  // hosted run points at, so the target pair is created before the suite.
+  await createTarget(api, project, { key: "shop", name: "Shop", baseUrl: "http://shop.test" });
   const suite = (await api.post(`/projects/${project.key}/suites`, { slug: "shop", name: "Shop" })).body;
-  const commit = await api.post(`/suites/${suite.id}/commit`, { changes: SUITE_FILES, note: "seed" });
+  const commit = await api.post(`/suites/${suite.id}/commit`, { changes: files, note: "seed" });
   assert.equal(commit.status, 200, JSON.stringify(commit.body));
   return { project, suite };
 }
@@ -123,6 +133,39 @@ test("playwright export returns a downloadable spec for the accepted baseline", 
       const notes = JSON.parse(Buffer.from(res.headers.get("x-playtest-export-notes"), "base64").toString("utf8"));
       assert.equal(notes.length, 1);
       assert.match(notes[0], /LLM-judged/);
+    });
+  } finally {
+    await fsp.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("playwright export of a target-free hosted suite bakes in no default URL", async () => {
+  const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), "pt-pwx-nourl-"));
+  try {
+    await withApp(async ({ api, app }: HostedDynamic) => {
+      // A hosted suite legitimately authors no target: the ring supplies the URL
+      // at launch, and the ring is NOT a suite file, so it cannot leak into an
+      // export that is meant to stand alone.
+      const { project, suite } = await seed(api, app, tmp, TARGET_FREE_SUITE_FILES);
+      const key = await seedBundle(app, tmp, "checkout");
+      await insertBaseline(app, { project, suite, storyId: "checkout", trajectoryKey: key });
+
+      const res = await api.get(`/suites/${suite.id}/playwright-export?story=checkout`);
+      assert.equal(res.status, 200, JSON.stringify(res.body));
+      const code = res.body.toString("utf8");
+      // No invented default, and specifically not the ring's URL.
+      assert.doesNotMatch(code, /http:\/\/127\.0\.0\.1:4173/);
+      assert.doesNotMatch(code, /\?\? "/);
+      // The environment variable is the only source, and the spec fails fast and
+      // actionably rather than navigating to the empty string.
+      assert.match(code, /const BASE_URL = requireBaseUrl\(\);/);
+      assert.match(code, /PLAYTEST_BASE_URL is not set\./);
+
+      const notes = JSON.parse(Buffer.from(res.headers.get("x-playtest-export-notes"), "base64").toString("utf8"));
+      assert.ok(
+        notes.some((n: HostedDynamic) => /no default target — set PLAYTEST_BASE_URL/.test(n)),
+        JSON.stringify(notes),
+      );
     });
   } finally {
     await fsp.rm(tmp, { recursive: true, force: true });

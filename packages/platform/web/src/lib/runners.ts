@@ -198,7 +198,7 @@ export function placementReadiness(
     return {
       state: "unmatched", labels, matching, live,
       message: `No registered runner advertises ${labels.length === 1 ? "the label" : "all the labels"} ${named}. `
-        + `This run waits on the board and then fails. Change the environment's runner labels, or start a runner advertising ${labels.length === 1 ? "it" : "them"}.`,
+        + `This run waits on the board and then fails. Change the ring's runner labels, or start a runner advertising ${labels.length === 1 ? "it" : "them"}.`,
     };
   }
   if (!live.length) {

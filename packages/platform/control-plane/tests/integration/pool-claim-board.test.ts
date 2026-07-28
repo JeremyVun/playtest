@@ -11,7 +11,7 @@
 // bounded re-dispatch; and cancellation observed at the heartbeat.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { withApp, loadSuiteDir, REPO_ROOT } from "./helpers.ts";
+import { withApp, createTarget, loadSuiteDir, REPO_ROOT } from "./helpers.ts";
 import { writeTar } from "../../src/suites/tar.ts";
 import { reconcileDispatches } from "../../src/dispatch/reconciler.ts";
 
@@ -38,26 +38,25 @@ function claimer(base: HostedDynamic, credential: HostedDynamic) {
   };
 }
 
-/** A project with the todos suite committed and one labelled environment. */
+/** A project with the todos suite committed and one labelled ring. */
 async function setUp(api: HostedDynamic, { key, labels = ["macos"] }: HostedDynamic) {
   const project = (await api.post("/projects", { key, name: key })).body;
+  const { application, ring } = await createTarget(api, project, {
+    key: "todos",
+    ringKey: "laptop",
+    baseUrl: "http://127.0.0.1:9",
+    runnerLabels: labels,
+  });
   const suite = (await api.post(`/projects/${key}/suites`, { slug: "todos", name: "Todos" })).body;
   const tar = writeTar(loadSuiteDir(`${REPO_ROOT}/tests/fixtures/todos`));
   assert.equal((await api.postTar(`/suites/${suite.id}/import`, tar)).status, 200);
-  const env = (
-    await api.post(`/projects/${key}/environments`, {
-      name: "laptop",
-      runner_labels: labels,
-      config: { app: { base_url: "http://127.0.0.1:9" } },
-    })
-  ).body;
-  return { project, suite, env };
+  return { project, suite, application, ring };
 }
 
-const launch = (api: HostedDynamic, { project, suite, env, ids = ["add-todo"] }: HostedDynamic) =>
+const launch = (api: HostedDynamic, { project, suite, ring, ids = ["add-todo"] }: HostedDynamic) =>
   api.post(`/projects/${project.key}/run-groups`, {
     suite_id: suite.id,
-    environment_id: env.id,
+    ring_id: ring.id,
     selection: { ids },
   });
 
@@ -69,7 +68,7 @@ async function register(api: HostedDynamic, project: HostedDynamic, body: Hosted
 
 test("pool: register, poll, race one winner, exchange, execute, report, complete", async () => {
   await withApp(async ({ api, base, app }: HostedDynamic) => {
-    const { project, suite, env } = await setUp(api, { key: "pool1", labels: ["macos"] });
+    const { project, suite, ring } = await setUp(api, { key: "pool1", labels: ["macos"] });
     const runner = await register(api, project, { name: "adas-laptop", labels: ["macos", "ios-sim"] });
     assert.ok(runner.credential.startsWith("ptr_"), "the credential is minted once at registration");
     const second = await register(api, project, { name: "spare-mini", labels: ["macos"] });
@@ -92,7 +91,7 @@ test("pool: register, poll, race one winner, exchange, execute, report, complete
     assert.equal(idle.status, 200);
     assert.equal(idle.body.claim, null);
 
-    const launched = await launch(api, { project, suite, env });
+    const launched = await launch(api, { project, suite, ring });
     assert.equal(launched.status, 200, JSON.stringify(launched.body));
     const groupId = launched.body.run_group.id;
     // Placement started nothing: the requested dispatch row IS the board entry.
@@ -146,7 +145,7 @@ test("pool: register, poll, race one winner, exchange, execute, report, complete
     const runnerHeaders = { authorization: `Bearer ${exchanged.body.token}`, "content-type": "application/json" };
     const spec = await fetch(`${base}/api/v1/runner/groups/${groupId}`, { headers: runnerHeaders }).then((r) => r.json());
     assert.equal(spec.cases.length, 1);
-    assert.deepEqual(spec.environment.runner_labels, ["macos"]);
+    assert.deepEqual(spec.ring.runner_labels, ["macos"]);
     const run = spec.cases[0];
     assert.equal(
       (await fetch(`${base}/api/v1/runner/groups/${groupId}/cases/${run.run_id}/start`, { method: "POST", headers: runnerHeaders, body: "{}" })).status,
@@ -197,15 +196,45 @@ test("pool: register, poll, race one winner, exchange, execute, report, complete
   }, POOL);
 });
 
+test("pool: a re-exchange does not orphan the earlier bearer mid-group", async () => {
+  await withApp(async ({ api, base }: HostedDynamic) => {
+    const { project, suite, ring } = await setUp(api, { key: "pool6" });
+    const runner = await register(api, project, { name: "adas-laptop", labels: ["macos"] });
+    const one = claimer(base, runner.credential);
+    const launched = await launch(api, { project, suite, ring });
+    const groupId = launched.body.run_group.id;
+    const dispatchId = (await one.poll()).body.claim.dispatch_id;
+    assert.equal((await one.claim(dispatchId)).status, 200);
+
+    // A crash-resumed runner exchanges again for the claim it already holds.
+    // Exchange re-stamps the dispatch row's executor_id, so the first bearer's
+    // executor no longer matches the row — its target snapshot must be served
+    // by the newest-attempt fallback, never a 404 mid-group.
+    const first = await one.exchange({ dispatch_id: dispatchId, isolation: "process" });
+    assert.equal(first.status, 200, JSON.stringify(first.body));
+    const second = await one.exchange({ dispatch_id: dispatchId, isolation: "process" });
+    assert.equal(second.status, 200, JSON.stringify(second.body));
+
+    for (const token of [first.body.token, second.body.token]) {
+      const spec = await fetch(`${base}/api/v1/runner/groups/${groupId}`, {
+        headers: { authorization: `Bearer ${token}` },
+      });
+      assert.equal(spec.status, 200, `bearer still serves the group spec after re-exchange`);
+      const body = await spec.json();
+      assert.equal(body.ring.key, ring.key, "the spec carries the attempt's ring snapshot");
+    }
+  }, POOL);
+});
+
 test("pool: a revoked credential is refused at poll, claim, and exchange", async () => {
   await withApp(async ({ api, base }: HostedDynamic) => {
-    const { project, suite, env } = await setUp(api, { key: "pool2" });
+    const { project, suite, ring } = await setUp(api, { key: "pool2" });
     const runner = await register(api, project, { name: "adas-laptop", labels: ["macos"] });
     const live = await register(api, project, { name: "keeper", labels: ["macos"] });
     const revoked = claimer(base, runner.credential);
     const keeper = claimer(base, live.credential);
 
-    const groupId = (await launch(api, { project, suite, env })).body.run_group.id;
+    const groupId = (await launch(api, { project, suite, ring })).body.run_group.id;
     const dispatchId = (await keeper.poll()).body.claim.dispatch_id;
 
     assert.equal((await api.del(`/projects/${project.key}/runners/${runner.id}`)).status, 204);
@@ -237,11 +266,11 @@ test("pool: a revoked credential is refused at poll, claim, and exchange", async
 
 test("pool: revoking mid-group refuses new work and lets the group already exchanged finish", async () => {
   await withApp(async ({ api, base, app }: HostedDynamic) => {
-    const { project, suite, env } = await setUp(api, { key: "pool2b" });
+    const { project, suite, ring } = await setUp(api, { key: "pool2b" });
     const registered = await register(api, project, { name: "adas-laptop", labels: ["macos"] });
     const runner = claimer(base, registered.credential);
 
-    const groupId = (await launch(api, { project, suite, env })).body.run_group.id;
+    const groupId = (await launch(api, { project, suite, ring })).body.run_group.id;
     const dispatchId = (await runner.poll()).body.claim.dispatch_id;
     assert.equal((await runner.claim(dispatchId)).status, 200);
     const exchanged = await runner.exchange({ dispatch_id: dispatchId, isolation: "process" });
@@ -340,15 +369,16 @@ test("pool: a label outside the safe charset is refused where it is written", as
       assert.equal(res.status, 400, `"${bad}" is refused: ${JSON.stringify(res.body)}`);
       assert.match(res.body.error.message, /may use only letters, digits/);
     }
-    // The environment side is the same validator, so a target cannot ask for a
-    // label no runner is allowed to advertise.
-    const env = await api.post(`/projects/${project.key}/environments`, {
-      name: "bad-labels",
+    // The ring side is the same validator, so a target cannot ask for a label
+    // no runner is allowed to advertise.
+    const app = (await api.post(`/projects/${project.key}/applications`, { key: "labels", name: "Labels", driver: "web" })).body;
+    const ring = await api.post(`/applications/${app.id}/rings`, {
+      key: "bad-labels",
+      base_url: "http://127.0.0.1:9",
       runner_labels: ["ios sim"],
-      config: { app: { base_url: "http://127.0.0.1:9" } },
     });
-    assert.equal(env.status, 400);
-    assert.match(env.body.error.message, /may use only letters, digits/);
+    assert.equal(ring.status, 400);
+    assert.match(ring.body.error.message, /may use only letters, digits/);
     // Re-advertisement at check-in is the same validator, so a runner cannot
     // smuggle in a label the console would have refused to store.
     const good = await register(api, project, { name: "adas-laptop", labels: ["ios-sim", "macos.14", "ci_1"] });
@@ -362,13 +392,14 @@ test("pool: a label outside the safe charset is refused where it is written", as
 
 test("pool: label matching is subset semantics, oldest first, project-scoped", async () => {
   await withApp(async ({ api, base }: HostedDynamic) => {
-    const { project, suite, env } = await setUp(api, { key: "pool3", labels: ["macos", "ios-sim"] });
-    // A second environment with no labels at all: any runner in the project.
-    const anyEnv = (
-      await api.post(`/projects/${project.key}/environments`, {
-        name: "anywhere",
+    const { project, suite, application, ring } = await setUp(api, { key: "pool3", labels: ["macos", "ios-sim"] });
+    // A second ring on the same application with no labels at all: any runner
+    // in the project.
+    const anyRing = (
+      await api.post(`/applications/${application.id}/rings`, {
+        key: "anywhere",
+        base_url: "http://127.0.0.1:9",
         runner_labels: [],
-        config: { app: { base_url: "http://127.0.0.1:9" } },
       })
     ).body;
     // Another project's runner must never see this project's board.
@@ -378,7 +409,7 @@ test("pool: label matching is subset semantics, oldest first, project-scoped", a
     const partial = claimer(base, (await register(api, project, { name: "linux-box", labels: ["macos"] })).credential);
     const full = claimer(base, (await register(api, project, { name: "adas-laptop", labels: ["macos", "ios-sim", "spare"] })).credential);
 
-    const labelled = (await launch(api, { project, suite, env })).body.run_group.id;
+    const labelled = (await launch(api, { project, suite, ring })).body.run_group.id;
     // The partial runner advertises a subset of what the job needs: no offer.
     assert.equal((await partial.poll()).body.claim, null);
     assert.equal((await outsider.poll()).body.claim, null);
@@ -387,7 +418,7 @@ test("pool: label matching is subset semantics, oldest first, project-scoped", a
 
     // An unlabelled job matches any runner in the project, and the board is
     // served oldest first — the labelled group was launched first.
-    const unlabelled = (await launch(api, { project, suite, env: anyEnv })).body.run_group.id;
+    const unlabelled = (await launch(api, { project, suite, ring: anyRing })).body.run_group.id;
     assert.equal((await partial.poll()).body.claim.run_group_id, unlabelled);
     assert.equal((await full.poll()).body.claim.run_group_id, labelled, "oldest eligible entry first");
 
@@ -460,9 +491,9 @@ test("pool: a mint dispatch is served on the same board and exchanges to a mint 
 
 test("pool: a job nothing claims fails the group with the labels named, and is not re-posted", async () => {
   await withApp(async ({ api, app }: HostedDynamic) => {
-    const { project, suite, env } = await setUp(api, { key: "pool5", labels: ["jeremys-mac"] });
+    const { project, suite, ring } = await setUp(api, { key: "pool5", labels: ["jeremys-mac"] });
     await register(api, project, { name: "linux-box", labels: ["linux"] });
-    const groupId = (await launch(api, { project, suite, env })).body.run_group.id;
+    const groupId = (await launch(api, { project, suite, ring })).body.run_group.id;
 
     const results = await reconcileDispatches(app.ctx);
     assert.equal(results[0].action, "dead", JSON.stringify(results));
@@ -485,9 +516,9 @@ test("pool: a job nothing claims fails the group with the labels named, and is n
 
 test("pool: a claim that stops heartbeating is a dead executor, with one bounded re-dispatch", async () => {
   await withApp(async ({ api, base, app }: HostedDynamic) => {
-    const { project, suite, env } = await setUp(api, { key: "pool6", labels: ["macos"] });
+    const { project, suite, ring } = await setUp(api, { key: "pool6", labels: ["macos"] });
     const runner = claimer(base, (await register(api, project, { name: "adas-laptop", labels: ["macos"] })).credential);
-    const groupId = (await launch(api, { project, suite, env })).body.run_group.id;
+    const groupId = (await launch(api, { project, suite, ring })).body.run_group.id;
     const first = (await runner.poll()).body.claim.dispatch_id;
     assert.equal((await runner.claim(first)).status, 200);
 
@@ -517,9 +548,9 @@ test("pool: a claim that stops heartbeating is a dead executor, with one bounded
 
 test("pool: cancellation reaches the runner at its next heartbeat", async () => {
   await withApp(async ({ api, base, app }: HostedDynamic) => {
-    const { project, suite, env } = await setUp(api, { key: "pool7", labels: ["macos"] });
+    const { project, suite, ring } = await setUp(api, { key: "pool7", labels: ["macos"] });
     const runner = claimer(base, (await register(api, project, { name: "adas-laptop", labels: ["macos"] })).credential);
-    const groupId = (await launch(api, { project, suite, env })).body.run_group.id;
+    const groupId = (await launch(api, { project, suite, ring })).body.run_group.id;
     const dispatchId = (await runner.poll()).body.claim.dispatch_id;
     assert.equal((await runner.claim(dispatchId)).status, 200);
     assert.equal((await runner.heartbeat(dispatchId)).body.canceled, false);

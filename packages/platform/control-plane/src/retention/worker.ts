@@ -579,13 +579,11 @@ async function pruneSnapshots(tx: Tx): Promise<{ deleted: number }> {
 /**
  * Reclaim content-addressed blobs nothing names any more.
  *
- * `blobs/<sha256>` holds two kinds of content that share one namespace because
- * they share one property — the bytes ARE the key: suite-snapshot files, and
- * environment app artifacts. A blob survives while ANY of the three referrers
- * names it, so an artifact an environment has replaced still lives as long as a
- * run group pinned it, and history stays re-runnable. Every referrer has to be
- * listed here: a reader added later and forgotten here would have its objects
- * deleted out from under it.
+ * `blobs/<sha256>` holds suite-snapshot file content, keyed by its own bytes.
+ * Every referrer has to be listed here: a reader added later and forgotten here
+ * would have its objects deleted out from under it. (The platform holds no
+ * application bytes — a mobile build lives on the runner that will install it —
+ * so snapshots are the only referrer.)
  */
 async function gcBlobs(ctx: AppContext): Promise<number> {
   const keys = await ctx.store.list("blobs/");
@@ -594,15 +592,6 @@ async function gcBlobs(ctx: AppContext): Promise<number> {
   const referenced = new Set<string>();
   for (const row of rows) {
     for (const sha of Object.values(row.tree || {})) referenced.add(`blobs/${sha}`);
-  }
-  // Two statements, not a UNION: the row decoder resolves a JSON column from
-  // its ORIGIN table, which a compound select does not report.
-  for (const table of ["environments", "run_groups"]) {
-    const { rows: refs } = await ctx.db.query(`SELECT app_artifact FROM ${table} WHERE app_artifact IS NOT NULL`);
-    for (const row of refs) {
-      const sha = row.app_artifact?.sha256;
-      if (sha) referenced.add(`blobs/${sha}`);
-    }
   }
   let deleted = 0;
   for (const key of keys) {

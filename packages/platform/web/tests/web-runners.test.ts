@@ -143,7 +143,7 @@ test("launch: a run nothing can claim says so before it is launched", () => {
   assert.match(empty.message, /Settings → Runners/);
   assert.match(empty.message, /waits on the board and then fails/);
 
-  // Registered, but nothing advertises what this environment asks for — the
+  // Registered, but nothing advertises what this ring asks for — the
   // exact shape of the unclaimed-timeout failure, predicted.
   const unmatched = read(["ios-sim"], [{ name: "linux-box", labels: ["linux"], last_seen_at: fresh }]);
   assert.equal(unmatched.state, "unmatched");
@@ -188,9 +188,9 @@ test("runs: a placement failure is recognised, so the remedy can be the runner",
 
 test("runners: the section is a developer surface on a deployment that HAS a pool", () => {
   const ids = SETTINGS_SECTIONS.map((s: WebDynamic) => s.id);
-  assert.deepEqual(ids, ["test-targets", "runners", "runs", "models", "team", "audit"]);
+  assert.deepEqual(ids, ["runners", "runs", "models", "team", "audit"]);
   const runners = SETTINGS_SECTIONS.find((s: WebDynamic) => s.id === "runners");
-  assert.equal(runners.min, "developer", "registering a runner is a developer act, like the environment it serves");
+  assert.equal(runners.min, "developer", "registering a runner is a developer act, like the ring it serves");
   assert.equal(runners.label, "Runners");
   // A viewer cannot register or revoke, so the section is not offered at all.
   assert.equal(visibleSections((min: WebDynamic) => min === "viewer", POOLED).some((s: WebDynamic) => s.id === "runners"), false);

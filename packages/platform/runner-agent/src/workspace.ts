@@ -2,7 +2,6 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import YAML from "yaml";
-import { materializeAppArtifact } from "./app-artifact.ts";
 
 export async function materializeWorkspace({ api, spec, sessions, failedSessions = {}, workDir }: RunnerDynamic): Promise<RunnerDynamic> {
   const root = path.resolve(workDir, spec.run_group_id);
@@ -33,25 +32,9 @@ export async function materializeWorkspace({ api, spec, sessions, failedSessions
     await fsp.writeFile(`${base}.baseline.json`, JSON.stringify(b.meta, null, 2) + "\n");
   }
 
-  const materialized = await buildEnvironmentOverlay({ spec, sessions, failedSessions, envDir });
-  // The environment's pinned app artifact becomes a real file on this disk, and
-  // its absolute path becomes the overlay's `app:` — so core keeps receiving
-  // exactly what the engine contract promises and never learns the provenance.
-  //
-  // Read the suite's own file FIRST: a suite that declares `app.envs.<name>.app`
-  // has said something more specific than the environment did and wins the
-  // merge below anyway, so downloading a build it would discard is pure waste
-  // (and these are hundreds of megabytes).
+  const materialized = await buildRingOverlay({ spec, sessions, failedSessions, envDir });
   const suiteDoc = await readSuiteDefaults(suiteDir);
-  const suiteEnvApp = suiteDoc.app?.envs?.[spec.environment?.name]?.app;
-  if (spec.environment?.app_artifact?.sha256 && typeof suiteEnvApp !== "string") {
-    materialized.appOverlay.app = await materializeAppArtifact({
-      api,
-      artifact: spec.environment.app_artifact,
-      root,
-    });
-  }
-  await mergeOverlay(suiteDir, suiteDoc, spec.environment.name, materialized.appOverlay, materialized.authDefault, spec.project?.models);
+  await mergeOverlay(suiteDir, suiteDoc, spec.ring.key, materialized.appOverlay, materialized.authDefault, spec.project?.models);
 
   return {
     root,
@@ -62,9 +45,9 @@ export async function materializeWorkspace({ api, spec, sessions, failedSessions
   };
 }
 
-async function buildEnvironmentOverlay({ spec, sessions, failedSessions = {}, envDir }: RunnerDynamic): Promise<RunnerDynamic> {
-  const cfg: { app?: RunnerDynamic; auth?: RunnerDynamic; secret_env?: Record<string, RunnerDynamic> } = spec.environment?.config || {};
-  const resolvedSecrets = spec.environment?.resolved_secrets || {};
+async function buildRingOverlay({ spec, sessions, failedSessions = {}, envDir }: RunnerDynamic): Promise<RunnerDynamic> {
+  const cfg: { app?: RunnerDynamic; auth?: RunnerDynamic; secret_env?: Record<string, RunnerDynamic> } = spec.ring?.config || {};
+  const resolvedSecrets = spec.ring?.resolved_secrets || {};
   const appOverlay = resolveRefs(cfg.app || {}, { envDir, resolvedSecrets, sessions });
   const authStates: Record<string, RunnerDynamic> = {};
   const identities = cfg.auth?.identities || {};
@@ -138,7 +121,7 @@ async function readSuiteDefaults(suiteDir: string): Promise<RunnerDynamic> {
   }
 }
 
-async function mergeOverlay(suiteDir: string, data: RunnerDynamic, envName: string, appOverlay: RunnerDynamic, authDefault: RunnerDynamic = null, projectModels: RunnerDynamic = null): Promise<void> {
+async function mergeOverlay(suiteDir: string, data: RunnerDynamic, ringKey: string, appOverlay: RunnerDynamic, authDefault: RunnerDynamic = null, projectModels: RunnerDynamic = null): Promise<void> {
   const file = path.join(suiteDir, "playtest.yaml");
   // The project's actor/grader defaults fill only UNSET top-level keys, so the
   // whole per-key precedence chain stays intact around them: a case file or a
@@ -151,25 +134,28 @@ async function mergeOverlay(suiteDir: string, data: RunnerDynamic, envName: stri
     }
   }
   data.app = data.app && typeof data.app === "object" ? data.app : {};
-  // The environment's auth.default is a SUITE-level default identity: written
-  // to the top-level app.auth (replacing any suite default), NEVER into the
-  // env overlay — overlay keys apply after the case-file merge and would
-  // silently override every story's own app.auth (§3a: stories must win).
+  // The ring's auth.default is a SUITE-level default identity: written to the
+  // top-level app.auth (replacing any suite default), NEVER into the ring
+  // overlay — overlay keys apply after the case-file merge and would silently
+  // override every story's own app.auth (§3a: stories must win).
   if (authDefault != null) data.app.auth = authDefault;
   data.app.envs = data.app.envs && typeof data.app.envs === "object" ? data.app.envs : {};
-  // The environment record is the PROJECT-level source of app.envs.<name>
-  // defaults; a suite that declares its own app.envs.<name> keys keeps them
-  // (suite isolation — specific over general). The
-  // carve-out: credentials are operator-owned, so minted auth_states always
-  // come from the environment and can never be shadowed by a committed file.
-  data.app.envs[envName] = mergeEnvConfig(appOverlay, data.app.envs[envName]);
+  // The ring is the PROJECT-level source of app.envs.<ring key> defaults; a
+  // suite that declares its own app.envs.<ring key> keys keeps them (suite
+  // isolation — specific over general). Two carve-outs: credentials are
+  // operator-owned, so minted auth_states always come from the ring and can
+  // never be shadowed by a committed file — and the PHYSICAL target is no
+  // longer decided here at all. It is applied after the complete authored merge
+  // by core's runtime target (exec-group.ts), so a suite edit can no longer
+  // redirect which application a hosted run reaches.
+  data.app.envs[ringKey] = mergeRingConfig(appOverlay, data.app.envs[ringKey]);
   await fsp.writeFile(file, YAML.stringify(data));
 }
 
-function mergeEnvConfig(envOverlay: RunnerDynamic, suiteDeclared: RunnerDynamic): RunnerDynamic {
-  if (!isPlainObject(suiteDeclared)) return envOverlay;
-  const merged = deepMerge(envOverlay, suiteDeclared);
-  if (envOverlay.auth_states !== undefined) merged.auth_states = envOverlay.auth_states;
+function mergeRingConfig(ringOverlay: RunnerDynamic, suiteDeclared: RunnerDynamic): RunnerDynamic {
+  if (!isPlainObject(suiteDeclared)) return ringOverlay;
+  const merged = deepMerge(ringOverlay, suiteDeclared);
+  if (ringOverlay.auth_states !== undefined) merged.auth_states = ringOverlay.auth_states;
   return merged;
 }
 

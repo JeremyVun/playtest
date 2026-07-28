@@ -97,7 +97,7 @@ async function buildRunBundle(tmpDir: HostedDynamic, i: HostedDynamic, { runId, 
 /** Seed M finished runs (run_groups + runs + bundle artifacts) directly, the
  * phase3-adapter-paths.test.js pattern: the read path never cares who wrote. */
 async function seedRuns(app: HostedDynamic, api: HostedDynamic, { runs, bundleKb }: HostedDynamic) {
-  const { project, suite, env } = await setUpProject(api, {
+  const { project, suite, application, ring } = await setUpProject(api, {
     key: "viewer-load",
     todoAppUrl: "http://127.0.0.1:1", // never dialed — nothing executes in a read-path load
     authStubUrl: "http://127.0.0.1:1",
@@ -121,9 +121,9 @@ async function seedRuns(app: HostedDynamic, api: HostedDynamic, { runs, bundleKb
       const groupId = ulid();
       const runDbId = ulid();
       await app.db.query(
-        `INSERT INTO run_groups (id, project_id, suite_id, snapshot_id, environment_id, trigger, selection, status)
-           VALUES ($1, $2, $3, $4, $5, '{}', '{}', 'done')`,
-        [groupId, project.id, suite.id, snapshotId, env.id],
+        `INSERT INTO run_groups (id, project_id, suite_id, snapshot_id, application_id, ring_id, trigger, selection, status)
+           VALUES ($1, $2, $3, $4, $5, $6, '{}', '{}', 'done')`,
+        [groupId, project.id, suite.id, snapshotId, application.id, ring.id],
       );
       await app.db.query(
         `INSERT INTO runs (id, run_group_id, case_id, story_id, run_id, status, mode, healed, manifest,

@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import zlib from "node:zlib";
 
-import { withApp } from "./helpers.ts";
+import { withApp, createTarget } from "./helpers.ts";
 import { writeBundle } from "@playtest/core/artifacts";
 import { runRetentionCycle, RETENTION_LEASE } from "../../src/retention/worker.ts";
 import { claimLease, readLease } from "../../src/leases.ts";
@@ -17,12 +17,12 @@ test("phase5 retention lifecycle and on-demand clips", async () => {
   const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), "pt-phase5-"));
   try {
     await withApp(async ({ base, api, app }: HostedDynamic) => {
-      const { project, suite, env, snapshotId } = await seedProject(api, app);
+      const { project, suite, application, ring, snapshotId } = await seedProject(api, app);
       const groupId = ulid();
       await app.db.query(
-        `INSERT INTO run_groups (id, project_id, suite_id, snapshot_id, environment_id, trigger, selection, status)
-           VALUES ($1, $2, $3, $4, $5, '{}', '{}', 'done')`,
-        [groupId, project.id, suite.id, snapshotId, env.id],
+        `INSERT INTO run_groups (id, project_id, suite_id, snapshot_id, application_id, ring_id, trigger, selection, status)
+           VALUES ($1, $2, $3, $4, $5, $6, '{}', '{}', 'done')`,
+        [groupId, project.id, suite.id, snapshotId, application.id, ring.id],
       );
 
       // coreRun is past core_days but a current baseline keeps it at core (never meta).
@@ -114,15 +114,17 @@ test("phase5 retention lifecycle and on-demand clips", async () => {
 
 async function seedProject(api: HostedDynamic, app: HostedDynamic) {
   const project = (await api.post("/projects", { key: "phase5", name: "Phase 5" })).body;
+  // The application and its ring come first: a suite binds to an application at
+  // creation, and a run group records both. Nothing here is ever dialed.
+  const { application, ring } = await createTarget(api, project, { ringKey: "staging", baseUrl: "http://127.0.0.1:1" });
   const suite = (await api.post(`/projects/${project.key}/suites`, { slug: "s", name: "Suite" })).body;
   const commit = await api.post(`/suites/${suite.id}/commit`, {
     changes: [{ path: "playtest.yaml", content: "app:\n  base_url: http://127.0.0.1:1\n" }],
     note: "seed",
   });
   assert.equal(commit.status, 200, JSON.stringify(commit.body));
-  const env = (await api.post(`/projects/${project.key}/environments`, { name: "staging" })).body;
   const snap = await app.db.query(`SELECT id FROM suite_snapshots WHERE suite_id = $1 ORDER BY seq DESC LIMIT 1`, [suite.id]);
-  return { project, suite, env, snapshotId: snap.rows[0].id };
+  return { project, suite, application, ring, snapshotId: snap.rows[0].id };
 }
 
 async function seedRun(app: HostedDynamic, tmp: HostedDynamic, { groupId, caseId, daysOld, initialTier = "full", prunedDaysOld = null }: HostedDynamic) {

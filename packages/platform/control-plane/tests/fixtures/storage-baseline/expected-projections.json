@@ -1,15 +1,16 @@
 {
   "rowCounts": {
-    "schema_migrations": 9,
+    "schema_migrations": 1,
     "users": 3,
     "projects": 2,
     "memberships": 4,
     "sessions": 2,
     "api_tokens": 2,
+    "applications": 2,
+    "rings": 3,
     "suites": 2,
     "suite_files": 6,
     "suite_snapshots": 3,
-    "environments": 3,
     "personas": 1,
     "rule_cards": 3,
     "secrets": 2,
@@ -35,9 +36,10 @@
     "consolidation_labels": 2,
     "service_heartbeats": 1
   },
-  "totalRows": 103,
+  "totalRows": 97,
   "tables": [
     "api_tokens",
+    "applications",
     "artifacts",
     "audit_log",
     "auth_providers",
@@ -46,7 +48,6 @@
     "consolidation_labels",
     "consolidation_plans",
     "dispatches",
-    "environments",
     "executors",
     "finding_evidence",
     "finding_intake_keys",
@@ -56,6 +57,7 @@
     "personas",
     "platform_events",
     "projects",
+    "rings",
     "rule_cards",
     "run_events",
     "run_groups",
@@ -104,15 +106,12 @@
     "activeFindingFingerprintsAreUnique": true
   },
   "canonicalJsonValues": {
+    "rings:01KT1A0F80RG8XB3NEAZH8JN8J:config": "{\"app\":{\"viewport\":{\"height\":720,\"width\":1280}},\"auth\":{\"identities\":{\"shopper\":{\"$session\":\"staging-login/shopper\"}}},\"secret_env\":{\"ACME_API_TOKEN\":\"API_TOKEN\",\"ACME_DB_PASSWORD\":{\"$secret_file\":\"DB_PASSWORD\"}}}",
+    "rings:01KT1A0F80ADP5W28H0RH6XJ0R:config": "{}",
+    "rings:01KT1A0F806FSCEWNWKGHFDN8F:config": "{}",
     "suite_snapshots:01KT3NHF00CGCVR70K1NE8C0BK:tree": "{\"hooks/reset.mjs\":\"0fc29965b0b0c5fd629ab9b9a898ac6a60bbd941b68f58bc2ed9e4e9aacce7f0\",\"personas/shopper.yaml\":\"6cfb0b324e02255a56b084e172d5076e5fd56f50541a6723883a2e3617ff9958\",\"playtest.yaml\":\"28128fd4b66f8425fbc9f652a66f06ce4f74078fb6a900b1e491c6c4c2cd8082\",\"stories/checkout.yaml\":\"f20818e70ba93d267fd5a2dc8b62f6e428a01ed26a8ddb05dbaa66d3b23f1cab\",\"stories/refund.yaml\":\"077e3b72148d12fb55dbb6072541e977b17d08c90bbdf266fd2bff8186acd2f8\"}",
     "suite_snapshots:01KT67Y60058AHATFD8NSC4VND:tree": "{\"hooks/reset.mjs\":\"0fc29965b0b0c5fd629ab9b9a898ac6a60bbd941b68f58bc2ed9e4e9aacce7f0\",\"personas/shopper.yaml\":\"6cfb0b324e02255a56b084e172d5076e5fd56f50541a6723883a2e3617ff9958\",\"playtest.yaml\":\"28128fd4b66f8425fbc9f652a66f06ce4f74078fb6a900b1e491c6c4c2cd8082\",\"stories/checkout.yaml\":\"11a37ab881c1876f6cf3979b78b7ff2147f1162e68a238ff516037d24775d32e\",\"stories/refund.yaml\":\"077e3b72148d12fb55dbb6072541e977b17d08c90bbdf266fd2bff8186acd2f8\"}",
     "suite_snapshots:01KT3NHF004XEVHFQ4JTB9YS40:tree": "{\"assets/logo.svg\":\"d05c5bfb2ccd524ae83bdca758f52b80c35daf8e3524f2e12d4e3b7d7afbe6f7\"}",
-    "environments:01KT1A0F80QSKY5QHGKMKPJ82V:config": "{\"app\":{\"base_url\":\"https://staging.acme.test\",\"viewport\":{\"height\":720,\"width\":1280}},\"auth\":{\"identity\":\"shopper\",\"provider\":\"staging-login\"},\"secret_env\":{\"ACME_API_TOKEN\":\"API_TOKEN\",\"ACME_DB_PASSWORD\":{\"$secret_file\":\"DB_PASSWORD\"}}}",
-    "environments:01KT1A0F80QSKY5QHGKMKPJ82V:app_artifact": "{\"filename\":\"acme-staging.apk\",\"sha256\":\"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\",\"size\":48317952,\"uploaded_at\":\"2026-02-11T09:14:22.000Z\",\"uploaded_by\":\"01KT16JKM048Y4W817XMX2ZRN8\"}",
-    "environments:01KT1A0F80ZKX68FKYVAW43T1X:config": "{}",
-    "environments:01KT1A0F80ZKX68FKYVAW43T1X:app_artifact": null,
-    "environments:01KT1A0F806X1XWC7ZZ0BMPG0X:config": "{}",
-    "environments:01KT1A0F806X1XWC7ZZ0BMPG0X:app_artifact": null,
     "auth_providers:01KT1A0F807DESQVV2F3BFRJV7:config": "{\"method\":\"POST\",\"url\":\"https://staging.acme.test/api/session\"}",
     "auth_providers:01KT1A0F807DESQVV2F3BFRJV7:identities": "{\"shopper\":{\"password_secret\":\"API_TOKEN\",\"username\":\"shopper@acme.test\"}}",
     "auth_providers:01KT1A0F80S7KXHWGNNXBVXVDP:config": "{}",
@@ -120,11 +119,9 @@
     "run_groups:01KT6BC1M094RFN90TX6F4BQG8:trigger": "{\"actor\":{\"user_id\":\"01KT16JKM048Y4W817XMX2ZRN8\"},\"kind\":\"ci\",\"ref\":\"refs/heads/main\",\"sha\":\"b7f2c1d9e0a4\"}",
     "run_groups:01KT6BC1M094RFN90TX6F4BQG8:selection": "{\"mode\":\"act\",\"refresh\":false,\"stories\":[\"checkout\",\"refund\"]}",
     "run_groups:01KT6BC1M094RFN90TX6F4BQG8:exit_summary": "{\"changed\":1,\"exit_code\":1,\"fail\":1,\"infra\":0,\"pass\":2}",
-    "run_groups:01KT6BC1M094RFN90TX6F4BQG8:app_artifact": "{\"filename\":\"acme-staging.apk\",\"sha256\":\"b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2\",\"size\":47982113,\"uploaded_at\":\"2026-02-04T18:02:40.000Z\",\"uploaded_by\":\"01KT16JKM048Y4W817XMX2ZRN8\"}",
     "run_groups:01KTV8VCG0GWD48MM99GKX098W:trigger": "{\"actor\":{\"user_id\":\"01KT16JKM0V1JGHMS4X0MA8P4X\"},\"kind\":\"manual\"}",
     "run_groups:01KTV8VCG0GWD48MM99GKX098W:selection": "{\"mode\":\"explore\",\"refresh\":true,\"stories\":[\"checkout\"]}",
     "run_groups:01KTV8VCG0GWD48MM99GKX098W:exit_summary": null,
-    "run_groups:01KTV8VCG0GWD48MM99GKX098W:app_artifact": null,
     "runners:01KT1A0F80Z9DPAKMZ66HMNAVB:source": null,
     "runners:01KT1A0F80GSWXNAGC650KK42D:source": null,
     "runners:01KTV8VCG0VEM070KEP0SCHZ8D:source": "{\"ref\":\"refs/pull/42/merge\",\"repository\":\"acme/storefront\",\"run_attempt\":\"1\",\"run_id\":\"900100\",\"sha\":\"b7f2c1d9e0a4\",\"workflow_ref\":\"acme/storefront/.github/workflows/playtest.yml@refs/pull/42/merge\"}",
@@ -156,6 +153,10 @@
     "runs:01KTV8VCG01BADSF9X1B0F4Z3B:gate": null,
     "runs:01KTV8VCG01BADSF9X1B0F4Z3B:pins": null,
     "runs:01KTV8VCG01BADSF9X1B0F4Z3B:retention_provenance": "{}",
+    "dispatches:01KT6BC1M0H3Z1XN5TJ5BD4M8R:target": "{\"application_id\":\"01KT1A0F80RH9H1FCJYQ8P0D0G\",\"application_key\":\"acme-web\",\"base_url\":\"https://staging.acme.test\",\"config\":{\"app\":{\"viewport\":{\"height\":720,\"width\":1280}}},\"driver\":\"web\",\"labels\":[\"ci-run-900100\"],\"platform\":null,\"ring_id\":\"01KT1A0F80RG8XB3NEAZH8JN8J\",\"ring_key\":\"staging\"}",
+    "dispatches:01KT94MFW0NRBDR3PKS2PRNHPK:target": null,
+    "dispatches:01KTV8VCG0KFG1YMWAT077H53S:target": null,
+    "dispatches:01KTV8VCG0HE8GZFDXFZNRBWV2:target": "{\"application_id\":\"01KT1A0F80RH9H1FCJYQ8P0D0G\",\"application_key\":\"acme-web\",\"base_url\":\"https://staging.acme.test\",\"config\":{\"app\":{\"viewport\":{\"height\":720,\"width\":1280}}},\"driver\":\"web\",\"labels\":[\"macos\",\"ios-sim\"],\"platform\":null,\"ring_id\":\"01KT1A0F80RG8XB3NEAZH8JN8J\",\"ring_key\":\"staging\"}",
     "run_events:01KT6BC1M0P57ARANENTNP6TH2|1:payload": "{\"case_id\":\"checkout\"}",
     "run_events:01KT6BC1M0P57ARANENTNP6TH2|2:payload": "{\"action\":\"click\",\"step\":4,\"target\":\"Place order\"}",
     "run_events:01KT6BC1M0P57ARANENTNP6TH2|3:payload": "{\"score\":96,\"status\":\"pass\"}",
@@ -215,15 +216,7 @@
     "service_heartbeats:reconciler:detail": "{\"dead\":1,\"interval_s\":30,\"reconciled\":3}"
   },
   "timestampEpochs": {
-    "schema_migrations:0001_phase1_control_plane.sql:applied_at": 1780304400000,
-    "schema_migrations:0002_phase2_execution_plane.sql:applied_at": 1780304400000,
-    "schema_migrations:0003_session_claims.sql:applied_at": 1780304400000,
-    "schema_migrations:0004_candidate_diff_summary.sql:applied_at": 1780304400000,
-    "schema_migrations:0005_phase4_authoring_insights.sql:applied_at": 1780304400000,
-    "schema_migrations:0006_phase5_media_retention.sql:applied_at": 1780304400000,
-    "schema_migrations:0007_phase6_findings_plugins.sql:applied_at": 1780304400000,
-    "schema_migrations:0008_phase7_ops.sql:applied_at": 1780304400000,
-    "schema_migrations:0009_platform_simplification.sql:applied_at": 1780304400000,
+    "schema_migrations:0001_baseline.sql:applied_at": 1780304400000,
     "users:01KT16JKM048Y4W817XMX2ZRN8:created_at": 1780304400000,
     "users:01KT16JKM048Y4W817XMX2ZRN8:updated_at": 1780304400000,
     "users:01KT16JKM0V1JGHMS4X0MA8P4X:created_at": 1780304400000,
@@ -250,6 +243,16 @@
     "api_tokens:01KT1A0F80R7TQGFGSV0CDYR62:created_at": 1780308000000,
     "api_tokens:01KT1A0F803VGCC97BNGNJMM2Q:expires_at": null,
     "api_tokens:01KT1A0F803VGCC97BNGNJMM2Q:created_at": 1780308000000,
+    "applications:01KT1A0F80RH9H1FCJYQ8P0D0G:created_at": 1780308000000,
+    "applications:01KT1A0F80RH9H1FCJYQ8P0D0G:updated_at": 1780308000000,
+    "applications:01KT1A0F807YVHD67H2A5CQPWT:created_at": 1780308000000,
+    "applications:01KT1A0F807YVHD67H2A5CQPWT:updated_at": 1780308000000,
+    "rings:01KT1A0F80RG8XB3NEAZH8JN8J:created_at": 1780308000000,
+    "rings:01KT1A0F80RG8XB3NEAZH8JN8J:updated_at": 1780308000000,
+    "rings:01KT1A0F80ADP5W28H0RH6XJ0R:created_at": 1780308000000,
+    "rings:01KT1A0F80ADP5W28H0RH6XJ0R:updated_at": 1780308000000,
+    "rings:01KT1A0F806FSCEWNWKGHFDN8F:created_at": 1780308000000,
+    "rings:01KT1A0F806FSCEWNWKGHFDN8F:updated_at": 1780308000000,
     "suites:01KT1A0F80BH11R4BAV7822JCA:created_at": 1780308000000,
     "suites:01KT1A0F80BH11R4BAV7822JCA:updated_at": 1780473600000,
     "suites:01KT1A0F80E1M2Y57RQWJ0MSV0:created_at": 1780308000000,
@@ -269,12 +272,6 @@
     "suite_snapshots:01KT3NHF00CGCVR70K1NE8C0BK:created_at": 1780387200000,
     "suite_snapshots:01KT67Y60058AHATFD8NSC4VND:created_at": 1780473600000,
     "suite_snapshots:01KT3NHF004XEVHFQ4JTB9YS40:created_at": 1780387200000,
-    "environments:01KT1A0F80QSKY5QHGKMKPJ82V:created_at": 1780308000000,
-    "environments:01KT1A0F80QSKY5QHGKMKPJ82V:updated_at": 1780308000000,
-    "environments:01KT1A0F80ZKX68FKYVAW43T1X:created_at": 1780308000000,
-    "environments:01KT1A0F80ZKX68FKYVAW43T1X:updated_at": 1780308000000,
-    "environments:01KT1A0F806X1XWC7ZZ0BMPG0X:created_at": 1780308000000,
-    "environments:01KT1A0F806X1XWC7ZZ0BMPG0X:updated_at": 1780308000000,
     "personas:01KT1A0F80NJW308XQXPQY4141:created_at": 1780308000000,
     "personas:01KT1A0F80NJW308XQXPQY4141:updated_at": 1780308000000,
     "rule_cards:01KT1A0F80NYZE7W58057FMR4M:decided_at": 1780570800000,
@@ -425,7 +422,7 @@
     "finding_evidence:01KT6BG0JGSZE9ZHH3FABQ55GS:created_at": 1780477330000,
     "finding_evidence:01KT6BKGW8Q3Y5VQCPF7Y2C7AV:created_at": 1780477445000,
     "finding_evidence:01KT6BKGW8A4N15SBCRT3KY8C6:created_at": 1780477445000,
-    "finding_resolution_stamps:01KT6BKGW8G72DCW1YN77DEQ25|01KT1A0F80BH11R4BAV7822JCA|01KT1A0F80QSKY5QHGKMKPJ82V|checkout:stamped_at": 1780477540000,
+    "finding_resolution_stamps:01KT6BKGW8G72DCW1YN77DEQ25|01KT1A0F80BH11R4BAV7822JCA|01KT1A0F80RG8XB3NEAZH8JN8J|checkout:stamped_at": 1780477540000,
     "finding_intake_keys:01KT6BKGW8T2JVRJWZK7QX88D5:created_at": 1780477445000,
     "platform_events:01KT6BG0JGNQSDMR9N6NG5YF23:ts": 1780477330000,
     "platform_events:01KT6BKGW8DR5QKR36TZ3VJ8N1:ts": 1780477445000,
@@ -455,17 +452,17 @@
       "01KT1A0F803VGCC97BNGNJMM2Q:expires_at",
       "01KT1A0F803VGCC97BNGNJMM2Q:project_id"
     ],
+    "applications": [
+      "01KT1A0F80RH9H1FCJYQ8P0D0G:platform"
+    ],
+    "rings": [
+      "01KT1A0F806FSCEWNWKGHFDN8F:base_url"
+    ],
     "suite_files": [
       "01KT3NHF00VK7EWCANJ8WAWWPQ:updated_by"
     ],
     "suite_snapshots": [
       "01KT67Y60058AHATFD8NSC4VND:note"
-    ],
-    "environments": [
-      "01KT1A0F806X1XWC7ZZ0BMPG0X:app_artifact",
-      "01KT1A0F80QSKY5QHGKMKPJ82V:suite_id",
-      "01KT1A0F80ZKX68FKYVAW43T1X:app_artifact",
-      "01KT1A0F80ZKX68FKYVAW43T1X:suite_id"
     ],
     "rule_cards": [
       "01KT1A0F80F1S5A0VJ5F73562Z:exceptions",
@@ -479,11 +476,10 @@
     ],
     "auth_providers": [
       "01KT1A0F807DESQVV2F3BFRJV7:code",
-      "01KT1A0F80S7KXHWGNNXBVXVDP:environment_id",
+      "01KT1A0F80S7KXHWGNNXBVXVDP:ring_id",
       "01KT1A0F80S7KXHWGNNXBVXVDP:updated_by"
     ],
     "run_groups": [
-      "01KTV8VCG0GWD48MM99GKX098W:app_artifact",
       "01KTV8VCG0GWD48MM99GKX098W:exit_summary",
       "01KTV8VCG0GWD48MM99GKX098W:runner_labels"
     ],
@@ -543,6 +539,7 @@
       "01KT94MFW0NRBDR3PKS2PRNHPK:heartbeat_at",
       "01KT94MFW0NRBDR3PKS2PRNHPK:labels",
       "01KT94MFW0NRBDR3PKS2PRNHPK:runner_id",
+      "01KT94MFW0NRBDR3PKS2PRNHPK:target",
       "01KT94MFW0NRBDR3PKS2PRNHPK:workflow_run_id",
       "01KT94MFW0NRBDR3PKS2PRNHPK:workflow_run_url",
       "01KTV8VCG0HE8GZFDXFZNRBWV2:canceled_at",
@@ -555,7 +552,8 @@
       "01KTV8VCG0KFG1YMWAT077H53S:concluded_at",
       "01KTV8VCG0KFG1YMWAT077H53S:error",
       "01KTV8VCG0KFG1YMWAT077H53S:heartbeat_at",
-      "01KTV8VCG0KFG1YMWAT077H53S:runner_id"
+      "01KTV8VCG0KFG1YMWAT077H53S:runner_id",
+      "01KTV8VCG0KFG1YMWAT077H53S:target"
     ],
     "baselines": [
       "01KT3NHF00JRGMXQFVFG0MDR3M:accepted_from_run_id",

@@ -68,11 +68,66 @@ export function makeClient(base: HostedDynamic, { token = null }: HostedDynamic 
     patch: (p: HostedDynamic, b: HostedDynamic) => call("PATCH", p, b),
     del: (p: HostedDynamic, b: HostedDynamic) => call("DELETE", p, b),
     postTar: (p: HostedDynamic, buf: HostedDynamic) => call("POST", p, undefined, { raw: buf, headers: { "content-type": "application/x-tar" } }),
-    /** PUT raw bytes — app-artifact upload, and anything else that is not JSON. */
+    /** PUT raw bytes — anything a route takes that is not JSON. */
     putRaw: (p: HostedDynamic, buf: HostedDynamic) =>
       call("PUT", p, undefined, { raw: buf, headers: { "content-type": "application/octet-stream" } }),
     withToken: (t: HostedDynamic) => makeClient(base, { token: t }),
   };
+}
+
+/**
+ * The target fixture every launching test needs: one application and one ring
+ * with a URL.
+ *
+ * A suite runs against exactly one application and launches against exactly one
+ * of that application's rings, and the ring's `base_url` is the ONLY thing that
+ * decides where a hosted run points — there is no fallback to whatever the suite
+ * happened to author. So a test that launches has to create this pair first, and
+ * pass `ring.id` as the launch's `ring_id`.
+ *
+ * Defaults suit the common case (a web application with one `local` ring), and
+ * every field is overridable for the tests that care: `driver`/`platform` for a
+ * mobile surface, `runnerLabels` for placement, `discoveryAllowed` for discovery
+ * stories, `config` for the logical auth/secret_env overlay.
+ *
+ * A suite created after this needs no `application_id`: with exactly one
+ * application in the project, suite creation takes it.
+ */
+export async function createTarget(api: HostedDynamic, project: HostedDynamic, over: HostedDynamic = {}) {
+  const {
+    key = "app",
+    name = over.key ?? "App",
+    driver = "web",
+    platform = null,
+    ringKey = "local",
+    ringName = ringKey,
+    baseUrl = driver === "mobile" ? null : "http://127.0.0.1:4173",
+    runnerLabels = [],
+    discoveryAllowed = false,
+    config = {},
+  } = over;
+  const created = await api.post(`/projects/${project.key}/applications`, {
+    key,
+    name,
+    driver,
+    ...(platform ? { platform } : {}),
+  });
+  if (created.status !== 201) {
+    throw new Error(`could not create application "${key}": ${created.status} ${JSON.stringify(created.body)}`);
+  }
+  const application = created.body;
+  const ringRes = await api.post(`/applications/${application.id}/rings`, {
+    key: ringKey,
+    name: ringName,
+    ...(baseUrl == null ? {} : { base_url: baseUrl }),
+    runner_labels: runnerLabels,
+    discovery_allowed: discoveryAllowed,
+    config,
+  });
+  if (ringRes.status !== 201) {
+    throw new Error(`could not create ring "${key}/${ringKey}": ${ringRes.status} ${JSON.stringify(ringRes.body)}`);
+  }
+  return { application, ring: ringRes.body };
 }
 
 /** Load a suite directory into a { path: content } map (skipping run output). */

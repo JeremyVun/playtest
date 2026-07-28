@@ -23,6 +23,7 @@ export async function createAuthProvider(ctx: HostedDynamic) {
   guard(ctx, project.id, "developer");
   const body = await readJsonBody(ctx.req);
   const fields = validateProviderFields(body, { nameRequired: true });
+  await requireOwnRing(ctx, project.id, fields.ring_id);
   const dup = await ctx.db.query(`SELECT 1 FROM auth_providers WHERE project_id = $1 AND name = $2`, [
     project.id,
     fields.name,
@@ -35,13 +36,13 @@ export async function createAuthProvider(ctx: HostedDynamic) {
     try {
       ({ rows } = await tx.query(
         `INSERT INTO auth_providers
-           (id, project_id, environment_id, name, kind, config, code, identities, ttl_minutes, enabled, updated_by)
+           (id, project_id, ring_id, name, kind, config, code, identities, ttl_minutes, enabled, updated_by)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
          RETURNING *`,
         [
           id,
           project.id,
-          fields.environment_id,
+          fields.ring_id,
           fields.name,
           fields.kind,
           fields.config,
@@ -80,7 +81,7 @@ export async function updateAuthProvider(ctx: HostedDynamic) {
   const body = await readJsonBody(ctx.req);
   const fields = validateProviderFields({
     name: "name" in body ? body.name : existing.name,
-    environment_id: "environment_id" in body ? body.environment_id : existing.environment_id,
+    ring_id: "ring_id" in body ? body.ring_id : existing.ring_id,
     kind: "kind" in body ? body.kind : existing.kind,
     config: "config" in body ? body.config : existing.config,
     code: "code" in body ? body.code : existing.code,
@@ -88,19 +89,20 @@ export async function updateAuthProvider(ctx: HostedDynamic) {
     ttl_minutes: "ttl_minutes" in body ? body.ttl_minutes : existing.ttl_minutes,
     enabled: "enabled" in body ? body.enabled : existing.enabled,
   }, { nameRequired: true });
+  await requireOwnRing(ctx, existing.project_id, fields.ring_id);
   const row = await ctx.db.withTx(async (tx: HostedDynamic) => {
     let rows;
     try {
       ({ rows } = await tx.query(
         `UPDATE auth_providers
-            SET environment_id = $2, name = $3, kind = $4, config = $5, code = $6,
+            SET ring_id = $2, name = $3, kind = $4, config = $5, code = $6,
                 identities = $7, ttl_minutes = $8, enabled = $9, updated_by = $10,
                 updated_at = now()
           WHERE id = $1
           RETURNING *`,
         [
           existing.id,
-          fields.environment_id,
+          fields.ring_id,
           fields.name,
           fields.kind,
           fields.config,
@@ -172,6 +174,23 @@ export async function sessions(ctx: HostedDynamic) {
   return { items: await listProviderSessions(ctx, existing.id) };
 }
 
+/**
+ * A provider may bind only a ring of ITS OWN project. Without this check the
+ * reference is caller-supplied and unvalidated: a developer in project A could
+ * hang a provider off project B's ring, and B's launches would then resolve A's
+ * credentials. `ring_id` null keeps the provider project-wide, which is the
+ * default and needs no check.
+ */
+async function requireOwnRing(ctx: HostedDynamic, projectId: HostedDynamic, ringId: HostedDynamic) {
+  if (!ringId) return;
+  const { rows } = await ctx.db.query(
+    `SELECT r.id FROM rings r JOIN applications a ON a.id = r.application_id
+      WHERE r.id = $1 AND a.project_id = $2`,
+    [ringId, projectId],
+  );
+  if (!rows[0]) throw notFound(`no ring "${ringId}" in this project`);
+}
+
 async function getProvider(ctx: HostedDynamic) {
   const { rows } = await ctx.db.query(`SELECT * FROM auth_providers WHERE id = $1`, [ctx.params.a]);
   if (!rows[0]) throw notFound(`no auth provider "${ctx.params.a}"`);
@@ -195,8 +214,8 @@ function validateProviderFields(body: HostedDynamic, { nameRequired }: HostedDyn
     throw badRequest(`"ttl_minutes" must be an integer from 1 to 1440`);
   }
   const enabled = body.enabled !== false;
-  const environment_id = body.environment_id == null ? null : stringField(body, "environment_id", { max: 64 });
-  return { name, kind, config, identities, code, ttl_minutes, enabled, environment_id };
+  const ring_id = body.ring_id == null || body.ring_id === "" ? null : stringField(body, "ring_id", { max: 64 });
+  return { name, kind, config, identities, code, ttl_minutes, enabled, ring_id };
 }
 
 function objectField(value: HostedDynamic, name: HostedDynamic) {
@@ -208,7 +227,7 @@ function providerView(r: HostedDynamic) {
   return {
     id: r.id,
     project_id: r.project_id,
-    environment_id: r.environment_id,
+    ring_id: r.ring_id ?? null,
     name: r.name,
     kind: r.kind,
     config: r.config,

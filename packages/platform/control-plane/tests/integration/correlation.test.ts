@@ -10,22 +10,25 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import http from "node:http";
-import { withApp, loadSuiteDir, REPO_ROOT } from "./helpers.ts";
+import { withApp, createTarget, loadSuiteDir, REPO_ROOT } from "./helpers.ts";
 import { writeTar } from "../../src/suites/tar.ts";
 import { reconcileDispatches } from "../../src/dispatch/reconciler.ts";
 
 async function launchGroup(api: HostedDynamic) {
   const project = (await api.post("/projects", { key: "corr", name: "Correlation" })).body;
+  const { ring } = await createTarget(api, project, {
+    key: "todos",
+    name: "Todos",
+    ringKey: "staging",
+    baseUrl: "http://127.0.0.1:9",
+    config: { secret_env: {} },
+  });
   const suite = (await api.post("/projects/corr/suites", { slug: "todos", name: "Todos" })).body;
   const tar = writeTar(loadSuiteDir(`${REPO_ROOT}/tests/fixtures/todos`));
   assert.equal((await api.postTar(`/suites/${suite.id}/import`, tar)).status, 200);
-  const env = (await api.post("/projects/corr/environments", {
-    name: "staging",
-    config: { app: { base_url: "http://127.0.0.1:9" }, secret_env: {} },
-  })).body;
   const launched = await api.post("/projects/corr/run-groups", {
     suite_id: suite.id,
-    environment_id: env.id,
+    ring_id: ring.id,
     selection: { ids: ["add-todo"], mode: "auto" },
   });
   assert.equal(launched.status, 200, JSON.stringify(launched.body));

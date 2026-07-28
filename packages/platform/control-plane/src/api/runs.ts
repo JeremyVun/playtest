@@ -8,8 +8,11 @@ import {
   getRunGroup,
   getRunGroupView,
   groupDispatchLabels,
+  groupTarget,
+  targetSnapshot,
   dispatchAttempt,
 } from "../dispatch/dispatcher.ts";
+import { applicationById, ringById } from "./applications.ts";
 import { normalizeLabels } from "../auth/runner-credentials.ts";
 import { normalizeClipRequest, startClip } from "../media/clip.ts";
 import { ulid } from "../ulid.ts";
@@ -23,13 +26,14 @@ export async function createGroup(ctx: HostedDynamic) {
   guard(ctx, project.id, "editor");
   const body = await readJsonBody(ctx.req);
   if (!body.suite_id) throw badRequest(`"suite_id" is required`);
-  if (!body.environment_id) throw badRequest(`"environment_id" is required`);
-  const { suite, environment } = await resolveLaunchTarget(ctx, project, body);
+  if (!body.ring_id) throw badRequest(`"ring_id" is required`);
+  const { suite, application, ring } = await resolveLaunchTarget(ctx, project, body);
   return await createRunGroup(ctx, {
     principal,
     project,
     suite,
-    environment,
+    application,
+    ring,
     selection: body.selection || {},
     note: body.note ?? null,
     runnerLabels: pinnedLabels(body),
@@ -37,9 +41,9 @@ export async function createGroup(ctx: HostedDynamic) {
 }
 
 /**
- * The optional per-launch placement pin. Absent means "follow the environment";
+ * The optional per-launch placement pin. Absent means "follow the ring";
  * present — including an explicit `[]`, which means "any runner in the project" —
- * overrides the environment's labels for this group alone.
+ * overrides the ring's labels for this group alone.
  *
  * It carries no authorization of its own. Labels are routing, not authority: a
  * runner only ever reaches jobs in the project its credential is registered to,
@@ -62,35 +66,37 @@ export async function previewGroup(ctx: HostedDynamic) {
   guard(ctx, project.id, "viewer");
   const body = await readJsonBody(ctx.req);
   if (!body.suite_id) throw badRequest(`"suite_id" is required`);
-  if (!body.environment_id) throw badRequest(`"environment_id" is required`);
-  const { suite, environment } = await resolveLaunchTarget(ctx, project, body);
+  if (!body.ring_id) throw badRequest(`"ring_id" is required`);
+  const { suite, application, ring } = await resolveLaunchTarget(ctx, project, body);
   return await previewRunGroup(ctx, {
     project,
     suite,
-    environment,
+    application,
+    ring,
     selection: body.selection || {},
     runnerLabels: pinnedLabels(body),
   });
 }
 
 /**
- * The suite and environment a launch (or its preview) names, both checked to be
- * in this project — and the environment checked to be one this suite may use. A
- * suite-owned environment is launchable from its own suite only; it is in no
- * other suite's picker, so reaching one is a mistake worth naming rather than a
- * silent run against the wrong host.
+ * The (suite, ring) a launch or preview names, resolved to the application both
+ * must agree on. A suite belongs to exactly one application and may launch only
+ * against that application's rings, so a ring of another surface is a mistake
+ * worth naming rather than a silent run against the wrong thing.
  */
 async function resolveLaunchTarget(ctx: HostedDynamic, project: HostedDynamic, body: HostedDynamic) {
   const suite = await getSuite(ctx, body.suite_id);
   if (suite.project_id !== project.id) throw notFound(`no suite "${body.suite_id}" in project "${project.key}"`);
-  const environment = await getEnvironment(ctx, body.environment_id);
-  if (environment.project_id !== project.id) throw notFound(`no environment "${body.environment_id}" in project "${project.key}"`);
-  if (environment.suite_id && environment.suite_id !== suite.id) {
+  const { ring, application } = await ringById(ctx, body.ring_id);
+  if (application.project_id !== project.id) throw notFound(`no ring "${body.ring_id}" in project "${project.key}"`);
+  if (ring.application_id !== suite.application_id) {
+    const own = await applicationById(ctx, suite.application_id);
     throw badRequest(
-      `the environment "${environment.name}" belongs to another suite — pick one of this suite's environments`,
+      `ring "${application.key}/${ring.key}" belongs to another application — suite "${suite.slug}" runs ` +
+        `against "${own.key}", so pick one of its rings`,
     );
   }
-  return { suite, environment };
+  return { suite, application, ring };
 }
 
 /**
@@ -112,7 +118,7 @@ async function resolveLaunchTarget(ctx: HostedDynamic, project: HostedDynamic, b
  *
  * `outcome=attention` keeps only runs a person still has to look at: one that
  * failed a check, or one that never produced a verdict, and whose failing story
- * hasn't since passed in a newer run of the same suite and environment.
+ * hasn't since passed in a newer run of the same suite and ring.
  */
 const RUN_ROWS_CAP = 2000;
 
@@ -135,7 +141,7 @@ export async function listGroups(ctx: HostedDynamic) {
     // attention: a discovery run has no pass/fail to give, and a cancellation is
     // something a person already decided — including a story that failed before
     // the person pulled the plug on its group. A failure is retired once a newer
-    // run of the same story, on the same suite and environment, passes — a green
+    // run of the same story, on the same suite and ring, passes — a green
     // rerun is how a person resolves a red run, so the alert clears itself.
     where += ` AND run_groups.status <> 'canceled'
                AND EXISTS (SELECT 1 FROM runs r WHERE r.run_group_id = run_groups.id
@@ -144,7 +150,7 @@ export async function listGroups(ctx: HostedDynamic) {
                                SELECT 1 FROM runs r2
                                  JOIN run_groups g2 ON g2.id = r2.run_group_id
                                 WHERE g2.suite_id = run_groups.suite_id
-                                  AND g2.environment_id = run_groups.environment_id
+                                  AND g2.ring_id = run_groups.ring_id
                                   AND g2.created_at > run_groups.created_at
                                   AND r2.case_id = r.case_id
                                   AND r2.status = 'pass'))`;
@@ -366,10 +372,13 @@ export async function retryGroup(ctx: HostedDynamic) {
   const principal = requireAuth(ctx);
   const group = await getRunGroup(ctx, ctx.params.g);
   guard(ctx, group.project_id, "editor");
-  const environment = await getEnvironment(ctx, group.environment_id);
+  const { application, ring } = await groupTarget(ctx, group);
   // A retry is the same group, so it is placed the way the group was: a launch
-  // that pinned its labels keeps them even if the environment changed since.
-  const labels = groupDispatchLabels(group, environment);
+  // that pinned its labels keeps them even if the ring changed since. Its TARGET
+  // snapshot, though, is taken fresh — a retry runs against the ring as it is
+  // now, which is the documented retry behavior.
+  const labels = groupDispatchLabels(group, ring);
+  const target = targetSnapshot(application, ring, labels);
   const dispatchId = ulid();
   let attempt = 0;
   let retried = 0;
@@ -415,9 +424,9 @@ export async function retryGroup(ctx: HostedDynamic) {
     );
     attempt = attempts.rows[0].attempt;
     await tx.query(
-      `INSERT INTO dispatches (id, project_id, kind, ref_id, attempt, status, labels)
-       VALUES ($1, $2, 'group', $3, $4, 'requested', $5)`,
-      [dispatchId, group.project_id, group.id, attempt, labels],
+      `INSERT INTO dispatches (id, project_id, kind, ref_id, attempt, status, labels, target)
+       VALUES ($1, $2, 'group', $3, $4, 'requested', $5, $6)`,
+      [dispatchId, group.project_id, group.id, attempt, labels, target],
     );
     await tx.query(
       `UPDATE run_groups SET status = 'queued', exit_summary = NULL, updated_at = now()
@@ -599,7 +608,7 @@ export async function dispatchAdmin(ctx: HostedDynamic) {
 
 async function runById(ctx: HostedDynamic, id: HostedDynamic) {
   const { rows } = await ctx.db.query(
-    `SELECT r.*, g.project_id, g.suite_id, g.environment_id,
+    `SELECT r.*, g.project_id, g.suite_id, g.application_id, g.ring_id,
             (SELECT json_object('key', a.key, 'sha256', a.sha256, 'size', a.size,
                                 'tier', a.tier, 'created_at', a.created_at)
                FROM artifacts a
@@ -675,10 +684,4 @@ async function latestArtifact(ctx: HostedDynamic, runId: HostedDynamic, kind: Ho
 
 function artifactView(a: HostedDynamic) {
   return a ? { key: a.key, sha256: a.sha256, size: a.size, tier: a.tier, created_at: a.created_at } : null;
-}
-
-async function getEnvironment(ctx: HostedDynamic, id: HostedDynamic) {
-  const { rows } = await ctx.db.query(`SELECT * FROM environments WHERE id = $1`, [id]);
-  if (!rows[0]) throw notFound(`no environment "${id}"`);
-  return rows[0];
 }

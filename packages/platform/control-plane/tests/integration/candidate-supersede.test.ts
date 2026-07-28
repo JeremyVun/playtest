@@ -5,13 +5,18 @@
 // stop showing it, and candidate.superseded must fire so badges re-count.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { withApp } from "./helpers.ts";
+import { withApp, createTarget } from "./helpers.ts";
 import { ulid } from "../../src/ulid.ts";
 
 test("a clean pass supersedes the story's pending candidates, and only that story's", async () => {
   const github = new MockGitHub();
   await withApp(async ({ app, api, base }: HostedDynamic) => {
     const project = (await api.post("/projects", { key: "supersede", name: "Supersede" })).body;
+    const { application, ring } = await createTarget(api, project, {
+      ringKey: "staging",
+      baseUrl: "http://127.0.0.1:9",
+      runnerLabels: ["self-hosted", "playtest"],
+    });
     const suite = (await api.post(`/projects/${project.key}/suites`, { slug: "s", name: "S" })).body;
     await api.post(`/suites/${suite.id}/commit`, {
       changes: [
@@ -20,15 +25,10 @@ test("a clean pass supersedes the story's pending candidates, and only that stor
       ],
       note: "seed",
     });
-    const env = (await api.post(`/projects/${project.key}/environments`, {
-      name: "staging",
-      runner_labels: ["self-hosted", "playtest"],
-      config: { app: { base_url: "http://127.0.0.1:9" } },
-    })).body;
 
     const launched = await api.post(`/projects/${project.key}/run-groups`, {
       suite_id: suite.id,
-      environment_id: env.id,
+      ring_id: ring.id,
       selection: { ids: ["save"], mode: "auto" },
     });
     assert.equal(launched.status, 200, JSON.stringify(launched.body));
@@ -38,7 +38,7 @@ test("a clean pass supersedes the story's pending candidates, and only that stor
     // Two pending heal candidates from earlier healed runs: one for this story,
     // one for an unrelated story that must stay pending (supersede is scoped).
     const snapshot = (await api.get(`/suites/${suite.id}/snapshots`)).body.items[0];
-    const seed = { project, suite, env, snapshot };
+    const seed = { project, suite, application, ring, snapshot };
     const stale = await seedCandidate(app, { ...seed, storyId: runRow.story_id });
     const other = await seedCandidate(app, { ...seed, storyId: "other-story" });
     let health = await api.get(`/projects/${project.key}/health`);
@@ -100,15 +100,15 @@ test("a clean pass supersedes the story's pending candidates, and only that stor
   }, {}, { github });
 });
 
-async function seedCandidate(app: HostedDynamic, { project, suite, env, snapshot, storyId }: HostedDynamic) {
+async function seedCandidate(app: HostedDynamic, { project, suite, application, ring, snapshot, storyId }: HostedDynamic) {
   const id = ulid();
   const groupId = ulid();
   const runId = ulid();
   await app.db.withTx(async (tx: HostedDynamic) => {
     await tx.query(
-      `INSERT INTO run_groups (id, project_id, suite_id, snapshot_id, environment_id, trigger, selection, status)
-         VALUES ($1, $2, $3, $4, $5, '{}', '{}', 'done')`,
-      [groupId, project.id, suite.id, snapshot.id, env.id],
+      `INSERT INTO run_groups (id, project_id, suite_id, snapshot_id, application_id, ring_id, trigger, selection, status)
+         VALUES ($1, $2, $3, $4, $5, $6, '{}', '{}', 'done')`,
+      [groupId, project.id, suite.id, snapshot.id, application.id, ring.id],
     );
     await tx.query(
       `INSERT INTO runs (id, run_group_id, case_id, story_id, run_id, status, mode, healed, changed, finished_at)

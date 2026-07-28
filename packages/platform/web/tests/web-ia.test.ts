@@ -16,11 +16,13 @@ import { categoryLabel, signalLabel, criterionLabel, humanize, nextRunLabel } fr
 import { CATEGORIES } from "@playtest/core/findings";
 import { SUCCESS_KINDS } from "../src/lib/caseform.js";
 
-test("nav: primary project navigation is exactly five items", () => {
-  // P1's four, plus Personas: a persona is project-wide and the story editor's
-  // picker needs somewhere to send people to make one.
-  assert.deepEqual(RAIL.map((i: WebDynamic) => i.nav), ["overview", "runs", "findings", "personas", "settings"]);
-  assert.deepEqual(RAIL.map((i: WebDynamic) => i.label), ["Suites", "Runs", "Findings", "Personas", "Settings"]);
+test("nav: primary project navigation is exactly six items", () => {
+  // P1's four, plus Personas (project-wide, and the story editor's picker needs
+  // somewhere to send people to make one) and Applications (what this project
+  // tests and where each surface is deployed — the first step of a first run,
+  // not a settings tab).
+  assert.deepEqual(RAIL.map((i: WebDynamic) => i.nav), ["overview", "runs", "findings", "applications", "personas", "settings"]);
+  assert.deepEqual(RAIL.map((i: WebDynamic) => i.label), ["Suites", "Runs", "Findings", "Applications", "Personas", "Settings"]);
   // No separate Review or Insights destination on the rail.
   for (const gone of ["review", "insights"]) {
     assert.ok(!RAIL.some((i: WebDynamic) => i.nav === gone), `rail must not contain ${gone}`);
@@ -32,7 +34,7 @@ test("nav: every page's nav value lights up exactly one rail item", () => {
   // rendered with every item inactive and the console never said where you
   // were. This is the full set of `nav:` values the pages pass.
   const items = new Set(RAIL.map((i: WebDynamic) => i.nav));
-  for (const nav of ["overview", "runs", "findings", "personas", "settings", "suites", "review"]) {
+  for (const nav of ["overview", "runs", "findings", "applications", "personas", "settings", "suites", "review"]) {
     assert.ok(items.has(railFor(nav)), `nav "${nav}" must resolve to a rail item, got ${railFor(nav)}`);
   }
   assert.equal(railFor("suites"), "overview", "Suites is the project home");
@@ -44,6 +46,7 @@ test("nav: Suites is the project home; each item deep-links by key", () => {
   assert.equal(RAIL[0].to("acme"), "/p/acme");
   assert.equal(RAIL.find((i: WebDynamic) => i.nav === "runs").to("acme"), "/p/acme/runs");
   assert.equal(RAIL.find((i: WebDynamic) => i.nav === "findings").to("acme"), "/p/acme/findings");
+  assert.equal(RAIL.find((i: WebDynamic) => i.nav === "applications").to("acme"), "/p/acme/applications");
   assert.equal(RAIL.find((i: WebDynamic) => i.nav === "personas").to("acme"), "/p/acme/personas");
   assert.equal(RAIL.find((i: WebDynamic) => i.nav === "settings").to("acme"), "/p/acme/settings");
 });
@@ -66,6 +69,9 @@ test("redirects: removed SPA surfaces resolve to their surviving home", () => {
   // candidate's id survived as its finding's id — deep links land on the claim.
   assert.equal(redirectFor("/p/acme/candidates"), "/p/acme/findings?filter=review");
   assert.equal(redirectFor("/p/acme/candidates/01HXYZ"), "/p/acme/findings/01HXYZ");
+  // Environments became applications and their rings, and they left Settings
+  // for a first-class section — the old tab's bookmark lands there.
+  assert.equal(redirectFor("/p/acme/settings/test-targets"), "/p/acme/applications");
 });
 
 test("redirects: surviving deep links are never redirected", () => {
@@ -165,26 +171,27 @@ test("vocab: every engine enum a person can see has a plain-English word", () =>
   assert.deepEqual(["record", "check", "explore"].map(nextRunLabel), ["record", "check", "explore"]);
 });
 
-test("settings: exactly six sections, no plugins/integrations/retention", () => {
-  // Runners joined the five when placement became something a person owns: it
-  // says which machine executes a run, next to what a run points at.
-  assert.deepEqual(SETTINGS_SECTIONS.map((s: WebDynamic) => s.id), ["test-targets", "runners", "runs", "models", "team", "audit"]);
-  assert.deepEqual(SETTINGS_SECTIONS.map((s: WebDynamic) => s.label), ["Test targets", "Runners", "Runs", "Models", "Team", "Audit"]);
-  for (const gone of ["plugins", "integrations", "retention", "environments", "secrets"]) {
+test("settings: exactly five sections, and targets are not one of them", () => {
+  // Runners says which machine executes a run. WHAT a run points at is a ring,
+  // and rings live under Applications — a first-class section, because creating
+  // the first application is the first step of a first run.
+  assert.deepEqual(SETTINGS_SECTIONS.map((s: WebDynamic) => s.id), ["runners", "runs", "models", "team", "audit"]);
+  assert.deepEqual(SETTINGS_SECTIONS.map((s: WebDynamic) => s.label), ["Runners", "Runs", "Models", "Team", "Audit"]);
+  for (const gone of ["plugins", "integrations", "retention", "environments", "test-targets", "applications", "secrets"]) {
     assert.ok(!SETTINGS_SECTIONS.some((s: WebDynamic) => s.id === gone), `no ${gone} section`);
   }
 });
 
-test("settings: role disclosure — developer sees test targets and runners; runs/models/team/audit are admin", () => {
+test("settings: role disclosure — developer sees runners; runs/models/team/audit are admin", () => {
   const rank: WebDynamic = { viewer: 0, editor: 1, reviewer: 2, developer: 3, admin: 4 };
   const has = (role: WebDynamic) => (min: WebDynamic) => rank[role] >= rank[min];
   // Two gates, not one: the role, and what this DEPLOYMENT can do. Runners
   // exists only where runs are placed on a self-hosted pool.
   const pooled = { pool_dispatch: true };
   assert.deepEqual(visibleSections(has("editor"), pooled).map((s: WebDynamic) => s.id), []);
-  assert.deepEqual(visibleSections(has("developer"), pooled).map((s: WebDynamic) => s.id), ["test-targets", "runners"]);
-  assert.deepEqual(visibleSections(has("admin"), pooled).map((s: WebDynamic) => s.id), ["test-targets", "runners", "runs", "models", "team", "audit"]);
-  assert.deepEqual(visibleSections(has("admin"), {}).map((s: WebDynamic) => s.id), ["test-targets", "runs", "models", "team", "audit"]);
+  assert.deepEqual(visibleSections(has("developer"), pooled).map((s: WebDynamic) => s.id), ["runners"]);
+  assert.deepEqual(visibleSections(has("admin"), pooled).map((s: WebDynamic) => s.id), ["runners", "runs", "models", "team", "audit"]);
+  assert.deepEqual(visibleSections(has("admin"), {}).map((s: WebDynamic) => s.id), ["runs", "models", "team", "audit"]);
 });
 
 test("secret masking: literal values are masked; references stay readable", () => {

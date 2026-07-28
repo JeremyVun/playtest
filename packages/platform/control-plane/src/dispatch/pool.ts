@@ -179,7 +179,7 @@ export class PoolDispatchClient {
         `no runner with ${missing.length === 1 ? "the label" : "the labels"} ${named} has checked in for ` +
         `${minutes} minute${minutes === 1 ? "" : "s"} — ${runners.length} runner${runners.length === 1 ? " is" : "s are"} ` +
         `registered in this project (${runners.map((r: DbRow) => `"${r.name}": ${(r.labels || []).join(", ") || "no labels"}`).join("; ")}). ` +
-        `Give this environment's runner labels to a running runner, or start one advertising them.`
+        `Give this ring's runner labels to a running runner, or start one advertising them.`
       );
     }
     return (

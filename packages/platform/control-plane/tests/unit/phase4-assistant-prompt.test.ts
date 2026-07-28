@@ -72,20 +72,27 @@ test("composeSystemPrompt: states the assistant can never save — the human sav
   assert.match(prompt, /more:true on every story except the last/);
 });
 
-test("composeSystemPrompt: environments ride as name + URL + discovery flag, with the precedence rule — never secrets", async () => {
+test("composeSystemPrompt: rings ride as key + URL + discovery flag, and the target is stated as the ring's — never secrets", async () => {
   const skill = await skillBody();
   const prompt = composeSystemPrompt({
     skill, suiteSlug: "s", defaultsYaml: "", cases: [], personaFiles: [],
-    environments: [
-      { name: "staging", base_url: "https://staging.example", discovery_allowed: true },
-      { name: "production", base_url: "https://app.example", discovery_allowed: false },
+    rings: [
+      { key: "staging", base_url: "https://staging.example", discovery_allowed: true },
+      { key: "production", base_url: "https://app.example", discovery_allowed: false },
+      { key: "local", base_url: null, discovery_allowed: false },
     ],
   });
   assert.match(prompt, /- staging — https:\/\/staging\.example \(discovery allowed\)/);
   assert.match(prompt, /- production — https:\/\/app\.example/);
-  assert.match(prompt, /app\.envs\.<name>` keys override the/); // the precedence rule, said out loud
+  // A URL-less ring is a mobile one; the prompt says who supplies the build
+  // rather than inviting the model to author a path.
+  assert.match(prompt, /- local — the claiming runner supplies the build/);
+  // The physical target belongs to the ring, and the assistant is told to draft
+  // logical overlays only.
+  assert.match(prompt, /its URL replaces any\n`app\.base_url` a suite authors/);
+  assert.match(prompt, /never a mobile build path, device or Appium endpoint/);
   assert.match(prompt, /never written into suite files/);
-  // no environments → honest placeholder
+  // no rings → honest placeholder
   const empty = composeSystemPrompt({ skill, suiteSlug: "s", defaultsYaml: "", cases: [], personaFiles: [] });
   assert.match(empty, /none configured yet/);
 });

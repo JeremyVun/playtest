@@ -1,7 +1,7 @@
 // Project-scoped personas. A persona is prose ({name, description}) a project
 // keeps so its stories can reference it by slug — `persona: <slug>` — without
 // every suite carrying its own `personas/<slug>.yaml`. Editor role throughout:
-// authoring a persona is authoring, not infra (unlike environments/auth
+// authoring a persona is authoring, not infra (unlike rings/auth
 // providers, which stay developer-gated).
 import YAML from "yaml";
 import { ulid } from "../ulid.ts";

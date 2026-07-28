@@ -1,21 +1,21 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { withApp } from "./helpers.ts";
+import { createTarget, withApp } from "./helpers.ts";
 import { ulid } from "../../src/ulid.ts";
 import { extractFindingFromReport } from "../../src/findings/extractor.ts";
 
 test("phase6 findings dedupe, triage, and manual promotion", async () => {
   await withApp(async ({ app, api }: HostedDynamic) => {
     const project = (await api.post("/projects", { key: "phase6", name: "Phase 6" })).body;
-    const { suite, env, snapshot } = await seedSuite(app, api, project);
+    const { suite, application, ring, snapshot } = await seedSuite(app, api, project);
 
-    const run1 = await seedRun(app, { project, suite, env, snapshot, status: "fail", score: 40, detail: "button 123 not visible" });
+    const run1 = await seedRun(app, { project, suite, application, ring, snapshot, status: "fail", score: 40, detail: "button 123 not visible" });
     await extract(app, project, run1.group, run1.run, "button 456 not visible");
     let queue = await api.get(`/projects/${project.key}/findings?state=all`);
     assert.equal(queue.body.items.length, 1);
     assert.equal(queue.body.items[0].evidence_count, 1);
 
-    const run2 = await seedRun(app, { project, suite, env, snapshot, status: "fail", score: 41, detail: "button 999 not visible" });
+    const run2 = await seedRun(app, { project, suite, application, ring, snapshot, status: "fail", score: 41, detail: "button 999 not visible" });
     await extract(app, project, run2.group, run2.run, "button 1000 not visible");
     queue = await api.get(`/projects/${project.key}/findings?state=all`);
     assert.equal(queue.body.items.length, 1, "same normalized failure dedupes");
@@ -34,7 +34,7 @@ test("phase6 findings dedupe, triage, and manual promotion", async () => {
     assert.deepEqual(after, { new: 0, reopened: 0, accepted: 1, rejected: 0, resolved: 0 },
       "confirm moves one from the review tally to the open tally");
 
-    const run3 = await seedRun(app, { project, suite, env, snapshot, status: "fail", score: 39, detail: "button 777 not visible" });
+    const run3 = await seedRun(app, { project, suite, application, ring, snapshot, status: "fail", score: 39, detail: "button 777 not visible" });
     await extract(app, project, run3.group, run3.run, "button 778 not visible");
     const stillAccepted = (await api.get(`/findings/${findingId}`)).body;
     assert.equal(stillAccepted.state, "accepted", "accepted finding keeps absorbing matching evidence");
@@ -49,7 +49,7 @@ test("phase6 findings dedupe, triage, and manual promotion", async () => {
       "an accepted major surfaces on health.major_findings");
 
     await api.post(`/findings/${findingId}/resolve`, {});
-    const run4 = await seedRun(app, { project, suite, env, snapshot, status: "fail", score: 38, detail: "button 42 not visible" });
+    const run4 = await seedRun(app, { project, suite, application, ring, snapshot, status: "fail", score: 38, detail: "button 42 not visible" });
     await extract(app, project, run4.group, run4.run, "button 43 not visible");
     const reopened = (await api.get(`/findings/${findingId}`)).body;
     assert.equal(reopened.state, "reopened");
@@ -60,17 +60,17 @@ test("phase6 findings dedupe, triage, and manual promotion", async () => {
     assert.ok(reopened.story_health.run_db_id && reopened.story_health.run_group_id);
     const listed = (await api.get(`/projects/${project.key}/findings?state=all`)).body.items.find((x: HostedDynamic) => x.id === findingId);
     assert.equal(listed.story_health?.status, "fail", "list rows carry story_health too");
-    await seedRun(app, { project, suite, env, snapshot, status: "pass", score: 88 });
+    await seedRun(app, { project, suite, application, ring, snapshot, status: "pass", score: 88 });
     const greenNow = (await api.get(`/findings/${findingId}`)).body;
     assert.equal(greenNow.story_health?.status, "pass", "a newer green run reconciles the finding as passing");
     assert.ok(new Date(greenNow.story_health.finished_at) >= new Date(greenNow.last_seen));
 
-    const noisy = await seedRun(app, { project, suite, env, snapshot, status: "fail", score: 20, caseId: "checkout", storyId: "checkout", detail: "checkout modal missing" });
+    const noisy = await seedRun(app, { project, suite, application, ring, snapshot, status: "fail", score: 20, caseId: "checkout", storyId: "checkout", detail: "checkout modal missing" });
     await extract(app, project, noisy.group, noisy.run, "checkout modal missing");
     const noisyFinding = (await api.get(`/projects/${project.key}/findings?state=new`)).body.items.find((f: HostedDynamic) => f.summary.case_id === "checkout");
     assert.ok(noisyFinding);
     await api.post(`/findings/${noisyFinding.id}/reject`, { reason: "not_a_bug" });
-    const noisyRepeat = await seedRun(app, { project, suite, env, snapshot, status: "fail", score: 22, caseId: "checkout", storyId: "checkout", detail: "checkout modal missing" });
+    const noisyRepeat = await seedRun(app, { project, suite, application, ring, snapshot, status: "fail", score: 22, caseId: "checkout", storyId: "checkout", detail: "checkout modal missing" });
     await extract(app, project, noisyRepeat.group, noisyRepeat.run, "checkout modal missing");
     const rejected = (await api.get(`/findings/${noisyFinding.id}`)).body;
     assert.equal(rejected.state, "rejected");
@@ -80,7 +80,7 @@ test("phase6 findings dedupe, triage, and manual promotion", async () => {
 
     // Manual promotion pins evidence to the run's final observed state (the
     // gate judges the end state) and the excerpt carries the failing check.
-    const promo = await seedRun(app, { project, suite, env, snapshot, status: "fail", score: 55, caseId: "promo", storyId: "promo", detail: "spinner hangs" });
+    const promo = await seedRun(app, { project, suite, application, ring, snapshot, status: "fail", score: 55, caseId: "promo", storyId: "promo", detail: "spinner hangs" });
     const promoted = (await api.post(`/runs/${promo.run.id}/promote-finding`, { title: "Spinner never resolves", severity: "minor", note: "saw it hang" })).body;
     assert.equal(promoted.evidence[0].step_from, 4, "promote pins step_from to the final state (totals.steps)");
     assert.match(promoted.evidence[0].viewer_url, /\?step=4$/);
@@ -110,10 +110,10 @@ test("phase6 findings dedupe, triage, and manual promotion", async () => {
 test("phase6 evidence split carves one occurrence into its own finding", async () => {
   await withApp(async ({ app, api }: HostedDynamic) => {
     const project = (await api.post("/projects", { key: "phase6-split", name: "Phase 6 split" })).body;
-    const { suite, env, snapshot } = await seedSuite(app, api, project);
-    const run1 = await seedRun(app, { project, suite, env, snapshot, status: "fail", score: 40, detail: "button 123 not visible" });
+    const { suite, application, ring, snapshot } = await seedSuite(app, api, project);
+    const run1 = await seedRun(app, { project, suite, application, ring, snapshot, status: "fail", score: 40, detail: "button 123 not visible" });
     await extract(app, project, run1.group, run1.run, "button 456 not visible");
-    const run2 = await seedRun(app, { project, suite, env, snapshot, status: "fail", score: 41, detail: "button 999 not visible" });
+    const run2 = await seedRun(app, { project, suite, application, ring, snapshot, status: "fail", score: 41, detail: "button 999 not visible" });
     await extract(app, project, run2.group, run2.run, "button 1000 not visible");
     const source = (await api.get(`/projects/${project.key}/findings?state=all`)).body.items[0];
     assert.equal(source.evidence_count, 2);
@@ -135,28 +135,27 @@ test("phase6 evidence split carves one occurrence into its own finding", async (
 });
 
 async function seedSuite(app: HostedDynamic, api: HostedDynamic, project: HostedDynamic) {
+  const { application, ring } = await createTarget(api, project, {
+    ringKey: "staging",
+    baseUrl: "http://127.0.0.1",
+  });
   const suite = (await api.post(`/projects/${project.key}/suites`, { slug: "suite", name: "Suite" })).body;
   const snapshot = { id: ulid(), suite_id: suite.id, seq: 1, tree: {} };
   await app.db.query(
     `INSERT INTO suite_snapshots (id, suite_id, seq, tree, created_by) VALUES ($1, $2, 1, '{}', $3)`,
     [snapshot.id, suite.id, app.ctx.devUserId],
   );
-  const env = (
-    await api.post(`/projects/${project.key}/environments`, {
-      name: "staging",
-      config: { app: { base_url: "http://127.0.0.1" } },
-    })
-  ).body;
-  return { suite, snapshot, env };
+  return { suite, snapshot, application, ring };
 }
 
-async function seedRun(app: HostedDynamic, { project, suite, env, snapshot, status, score, caseId = "save", storyId = "save", detail, startedOffsetMs = 0 }: HostedDynamic) {
+async function seedRun(app: HostedDynamic, { project, suite, application, ring, snapshot, status, score, caseId = "save", storyId = "save", detail, startedOffsetMs = 0 }: HostedDynamic) {
   const group = {
     id: ulid(),
     project_id: project.id,
     suite_id: suite.id,
     snapshot_id: snapshot.id,
-    environment_id: env.id,
+    application_id: application.id,
+    ring_id: ring.id,
   };
   const run: HostedDynamic = {
     id: ulid(),
@@ -171,9 +170,9 @@ async function seedRun(app: HostedDynamic, { project, suite, env, snapshot, stat
   await app.db.withTx(async (tx: HostedDynamic) => {
     await tx.query(
       `INSERT INTO run_groups
-         (id, project_id, suite_id, snapshot_id, environment_id, trigger, selection, status)
-       VALUES ($1, $2, $3, $4, $5, '{}', '{}', 'done')`,
-      [group.id, project.id, suite.id, snapshot.id, env.id],
+         (id, project_id, suite_id, snapshot_id, application_id, ring_id, trigger, selection, status)
+       VALUES ($1, $2, $3, $4, $5, $6, '{}', '{}', 'done')`,
+      [group.id, project.id, suite.id, snapshot.id, application.id, ring.id],
     );
     await tx.query(
       `INSERT INTO runs

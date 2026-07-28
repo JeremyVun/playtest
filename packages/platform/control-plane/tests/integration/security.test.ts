@@ -3,14 +3,15 @@
 // commits, open-redirect hardening, user-enumeration restriction, and the API 404.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { withApp } from "./helpers.ts";
+import { withApp, createTarget } from "./helpers.ts";
 import { contentTree } from "../../src/suites/snapshots.ts";
 
 const RCE = 'import("node:fs").then(f=>f.writeFileSync("/tmp/pt-should-not-exist","x"));\nexport default { keys() { return []; }, gather() { return {}; }, verdict() { return { pass: true }; } };\n';
 
 test("validate/lint: uncommitted assertion code needs developer (no viewer/editor RCE)", async () => {
   await withApp(async ({ api }: HostedDynamic) => {
-    await api.post("/projects", { key: "p", name: "P" });
+    const project = (await api.post("/projects", { key: "p", name: "P" })).body;
+    await createTarget(api, project);
     const suite = (await api.post("/projects/p/suites", { slug: "s", name: "S" })).body;
     // A committed suite with a case (so discovery would import assertions).
     await api.post(`/suites/${suite.id}/commit`, {
@@ -35,7 +36,8 @@ test("validate/lint: uncommitted assertion code needs developer (no viewer/edito
 
 test("concurrent commits to different paths keep the latest snapshot tree == suite_files", async () => {
   await withApp(async ({ api, app }: HostedDynamic) => {
-    await api.post("/projects", { key: "p", name: "P" });
+    const project = (await api.post("/projects", { key: "p", name: "P" })).body;
+    await createTarget(api, project);
     const suite = (await api.post("/projects/p/suites", { slug: "s", name: "S" })).body;
     await api.post(`/suites/${suite.id}/commit`, {
       changes: [
@@ -65,7 +67,8 @@ test("concurrent commits to different paths keep the latest snapshot tree == sui
 test("duplicate-create races: never a raw 500, always a friendly conflict", async () => {
   await withApp(async ({ api }: HostedDynamic) => {
     // --- sequential: the pre-check path ---
-    await api.post("/projects", { key: "p", name: "P" });
+    const project = (await api.post("/projects", { key: "p", name: "P" })).body;
+    const { application } = await createTarget(api, project);
     const dup = await api.post("/projects", { key: "p", name: "P again" });
     assert.equal(dup.status, 409);
     assert.equal(dup.body.error.code, "conflict");
@@ -73,7 +76,7 @@ test("duplicate-create races: never a raw 500, always a friendly conflict", asyn
     // --- concurrent: the pre-check races past, so the INSERT's own unique-violation
     // catch is what must answer 409 — one creator wins 201, the other gets 409, and
     // neither ever sees a raw pg 23505 as a 500. Same shape for suites (project_id,
-    // slug) and environments (project_id, name).
+    // slug), applications (project_id, key) and rings (application_id, key).
     const projectRace: HostedDynamic = await Promise.allSettled([
       api.post("/projects", { key: "race", name: "R1" }),
       api.post("/projects", { key: "race", name: "R2" }),
@@ -86,11 +89,17 @@ test("duplicate-create races: never a raw 500, always a friendly conflict", asyn
     ]);
     assert.deepEqual(suiteRace.map((r: HostedDynamic) => r.value.status).sort(), [201, 409]);
 
-    const envRace: HostedDynamic = await Promise.allSettled([
-      api.post("/projects/p/environments", { name: "race" }),
-      api.post("/projects/p/environments", { name: "race" }),
+    const applicationRace: HostedDynamic = await Promise.allSettled([
+      api.post("/projects/p/applications", { key: "race", name: "A1", driver: "web" }),
+      api.post("/projects/p/applications", { key: "race", name: "A2", driver: "web" }),
     ]);
-    assert.deepEqual(envRace.map((r: HostedDynamic) => r.value.status).sort(), [201, 409]);
+    assert.deepEqual(applicationRace.map((r: HostedDynamic) => r.value.status).sort(), [201, 409]);
+
+    const ringRace: HostedDynamic = await Promise.allSettled([
+      api.post(`/applications/${application.id}/rings`, { key: "race", base_url: "http://127.0.0.1:9" }),
+      api.post(`/applications/${application.id}/rings`, { key: "race", base_url: "http://127.0.0.1:9" }),
+    ]);
+    assert.deepEqual(ringRace.map((r: HostedDynamic) => r.value.status).sort(), [201, 409]);
   });
 });
 
@@ -152,7 +161,8 @@ test("session cookie: HttpOnly + SameSite always, Secure only when publicUrl is 
 
 test("validate: a malformed JSON body surfaces a friendly 400, not a swallowed empty body", async () => {
   await withApp(async ({ api, base }: HostedDynamic) => {
-    await api.post("/projects", { key: "p", name: "P" });
+    const project = (await api.post("/projects", { key: "p", name: "P" })).body;
+    await createTarget(api, project);
     const suite = (await api.post("/projects/p/suites", { slug: "s", name: "S" })).body;
     const res = await fetch(`${base}/api/v1/suites/${suite.id}/validate`, {
       method: "POST",

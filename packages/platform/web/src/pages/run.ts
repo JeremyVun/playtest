@@ -49,12 +49,13 @@ export async function runDetailPage(projectKey: WebDynamic, groupId: WebDynamic,
   }
   mount(main, h("div.page", {}, h("div.dim", {}, "Loading…")));
 
-  let run: WebDynamic, group: WebDynamic, environments = [], mine = [];
+  let run: WebDynamic, group: WebDynamic, mine = [];
   try {
-    [run, group, { items: environments }, { items: mine }] = await Promise.all([
+    // The group carries where it ran — its application and ring, by key — so
+    // nothing here joins an opaque id against a separate collection.
+    [run, group, { items: mine }] = await Promise.all([
       api.get(`/runs/${runId}`),
       api.get(`/run-groups/${groupId}`),
-      api.cached(`/projects/${projectKey}/environments`),
       // ALL of this run's candidates (any status): pending drives the banner,
       // the newest resolved row is the sign-off receipt — server-derived, so
       // it survives navigation instead of living in page memory.
@@ -79,9 +80,8 @@ export async function runDetailPage(projectKey: WebDynamic, groupId: WebDynamic,
     return mount(main, h("div.page", {}, errorState(err, () => runDetailPage(projectKey, groupId, runId))));
   }
   const groupRun = (group.runs || []).find((r: WebDynamic) => r.id === runId) || null;
-  const environment = environments.find((e: WebDynamic) => e.id === run.environment_id) || null;
-  const envName = environment?.name || null;
-  const envUrl = environment?.config?.app?.base_url || null;
+  const ringName = group.application?.key && group.ring?.key ? `${group.application.key}/${group.ring.key}` : null;
+  const ringUrl = group.ring?.base_url || null;
   const pickCandidates = (items: WebDynamic) => ({
     candidate: items.find((c: WebDynamic) => c.status === "pending") || null,
     resolved: items.find((c: WebDynamic) => c.status === "accepted" || c.status === "rejected") || null,
@@ -264,7 +264,7 @@ export async function runDetailPage(projectKey: WebDynamic, groupId: WebDynamic,
     // recede to a hairline colour and each fact becomes its own scan target,
     // which is the whole job of this line.
     const provenance = metaCells([
-      envName ? h("span.m.where", {}, envName) : null,
+      ringName ? h("span.m.where", {}, ringName) : null,
       group.snapshot_id ? h("span.m", {}, "snapshot ", h("span.mono", {}, short(group.snapshot_id))) : null,
       r.started_at ? h("span.m", {}, ago(r.started_at)) : null,
       r.totals?.steps != null ? h("span.m.num", {}, `${r.totals.steps} steps`) : null,
@@ -579,7 +579,7 @@ export async function runDetailPage(projectKey: WebDynamic, groupId: WebDynamic,
     return h("div.rd-didnt-run", {},
       h("div.why", {},
         // The chip above already says "didn't run" — this line says WHY.
-        infraCause(r, envUrl, projectKey),
+        infraCause(r, ringUrl, projectKey),
         r.error
           ? h("details.advanced", { style: "margin-top:6px" },
               h("summary", {}, "what the runner reported"),
@@ -601,7 +601,7 @@ export async function runDetailPage(projectKey: WebDynamic, groupId: WebDynamic,
         : null,
       ...failed.map((c: WebDynamic) => `Failed check: ${[c.spec || c.kind, c.detail].filter(Boolean).join(" — ")}`),
       ...(!failed.length && r.error ? [`Error: ${r.error}`] : []),
-      [envName, r.totals?.steps != null ? `${r.totals.steps} steps` : null, r.duration_ms != null ? fmtMs(r.duration_ms) : null, r.started_at ? ago(r.started_at) : null].filter(Boolean).join(" · "),
+      [ringName, r.totals?.steps != null ? `${r.totals.steps} steps` : null, r.duration_ms != null ? fmtMs(r.duration_ms) : null, r.started_at ? ago(r.started_at) : null].filter(Boolean).join(" · "),
       `Run: ${location.origin}/p/${projectKey}/runs/${groupId}/${runId}`,
     ].filter(Boolean);
     const ok = await copyText(lines.join("\n"));
@@ -724,8 +724,8 @@ const ISOLATION_GLOSS: WebDynamic = {
 /** Which labels this attempt was placed on, and whose decision that was. */
 function placementTitle(placement: WebDynamic) {
   const labels = (placement.labels || []).join(", ");
-  if (!labels) return "claimed from the board by this runner — the environment asked for no particular labels";
-  return `claimed from the board by this runner, placed on ${labels} (${placement.labels_source === "launch" ? "pinned by the launch" : "the environment's labels"})`;
+  if (!labels) return "claimed from the board by this runner — the ring asked for no particular labels";
+  return `claimed from the board by this runner, placed on ${labels} (${placement.labels_source === "launch" ? "pinned by the launch" : "the ring's labels"})`;
 }
 
 /**
@@ -753,9 +753,9 @@ const stateChip = (s: WebDynamic) =>
  * The likely cause of an infra failure, in words a person can act on. The raw
  * errno stays available behind the disclosure; this line says what to check.
  */
-function infraCause(r: WebDynamic, envUrl: WebDynamic, projectKey: WebDynamic = null) {
+function infraCause(r: WebDynamic, ringUrl: WebDynamic, projectKey: WebDynamic = null) {
   const err = String(r.error || "");
-  const target = envUrl ? h("span.mono", {}, envUrl) : "the app under test";
+  const target = ringUrl ? h("span.mono", {}, ringUrl) : "the app under test";
   if (r.status === "canceled") return h("span", {}, "Someone stopped this run before it finished.");
   // Placement, not the app: nothing ever picked this story up, so nothing here
   // says anything about the software. The remedy is the runner, and it is one
@@ -774,9 +774,9 @@ function infraCause(r: WebDynamic, envUrl: WebDynamic, projectKey: WebDynamic = 
       return h("span", {},
         `Nothing was advertising ${pool.labels.length === 1 ? "the label" : "the labels"} `,
         h("span.mono", {}, pool.labels.join(", ")),
-        " that this environment asks for, so this run waited on the board and then gave up. Either give a running runner ",
+        " that this ring asks for, so this run waited on the board and then gave up. Either give a running runner ",
         pool.labels.length === 1 ? "that label" : "those labels", " under ", setup,
-        ", or change the environment's runner labels under Settings → Test targets.");
+        ", or change the ring's runner labels under Applications.");
     }
     if (pool.kind === "idle") {
       return h("span", {},
@@ -789,10 +789,10 @@ function infraCause(r: WebDynamic, envUrl: WebDynamic, projectKey: WebDynamic = 
   }
   if (r.status === "lost") return h("span", {}, "The runner stopped reporting, so Playtest can't say what happened. Running it again is safe.");
   if (/ECONNREFUSED|ERR_CONNECTION_REFUSED/i.test(err)) {
-    return h("span", {}, "Playtest couldn't reach ", target, " — nothing was listening. Check the environment's base URL under Settings, and that the app is up.");
+    return h("span", {}, "Playtest couldn't reach ", target, " — nothing was listening. Check the ring's URL under Applications, and that the app is up.");
   }
   if (/ENOTFOUND|ERR_NAME_NOT_RESOLVED|EAI_AGAIN/i.test(err)) {
-    return h("span", {}, "That host doesn't resolve: ", target, ". Check the environment's base URL for a typo.");
+    return h("span", {}, "That host doesn't resolve: ", target, ". Check the ring's URL for a typo.");
   }
   if (/ETIMEDOUT|ERR_TIMED_OUT|timeout/i.test(err)) {
     return h("span", {}, "The app took too long to answer at ", target, " — it may be starting up, or too slow to reach from the runner.");
@@ -801,7 +801,7 @@ function infraCause(r: WebDynamic, envUrl: WebDynamic, projectKey: WebDynamic = 
     return h("span", {}, "The TLS certificate at ", target, " wasn't accepted.");
   }
   if (/401|403|unauthor|forbidden/i.test(err)) {
-    return h("span", {}, "The run was refused before it could start — check the environment's auth identity and secrets.");
+    return h("span", {}, "The run was refused before it could start — check the ring's auth identity and secrets.");
   }
   if (!r.started_at) return h("span", {}, "The runner never picked this story up, so nothing was captured.");
   return h("span", {}, "The run stopped before it could reach a verdict. Nothing here says anything about your app.");

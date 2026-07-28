@@ -8,7 +8,7 @@
 // provably model-free — these tests never configure an LLM gateway.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { withApp } from "./helpers.ts";
+import { createTarget, withApp } from "./helpers.ts";
 import { ulid } from "../../src/ulid.ts";
 import { intakeFinding, recomputeFindingKeys } from "../../src/findings/intake.ts";
 import { runRetentionCycle } from "../../src/retention/worker.ts";
@@ -19,20 +19,20 @@ const SYSTEM = { system: "test" };
 
 async function seedProject(app: HostedDynamic, api: HostedDynamic, key: HostedDynamic) {
   const project = (await api.post("/projects", { key, name: key })).body;
+  const { application, ring } = await createTarget(api, project, { ringKey: "staging", discoveryAllowed: true });
   const suite = (await api.post(`/projects/${key}/suites`, { slug: "s", name: "S" })).body;
   const snapshotId = ulid();
   await app.db.query(
     `INSERT INTO suite_snapshots (id, suite_id, seq, tree, created_by) VALUES ($1,$2,1,'{}',$3)`,
     [snapshotId, suite.id, app.ctx.devUserId],
   );
-  const env = (await api.post(`/projects/${key}/environments`, { name: "staging", discovery_allowed: true })).body;
   const groupId = ulid();
   await app.db.query(
-    `INSERT INTO run_groups (id, project_id, suite_id, snapshot_id, environment_id, trigger, selection, status)
-       VALUES ($1,$2,$3,$4,$5,'{}','{}','done')`,
-    [groupId, project.id, suite.id, snapshotId, env.id],
+    `INSERT INTO run_groups (id, project_id, suite_id, snapshot_id, application_id, ring_id, trigger, selection, status)
+       VALUES ($1,$2,$3,$4,$5,$6,'{}','{}','done')`,
+    [groupId, project.id, suite.id, snapshotId, application.id, ring.id],
   );
-  return { project, suite, env, snapshotId, groupId };
+  return { project, suite, application, ring, snapshotId, groupId };
 }
 
 async function seedRun(app: HostedDynamic, { groupId, caseId = "cart", storyId = "cart/remove", status = "explored", gate = null, totals = null }: HostedDynamic) {

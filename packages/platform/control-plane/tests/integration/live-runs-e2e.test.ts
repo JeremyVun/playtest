@@ -17,7 +17,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { withApp, loadSuiteDir, REPO_ROOT } from "./helpers.ts";
+import { withApp, createTarget, loadSuiteDir, REPO_ROOT } from "./helpers.ts";
 import { SpawningGitHub, sleep, waitForGroupDone } from "./exec-helpers.ts";
 import { writeTar } from "../../src/suites/tar.ts";
 import { startInvariantApi } from "../../../../../tests/fixtures/invariant-api/server.ts";
@@ -34,20 +34,20 @@ const journey = (prefix: string) => [
 
 async function setUp(api: HostedDynamic, { key, baseUrl }: HostedDynamic) {
   const project = (await api.post("/projects", { key, name: key })).body;
+  const { application, ring } = await createTarget(api, project, {
+    key: "ledger",
+    name: "Ledger",
+    driver: "api",
+    ringKey: "laptop",
+    baseUrl,
+    runnerLabels: ["self-hosted", "playtest"],
+  });
   const suite = (await api.post(`/projects/${key}/suites`, { slug: "ledger", name: "Ledger" })).body;
   // loadSuiteDir skips `results/`, so the committed baseline stays behind and
   // this story records — the model in the loop is the scripted gateway.
   const tar = writeTar(loadSuiteDir(`${REPO_ROOT}/tests/fixtures/api-example`));
   assert.equal((await api.postTar(`/suites/${suite.id}/import`, tar)).status, 200);
-  const env = (
-    await api.post(`/projects/${key}/environments`, {
-      name: "laptop",
-      driver: "api",
-      runner_labels: ["self-hosted", "playtest"],
-      config: { app: { base_url: baseUrl } },
-    })
-  ).body;
-  return { project, suite, env };
+  return { project, suite, application, ring };
 }
 
 /** Poll `pred` until it answers something truthy. */
@@ -102,10 +102,10 @@ test("a hosted case streams into the live endpoint while it executes, then seals
     await withApp(
       async ({ api, base, app }: HostedDynamic) => {
         github.serverBase = base;
-        const { project, suite, env } = await setUp(api, { key: "livee2e", baseUrl: target.url });
+        const { project, suite, ring } = await setUp(api, { key: "livee2e", baseUrl: target.url });
         const launched = await api.post(`/projects/${project.key}/run-groups`, {
           suite_id: suite.id,
-          environment_id: env.id,
+          ring_id: ring.id,
           selection: { ids: ["ledger-journey"] },
         });
         assert.equal(launched.status, 200, JSON.stringify(launched.body));

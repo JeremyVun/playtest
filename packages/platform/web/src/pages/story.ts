@@ -815,7 +815,7 @@ function baseUrlCheck(st: WebDynamic) {
   return h("li.check-item.err", {}, h("span.g", {}, "✗"), h("span.msg", {},
     "This suite has no app URL, so no story in it can resolve. ",
     link(`/p/${st.projectKey}/suites/${st.slug}/settings`, "Set it in Suite settings"),
-    " — an environment can still override it at launch."));
+    " — under hosted execution the ring supplies it at launch instead."));
 }
 
 function renderChecks(validation: WebDynamic, findings: WebDynamic, st: WebDynamic) {

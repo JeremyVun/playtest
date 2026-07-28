@@ -15,7 +15,7 @@ import { writeBundle } from "@playtest/core/artifacts";
 import { writeTar } from "../../src/suites/tar.ts";
 import { runRetentionCycle } from "../../src/retention/worker.ts";
 import { ulid } from "../../src/ulid.ts";
-import { REPO_ROOT, loadSuiteDir, withApp } from "./helpers.ts";
+import { REPO_ROOT, createTarget, loadSuiteDir, withApp } from "./helpers.ts";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -54,17 +54,20 @@ const envelope = (step: number) => JSON.stringify({ type: "step", step, action: 
 /** Launch every story in the fixture suite and exchange a runner token for it. */
 async function launch(api: HostedDynamic, base: HostedDynamic, key: string) {
   const project = (await api.post("/projects", { key, name: key })).body;
+  const { application, ring } = await createTarget(api, project, {
+    key: "todos",
+    name: "Todos",
+    ringKey: "staging",
+    baseUrl: "http://127.0.0.1:9",
+    runnerLabels: ["self-hosted", "playtest"],
+    config: { secret_env: {} },
+  });
   const suite = (await api.post(`/projects/${project.key}/suites`, { slug: "todos", name: "Todos" })).body;
   const tar = writeTar(loadSuiteDir(`${REPO_ROOT}/tests/fixtures/todos`));
   assert.equal((await api.postTar(`/suites/${suite.id}/import`, tar)).status, 200);
-  const env = (await api.post(`/projects/${project.key}/environments`, {
-    name: "staging",
-    runner_labels: ["self-hosted", "playtest"],
-    config: { app: { base_url: "http://127.0.0.1:9" }, secret_env: {} },
-  })).body;
   const launched = await api.post(`/projects/${project.key}/run-groups`, {
     suite_id: suite.id,
-    environment_id: env.id,
+    ring_id: ring.id,
     selection: { mode: "auto" },
   });
   assert.equal(launched.status, 200, JSON.stringify(launched.body));
@@ -78,7 +81,7 @@ async function launch(api: HostedDynamic, base: HostedDynamic, key: string) {
   const spec = await fetch(`${base}/api/v1/runner/groups/${groupId}`, {
     headers: { authorization: `Bearer ${exchanged.token}` },
   }).then((r) => r.json());
-  return { project, suite, env, groupId, token: exchanged.token, runner, spec };
+  return { project, suite, application, ring, groupId, token: exchanged.token, runner, spec };
 }
 
 /** The live half of the runner protocol, as a runner would speak it. */

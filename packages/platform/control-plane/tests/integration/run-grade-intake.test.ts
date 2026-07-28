@@ -12,7 +12,7 @@ import assert from "node:assert/strict";
 import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { withApp } from "./helpers.ts";
+import { createTarget, withApp } from "./helpers.ts";
 import { ulid } from "../../src/ulid.ts";
 import { writeBundle } from "@playtest/core/artifacts";
 import { collectRunGradeIssues, ingestRunGradeFindings, gradeIssues } from "../../src/findings/run-grade.ts";
@@ -56,18 +56,20 @@ test("run_grade intake: grade issues from a sealed bundle become unreviewed find
   try {
     await withApp(async ({ app, api }: HostedDynamic) => {
       const project = (await api.post("/projects", { key: "rg", name: "RG" })).body;
+      // A suite binds to an application at creation, and a run group records
+      // the (application, ring) it was launched against.
+      const { application, ring } = await createTarget(api, project, { ringKey: "staging" });
       const suite = (await api.post(`/projects/${project.key}/suites`, { slug: "s", name: "S" })).body;
       const snapshotId = ulid();
       await app.db.query(
         `INSERT INTO suite_snapshots (id, suite_id, seq, tree, created_by) VALUES ($1, $2, 1, '{}', $3)`,
         [snapshotId, suite.id, app.ctx.devUserId],
       );
-      const env = (await api.post(`/projects/${project.key}/environments`, { name: "staging" })).body;
       const groupId = ulid();
       await app.db.query(
-        `INSERT INTO run_groups (id, project_id, suite_id, snapshot_id, environment_id, trigger, selection, status)
-           VALUES ($1,$2,$3,$4,$5,'{}','{}','done')`,
-        [groupId, project.id, suite.id, snapshotId, env.id],
+        `INSERT INTO run_groups (id, project_id, suite_id, snapshot_id, application_id, ring_id, trigger, selection, status)
+           VALUES ($1,$2,$3,$4,$5,$6,'{}','{}','done')`,
+        [groupId, project.id, suite.id, snapshotId, application.id, ring.id],
       );
       const runDbId = ulid();
       await app.db.query(

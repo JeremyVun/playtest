@@ -69,7 +69,7 @@ credentials. The local hosted launcher supplies them automatically.
 src/exec-group.ts         group exchange, scheduling, progress, and reporting
 src/case-runner.ts        process and container isolation
 src/case-runner-child.ts  one-case container protocol
-src/workspace.ts          snapshot, baseline, environment, and secret materialization
+src/workspace.ts          snapshot, baseline, ring-overlay, and secret materialization
 src/api-client.ts         authenticated runner-protocol client
 src/exec-mint.ts          hosted mint-job lifecycle
 src/mint.ts               clean-room provider-script execution

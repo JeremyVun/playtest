@@ -424,7 +424,7 @@ export async function findingDetailPage(projectKey: WebDynamic, findingId: WebDy
 
   // The deterministic "looks fixed" suggestion on a judgment-call (or
   // externally tracked) finding: a newer run passed every affected
-  // suite/environment/case, but judging the claim stays with a person —
+  // suite/ring/case, but judging the claim stays with a person —
   // one click either way, and "Not fixed" is remembered so the same run
   // never re-suggests.
   function suggestionBanner(f: WebDynamic, canReview: WebDynamic) {

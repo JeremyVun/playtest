@@ -17,8 +17,8 @@ export class ApiError extends Error {
   }
 }
 
-// Read cache for slow-moving reference collections (environments, personas,
-// models, members, suite lists). Keyed by path; an entry holds the request
+// Read cache for slow-moving reference collections (applications and rings,
+// personas, models, members, suite lists). Keyed by path; an entry holds the request
 // promise itself, so concurrent callers — a page and the modal it opens —
 // share one wire request. Any successful mutation wipes the whole cache:
 // mutations happen at human rate, so the cost is one refetch per list, while
@@ -72,9 +72,6 @@ export const api: WebDynamic = {
   patch: (p: WebDynamic, body: WebDynamic) => request("PATCH", p, { body }),
   del: (p: WebDynamic, body: WebDynamic) => request("DELETE", p, { body }),
   postRaw: (p: WebDynamic, raw: WebDynamic, contentType: WebDynamic) => request("POST", p, { raw, headers: { "content-type": contentType } }),
-  // The same for a PUT — an environment's app artifact is raw bytes with its
-  // file name in the query, never a JSON envelope with a build inside it.
-  putRaw: (p: WebDynamic, raw: WebDynamic, contentType: WebDynamic) => request("PUT", p, { raw, headers: { "content-type": contentType } }),
   // A binary GET (tar export) — returns a Blob for download.
   async blob(p: WebDynamic) {
     const res = await fetch(`/api/v1${p}`);

@@ -14,6 +14,19 @@ import { readBaseline } from "@playtest/core/artifacts";
 import { normalizePath } from "./paths.ts";
 
 /**
+ * Every read on this path is STRUCTURAL resolution
+ * (docs/contracts/engine.md#resolution-modes): cases and logical configuration
+ * are validated, but a complete physical target is not required.
+ *
+ * That is the honest mode for hosted editing, because a hosted suite
+ * legitimately authors no target at all — the ring supplies the URL at launch,
+ * and for mobile the platform deliberately does not know an app path. Executable
+ * resolution still requires a complete target where it matters: on the runner,
+ * and on the CLI. Faking a target here instead would mask real errors.
+ */
+const STRUCTURAL = { resolution: "structural" } as const;
+
+/**
  * Write `{ path: content }` to a fresh temp dir (exact CLI suite layout).
  * @returns {Promise<{ dir: string, cleanup: () => Promise<void> }>}
  */
@@ -78,7 +91,7 @@ function project(c: HostedDynamic, dir: HostedDynamic) {
 export async function resolveCaseByStory(files: HostedDynamic, storyId: HostedDynamic) {
   const { dir, cleanup } = await materializeTree(files);
   try {
-    const cases = await discoverCases([dir]);
+    const cases = await discoverCases([dir], STRUCTURAL);
     const hit = cases.find((c) => (c.storyId || c.id) === storyId) ?? null;
     return hit ? { ...hit, path: path.relative(dir, hit.file) } : null;
   } finally {
@@ -93,7 +106,7 @@ export async function resolveCaseByStory(files: HostedDynamic, storyId: HostedDy
 export async function resolveCases(files: HostedDynamic) {
   const { dir, cleanup } = await materializeTree(files);
   try {
-    const cases = await discoverCases([dir]);
+    const cases = await discoverCases([dir], STRUCTURAL);
     return cases.map((c) => project(c, dir));
   } finally {
     await cleanup();
@@ -141,7 +154,7 @@ export async function validateTree(files: HostedDynamic, { only = null }: Hosted
   const { dir, cleanup } = await materializeTree(files);
   try {
     const targets = only && only.length ? only.map((p: HostedDynamic) => path.join(dir, normalizePath(p))) : [dir];
-    const cases = await discoverCases(targets);
+    const cases = await discoverCases(targets, STRUCTURAL);
     return { ok: true, cases: cases.map((c) => project(c, dir)) };
   } catch (e) {
     if (e instanceof DummyConfigError) {
@@ -155,13 +168,18 @@ export async function validateTree(files: HostedDynamic, { only = null }: Hosted
 
 /**
  * Lint every resolved case in the tree (core lintCase); advisory warnings only.
- * If the tree doesn't resolve (invalid YAML/config), there is nothing to lint —
- * return no findings and let validateTree surface the real error. Lint never fails.
+ *
+ * A tree that does not resolve at all (invalid YAML, a bad config key) has
+ * nothing to lint, so the DummyConfigError is swallowed and validateTree
+ * surfaces the real error — lint never fails a request. Under STRUCTURAL
+ * resolution that swallow is a much narrower net than it used to be: a suite
+ * authoring no base URL now resolves and is linted, where before it fell into
+ * this catch and silently reported zero findings for the wrong reason.
  */
 export async function lintTree(files: HostedDynamic) {
   const { dir, cleanup } = await materializeTree(files);
   try {
-    const cases = await discoverCases([dir]);
+    const cases = await discoverCases([dir], STRUCTURAL);
     return cases.flatMap((c) =>
       lintCase(c).map((w) => ({ id: c.id, level: w.level, message: w.message })),
     );

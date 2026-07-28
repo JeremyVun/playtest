@@ -34,7 +34,7 @@ const EPHEMERAL_TABLES = new Set([
   "live_artifacts",
 ]);
 
-/** Tables the post-0009 schema actually has: everything created, minus everything dropped. */
+/** Tables the shipped schema actually has: everything created, minus everything dropped. */
 function liveTables() {
   const live = new Set(["schema_migrations"]); // created by the migration runner, not a file
   for (const file of fs.readdirSync(MIGRATIONS).filter((f) => f.endsWith(".sql")).sort()) {
@@ -58,14 +58,14 @@ function liveTables() {
   return live;
 }
 
-test("the fixture seeds every table in the post-0009 schema", () => {
+test("the fixture seeds every table in the shipped schema", () => {
   const live = liveTables();
-  // The seven simplification tables must be gone from the schema and absent here.
+  // Vocabulary the baseline retired: gone from the schema, absent here.
   for (const dropped of [
-    "plugins", "plugin_deliveries", "integrations", "insights",
+    "environments", "plugins", "plugin_deliveries", "integrations", "insights",
     "authoring_sessions", "legal_holds", "retention_policies",
   ]) {
-    assert.equal(live.has(dropped), false, `${dropped} should be dropped by 0009`);
+    assert.equal(live.has(dropped), false, `${dropped} is not part of the model any more`);
     assert.equal(dropped in TABLES, false, `${dropped} must not appear in the fixture`);
   }
   assert.deepEqual([...live].sort(), [...TABLE_ORDER].sort());
@@ -170,7 +170,7 @@ test("canonical JSON is stable, key-sorted, and whitespace-free", () => {
   assert.equal(canonicalJson({ a: 1, b: null }), '{"a":1,"b":null}');
   assert.equal(canonicalJson([]), "[]");
   // Reordering an object's keys must not change its canonical form.
-  const env: HostedDynamic = TABLES.environments[0].config;
-  const reordered = Object.fromEntries(Object.entries(env).reverse());
-  assert.equal(canonicalJson(reordered), canonicalJson(env));
+  const ring: HostedDynamic = TABLES.rings[0].config;
+  const reordered = Object.fromEntries(Object.entries(ring).reverse());
+  assert.equal(canonicalJson(reordered), canonicalJson(ring));
 });

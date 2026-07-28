@@ -10,20 +10,12 @@ test("config: dev auth needs no OIDC", () => {
   assert.equal(cfg.auth.devUser.subject, "dev-admin");
 });
 
-test("config: the app-artifact cap defaults generously and refuses a nonsensical override at boot", () => {
-  const dev = { ...base, PLAYTEST_AUTH: "dev" };
-  // A real APK or a zipped simulator build is hundreds of megabytes, so the
-  // default has to be far above the suite-file caps — this is the "different
-  // cap for binaries" the design calls for, not a reuse of the 4 MiB one.
-  assert.equal(loadConfig(dev).uploads.appArtifactMaxBytes, 512 * 1024 * 1024);
-  assert.equal(loadConfig({ ...dev, PLAYTEST_APP_ARTIFACT_MAX_MB: "1024" }).uploads.appArtifactMaxBytes, 1024 * 1024 * 1024);
-  for (const value of ["0", "-1", "8192", "half a gig"]) {
-    assert.throws(
-      () => loadConfig({ ...dev, PLAYTEST_APP_ARTIFACT_MAX_MB: value }),
-      (e) => e instanceof ServerConfigError && /PLAYTEST_APP_ARTIFACT_MAX_MB/.test(e.message) && /between 1 and 4096/.test(e.message),
-      `expected ${value} to be refused at boot`,
-    );
-  }
+test("config: no upload ceiling for application bytes — the platform holds none", () => {
+  // The platform never receives an app binary: a mobile build is a runner-local
+  // fact read from the runner's own configuration file. So there is no artifact
+  // cap to configure, and naming the retired variable changes nothing.
+  const cfg: HostedDynamic = loadConfig({ ...base, PLAYTEST_AUTH: "dev", PLAYTEST_APP_ARTIFACT_MAX_MB: "1024" });
+  assert.equal(cfg.uploads, undefined);
 });
 
 test("config: local dispatch is dev-auth only, named", () => {

@@ -1,12 +1,23 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { withApp, loadSuiteDir, REPO_ROOT } from "./helpers.ts";
+import { withApp, createTarget, loadSuiteDir, REPO_ROOT } from "./helpers.ts";
 import { writeTar } from "../../src/suites/tar.ts";
 
 test("phase2: launch + runner protocol with mock GitHub and auth broker", async () => {
   const github = new MockGitHub();
   await withApp(async ({ api, base }: HostedDynamic) => {
     const project = (await api.post("/projects", { key: "phase2", name: "Phase 2" })).body;
+    const { ring } = await createTarget(api, project, {
+      key: "todos",
+      name: "Todos",
+      ringKey: "staging",
+      baseUrl: "http://127.0.0.1:9",
+      runnerLabels: ["self-hosted", "playtest"],
+      config: {
+        auth: { default: "member", identities: { member: { $session: "sso/member" } } },
+        secret_env: {},
+      },
+    });
     const suite = (await api.post("/projects/phase2/suites", { slug: "todos", name: "Todos" })).body;
     const tar = writeTar(loadSuiteDir(`${REPO_ROOT}/tests/fixtures/todos`));
     assert.equal((await api.postTar(`/suites/${suite.id}/import`, tar)).status, 200);
@@ -14,15 +25,6 @@ test("phase2: launch + runner protocol with mock GitHub and auth broker", async 
       name: "member-state",
       value: JSON.stringify({ cookies: [{ name: "sid", value: "member" }], origins: [] }),
     })).status, 201);
-    const env = (await api.post("/projects/phase2/environments", {
-      name: "staging",
-      runner_labels: ["self-hosted", "playtest"],
-      config: {
-        app: { base_url: "http://127.0.0.1:9" },
-        auth: { default: "member", identities: { member: { $session: "sso/member" } } },
-        secret_env: {},
-      },
-    })).body;
     const provider = (await api.post("/projects/phase2/auth-providers", {
       name: "sso",
       kind: "storage_state_secret",
@@ -33,7 +35,7 @@ test("phase2: launch + runner protocol with mock GitHub and auth broker", async 
 
     const launched = await api.post("/projects/phase2/run-groups", {
       suite_id: suite.id,
-      environment_id: env.id,
+      ring_id: ring.id,
       selection: { ids: ["add-todo"], mode: "auto", max_steps: 77, timeout_ms: 360_000 },
     });
     assert.equal(launched.status, 200);

@@ -40,7 +40,7 @@ test("bundle-entry resolution: <run_id>/<case_id> prefix match picks the NEWEST 
   const tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), "pt-adapter-paths-"));
   try {
     await withApp(async ({ base, api, app }: HostedDynamic) => {
-      const { project, suite, env } = await setUpProject(api, {
+      const { project, suite, application, ring } = await setUpProject(api, {
         key: "adapter-paths",
         todoAppUrl: "http://127.0.0.1:1", // never dialed — no run actually executes in this test
         authStubUrl: "http://127.0.0.1:1",
@@ -51,8 +51,8 @@ test("bundle-entry resolution: <run_id>/<case_id> prefix match picks the NEWEST 
 
       const runId = "collision-run"; // same core run_id, deliberately, across two different groups
       const caseId = "add-todo";
-      const older = await makeRun(app, { project, suite, env, snapshotId, runId, caseId, ageMinutes: 60 });
-      const newer = await makeRun(app, { project, suite, env, snapshotId, runId, caseId, ageMinutes: 0 });
+      const older = await makeRun(app, { project, suite, application, ring, snapshotId, runId, caseId, ageMinutes: 60 });
+      const newer = await makeRun(app, { project, suite, application, ring, snapshotId, runId, caseId, ageMinutes: 0 });
 
       await attachBundle(app, older.runDbId, await buildBundle(tmpDir, "old"));
       await attachBundle(app, newer.runDbId, await buildBundle(tmpDir, "new"));
@@ -78,13 +78,13 @@ test("bundle-entry resolution: <run_id>/<case_id> prefix match picks the NEWEST 
   }
 });
 
-async function makeRun(app: HostedDynamic, { project, suite, env, snapshotId, runId, caseId, ageMinutes }: HostedDynamic) {
+async function makeRun(app: HostedDynamic, { project, suite, application, ring, snapshotId, runId, caseId, ageMinutes }: HostedDynamic) {
   const groupId = ulid();
   const runDbId = ulid();
   await app.db.query(
-    `INSERT INTO run_groups (id, project_id, suite_id, snapshot_id, environment_id, trigger, selection, status, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, '{}', '{}', 'done', $6, now())`,
-    [groupId, project.id, suite.id, snapshotId, env.id, new Date(Date.now() - ageMinutes * 60_000)],
+    `INSERT INTO run_groups (id, project_id, suite_id, snapshot_id, application_id, ring_id, trigger, selection, status, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, '{}', '{}', 'done', $7, now())`,
+    [groupId, project.id, suite.id, snapshotId, application.id, ring.id, new Date(Date.now() - ageMinutes * 60_000)],
   );
   await app.db.query(
     `INSERT INTO runs (id, run_group_id, case_id, story_id, run_id, status, mode, created_at, updated_at)

@@ -7,7 +7,7 @@
 import { Router } from "./router.ts";
 import * as projects from "./api/projects.ts";
 import * as suites from "./api/suites.ts";
-import * as environments from "./api/environments.ts";
+import * as applications from "./api/applications.ts";
 // Named import: core also exports a `listPersonas` (packages/core/src/public/suite.ts) —
 // this module import keeps the two unambiguous.
 import * as personasApi from "./api/personas.ts";
@@ -75,14 +75,18 @@ export function buildRouter() {
   r.get(`${v}/suites/:s/export`, suites.exportSuite);
   r.post(`${v}/suites/:s/import`, suites.importSuite);
 
-  // --- environments, secrets, tokens ---
-  r.get(`${v}/projects/:p/environments`, environments.listEnvironments);
-  r.post(`${v}/projects/:p/environments`, environments.createEnvironment);
-  r.put(`${v}/environments/:e`, environments.updateEnvironment);
-  r.del(`${v}/environments/:e`, environments.deleteEnvironment);
-  // The app binary an environment ships to whichever runner takes its work.
-  r.put(`${v}/environments/:e/app-artifact`, environments.putAppArtifact);
-  r.del(`${v}/environments/:e/app-artifact`, environments.deleteAppArtifact);
+  // --- applications and rings (the test surfaces a project owns) ---
+  r.get(`${v}/projects/:p/applications`, applications.listApplications);
+  r.post(`${v}/projects/:p/applications`, applications.createApplication);
+  r.get(`${v}/applications/:a`, applications.getApplication);
+  r.put(`${v}/applications/:a`, applications.updateApplication);
+  r.del(`${v}/applications/:a`, applications.deleteApplication);
+  r.get(`${v}/applications/:a/rings`, applications.listRings);
+  r.post(`${v}/applications/:a/rings`, applications.createRing);
+  r.put(`${v}/rings/:r`, applications.updateRing);
+  r.del(`${v}/rings/:r`, applications.deleteRing);
+
+  // --- personas, secrets, tokens ---
   r.get(`${v}/projects/:p/personas`, personasApi.listPersonas);
   r.post(`${v}/projects/:p/personas`, personasApi.createPersona);
   r.put(`${v}/personas/:id`, personasApi.updatePersona);
@@ -192,7 +196,6 @@ export function buildRouter() {
   r.get(`${v}/runner/groups/:g`, executor.groupSpec);
   r.get(`${v}/runner/snapshots/:id/tree`, executor.snapshotTree);
   r.get(`${v}/runner/blobs/:sha256`, executor.blob);
-  r.get(`${v}/runner/artifacts/:sha256`, executor.appArtifact);
   r.get(`${v}/runner/baselines/:id/trajectory`, executor.baselineTrajectory);
   r.post(`${v}/runner/sessions/claim`, executor.claim);
   r.post(`${v}/runner/sessions/:claim/fulfill`, executor.fulfill);

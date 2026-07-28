@@ -15,7 +15,7 @@ import http from "node:http";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { withApp, loadSuiteDir, REPO_ROOT } from "./helpers.ts";
+import { withApp, createTarget, loadSuiteDir, REPO_ROOT } from "./helpers.ts";
 import { childEnv, EXEC_GROUP_CLI, sleep } from "./exec-helpers.ts";
 import { writeTar } from "../../src/suites/tar.ts";
 import { reconcileDispatches } from "../../src/dispatch/reconciler.ts";
@@ -37,6 +37,16 @@ const journey = (prefix: string) => [
 /** A project holding the committed API example suite, targeted at `baseUrl`. */
 async function setUp(api: HostedDynamic, { key, baseUrl, labels = ["macos"], stories = 1 }: HostedDynamic) {
   const project = (await api.post("/projects", { key, name: key })).body;
+  const { application, ring } = await createTarget(api, project, {
+    key: "ledger",
+    name: "Ledger",
+    driver: "api",
+    ringKey: "laptop",
+    runnerLabels: labels,
+    // The whole point: the ring's URL is loopback on the RUNNER's machine, which
+    // a remotely hosted control plane could never reach itself.
+    baseUrl,
+  });
   const suite = (await api.post(`/projects/${key}/suites`, { slug: "ledger", name: "Ledger" })).body;
   // loadSuiteDir skips `results/`, so the committed baseline stays behind and
   // this story records â€” the model in the loop is the scripted gateway.
@@ -46,20 +56,10 @@ async function setUp(api: HostedDynamic, { key, baseUrl, labels = ["macos"], sto
   if (stories > 1) files["stories/second-journey.yaml"] = files["stories/ledger-journey.yaml"];
   const tar = writeTar(files);
   assert.equal((await api.postTar(`/suites/${suite.id}/import`, tar)).status, 200);
-  const env = (
-    await api.post(`/projects/${key}/environments`, {
-      name: "laptop",
-      driver: "api",
-      runner_labels: labels,
-      // The whole point: the target is loopback on the RUNNER's machine, which
-      // a remotely hosted control plane could never reach itself.
-      config: { app: { base_url: baseUrl } },
-    })
-  ).body;
-  return { project, suite, env };
+  return { project, suite, application, ring };
 }
 
-/** Start the real agent in pool mode. The credential rides the environment. */
+/** Start the real agent in pool mode. The credential rides the process environment. */
 function startAgent(base: string, credential: string, { llmUrl, labels = "macos" }: HostedDynamic) {
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "pool-agent-"));
   const out = { stdout: "", stderr: "" };
@@ -112,7 +112,7 @@ test("pool: the real agent claims a launched group and runs an API suite against
   let agent: HostedDynamic = null;
   try {
     await withApp(async ({ api, base, app }: HostedDynamic) => {
-      const { project, suite, env } = await setUp(api, { key: "poolagent", baseUrl: target.url });
+      const { project, suite, ring } = await setUp(api, { key: "poolagent", baseUrl: target.url });
       const registered = await api.post(`/projects/${project.key}/runners`, { name: "adas-laptop", labels: ["macos", "ios-sim"] });
       assert.equal(registered.status, 201, JSON.stringify(registered.body));
 
@@ -139,7 +139,7 @@ test("pool: the real agent claims a launched group and runs an API suite against
 
       const launched = await api.post(`/projects/${project.key}/run-groups`, {
         suite_id: suite.id,
-        environment_id: env.id,
+        ring_id: ring.id,
         selection: { ids: ["ledger-journey"] },
       });
       assert.equal(launched.status, 200, JSON.stringify(launched.body));
@@ -198,7 +198,7 @@ test("pool: a runner killed mid-group is reconciled like any vanished executor â
   let agent: HostedDynamic = null;
   try {
     await withApp(async ({ api, base, app }: HostedDynamic) => {
-      const { project, suite, env } = await setUp(api, { key: "poolkill", baseUrl: target.url, stories: 2 });
+      const { project, suite, ring } = await setUp(api, { key: "poolkill", baseUrl: target.url, stories: 2 });
       const registered = await api.post(`/projects/${project.key}/runners`, { name: "adas-laptop", labels: ["macos"] });
       agent = startAgent(base, registered.body.credential, { llmUrl: stalledUrl });
 
@@ -206,7 +206,7 @@ test("pool: a runner killed mid-group is reconciled like any vanished executor â
       // and the second has not started, which is the remainder the reconciler
       // is allowed to place once more.
       const groupId = (
-        await api.post(`/projects/${project.key}/run-groups`, { suite_id: suite.id, environment_id: env.id, selection: { ids: ["ledger-journey", "second-journey"] } })
+        await api.post(`/projects/${project.key}/run-groups`, { suite_id: suite.id, ring_id: ring.id, selection: { ids: ["ledger-journey", "second-journey"] } })
       ).body.run_group.id;
 
       const claimed = await until(

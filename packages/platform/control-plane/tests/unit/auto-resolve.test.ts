@@ -27,7 +27,7 @@ function finding(over = {}) {
 
 function triple(over = {}) {
   return {
-    suiteId: "s1", environmentId: "e1", caseId: "c1",
+    suiteId: "s1", ringId: "e1", caseId: "c1",
     lastEvidenceAt: T0,
     stamp: null,
     candidate: null,
@@ -134,11 +134,11 @@ test("signal tier: absence stamps only under locus coverage; presence writes the
 test("multi-triple: one fresh stamp does not close while another triple's evidence is newer", () => {
   const f = finding({ strict_key: "k", signal_type: "gate_assert", summary: { gate: { spec: "assert: x" } } });
   const stampedTriple = triple({
-    environmentId: "e1",
+    ringId: "e1",
     candidate: candidate({ gateChecks: [{ spec: "assert: x", pass: true }] }),
   });
   const staleTriple = triple({
-    environmentId: "e2",
+    ringId: "e2",
     lastEvidenceAt: T0 + 50,
     stamp: { run_id: "old", stamped_at: T0 + 20, method: "gate_pass" }, // older than its evidence
     candidate: null,
@@ -146,7 +146,7 @@ test("multi-triple: one fresh stamp does not close while another triple's eviden
   const d = resolveDecisions(f, [stampedTriple, staleTriple]);
   assert.equal(d.action, "none", "every affected triple must carry a fresh stamp");
   assert.equal(d.stamps.length, 1, "the pass still stamps its own triple");
-  // A newer pass on the second environment closes it, and provenance is the
+  // A newer pass on the second ring closes it, and provenance is the
   // newest stamp.
   const d2 = resolveDecisions(f, [
     { ...stampedTriple, stamp: { run_id: "rB", stamped_at: T0 + 10, method: "gate_pass" }, candidate: null },
@@ -231,7 +231,7 @@ test("full mode resolves only on ALL-verified stamps; case_pass and external ref
   // Mixed triples: one verified, one only case_pass — the weakest stamp decides.
   d = resolveDecisions(f, [
     triple({ candidate: candidate({ verdict: "fixed" }) }),
-    triple({ environmentId: "e2", stamp: { run_id: "rC", stamped_at: T0 + 20, method: "case_pass" } }),
+    triple({ ringId: "e2", stamp: { run_id: "rC", stamped_at: T0 + 20, method: "case_pass" } }),
   ], { mode: "full" });
   assert.equal(d.action, "suggest");
 
@@ -283,8 +283,8 @@ test("autoResolveReason: a short human sentence per tier, scoped when multi-trip
     "The exact check that failed (“assert: results show Tasmania”) passed in a newer run.",
   );
   assert.match(
-    autoResolveReason(gate, [triple(), triple({ environmentId: "e2" })]),
-    /everywhere it was seen \(2 suite\/environment combinations\)/,
+    autoResolveReason(gate, [triple(), triple({ ringId: "e2" })]),
+    /everywhere it was seen \(2 suite\/ring combinations\)/,
   );
   // A very long gate spec is clipped — the reason stays one readable sentence.
   const long = finding({ strict_key: "k", signal_type: "gate_assert", summary: { gate: { spec: "x".repeat(300) } } });

@@ -32,13 +32,18 @@ import { writeTar, readTar } from "../suites/tar.ts";
 const STORY_COUNT_SQL = `(SELECT COUNT(*) FROM suite_files f
      WHERE f.suite_id = s.id AND f.kind = 'case') AS story_count`;
 
+/** The bound application, folded into every suite read that renders a picker. */
+const APPLICATION_JOIN_SQL = `a.key AS application_key, a.name AS application_name,
+     a.driver AS application_driver, a.platform AS application_platform`;
+
 /** GET /projects/:p/suites — live suites; ?archived=1 lists the archived ones instead. */
 export async function listSuites(ctx: HostedDynamic) {
   const project = await getProjectByKey(ctx, ctx.params.p);
   guard(ctx, project.id, "viewer");
   const archived = ctx.query.get("archived") === "1" || ctx.query.get("archived") === "true";
   const { rows } = await ctx.db.query(
-    `SELECT s.*, ${STORY_COUNT_SQL} FROM suites s
+    `SELECT s.*, ${STORY_COUNT_SQL}, ${APPLICATION_JOIN_SQL}
+       FROM suites s JOIN applications a ON a.id = s.application_id
       WHERE s.project_id = $1 AND s.archived = $2 ORDER BY s.slug`,
     [project.id, archived],
   );
@@ -127,7 +132,9 @@ export async function getSuiteBySlug(ctx: HostedDynamic) {
   const project = await getProjectByKey(ctx, ctx.params.p);
   guard(ctx, project.id, "viewer");
   const { rows } = await ctx.db.query(
-    `SELECT s.*, ${STORY_COUNT_SQL} FROM suites s WHERE s.project_id = $1 AND s.slug = $2`,
+    `SELECT s.*, ${STORY_COUNT_SQL}, ${APPLICATION_JOIN_SQL}
+       FROM suites s JOIN applications a ON a.id = s.application_id
+      WHERE s.project_id = $1 AND s.slug = $2`,
     [project.id, ctx.params.slug],
   );
   if (!rows[0]) throw notFound(`no suite "${ctx.params.slug}" in project "${project.key}"`);
@@ -146,7 +153,15 @@ export async function getSuiteBySlug(ctx: HostedDynamic) {
   return view;
 }
 
-/** POST /projects/:p/suites {slug, name} */
+/**
+ * POST /projects/:p/suites {slug, name, application_id}
+ *
+ * The application binding is chosen at creation and is immutable: the suite's
+ * driver IS the application's driver, and the launch selector is (suite, ring),
+ * so this one field is what keeps a suite from ever reaching another surface's
+ * deployment. An empty project has no application to bind, which is a
+ * developer's job to fix — say so rather than 404ing on a null id.
+ */
 export async function createSuite(ctx: HostedDynamic) {
   const p = requireAuth(ctx);
   const project = await getProjectByKey(ctx, ctx.params.p);
@@ -154,6 +169,7 @@ export async function createSuite(ctx: HostedDynamic) {
   const body = await readJsonBody(ctx.req);
   const slug = slugField(body, "slug");
   const name = stringField(body, "name", { required: true, max: 200 });
+  const application = await suiteApplication(ctx, project, body.application_id);
   const dup = await ctx.db.query(`SELECT 1 FROM suites WHERE project_id = $1 AND slug = $2`, [
     project.id,
     slug,
@@ -165,8 +181,8 @@ export async function createSuite(ctx: HostedDynamic) {
     let rows;
     try {
       ({ rows } = await tx.query(
-        `INSERT INTO suites (id, project_id, slug, name) VALUES ($1, $2, $3, $4) RETURNING *`,
-        [id, project.id, slug, name],
+        `INSERT INTO suites (id, project_id, application_id, slug, name) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+        [id, project.id, application.id, slug, name],
       ));
     } catch (e: HostedDynamic) {
       // Pre-check races: a concurrent create can slip past it and hit the unique
@@ -182,11 +198,39 @@ export async function createSuite(ctx: HostedDynamic) {
       entityType: "suite",
       entityId: id,
       projectId: project.id,
-      detail: { project_id: project.id, slug, name },
+      detail: { project_id: project.id, slug, name, application: application.key },
     });
     return rows[0];
   });
-  return created(suiteView(suite));
+  return created(suiteView({ ...suite, application_key: application.key, application_name: application.name, application_driver: application.driver, application_platform: application.platform }));
+}
+
+/**
+ * The application a new suite binds to. Required — but when the project has
+ * exactly one, take it: a project with a single surface should not make an
+ * editor look up an opaque id to create a suite.
+ */
+async function suiteApplication(ctx: HostedDynamic, project: HostedDynamic, requested: HostedDynamic) {
+  const { rows } = await ctx.db.query(
+    `SELECT * FROM applications WHERE project_id = $1 ORDER BY key`,
+    [project.id],
+  );
+  if (requested) {
+    const hit = rows.find((r: HostedDynamic) => r.id === requested || r.key === requested);
+    if (!hit) throw notFound(`no application "${requested}" in project "${project.key}"`);
+    return hit;
+  }
+  if (rows.length === 1) return rows[0];
+  if (!rows.length) {
+    throw badRequest(
+      `project "${project.key}" has no application yet — a suite runs against one application target, ` +
+        `so a developer has to create one (its key, its driver, and a ring URL) before the first suite`,
+    );
+  }
+  throw badRequest(
+    `"application_id" is required: this project has ${rows.length} applications ` +
+      `(${rows.map((r: HostedDynamic) => `"${r.key}"`).join(", ")}), and a suite runs against exactly one`,
+  );
 }
 
 // ---------- files ----------
@@ -596,6 +640,21 @@ const userIdOf = (p: HostedDynamic) => (p.kind === "user" ? p.userId : null);
 const suiteView = (r: HostedDynamic) => ({
   id: r.id,
   project_id: r.project_id,
+  // The one application this suite runs against, fixed at creation. `application`
+  // is folded in wherever the read joins it, so a picker never has to look the
+  // key up separately.
+  application_id: r.application_id,
+  ...(r.application_key !== undefined
+    ? {
+        application: {
+          id: r.application_id,
+          key: r.application_key,
+          name: r.application_name ?? null,
+          driver: r.application_driver ?? null,
+          platform: r.application_platform ?? null,
+        },
+      }
+    : {}),
   slug: r.slug,
   name: r.name,
   archived: r.archived,

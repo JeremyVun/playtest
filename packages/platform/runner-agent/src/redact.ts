@@ -8,7 +8,7 @@ export function makeRedactor(values: unknown[] = []): (input: unknown) => string
 }
 
 export function collectSecretValues(spec: RunnerDynamic, sessions: Record<string, RunnerDynamic> = {}): unknown[] {
-  const vals: unknown[] = Object.values(spec.environment?.resolved_secrets || {});
+  const vals: unknown[] = Object.values(spec.ring?.resolved_secrets || {});
   for (const s of Object.values(sessions)) vals.push(JSON.stringify(s.storage_state || {}));
   return vals;
 }

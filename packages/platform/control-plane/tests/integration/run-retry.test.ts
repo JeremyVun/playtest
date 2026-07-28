@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { withApp, loadSuiteDir, REPO_ROOT } from "./helpers.ts";
+import { withApp, createTarget, loadSuiteDir, REPO_ROOT } from "./helpers.ts";
 import { writeTar } from "../../src/suites/tar.ts";
 
 class MockDispatch {
@@ -25,21 +25,24 @@ test("retry resets never-started stories inside one run group and double-clicks 
   const dispatch = new MockDispatch();
   await withApp(async ({ api, app }: HostedDynamic) => {
     const project = (await api.post("/projects", { key: "retry", name: "Retry" })).body;
+    const { ring } = await createTarget(api, project, {
+      key: "todos",
+      name: "Todos",
+      ringKey: "staging",
+      baseUrl: "http://127.0.0.1:9",
+      runnerLabels: ["local"],
+      config: { secret_env: {} },
+    });
     const suite = (await api.post(`/projects/${project.key}/suites`, {
       slug: "todos",
       name: "Todos",
     })).body;
     const tar = writeTar(loadSuiteDir(`${REPO_ROOT}/tests/fixtures/todos`));
     assert.equal((await api.postTar(`/suites/${suite.id}/import`, tar)).status, 200);
-    const environment = (await api.post(`/projects/${project.key}/environments`, {
-      name: "staging",
-      runner_labels: ["local"],
-      config: { app: { base_url: "http://127.0.0.1:9" }, secret_env: {} },
-    })).body;
 
     const launched = await api.post(`/projects/${project.key}/run-groups`, {
       suite_id: suite.id,
-      environment_id: environment.id,
+      ring_id: ring.id,
       selection: { mode: "auto" },
     });
     assert.equal(launched.status, 200);

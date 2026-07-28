@@ -1,5 +1,5 @@
 // Secret masking for the Test targets form. The console never renders a stored
-// literal secret value: an environment's `secret_env` literals show as a mask
+// literal secret value: a ring's `secret_env` literals show as a mask
 // everywhere (list, edit form), while `{$secret}`/`{$session}` references are
 // names, not values, so they stay readable. On save, an untouched mask means
 // "keep the stored value" — the browser never round-trips the literal through an

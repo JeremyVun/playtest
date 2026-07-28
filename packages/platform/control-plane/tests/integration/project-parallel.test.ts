@@ -1,7 +1,7 @@
 // Project concurrency defaults and the executor protocol that carries them.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { withApp } from "./helpers.ts";
+import { withApp, createTarget } from "./helpers.ts";
 
 const GITHUB_STUB = {
   enabled: true,
@@ -19,7 +19,7 @@ const CASE = [
 
 test("parallel: project settings validate, persist, and reach the runner", async () => {
   await withApp(async ({ api, base }: HostedDynamic) => {
-    await api.post("/projects", { key: "p", name: "P" });
+    const project = (await api.post("/projects", { key: "p", name: "P" })).body;
     assert.deepEqual((await api.get("/projects/p")).body.parallel, { total: 1, record: 1 });
 
     for (const bad of [
@@ -39,6 +39,7 @@ test("parallel: project settings validate, persist, and reach the runner", async
       { total: 6, record: 2 },
     );
 
+    const { ring } = await createTarget(api, project, { key: "checkout", name: "Checkout", baseUrl: "http://checkout.example" });
     const suite = (await api.post("/projects/p/suites", { slug: "checkout", name: "Checkout" })).body;
     const seeded = await api.post(`/suites/${suite.id}/commit`, {
       changes: [
@@ -48,10 +49,9 @@ test("parallel: project settings validate, persist, and reach the runner", async
       note: "seed",
     });
     assert.equal(seeded.status, 200, JSON.stringify(seeded.body));
-    const env = (await api.get("/projects/p/environments")).body.items[0];
     const launched = await api.post("/projects/p/run-groups", {
       suite_id: suite.id,
-      environment_id: env.id,
+      ring_id: ring.id,
       selection: {},
     });
     assert.equal(launched.status, 200, JSON.stringify(launched.body));

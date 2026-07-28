@@ -12,7 +12,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { withApp } from "./helpers.ts";
+import { withApp, createTarget } from "./helpers.ts";
 import { approvedRuleCards } from "../../src/authoring/rule-cards.ts";
 
 let server: HostedDynamic;
@@ -94,7 +94,10 @@ const PROPOSED = [
 ];
 
 async function seedSuite(api: HostedDynamic) {
-  await api.post("/projects", { key: "p", name: "P" });
+  const project = (await api.post("/projects", { key: "p", name: "P" })).body;
+  // Rule cards are about an HTTP surface, so the suite binds to an `api`
+  // application; its ring holds the URL the suite itself never authors.
+  await createTarget(api, project, { key: "widgets", name: "Widget registry", driver: "api" });
   const suite = (await api.post(`/projects/p/suites`, { slug: "s", name: "S" })).body;
   return suite;
 }

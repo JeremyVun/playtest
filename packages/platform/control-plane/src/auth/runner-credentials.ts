@@ -127,7 +127,7 @@ const LABEL_CHARSET_HELP = 'letters, digits, ".", "_" and "-"';
 
 /**
  * Validate and de-duplicate a label list. One implementation for every surface
- * that accepts labels — runner registration, environment `runner_labels`, a
+ * that accepts labels — runner registration, a ring's `runner_labels`, a
  * per-launch pin, ephemeral CI registration, and check-in re-advertisement — so
  * a label a runner may advertise is exactly a label a launch may ask for.
  */

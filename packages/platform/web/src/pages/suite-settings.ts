@@ -4,10 +4,10 @@
 // assertions are code-tier files that belong to the CLI (import a .tar to bring
 // them in, export one to take them out).
 //
-// The most load-bearing setting is app.base_url. Without it core refuses to
-// resolve any case in the suite — so a suite created without one cannot save its
-// first story. That is why the New suite dialog asks for it and why this page
-// leads with it.
+// Where a suite runs is NOT here: a suite belongs to one application and
+// launches against one of that application's rings, and the ring owns the URL.
+// This page shows those rings read-only and edits only what a suite may
+// legitimately say per ring — the logical overlay.
 //
 // Form and YAML are two views of the identical bytes (the story editor's
 // discipline): the form edits the parsed document IN PLACE, so comments, key
@@ -17,15 +17,14 @@ import { h, mount, clear } from "../lib/dom.js";
 import { link, navigate } from "../lib/router.js";
 import { renderFrame, page } from "../lib/shell.js";
 import { state, hasRole } from "../lib/state.js";
-import { toast, toastError, confirmModal, emptyState, errorState, formField, formModal, enhanceSelect, saveBar } from "../lib/ui.js";
+import { toast, toastError, confirmModal, emptyState, errorState, formField, enhanceSelect, saveBar } from "../lib/ui.js";
 import { parseYaml } from "../lib/caseform.js";
 import {
-  setAppKey, setViewportDimension, setLimitKey, setParallelValue, setModelKey, setEnvBaseUrl, resolveEnvTarget, baseUrlProblem,
+  setAppKey, setViewportDimension, setLimitKey, setParallelValue, setModelKey,
   setEnvCookies, parseCookieList, formatCookieList, resolveEnvCookies,
-  DEFAULT_ENV_NAME, ENV_NAME_RE, DRIVERS, driverLabel,
+  DRIVERS, driverLabel,
 } from "../lib/defaults-form.js";
 import { modelField } from "../lib/model-select.js";
-import { environmentDriver } from "../lib/env-config.js";
 import { getSuiteBySlug, exportSuite, importSuite } from "./suite.js";
 
 const DEFAULTS_PATH = "playtest.yaml";
@@ -53,18 +52,20 @@ export async function suiteSettingsPage(projectKey: WebDynamic, slug: WebDynamic
     }
     // Everything below depends only on the suite id, so it loads as one
     // parallel batch, each part keeping its own degrade-don't-block behavior:
-    // environments must not error the form for a role that can't read them
-    // (the per-env table is then just absent), and without the model
-    // vocabulary (tier enums + engine defaults) the model fields still work,
-    // they just explain less.
+    // the rings must not error the form for a role that can't read them (the
+    // ring table is then just absent), and without the model vocabulary (tier
+    // enums + engine defaults) the model fields still work, they just explain
+    // less.
     const file = suite.defaults || { content: "" };
-    const [snaps, envs, catalog] = await Promise.all([
+    const [snaps, rings, catalog] = await Promise.all([
       api.get(`/suites/${suite.id}/snapshots?limit=1`).catch(() => ({ items: [] })),
-      api.cached(`/projects/${projectKey}/environments`).then((r: WebDynamic) => r.items).catch(() => []),
+      suite.application_id
+        ? api.cached(`/applications/${suite.application_id}/rings`).then((r: WebDynamic) => r.items).catch(() => [])
+        : Promise.resolve([]),
       api.cached(`/models`, { ttl: Infinity }).catch(() => ({ tiers: [], defaults: {} })),
     ]);
     st = {
-      projectKey, slug, suite, project, envs, catalog,
+      projectKey, slug, suite, project, rings, catalog,
       raw: file.content, savedRaw: file.content,
       baseSeq: snaps.items[0]?.seq ?? null,
       view: "form",
@@ -201,22 +202,20 @@ function render(main: WebDynamic, st: WebDynamic) {
       },
     }, ...DRIVERS.map((d: WebDynamic) => h("option", { value: d, selected: driver === d }, driverLabel(d)))));
 
-    const binInput = h("input", {
-      type: "text", value: app.app || "",
-      placeholder: "/Users/you/builds/app.apk",
-      onchange: (e: WebDynamic) => setKey("app", e.target.value.trim() || null),
-    });
-
+    // The suite's driver has to agree with its application's: a suite has no
+    // driver column, its case files do, and a launch refuses a case whose
+    // driver is not the application's surface. So the mismatch is said here,
+    // beside the control that causes it, rather than at launch.
+    const bound = st.suite.application?.driver || null;
     const appCard = h("div.card.pad", {},
       h("div.label", { style: "margin-bottom:10px" }, "App under test"),
       formField("Driver", driverSel, driver === "web"
         ? "A browser app, driven by Chromium."
         : driver === "api" ? "An HTTP API, driven by fetch." : "A native app, driven by Appium."),
-      driver === "mobile"
-        // Optional: a real .apk exceeds what a suite may hold, so the usual
-        // answer is a path on the machine that runs it, set on the environment.
-        ? formField("App binary", binInput,
-            "Optional. The .app/.ipa/.apk to install — an absolute path on the runner that executes this suite, or a path relative to this file for a small fixture app. Leave blank to provide it from the environment.")
+      bound && bound !== driver
+        ? h("div.preview-warn", { style: "margin-top:-6px" },
+            `This suite is bound to ${st.suite.application.key}, a ${bound} surface — a launch refuses stories that drive anything else. `
+            + `Set the driver to ${bound}, or move these stories to a suite bound to a matching application.`)
         : null,
     );
 
@@ -402,281 +401,97 @@ function render(main: WebDynamic, st: WebDynamic) {
       h("button.btn", { onclick: () => switchView("yaml") }, "Edit YAML"),
     );
 
-    return h("div", {}, appCard, browserDisplayCard, limitsCard, concurrencyCard, modelsCard, driver === "mobile" ? null : targetsCard(app), restCard);
+    return h("div", {}, appCard, browserDisplayCard, limitsCard, concurrencyCard, modelsCard, ringsCard(app, driver), restCard);
   }
 
   /**
-   * Test targets: every place this suite can run, and the URL it uses there.
+   * The rings this suite can run against — its application's, and only those.
    *
-   * A target is a deployment ring — credentials, runner pool, discovery
-   * permission. Some belong to the project and are shared by every suite; some
-   * belong to this suite alone (a service only these stories talk to, or a
-   * project with no rings configured yet). Either way the URL is the SUITE's and
-   * is written into this file, which is why every field here saves with the
-   * page: the ring's own URL is only a fallback for suites that declare none.
+   * The ring says where a run points; the suite never does. A ring owns the
+   * URL, the credentials, the routing labels and the discovery permission for
+   * one deployment, and hosted execution applies that URL as the runtime target
+   * after the complete authored merge, replacing anything the suite wrote. So
+   * the URL column here is READ-ONLY: there is no per-ring URL to set and no
+   * precedence left to explain.
    *
-   * A blank row is not a mystery — each one states the URL it resolves to and
-   * which of the three sources won, mirroring the dispatcher's precedence
-   * exactly (lib/defaults-form.js resolveEnvTarget).
+   * What a suite may still say per ring is LOGICAL, and cookies are the one
+   * people set: `app.envs.<ring key>.cookies`, which core applies WHOLESALE
+   * over the suite default rather than merging into it.
    */
-  function targetsCard(app: WebDynamic) {
-    const suiteDriver = app.driver || "web";
-    const compatible = st.envs.filter((e: WebDynamic) => environmentDriver(e) === suiteDriver);
-    const mine = compatible.filter((e: WebDynamic) => e.suite_id === st.suite.id);
-    const shared = compatible.filter((e: WebDynamic) => !e.suite_id && e.name !== DEFAULT_ENV_NAME);
-    const defaultTarget = compatible.find((e: WebDynamic) => !e.suite_id && e.name === DEFAULT_ENV_NAME) || null;
-    const canManage = hasRole(st.project.id, "developer");
-    // Cookies are a web-driver key (set on the browser context before the first
-    // navigation) — an api suite's rows stay URL-only.
-    const web = (app.driver || "web") === "web";
-
-    // The suite's own base URL, first, because core resolves every case against
-    // it and refuses the suite without one. When the project keeps its `default`
-    // target this row is also a launchable target under that name; when a
-    // project has grown real rings and dropped it, the same URL still serves as
-    // the fallback for every target that sets none.
-    const defaultRow = row({
-      name: defaultTarget ? h("span.id", {}, defaultTarget.name) : h("span.dim", {}, "Suite default"),
-      sub: "this suite's own URL",
-      chips: defaultTarget?.discovery_allowed ? ["discovery"] : [],
-      value: app.base_url || "",
-      label: "Default base URL",
-      placeholder: "https://staging.example.com",
-      onset: (v: WebDynamic) => setKey("base_url", v),
-      cookies: web ? {
-        value: formatCookieList(app.cookies),
-        label: "Default cookies",
-        placeholder: "cookies: name=value; name2=value2",
-        onset: (v: WebDynamic) => setCookies(null, v),
-      } : null,
-      why: h("span", {},
-        defaultTarget
-          ? whyLine(app, defaultTarget)
-          : app.base_url
-            ? h("span", {}, "Used by any target below that sets no URL of its own.")
-            : h("span.warn", {}, "No URL yet — no story in this suite can resolve until this or a target below has one."),
-        web ? cookieWhy(app, defaultTarget?.name ?? DEFAULT_ENV_NAME, defaultTarget?.config?.app?.cookies) : null,
-      ),
-    });
-
-    const sharedRows = shared.map((e: WebDynamic) => row({
-      name: h("span.id", {}, e.name),
-      chips: e.discovery_allowed ? ["discovery"] : [],
-      value: app?.envs?.[e.name]?.base_url || "",
-      label: `Base URL for ${e.name}`,
-      placeholder: e.config?.app?.base_url || app.base_url || "no URL — runs here will fail",
-      onset: (v: WebDynamic) => setEnvUrl(e.name, v),
-      cookies: web ? envCookiesField(e) : null,
-      why: h("span", {}, whyLine(app, e), web ? cookieWhy(app, e.name, e.config?.app?.cookies) : null),
-    }));
-
-    const myRows = mine.map((e: WebDynamic) => row({
-      name: h("span.id", {}, e.name),
-      chips: e.discovery_allowed ? ["discovery"] : [],
-      value: app?.envs?.[e.name]?.base_url || "",
-      label: `Base URL for ${e.name}`,
-      placeholder: e.config?.app?.base_url || app.base_url || "no URL — runs here will fail",
-      onset: (v: WebDynamic) => setEnvUrl(e.name, v),
-      cookies: web ? envCookiesField(e) : null,
-      why: h("span", {}, whyLine(app, e), web ? cookieWhy(app, e.name, e.config?.app?.cookies) : null),
-      action: canManage
-        ? h("button.btn.btn-sm.danger", {
-            type: "button",
-            "aria-label": `Remove environment ${e.name}`,
-            onclick: () => removeEnvironment(e),
-          }, "Remove")
-        : null,
-    }));
-
-    return h("div.card.pad", { style: "margin-top:14px" },
-      h("div.label", { style: "margin-bottom:6px" }, "Environments"),
-      h("p.dim", { style: "margin-bottom:14px" },
-        "Where this suite runs. An environment carries the credentials, runner pool and discovery permission for a deployment ring; the URL — and any browser cookies sent with every request — is this suite's own inside that ring. Leave a row blank to accept what it already resolves to."),
-      defaultRow,
-      shared.length
-        ? h("div.env-section", {},
-            group("Shared with every suite in this project",
-              canManage ? link(`/p/${projectKey}/settings/test-targets`, h("span.btn.btn-sm", {}, "Manage")) : null),
-            ...sharedRows)
-        : null,
-      h("div.env-section", {},
-        group("This suite only", canManage
-          ? h("button.btn.btn-sm", { type: "button", onclick: () => addEnvironment(suiteDriver) }, "+ Add environment")
-          : h("span.faint", { style: "font-size:12px" }, "needs the developer role")),
-        ...(myRows.length
-          ? myRows
-          : [h("p.faint", { style: "font-size:12.5px;margin:2px 0 0" },
-              shared.length
-                ? "Nothing yet. Add one for a host only these stories use — a local service, a preview deploy — without putting it in front of every other suite."
-                : "Nothing yet. Add one for each place these stories should run — a local service, staging, a preview deploy.")]),
-      ),
-    );
-
-    /** One environment: its name, this suite's URL for it, what that resolves to. */
-    function row({ name, sub = null, chips = [], value, label, placeholder, onset, why, cookies = null, action = null }: WebDynamic) {
-      const input = h("input", {
-        type: "text", value, placeholder,
-        "aria-label": label,
-        onchange: (ev: WebDynamic) => onset(ev.target.value.trim() || null),
-      });
-      // A second, quieter field for the ring's cookies — blank accepts what the
-      // placeholder says it inherits, exactly like the URL above it.
-      const cookieInput = cookies
+  function ringsCard(app: WebDynamic, driver: WebDynamic) {
+    const web = driver === "web";
+    const application = st.suite.application || null;
+    const rows = st.rings.map((ring: WebDynamic) => {
+      const key = ring.key;
+      const cookieInput = web
         ? h("input.env-row-cookies", {
-            type: "text", value: cookies.value, placeholder: cookies.placeholder,
-            "aria-label": cookies.label,
-            onchange: (ev: WebDynamic) => cookies.onset(ev.target.value),
+            type: "text",
+            value: formatCookieList(app?.envs?.[key]?.cookies),
+            placeholder: formatCookieList(ring.config?.app?.cookies) || formatCookieList(app.cookies) || "cookies: name=value; name2=value2",
+            "aria-label": `Cookies for ${key}`,
+            onchange: (ev: WebDynamic) => setCookies(key, ev.target.value),
           })
         : null;
       return h("div.env-row", {},
         h("div.env-row-name", {},
-          name,
-          ...chips.map((c: WebDynamic) => h("span.chip", {}, c)),
-          sub ? h("div.env-row-sub.faint", {}, sub) : null),
-        action ? h("div.env-row-edit", {}, input, action) : input,
+          h("span.id", {}, key),
+          ring.discovery_allowed ? h("span.chip", {}, "discovery") : null,
+          h("div.env-row-sub.faint", {}, ring.name && ring.name !== key ? ring.name : " ")),
+        h("div.dim", {},
+          driver === "mobile"
+            ? "the claiming runner supplies the build"
+            : h("span.mono", {}, ring.base_url || "no URL — set one under Applications")),
         cookieInput,
-        h("div.env-row-why.dim", {}, why),
+        h("div.env-row-why.dim", {}, web ? cookieWhy(app, key, ring.config?.app?.cookies) : null),
       );
-    }
+    });
 
-    /** The cookies column for one project/suite environment's row. */
-    function envCookiesField(e: WebDynamic) {
-      return {
-        value: formatCookieList(app?.envs?.[e.name]?.cookies),
-        label: `Cookies for ${e.name}`,
-        placeholder: formatCookieList(e.config?.app?.cookies) || formatCookieList(app.cookies) || "cookies: name=value; name2=value2",
-        onset: (v: WebDynamic) => setCookies(e.name, v),
-      };
-    }
+    return h("div.card.pad", { style: "margin-top:14px" },
+      h("div.label", { style: "margin-bottom:6px" }, "Rings"),
+      h("p.dim", { style: "margin-bottom:14px" },
+        application
+          ? h("span", {}, "Where this suite runs, chosen at launch. ", h("span.mono", {}, application.key),
+              " owns these rings and their URLs; what this file may say per ring is logical only — the cookies a web run carries there.")
+          : "Where this suite runs, chosen at launch from its application's rings."),
+      st.rings.length
+        ? h("div.env-section", {},
+            h("div.env-group", {},
+              h("span", {}, application ? `Rings of ${application.name || application.key}` : "Rings"),
+              hasRole(st.project.id, "developer")
+                ? link(`/p/${projectKey}/applications`, h("span.btn.btn-sm", {}, "Manage"))
+                : null),
+            ...rows)
+        : h("p.faint", { style: "font-size:12.5px;margin:2px 0 0" },
+            hasRole(st.project.id, "developer")
+              ? h("span", {}, "This application has no ring yet, so there is nowhere to launch. Add one under ",
+                  link(`/p/${projectKey}/applications`, "Applications"), ".")
+              : "This application has no ring yet, so there is nowhere to launch. A developer adds one under Applications."),
+    );
 
-    /** What cookies a launch actually carries, appended to the URL's why line. */
-    function cookieWhy(app: WebDynamic, envName: WebDynamic, envCookies: WebDynamic) {
-      const { cookies, source } = resolveEnvCookies(app, envName, envCookies);
+    /** What cookies a launch actually carries, said under the field. */
+    function cookieWhy(app: WebDynamic, ringKey: WebDynamic, ringCookies: WebDynamic) {
+      const { cookies, source } = resolveEnvCookies(app, ringKey, ringCookies);
       if (!cookies) return null;
       const list = h("span.mono", {}, formatCookieList(cookies));
-      if (source === "suite-env") return h("span", {}, " Sends cookies ", list, " — this suite's own for ", envName, ".");
-      if (source === "environment") return h("span", {}, " Sends cookies ", list, " — set on the ", envName, " environment itself.");
-      return h("span", {}, " Sends cookies ", list, " — this suite's default.");
+      if (source === "suite-ring") return h("span", {}, "Sends cookies ", list, " — this suite's own for ", ringKey, ".");
+      if (source === "ring") return h("span", {}, "Sends cookies ", list, " — set on the ", ringKey, " ring itself.");
+      return h("span", {}, "Sends cookies ", list, " — this suite's default.");
     }
 
     /**
-     * Write cookies into the file: the default row edits `app.cookies`, an
-     * environment row edits `app.envs.<name>.cookies` (which core applies
-     * WHOLESALE over the default — an override, not an addition).
+     * Write cookies into the file: `app.envs.<ring key>.cookies`, which core
+     * applies WHOLESALE over the top-level `app.cookies` — an override, not an
+     * addition.
      */
-    function setCookies(envName: WebDynamic, text: WebDynamic) {
+    function setCookies(ringKey: WebDynamic, text: WebDynamic) {
       let parsed;
       try { parsed = parseCookieList(text); }
       catch (err: WebDynamic) { return toastError(err); }
-      try { st.raw = envName ? setEnvCookies(st.raw, envName, parsed) : setAppKey(st.raw, "cookies", parsed); }
+      try { st.raw = setEnvCookies(st.raw, ringKey, parsed); }
       catch (err: WebDynamic) { return toastError(err); }
       paintEditor();
       scheduleChecks();
     }
-
-    /** The dispatcher's precedence, said out loud for one environment. */
-    function whyLine(app: WebDynamic, e: WebDynamic) {
-      const envUrl = e.config?.app?.base_url || null;
-      const { url, source } = resolveEnvTarget(app, e.name, envUrl);
-      if (!url) return h("span.warn", {}, "No URL anywhere — a run against this environment can't start.");
-      const at = h("span.mono", {}, url);
-      if (source === "suite-env") {
-        // Only an override that CHANGES the destination is worth the words: the
-        // same URL on both sides is a coincidence, not a decision to explain.
-        const overrides = envUrl && envUrl !== url;
-        return h("span", {}, "Runs against ", at, " — this suite's own URL for ", e.name,
-          overrides ? h("span", {}, ", overriding its own ", h("span.mono", {}, envUrl)) : null);
-      }
-      if (source === "environment") {
-        return h("span", {}, "Runs against ", at, " — the URL set on the ", e.name, " environment itself");
-      }
-      return h("span", {}, "Runs against ", at, " — this suite's default URL");
-    }
-
-    function setEnvUrl(name: WebDynamic, value: WebDynamic) {
-      try { st.raw = setEnvBaseUrl(st.raw, name, value); }
-      catch (err: WebDynamic) { return toastError(err); }
-      paintEditor();
-      scheduleChecks();
-    }
-  }
-
-  const group = (title: WebDynamic, action: WebDynamic) => h("div.env-group", {}, h("span", {}, title), action);
-
-  /**
-   * Add a target only this suite can launch against. The target itself is a
-   * project-level object and is created immediately; its URL belongs to this
-   * file and lands with Save, like every other URL on this page. The toast says
-   * so, because a half-applied change nobody mentions is how people lose work.
-   */
-  function addEnvironment(suiteDriver: WebDynamic) {
-    const close = formModal("Add an environment", () => {
-      const name = h("input", { type: "text", placeholder: "checkout-local" });
-      const url = h("input", { type: "text", placeholder: "http://127.0.0.1:4173" });
-      const disc = h("input", { type: "checkbox" });
-      const problem = h("div.preview-warn", { style: "display:none;margin:-6px 0 10px" });
-      return h("form", { onsubmit: submit },
-        h("p.dim", { style: "margin:-4px 0 14px" },
-          "Only this suite can launch against it, and it carries no credentials. For a deployment ring with sign-in identities and a runner pool, add it under Settings → Test targets instead."),
-        formField("Name", name, "How it reads at launch, and the --env name the CLI uses. Letters, digits, dots and dashes."),
-        formField("Base URL", url, "Where this suite's app lives inside it."),
-        h("label.check", { style: "margin:6px 0 12px" }, disc, "Allow discovery studies against it"),
-        h("div.faint", { style: "font-size:11.5px;margin:-6px 0 12px 24px" },
-          "Discovery agents really click buy, delete and submit. Leave this off for anything with real data behind it."),
-        problem,
-        h("div.modal-actions", {},
-          h("button.btn.ghost", { type: "button", onclick: () => close() }, "Cancel"),
-          h("button.btn.primary", { type: "submit" }, "Add environment"),
-        ),
-      );
-      async function submit(ev: WebDynamic) {
-        ev.preventDefault();
-        const nm = name.value.trim();
-        if (!ENV_NAME_RE.test(nm)) {
-          return fail("A name is letters, digits, dots and dashes — no spaces, and it can't start with a dash.");
-        }
-        const bad = baseUrlProblem(url.value);
-        if (bad) return fail(bad);
-        try {
-          const created = await api.post(`/projects/${projectKey}/environments`, {
-            name: nm,
-            driver: suiteDriver,
-            suite_id: st.suite.id,
-            discovery_allowed: disc.checked,
-          });
-          st.envs = [...st.envs, created];
-        } catch (err: WebDynamic) { return fail(String(err.message || err)); }
-        try { st.raw = setEnvBaseUrl(st.raw, nm, url.value.trim()); }
-        catch (err: WebDynamic) { return toastError(err); }
-        close();
-        paintEditor();
-        scheduleChecks();
-        toast("Environment added", `save this page to keep ${nm}'s URL`, "ok");
-      }
-      function fail(message: WebDynamic) {
-        problem.style.display = "";
-        problem.textContent = message;
-      }
-    });
-  }
-
-  /** Remove a suite's own target, and the URL this file kept for it. */
-  async function removeEnvironment(env: WebDynamic) {
-    const ok = await confirmModal({
-      title: `Remove ${env.name}?`,
-      body: "This suite stops being able to launch against it. Its URL leaves these settings when you save. Runs that already used it keep their history.",
-      confirmLabel: "Remove environment",
-      cancelLabel: "Keep it",
-      danger: true,
-    });
-    if (!ok) return;
-    try { await api.del(`/environments/${env.id}`); }
-    catch (err: WebDynamic) { return toastError(err); }
-    st.envs = st.envs.filter((e: WebDynamic) => e.id !== env.id);
-    try { st.raw = setEnvBaseUrl(st.raw, env.name, null); } catch { /* the key stays; harmless */ }
-    paintEditor();
-    scheduleChecks();
-    toast("Environment removed", env.name, "ok");
   }
 
   async function runChecks() {

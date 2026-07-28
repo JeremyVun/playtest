@@ -1,4 +1,4 @@
-// S0 storage baseline fixture — a database-neutral seed for the whole post-0009
+// The storage baseline fixture — a database-neutral seed for the whole shipped
 // control-plane schema (docs/backlog/storage/S0-INVENTORY.md).
 //
 // Nothing here imports `pg`, `node:sqlite`, or any driver. Every value is plain
@@ -117,9 +117,12 @@ export const IDS: HostedDynamic = {
   snapshot2: fid(T.snapshot2, "snapshot:2"),
   snapshotArchived: fid(T.snapshot1, "snapshot:admin"),
 
-  envStaging: fid(T.suiteCreated, "env:staging"),
-  envProd: fid(T.suiteCreated, "env:prod"),
-  envSuitePreview: fid(T.suiteCreated, "env:preview"),
+  appWeb: fid(T.suiteCreated, "application:acme-web"),
+  appIos: fid(T.suiteCreated, "application:acme-ios"),
+
+  ringStaging: fid(T.suiteCreated, "ring:staging"),
+  ringProd: fid(T.suiteCreated, "ring:prod"),
+  ringIosLocal: fid(T.suiteCreated, "ring:ios-local"),
 
   personaGrumpy: fid(T.suiteCreated, "persona:grumpy-shopper"),
 
@@ -328,18 +331,30 @@ export const COLUMN_TYPES: HostedDynamic = {
   memberships: { user_id: "text", project_id: "text", role: "text", created_at: "ts", updated_at: "ts" },
   sessions: { id: "text", user_id: "text", expires_at: "ts", created_at: "ts" },
   api_tokens: { id: "text", project_id: "text", role: "text", name: "text", token_hash: "text", expires_at: "ts", created_at: "ts" },
-  suites: { id: "text", project_id: "text", slug: "text", name: "text", archived: "bool", created_at: "ts", updated_at: "ts" },
+  suites: {
+    id: "text", project_id: "text", application_id: "text", slug: "text", name: "text",
+    archived: "bool", created_at: "ts", updated_at: "ts",
+  },
   suite_files: {
     id: "text", suite_id: "text", path: "text", kind: "text", content: "text",
     updated_by: "text", created_at: "ts", updated_at: "ts",
   },
   suite_snapshots: { id: "text", suite_id: "text", seq: "int", tree: "json", created_by: "text", note: "text", created_at: "ts" },
-  environments: {
-    id: "text", project_id: "text", suite_id: "text", name: "text", config: "json", discovery_allowed: "bool",
-    runner_labels: "text[]", created_at: "ts", updated_at: "ts",
-    // Uploaded app binary, by reference (0017). NULL for every web/API target
-    // and for a runner whose build is already a path on its own disk.
-    app_artifact: "json",
+  applications: {
+    id: "text", project_id: "text", key: "text", name: "text", driver: "text",
+    // NULL for web/API, `ios`/`android` for mobile — core picks its device
+    // automation from it.
+    platform: "text",
+    created_at: "ts", updated_at: "ts",
+  },
+  rings: {
+    id: "text", application_id: "text", key: "text", name: "text",
+    // The ring's URL is a first-class column, required for web/API and NULL for
+    // mobile: a mobile build, its device and its Appium endpoint are runner-local
+    // facts no platform record holds.
+    base_url: "text",
+    config: "json", discovery_allowed: "bool", runner_labels: "text[]",
+    created_at: "ts", updated_at: "ts",
   },
   personas: {
     id: "text", project_id: "text", slug: "text", name: "text", description: "text",
@@ -357,7 +372,7 @@ export const COLUMN_TYPES: HostedDynamic = {
     entity_type: "text", entity_id: "text", detail: "json",
   },
   auth_providers: {
-    id: "text", project_id: "text", environment_id: "text", name: "text", kind: "text", config: "json",
+    id: "text", project_id: "text", ring_id: "text", name: "text", kind: "text", config: "json",
     code: "text", identities: "json", ttl_minutes: "int", enabled: "bool", updated_by: "text",
     created_at: "ts", updated_at: "ts",
   },
@@ -367,15 +382,14 @@ export const COLUMN_TYPES: HostedDynamic = {
   },
   session_claims: { id: "text", provider_id: "text", identity: "text", executor_id: "text", status: "text", created_at: "ts", expires_at: "ts" },
   run_groups: {
-    id: "text", project_id: "text", suite_id: "text", snapshot_id: "text", environment_id: "text",
+    id: "text", project_id: "text", suite_id: "text", snapshot_id: "text",
+    // What this launch ran against, pinned: the three are checked to agree in
+    // the launch transaction, so a group is always a self-consistent statement.
+    application_id: "text", ring_id: "text",
     trigger: "json", selection: "json", status: "text", exit_summary: "json", created_at: "ts", updated_at: "ts",
-    // Per-launch placement pin (0016). NULL means "follow the environment",
-    // which is every group nobody pinned.
+    // Per-launch placement pin. NULL means "follow the ring", which is every
+    // group nobody pinned.
     runner_labels: "text[]",
-    // The app artifact this launch resolved and pinned (0017). It keeps the
-    // blob alive for as long as the group can be re-run, whatever the
-    // environment holds now.
-    app_artifact: "json",
   },
   executors: {
     id: "text", run_group_id: "text", kind: "text", workflow_run_url: "text", versions: "json",
@@ -395,6 +409,10 @@ export const COLUMN_TYPES: HostedDynamic = {
     // Pull-based placement (0015): the labels snapshot that makes this row a
     // claim-board entry, plus the claim the winning runner stamped on it.
     labels: "text[]", runner_id: "text", claimed_at: "ts", heartbeat_at: "ts", canceled_at: "ts",
+    // This attempt's non-secret target snapshot: what its offer advertised and
+    // what its group spec serves, so a ring edit mid-flight cannot make the two
+    // disagree. Never holds secrets.
+    target: "json",
   },
   runners: {
     id: "text", project_id: "text", name: "text", labels: "text[]", credential_hash: "text",
@@ -437,7 +455,7 @@ export const COLUMN_TYPES: HostedDynamic = {
     id: "text", project_id: "text", intake_key: "text", finding_id: "text", created_at: "ts",
   },
   finding_resolution_stamps: {
-    finding_id: "text", suite_id: "text", environment_id: "text", case_id: "text",
+    finding_id: "text", suite_id: "text", ring_id: "text", case_id: "text",
     run_id: "text", method: "text", stamped_at: "ts",
   },
   consolidation_plans: {
@@ -466,10 +484,11 @@ export const TABLE_ORDER: HostedDynamic = [
   "memberships",
   "sessions",
   "api_tokens",
+  "applications",
+  "rings",
   "suites",
   "suite_files",
   "suite_snapshots",
-  "environments",
   "personas",
   "rule_cards",
   "secrets",
@@ -510,17 +529,11 @@ export const FIXTURE_SECRET_PLAINTEXTS = {
 // ------------------------------------------------------------------- rows
 
 export const TABLES: HostedDynamic = {
-  // Every migration the post-0009 schema is built from, recorded as applied.
+  // The shipped migration set, recorded as applied. It has to be exactly what
+  // this build ships: a ledger naming a retired file is a data root the server
+  // refuses to boot against (src/migrate.ts).
   schema_migrations: [
-    { filename: "0001_phase1_control_plane.sql", applied_at: T.accountsCreated },
-    { filename: "0002_phase2_execution_plane.sql", applied_at: T.accountsCreated },
-    { filename: "0003_session_claims.sql", applied_at: T.accountsCreated },
-    { filename: "0004_candidate_diff_summary.sql", applied_at: T.accountsCreated },
-    { filename: "0005_phase4_authoring_insights.sql", applied_at: T.accountsCreated },
-    { filename: "0006_phase5_media_retention.sql", applied_at: T.accountsCreated },
-    { filename: "0007_phase6_findings_plugins.sql", applied_at: T.accountsCreated },
-    { filename: "0008_phase7_ops.sql", applied_at: T.accountsCreated },
-    { filename: "0009_platform_simplification.sql", applied_at: T.accountsCreated },
+    { filename: "0001_baseline.sql", applied_at: T.accountsCreated },
   ],
 
   users: [
@@ -554,8 +567,8 @@ export const TABLES: HostedDynamic = {
   ],
 
   suites: [
-    { id: IDS.suiteCheckout, project_id: IDS.projectMain, slug: "checkout", name: "Checkout journeys", archived: false, created_at: T.suiteCreated, updated_at: T.snapshot2 },
-    { id: IDS.suiteArchived, project_id: IDS.projectMain, slug: "admin", name: "Admin console", archived: true, created_at: T.suiteCreated, updated_at: T.triage },
+    { id: IDS.suiteCheckout, project_id: IDS.projectMain, application_id: IDS.appWeb, slug: "checkout", name: "Checkout journeys", archived: false, created_at: T.suiteCreated, updated_at: T.snapshot2 },
+    { id: IDS.suiteArchived, project_id: IDS.projectMain, application_id: IDS.appWeb, slug: "admin", name: "Admin console", archived: true, created_at: T.suiteCreated, updated_at: T.triage },
   ],
 
   suite_files: [
@@ -587,57 +600,71 @@ export const TABLES: HostedDynamic = {
     { id: IDS.snapshotArchived, suite_id: IDS.suiteArchived, seq: 1, tree: TREE_ARCHIVED, created_by: IDS.userAdmin, note: "archived", created_at: T.snapshot1 },
   ],
 
-  environments: [
+  applications: [
     {
-      id: IDS.envStaging,
+      id: IDS.appWeb,
       project_id: IDS.projectMain,
-      suite_id: null,
-      name: "staging",
+      key: "acme-web",
+      name: "Acme Web",
+      driver: "web",
+      platform: null, // only a mobile application names one
+      created_at: T.suiteCreated,
+      updated_at: T.suiteCreated,
+    },
+    {
+      // A second surface in the same project: users think of one product, core
+      // has to pick a different driver, so these are two applications.
+      id: IDS.appIos,
+      project_id: IDS.projectMain,
+      key: "acme-ios",
+      name: "Acme iOS",
+      driver: "mobile",
+      platform: "ios",
+      created_at: T.suiteCreated,
+      updated_at: T.suiteCreated,
+    },
+  ],
+
+  rings: [
+    {
+      id: IDS.ringStaging,
+      application_id: IDS.appWeb,
+      key: "staging",
+      name: "Staging",
+      base_url: "https://staging.acme.test",
       config: {
-        app: { base_url: "https://staging.acme.test", viewport: { width: 1280, height: 720 } },
-        auth: { provider: "staging-login", identity: "shopper" },
+        app: { viewport: { width: 1280, height: 720 } },
+        auth: { identities: { shopper: { $session: "staging-login/shopper" } } },
         secret_env: { ACME_API_TOKEN: "API_TOKEN", ACME_DB_PASSWORD: { $secret_file: "DB_PASSWORD" } },
       },
       discovery_allowed: true,
       runner_labels: ["linux", "chromium"], // Postgres text[]
-      // The build this ring currently ships to whichever runner takes its work
-      // (0017): a reference into the content-addressed blob store, never bytes
-      // and never a URL. `group1` below pins an OLDER upload, which is the
-      // whole point of pinning.
-      app_artifact: {
-        sha256: "a1".repeat(32),
-        size: 48_317_952,
-        filename: "acme-staging.apk",
-        uploaded_at: "2026-02-11T09:14:22.000Z",
-        uploaded_by: IDS.userAdmin,
-      },
       created_at: T.suiteCreated,
       updated_at: T.suiteCreated,
     },
     {
-      id: IDS.envProd,
-      project_id: IDS.projectMain,
-      suite_id: null,
-      name: "production",
+      id: IDS.ringProd,
+      application_id: IDS.appWeb,
+      key: "production",
+      name: "Production",
+      base_url: "https://www.acme.test",
       config: {},
       discovery_allowed: false,
       runner_labels: [], // empty array, not NULL
-      app_artifact: null, // no build of its own
       created_at: T.suiteCreated,
       updated_at: T.suiteCreated,
     },
     {
-      // Suite-owned: launchable from one suite, deleted with it. The URL a suite
-      // uses lives in its own playtest.yaml, so the config here stays empty —
-      // this row carries identity and permission, nothing else.
-      id: IDS.envSuitePreview,
-      project_id: IDS.projectMain,
-      suite_id: IDS.suiteCheckout,
-      name: "preview",
+      // A mobile ring: NULL base_url, because the claiming runner supplies the
+      // build, the device and the Appium endpoint from its own config file.
+      id: IDS.ringIosLocal,
+      application_id: IDS.appIos,
+      key: "local",
+      name: "Local simulator",
+      base_url: null,
       config: {},
-      discovery_allowed: true,
-      runner_labels: [],
-      app_artifact: null,
+      discovery_allowed: false,
+      runner_labels: ["macbook", "ios"],
       created_at: T.suiteCreated,
       updated_at: T.suiteCreated,
     },
@@ -747,7 +774,7 @@ export const TABLES: HostedDynamic = {
     {
       id: IDS.providerToken,
       project_id: IDS.projectMain,
-      environment_id: IDS.envStaging,
+      ring_id: IDS.ringStaging,
       name: "staging-login",
       kind: "token_endpoint",
       config: { url: "https://staging.acme.test/api/session", method: "POST" },
@@ -762,7 +789,7 @@ export const TABLES: HostedDynamic = {
     {
       id: IDS.providerScript,
       project_id: IDS.projectMain,
-      environment_id: null, // nullable FK with ON DELETE SET NULL
+      ring_id: null, // project-wide: every ring may use it, and its mints carry no labels
       name: "script-login",
       kind: "script",
       config: {},
@@ -782,24 +809,15 @@ export const TABLES: HostedDynamic = {
       project_id: IDS.projectMain,
       suite_id: IDS.suiteCheckout,
       snapshot_id: IDS.snapshot2,
-      environment_id: IDS.envStaging,
+      application_id: IDS.appWeb,
+      ring_id: IDS.ringStaging,
       trigger: { kind: "ci", ref: "refs/heads/main", sha: "b7f2c1d9e0a4", actor: { user_id: IDS.userAdmin } },
       selection: { mode: "act", stories: ["checkout", "refund"], refresh: false },
       status: "done",
       exit_summary: { pass: 2, fail: 1, infra: 0, changed: 1, exit_code: 1 },
-      // A CI launch pinned its own build's runner (0016), so this group is
-      // placed on these labels however the environment is edited later.
+      // A CI launch pinned its own build's runner, so this group is placed on
+      // these labels however the ring is edited later.
       runner_labels: ["ci-run-900100"],
-      // The build this launch actually ran, pinned at launch (0017). The
-      // environment has since taken a newer upload; this row — and the blob it
-      // keeps alive — still describes what produced the evidence below.
-      app_artifact: {
-        sha256: "b2".repeat(32),
-        size: 47_982_113,
-        filename: "acme-staging.apk",
-        uploaded_at: "2026-02-04T18:02:40.000Z",
-        uploaded_by: IDS.userAdmin,
-      },
       created_at: T.group1,
       updated_at: T.run3End,
     },
@@ -808,13 +826,13 @@ export const TABLES: HostedDynamic = {
       project_id: IDS.projectMain,
       suite_id: IDS.suiteCheckout,
       snapshot_id: IDS.snapshot2,
-      environment_id: IDS.envStaging,
+      application_id: IDS.appWeb,
+      ring_id: IDS.ringStaging,
       trigger: { kind: "manual", actor: { user_id: IDS.userReviewer } },
       selection: { mode: "explore", stories: ["checkout"], refresh: true },
       status: "running",
       exit_summary: null,
-      runner_labels: null, // unpinned: this group follows its environment
-      app_artifact: null, // this launch resolved its target without an artifact
+      runner_labels: null, // unpinned: this group follows its ring
       created_at: T.group2,
       updated_at: T.group2,
     },
@@ -1105,6 +1123,20 @@ export const TABLES: HostedDynamic = {
       // Placed on GitHub: the labels rode the workflow inputs, and no claim
       // exists because the control plane started this executor itself.
       labels: ["self-hosted", "playtest"],
+      // The non-secret target snapshot this attempt served: application and ring
+      // ids and keys, driver, platform, the ring's URL, the placement labels, and
+      // the LOGICAL overlay. Never a secret, never a mobile path or device.
+      target: {
+        application_id: IDS.appWeb,
+        application_key: "acme-web",
+        ring_id: IDS.ringStaging,
+        ring_key: "staging",
+        driver: "web",
+        platform: null,
+        base_url: "https://staging.acme.test",
+        labels: ["ci-run-900100"],
+        config: { app: { viewport: { width: 1280, height: 720 } } },
+      },
       runner_id: null,
       claimed_at: null,
       heartbeat_at: null,
@@ -1125,6 +1157,7 @@ export const TABLES: HostedDynamic = {
       error: null,
       created_at: T.triage,
       labels: null,
+      target: null, // a media job has no target: it re-renders evidence already held
       runner_id: null,
       claimed_at: null,
       heartbeat_at: null,
@@ -1145,6 +1178,7 @@ export const TABLES: HostedDynamic = {
       error: null,
       created_at: T.group2,
       labels: [],
+      target: null, // a project-wide provider's mint: empty labels, no ring
       runner_id: null,
       claimed_at: null,
       heartbeat_at: null,
@@ -1167,6 +1201,17 @@ export const TABLES: HostedDynamic = {
       error: null,
       created_at: T.group2,
       labels: ["macos", "ios-sim"],
+      target: {
+        application_id: IDS.appWeb,
+        application_key: "acme-web",
+        ring_id: IDS.ringStaging,
+        ring_key: "staging",
+        driver: "web",
+        platform: null,
+        base_url: "https://staging.acme.test",
+        labels: ["macos", "ios-sim"],
+        config: { app: { viewport: { width: 1280, height: 720 } } },
+      },
       runner_id: IDS.runnerLaptop,
       claimed_at: T.group2,
       heartbeat_at: T.now,
@@ -1478,14 +1523,14 @@ export const TABLES: HostedDynamic = {
     { id: IDS.evidence5, finding_id: IDS.finding4New, run_id: IDS.run2, case_id: "refund", step_from: 9, step_to: 9, excerpt: null, created_at: T.run2End },
   ],
 
-  // The auto-resolve resolution ledger (0013): a later passing run stamped the
-  // key-less slow-checkout finding's (suite, environment, case) triple. Stamps
+  // The auto-resolve resolution ledger: a later passing run stamped the
+  // key-less slow-checkout finding's (suite, ring, case) triple. Stamps
   // are never deleted; they go stale by timestamp comparison.
   finding_resolution_stamps: [
     {
       finding_id: IDS.finding2,
       suite_id: IDS.suiteCheckout,
-      environment_id: IDS.envStaging,
+      ring_id: IDS.ringStaging,
       case_id: "checkout",
       run_id: IDS.run3,
       method: "case_pass",

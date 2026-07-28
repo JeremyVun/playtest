@@ -2,7 +2,7 @@
 // run history (run_groups pin suites via ON DELETE RESTRICT and must go first).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { withApp } from "./helpers.ts";
+import { createTarget, withApp } from "./helpers.ts";
 
 test("projects: admin can delete an empty project; key is free to reuse", async () => {
   await withApp(async ({ api }: HostedDynamic) => {
@@ -15,21 +15,22 @@ test("projects: admin can delete an empty project; key is free to reuse", async 
   });
 });
 
-test("projects: delete cascades suites, envs, and run history", async () => {
+test("projects: delete cascades suites, applications, rings, and run history", async () => {
   await withApp(async ({ api, app }: HostedDynamic) => {
     const project = (await api.post("/projects", { key: "wipe", name: "Wipe" })).body;
+    const { application, ring } = await createTarget(api, project, { ringKey: "staging" });
     const suite = (await api.post("/projects/wipe/suites", { slug: "s", name: "S" })).body;
     await api.post(`/suites/${suite.id}/commit`, {
       changes: [{ path: "playtest.yaml", content: "app:\n  base_url: http://x\n" }],
       note: "defaults",
     });
-    const env = (await api.post("/projects/wipe/environments", { name: "staging" })).body;
 
-    // Insert a run_group that would block a naïve project delete (suite RESTRICT).
+    // Insert a run_group that would block a naïve project delete: it pins the
+    // suite, the application and the ring, all ON DELETE RESTRICT.
     await app.db.query(
-      `INSERT INTO run_groups (id, project_id, suite_id, snapshot_id, environment_id, trigger, selection, status)
-       VALUES ($1, $2, $3, (SELECT id FROM suite_snapshots WHERE suite_id = $3 LIMIT 1), $4, '{}', '{}', 'done')`,
-      ["rg-wipe-1", project.id, suite.id, env.id],
+      `INSERT INTO run_groups (id, project_id, suite_id, snapshot_id, application_id, ring_id, trigger, selection, status)
+       VALUES ($1, $2, $3, (SELECT id FROM suite_snapshots WHERE suite_id = $3 LIMIT 1), $4, $5, '{}', '{}', 'done')`,
+      ["rg-wipe-1", project.id, suite.id, application.id, ring.id],
     );
 
     assert.equal((await api.del("/projects/wipe")).status, 204);
@@ -37,12 +38,13 @@ test("projects: delete cascades suites, envs, and run history", async () => {
     const left = await app.db.query(
       `SELECT
          (SELECT COUNT(*) FROM suites WHERE project_id = $1) AS suites,
-         (SELECT COUNT(*) FROM environments WHERE project_id = $1) AS envs,
+         (SELECT COUNT(*) FROM applications WHERE project_id = $1) AS applications,
+         (SELECT COUNT(*) FROM rings WHERE application_id = $2) AS rings,
          (SELECT COUNT(*) FROM run_groups WHERE project_id = $1) AS groups,
          (SELECT COUNT(*) FROM memberships WHERE project_id = $1) AS members`,
-      [project.id],
+      [project.id, application.id],
     );
-    assert.deepEqual(left.rows[0], { suites: 0, envs: 0, groups: 0, members: 0 });
+    assert.deepEqual(left.rows[0], { suites: 0, applications: 0, rings: 0, groups: 0, members: 0 });
   });
 });
 

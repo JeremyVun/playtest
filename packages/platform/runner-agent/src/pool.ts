@@ -291,7 +291,7 @@ export function startupLines(opts: PoolOptions, runner: RunnerIdentity | null): 
     `  labels     ${labels}`,
     `  isolation  ${opts.isolation}${opts.isolation === "process" ? " — cases run directly on this machine" : " — one container per case"}`,
     `  work dir   ${opts.workDir}`,
-    "waiting for work — launch a run against an environment whose runner labels this runner advertises",
+    "waiting for work — launch a run against a ring whose runner labels this runner advertises",
   ];
 }
 

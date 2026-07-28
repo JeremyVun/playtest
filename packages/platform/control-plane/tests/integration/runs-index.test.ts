@@ -8,7 +8,7 @@
 // exactly the runs a person has to look at.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { withApp, loadSuiteDir, REPO_ROOT } from "./helpers.ts";
+import { withApp, createTarget, loadSuiteDir, REPO_ROOT } from "./helpers.ts";
 import { writeTar } from "../../src/suites/tar.ts";
 
 class MockGitHub {
@@ -30,20 +30,23 @@ test("runs index: per-run stats, story rows, and the needs-attention filter", as
   const github = new MockGitHub();
   await withApp(async ({ api, base, app }: HostedDynamic) => {
     const project = (await api.post("/projects", { key: "runsidx", name: "Runs index" })).body;
+    const { application, ring } = await createTarget(api, project, {
+      key: "todos",
+      name: "Todos",
+      ringKey: "staging",
+      baseUrl: "http://127.0.0.1:9",
+      runnerLabels: ["self-hosted", "playtest"],
+      config: { secret_env: {} },
+    });
     const suite = (await api.post(`/projects/${project.key}/suites`, { slug: "todos", name: "Todos" })).body;
     const tar = writeTar(loadSuiteDir(`${REPO_ROOT}/tests/fixtures/todos`));
     assert.equal((await api.postTar(`/suites/${suite.id}/import`, tar)).status, 200);
-    const env = (await api.post(`/projects/${project.key}/environments`, {
-      name: "staging",
-      runner_labels: ["self-hosted", "playtest"],
-      config: { app: { base_url: "http://127.0.0.1:9" }, secret_env: {} },
-    })).body;
 
     /** Launch every story in the suite and report the outcome each name maps to. */
-    async function runGroup(outcomes: HostedDynamic, note: HostedDynamic) {
+    async function runGroup(outcomes: HostedDynamic, note: HostedDynamic, against: HostedDynamic = ring) {
       const launched = await api.post(`/projects/${project.key}/run-groups`, {
         suite_id: suite.id,
-        environment_id: env.id,
+        ring_id: against.id,
         selection: { mode: "auto" },
         note,
       });
@@ -157,7 +160,7 @@ test("runs index: per-run stats, story rows, and the needs-attention filter", as
     // `mixed` is retired: a green rerun is how a person resolves a red run.
     const retired = await api.get(`/projects/${project.key}/run-groups?outcome=attention`);
     assert.deepEqual(retired.body.items, [],
-      "a failure whose story has since passed on the same suite and environment is not attention");
+      "a failure whose story has since passed on the same suite and ring is not attention");
     const healthyOverview = await api.get(`/projects/${project.key}/health`);
     assert.deepEqual(healthyOverview.body.attention, [],
       "the suites overview also retires a failure after that story passes");
@@ -178,6 +181,24 @@ test("runs index: per-run stats, story rows, and the needs-attention filter", as
       [["fail", "complete-todo"]],
       "the suites overview raises attention again when the story's latest verdict is red",
     );
+
+    // Retirement is keyed on (suite, RING), not on the suite alone: the same
+    // story passing against a DIFFERENT deployment target says nothing about
+    // this one, so it must not clear the red run off anybody's desk.
+    const prod = (await api.post(`/applications/${application.id}/rings`, {
+      key: "prod",
+      name: "Prod",
+      base_url: "http://127.0.0.1:9",
+      runner_labels: ["self-hosted", "playtest"],
+    })).body;
+    await runGroup({
+      "add-todo": { status: "pass", score: 94, cost_usd: 0.01 },
+      "complete-todo": { status: "pass", score: 91, cost_usd: 0.01 },
+      "clear-completed": { status: "pass", score: 89, cost_usd: 0.01 },
+    }, "prod smoke", prod);
+    const acrossRings = await api.get(`/projects/${project.key}/run-groups?outcome=attention`);
+    assert.deepEqual(acrossRings.body.items.map((g: HostedDynamic) => g.id), [regressed],
+      "a green run on another ring never retires a failure on this one");
 
     // A run group can have several bounded dispatch attempts. The Suites
     // overview alerts on the run, not on each placement attempt: one broken run
@@ -215,7 +236,7 @@ test("runs index: per-run stats, story rows, and the needs-attention filter", as
     // Cancellation is a decision the person already made; a story that failed
     // before they pulled the plug doesn't put the run back on their desk.
     const launched = await api.post(`/projects/${project.key}/run-groups`, {
-      suite_id: suite.id, environment_id: env.id, selection: { mode: "auto" }, note: "abandoned",
+      suite_id: suite.id, ring_id: ring.id, selection: { mode: "auto" }, note: "abandoned",
     });
     const abandonedId = launched.body.run_group.id;
     const exchanged = await fetch(`${base}/api/v1/runner/exchange`, {
@@ -267,16 +288,19 @@ test("runs index: a run in flight reports progress, not a duration", async () =>
   const github = new MockGitHub();
   await withApp(async ({ api, base }: HostedDynamic) => {
     const project = (await api.post("/projects", { key: "runsflight", name: "In flight" })).body;
+    const { ring } = await createTarget(api, project, {
+      key: "todos",
+      name: "Todos",
+      ringKey: "staging",
+      baseUrl: "http://127.0.0.1:9",
+      runnerLabels: ["self-hosted", "playtest"],
+      config: { secret_env: {} },
+    });
     const suite = (await api.post(`/projects/${project.key}/suites`, { slug: "todos", name: "Todos" })).body;
     const tar = writeTar(loadSuiteDir(`${REPO_ROOT}/tests/fixtures/todos`));
     assert.equal((await api.postTar(`/suites/${suite.id}/import`, tar)).status, 200);
-    const env = (await api.post(`/projects/${project.key}/environments`, {
-      name: "staging",
-      runner_labels: ["self-hosted", "playtest"],
-      config: { app: { base_url: "http://127.0.0.1:9" }, secret_env: {} },
-    })).body;
     const groupId = (await api.post(`/projects/${project.key}/run-groups`, {
-      suite_id: suite.id, environment_id: env.id, selection: { mode: "auto" },
+      suite_id: suite.id, ring_id: ring.id, selection: { mode: "auto" },
     })).body.run_group.id;
 
     // Dispatched, nothing started: three stories, nothing done, no clock to show.

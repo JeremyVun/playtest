@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  setAppKey, setViewportDimension, setLimitKey, setParallelValue, setModelKey, setEnvBaseUrl, resolveEnvTarget, initialDefaultsYaml, baseUrlProblem,
+  setAppKey, setViewportDimension, setLimitKey, setParallelValue, setModelKey, initialDefaultsYaml,
   setEnvCookies, parseCookieList, formatCookieList, resolveEnvCookies,
   DRIVERS, driverLabel,
 } from "../src/lib/defaults-form.js";
@@ -104,29 +104,16 @@ test("defaults-form: model choices set and clear at the top level, other bytes i
   assert.throws(() => setModelKey("", "report_model", "opus"), /unknown model key/);
 });
 
-test("defaults-form: a suite declares its own URL for one environment", () => {
-  const out = setEnvBaseUrl(COMMENTED, "t2", "https://t2.example.com");
-  assert.match(out, /t2:\n\s+base_url: https:\/\/t2\.example\.com/);
-  // The env that was already there is untouched, and so is everything else.
-  assert.match(out, /prod:\n\s+base_url: https:\/\/example\.com/);
-  assert.match(out, /# staging defaults/);
-  // An empty file grows the whole path.
-  assert.equal(setEnvBaseUrl("", "staging", "https://s.test"),
-    "app:\n  envs:\n    staging:\n      base_url: https://s.test\n");
-});
-
-test("defaults-form: clearing an override prunes the empty maps it leaves behind", () => {
-  const one = setEnvBaseUrl("", "staging", "https://s.test");
+test("defaults-form: clearing a per-ring override prunes the empty maps it leaves behind", () => {
+  const one = setEnvCookies("", "staging", { slot: "blue" });
   // The last override in the file takes the whole app/envs scaffold with it.
-  assert.equal(setEnvBaseUrl(one, "staging", null), "");
-  // With a sibling env, only that env's entry goes.
-  const two = setEnvBaseUrl(one, "prod", "https://p.test");
-  const back = setEnvBaseUrl(two, "prod", null);
-  assert.equal(back, one);
-  // With a suite default present, the app map survives the pruning.
-  const withDefault = setAppKey(one, "base_url", "https://dev.test");
-  const pruned = setEnvBaseUrl(withDefault, "staging", null);
-  assert.equal(pruned, "app:\n  base_url: https://dev.test\n");
+  assert.equal(setEnvCookies(one, "staging", null), "");
+  // With a sibling ring, only that ring's entry goes.
+  const two = setEnvCookies(one, "prod", { slot: "green" });
+  assert.equal(setEnvCookies(two, "prod", null), one);
+  // With a suite-level key present, the app map survives the pruning.
+  const withDefault = setAppKey(one, "cookies", { bvt: "true" });
+  assert.equal(setEnvCookies(withDefault, "staging", null), "app:\n  cookies:\n    bvt: \"true\"\n");
 });
 
 test("defaults-form: cookie text and the flat map round-trip; junk names its entry", () => {
@@ -151,7 +138,7 @@ test("defaults-form: suite-default cookies write app.cookies and clear cleanly",
   assert.doesNotMatch(setAppKey(set, "cookies", null), /cookies:/);
 });
 
-test("defaults-form: per-environment cookies overlay one ring and prune away", () => {
+test("defaults-form: per-ring cookies overlay one ring and prune away", () => {
   const out = setEnvCookies(COMMENTED, "prod", { slot: "green" });
   assert.match(out, /prod:\n\s+base_url: https:\/\/example\.com\n\s+cookies:\n\s+slot: green/);
   assert.match(out, /# staging defaults/);
@@ -159,58 +146,37 @@ test("defaults-form: per-environment cookies overlay one ring and prune away", (
   const one = setEnvCookies("", "staging", { slot: "blue" });
   assert.equal(one, "app:\n  envs:\n    staging:\n      cookies:\n        slot: blue\n");
   assert.equal(setEnvCookies(one, "staging", null), "");
-  // Clearing cookies leaves a sibling base_url on the same env untouched.
-  const both = setEnvCookies(setEnvBaseUrl("", "staging", "https://s.test"), "staging", { slot: "blue" });
-  assert.equal(setEnvCookies(both, "staging", null), setEnvBaseUrl("", "staging", "https://s.test"));
+  // Clearing cookies leaves a sibling key on the same ring untouched.
+  assert.match(setEnvCookies(COMMENTED, "prod", null), /prod:\n\s+base_url: https:\/\/example\.com/);
 });
 
-test("defaults-form: cookies resolve with the same precedence as the URL", () => {
+test("defaults-form: cookies resolve suite-for-ring, then ring, then suite default", () => {
   const app = { cookies: { bvt: "true" }, envs: { staging: { cookies: { slot: "blue" } } } };
   // The suite's own cookies for the ring replace everything else wholesale.
   assert.deepEqual(resolveEnvCookies(app, "staging", { slot: "green" }),
-    { cookies: { slot: "blue" }, source: "suite-env" });
+    { cookies: { slot: "blue" }, source: "suite-ring" });
   // No override: the ring's own cookies.
   assert.deepEqual(resolveEnvCookies(app, "prod", { slot: "green" }),
-    { cookies: { slot: "green" }, source: "environment" });
+    { cookies: { slot: "green" }, source: "ring" });
   // Neither: the suite default.
   assert.deepEqual(resolveEnvCookies(app, "prod", null),
     { cookies: { bvt: "true" }, source: "suite" });
   assert.deepEqual(resolveEnvCookies({}, "prod", {}), { cookies: null, source: null });
 });
 
-test("defaults-form: a blank row resolves the way the dispatcher does", () => {
-  const app = { base_url: "https://dev.test", envs: { staging: { base_url: "https://suite-staging.test" } } };
-  // The suite's own URL for the ring wins over the ring's fallback.
-  assert.deepEqual(resolveEnvTarget(app, "staging", "https://ring.test"),
-    { url: "https://suite-staging.test", source: "suite-env" });
-  // No override: the ring's fallback.
-  assert.deepEqual(resolveEnvTarget(app, "prod", "https://ring.test"),
-    { url: "https://ring.test", source: "environment" });
-  // Neither: the suite's default — which is what a blank row with a blank ring says.
-  assert.deepEqual(resolveEnvTarget(app, "prod", null),
-    { url: "https://dev.test", source: "suite" });
-  // Nothing anywhere is the only case a run cannot start from.
-  assert.deepEqual(resolveEnvTarget({}, "prod", "   "), { url: null, source: null });
-});
-
-test("defaults-form: a new suite's playtest.yaml carries only what was chosen", () => {
-  assert.equal(initialDefaultsYaml({ driver: "web", baseUrl: "https://staging.example.com" }),
-    "app:\n  base_url: https://staging.example.com\n");
-  // web is the default driver — it is never written out.
-  assert.doesNotMatch(initialDefaultsYaml({ driver: "web", baseUrl: "https://x.test" }), /driver:/);
-  assert.equal(initialDefaultsYaml({ driver: "api", baseUrl: "https://api.test" }),
-    "app:\n  driver: api\n  base_url: https://api.test\n");
-  // mobile reaches a device, not an origin: it carries the binary, not a URL.
-  assert.equal(initialDefaultsYaml({ driver: "mobile", appBinary: "builds/app.apk", baseUrl: "https://ignored.test" }),
-    "app:\n  driver: mobile\n  app: builds/app.apk\n");
+test("defaults-form: a new suite's playtest.yaml carries the transport and no target", () => {
+  // A web suite with nothing configured gets NO file, which is exactly what
+  // "not set up yet" means to core — better than an empty one.
+  assert.equal(initialDefaultsYaml({ driver: "web" }), "");
   assert.equal(initialDefaultsYaml({}), "");
-});
-
-test("defaults-form: the app URL is checked before a suite is created", () => {
-  assert.equal(baseUrlProblem("https://staging.example.com"), null);
-  assert.equal(baseUrlProblem("http://127.0.0.1:4173"), null);
-  for (const bad of ["", "   ", "staging.example.com", "ftp://example.com"]) {
-    assert.ok(baseUrlProblem(bad), `"${bad}" must be rejected with a reason`);
+  // A non-default transport IS identity, and is worth committing on creation.
+  assert.equal(initialDefaultsYaml({ driver: "api" }), "app:\n  driver: api\n");
+  assert.equal(initialDefaultsYaml({ driver: "mobile" }), "app:\n  driver: mobile\n");
+  // No physical target is ever written here: the ring owns the URL, and hosted
+  // execution applies it after the authored merge, so anything written would be
+  // the value that loses.
+  for (const driver of ["web", "api", "mobile"]) {
+    assert.doesNotMatch(initialDefaultsYaml({ driver }), /base_url|app:\s+app:/);
   }
 });
 

@@ -18,12 +18,12 @@ export function parseSessionRef(ref: HostedDynamic) {
   return { providerName: m[1], identity: m[2] };
 }
 
-export async function claimSessions(ctx: HostedDynamic, { projectId, refs, actor, mintedByJob }: HostedDynamic) {
+export async function claimSessions(ctx: HostedDynamic, { projectId, ringId = null, refs, actor, mintedByJob }: HostedDynamic) {
   const out: HostedDynamic = {};
   for (const ref of refs) {
     const { providerName, identity } = parseSessionRef(ref);
     try {
-      out[ref] = await claimOne(ctx, { projectId, providerName, identity, actor, mintedByJob });
+      out[ref] = await claimOne(ctx, { projectId, ringId, providerName, identity, actor, mintedByJob });
     } catch (e) {
       // A mint failure (unreachable token endpoint, missing secret, disabled
       // provider) degrades per-identity (§3a): the claim response stays 200 and
@@ -37,7 +37,7 @@ export async function claimSessions(ctx: HostedDynamic, { projectId, refs, actor
   return out;
 }
 
-async function claimOne(ctx: HostedDynamic, { projectId, providerName, identity, actor, mintedByJob }: HostedDynamic) {
+async function claimOne(ctx: HostedDynamic, { projectId, ringId = null, providerName, identity, actor, mintedByJob }: HostedDynamic) {
   // Two transactions, because minting a `token_endpoint` session is an HTTP call
   // to the customer's app and the write transaction owns the single database
   // connection for its whole duration. The first transaction is read-only on the
@@ -46,7 +46,7 @@ async function claimOne(ctx: HostedDynamic, { projectId, providerName, identity,
   // the artifact write below is an upsert on (provider_id, identity), so two
   // racing minters converge on one row rather than corrupting it.
   const decided = await ctx.db.withTx(async (tx: HostedDynamic) => {
-    const provider = await getProvider(tx, projectId, providerName);
+    const provider = await getProvider(tx, projectId, providerName, ringId);
     if (!provider.enabled) throw badRequest(`auth provider "${providerName}" is disabled`);
     if (!provider.identities || !(identity in provider.identities)) {
       throw badRequest(`auth provider "${providerName}" has no identity "${identity}"`);
@@ -208,10 +208,12 @@ async function grantStandaloneMint(ctx: HostedDynamic, tx: HostedDynamic, { prov
     `SELECT COALESCE(MAX(attempt), 0) + 1 AS attempt FROM dispatches WHERE kind = 'mint' AND ref_id = $1`,
     [claimId],
   );
+  // A ring-bound provider mints on the ring's own runners; a project-wide one
+  // (null `ring_id`) keeps the empty-label mint any runner in the project takes.
   let labels: HostedDynamic[] = [];
-  if (provider.environment_id) {
-    const env = await tx.query(`SELECT runner_labels FROM environments WHERE id = $1`, [provider.environment_id]);
-    labels = env.rows[0]?.runner_labels || [];
+  if (provider.ring_id) {
+    const ring = await tx.query(`SELECT runner_labels FROM rings WHERE id = $1`, [provider.ring_id]);
+    labels = ring.rows[0]?.runner_labels || [];
   }
   // The labels snapshot is written WITH the ledger row: under pull-based
   // placement this row is the claim-board entry, and a mint is served on the
@@ -539,13 +541,26 @@ function renderTemplates(value: HostedDynamic, vars: HostedDynamic): HostedDynam
 // writer holds the whole database — and the session_artifacts upsert on
 // (provider_id, identity) is what actually makes the mint write idempotent, so
 // no per-row lock is needed or expressible.
-async function getProvider(q: HostedDynamic, projectId: HostedDynamic, name: HostedDynamic) {
+//
+// `ringId` is the ring whose session references are being resolved. A provider
+// is reachable from it only when the provider is project-wide (`ring_id` null)
+// or bound to that exact ring: a lookup by (project, name) alone would let one
+// ring borrow another ring's provider — and with it another ring's credentials —
+// simply by naming it in its own `auth.identities`.
+async function getProvider(q: HostedDynamic, projectId: HostedDynamic, name: HostedDynamic, ringId: HostedDynamic = null) {
   const { rows } = await q.query(`SELECT * FROM auth_providers WHERE project_id = $1 AND name = $2`, [
     projectId,
     name,
   ]);
   if (!rows[0]) throw notFound(`no auth provider "${name}"`);
-  return rows[0];
+  const provider = rows[0];
+  if (provider.ring_id && provider.ring_id !== ringId) {
+    throw forbidden(
+      `auth provider "${name}" is bound to another ring — a ring may use its own providers and the ` +
+        `project-wide ones, never another ring's credentials`,
+    );
+  }
+  return provider;
 }
 
 async function getProviderById(q: HostedDynamic, id: HostedDynamic) {

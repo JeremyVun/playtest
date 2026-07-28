@@ -13,7 +13,7 @@ import { spawn } from "node:child_process";
 import assert from "node:assert/strict";
 import { writeTar } from "../../src/suites/tar.ts";
 import { BundleProvider } from "@playtest/core/artifacts";
-import { REPO_ROOT as HELPERS_REPO_ROOT, loadSuiteDir } from "./helpers.ts";
+import { REPO_ROOT as HELPERS_REPO_ROOT, createTarget, loadSuiteDir } from "./helpers.ts";
 
 export const REPO_ROOT = HELPERS_REPO_ROOT;
 export const FIXTURE_DIR = path.join(REPO_ROOT, "packages/platform/control-plane/tests/fixtures/hosted-todos");
@@ -170,37 +170,39 @@ export function bundleFor(storeRoot: HostedDynamic, run: HostedDynamic) {
   return BundleProvider.fromFile(path.join(storeRoot, run.artifact.key));
 }
 
-export async function launchGroup(api: HostedDynamic, { project, suite, env, ids = ["add-todo", "admin-note", "signup"], mode = "auto" }: HostedDynamic = {}) {
+export async function launchGroup(api: HostedDynamic, { project, suite, ring, ids = ["add-todo", "admin-note", "signup"], mode = "auto" }: HostedDynamic = {}) {
   return api.post(`/projects/${project.key}/run-groups`, {
     suite_id: suite.id,
-    environment_id: env.id,
+    ring_id: ring.id,
     selection: { ids, mode },
   });
 }
 
 export async function setUpProject(api: HostedDynamic, { key, todoAppUrl, authStubUrl }: HostedDynamic) {
   const project = (await api.post("/projects", { key, name: key })).body;
+  // The application and its ring come FIRST: a suite binds to an application at
+  // creation, and the ring's URL is what a launch points at.
+  const { application, ring } = await createTarget(api, project, {
+    key: "todos",
+    name: "Todos",
+    ringKey: "staging",
+    baseUrl: todoAppUrl,
+    runnerLabels: ["self-hosted", "playtest"],
+    config: {
+      auth: {
+        identities: {
+          member: { $session: "sso/member" },
+          admin: { $session: "sso/admin" },
+        },
+      },
+      secret_env: {},
+    },
+  });
   const suite = (await api.post(`/projects/${project.key}/suites`, { slug: "todos", name: "Todos" })).body;
   const tar = writeTar(loadSuiteDir(FIXTURE_DIR));
   const imported = await api.postTar(`/suites/${suite.id}/import`, tar);
   assert.equal(imported.status, 200, JSON.stringify(imported.body));
 
-  const env = (
-    await api.post(`/projects/${project.key}/environments`, {
-      name: "staging",
-      runner_labels: ["self-hosted", "playtest"],
-      config: {
-        app: { base_url: todoAppUrl },
-        auth: {
-          identities: {
-            member: { $session: "sso/member" },
-            admin: { $session: "sso/admin" },
-          },
-        },
-        secret_env: {},
-      },
-    })
-  ).body;
   const provider = (
     await api.post(`/projects/${project.key}/auth-providers`, {
       name: "sso",
@@ -212,9 +214,10 @@ export async function setUpProject(api: HostedDynamic, { key, todoAppUrl, authSt
       },
       identities: { member: { username: "qa-member" }, admin: { username: "qa-admin" } },
       ttl_minutes: 45,
+      ring_id: ring.id,
     })
   ).body;
-  return { project, suite, env, provider };
+  return { project, suite, application, ring, provider };
 }
 
 export { loadSuiteDir };
@@ -232,8 +235,8 @@ export function runCli(args: HostedDynamic, llmUrl: HostedDynamic) {
 }
 
 /** Grab an ephemeral free TCP port and release it immediately — for tests that
- * restart a service (the todo app across a variant flip) on a FIXED port so an
- * environment's base_url keeps pointing at it. */
+ * restart a service (the todo app across a variant flip) on a FIXED port so a
+ * ring's base_url keeps pointing at it. */
 export async function getFreePort() {
   return await new Promise((resolve, reject) => {
     const srv: HostedDynamic = http.createServer();

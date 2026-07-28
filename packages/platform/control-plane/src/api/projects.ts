@@ -60,9 +60,6 @@ export async function me(ctx: HostedDynamic) {
     // server-side (dispatch/pool.ts) so the console's presence dot and the
     // reconciler's patience are the same number.
     runner_check_in_window_s: Math.round(checkInWindowMs(pool) / 1000),
-    // The environment app-artifact ceiling, so the upload control can state the
-    // cap before someone spends four minutes uploading past it.
-    app_artifact_max_mb: Math.round(ctx.config.uploads.appArtifactMaxBytes / (1024 * 1024)),
   };
   if (p.kind === "token") {
     return { kind: "token", project_id: p.projectId, role: p.role, capabilities };
@@ -140,15 +137,10 @@ export async function createProject(ctx: HostedDynamic) {
       `INSERT INTO memberships (user_id, project_id, role) VALUES ($1, $2, 'admin')`,
       [p.userId, id],
     );
-    // Every project starts with somewhere to launch. The `default` target holds
-    // no URL of its own, so it resolves to whatever base URL each suite declares
-    // — a first suite is runnable without a detour through Settings, and a
-    // deployment ring with real credentials is something you add when you have
-    // one, not a precondition for a first run.
-    await tx.query(
-      `INSERT INTO environments (id, project_id, name) VALUES ($1, $2, 'default')`,
-      [ulid(), id],
-    );
+    // A new project has no application: what a suite runs against is a decision
+    // ("this web app, at this URL"), and the platform cannot guess it. The first
+    // application is the first step of the first-run path, not a hidden default
+    // that quietly resolves to whatever a suite happened to author.
     await audit(tx, {
       actor: actorOf(p),
       action: "project.created",
@@ -172,12 +164,17 @@ export async function getProject(ctx: HostedDynamic) {
 /**
  * DELETE /projects/:p — permanent, admin-only.
  *
- * run_groups pin suites/snapshots/environments with ON DELETE RESTRICT, so a
- * bare project delete fails when any run history exists. Drop run groups first
- * (cascades runs → events/artifacts/candidates/evidence), then the project
- * (cascades suites, envs, secrets, tokens, findings, memberships, …). Content-
- * addressed blobs are shared and reaped by retention; they are not wiped here.
- * The project key is free to reuse after this returns.
+ * Every entity that refuses to be deleted out from under a referrer does so with
+ * ON DELETE RESTRICT — run groups pin suites, snapshots, applications and rings;
+ * suites pin applications; ring-bound auth providers pin rings. That is exactly
+ * right for the per-entity delete endpoints and exactly wrong for "remove this
+ * whole project", so the order is spelled out here rather than left to a cascade
+ * nobody can read: run groups (cascading runs → events/artifacts/candidates/
+ * evidence), auth providers, suites, rings, applications, then the project
+ * (cascading secrets, tokens, findings, memberships, personas, …).
+ *
+ * Content-addressed blobs are shared and reaped by retention; they are not wiped
+ * here. The project key is free to reuse after this returns.
  */
 export async function deleteProject(ctx: HostedDynamic) {
   const p = requireAuth(ctx);
@@ -196,6 +193,13 @@ export async function deleteProject(ctx: HostedDynamic) {
       detail: { key: project.key, name: project.name },
     });
     await tx.query(`DELETE FROM run_groups WHERE project_id = $1`, [project.id]);
+    await tx.query(`DELETE FROM auth_providers WHERE project_id = $1`, [project.id]);
+    await tx.query(`DELETE FROM suites WHERE project_id = $1`, [project.id]);
+    await tx.query(
+      `DELETE FROM rings WHERE application_id IN (SELECT id FROM applications WHERE project_id = $1)`,
+      [project.id],
+    );
+    await tx.query(`DELETE FROM applications WHERE project_id = $1`, [project.id]);
     await tx.query(`DELETE FROM projects WHERE id = $1`, [project.id]);
   });
   return noContent();

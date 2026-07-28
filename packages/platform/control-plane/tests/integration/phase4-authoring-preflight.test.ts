@@ -7,13 +7,14 @@
 // ctx.config), so this needs the var genuinely ABSENT for the whole process.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { withApp } from "./helpers.ts";
+import { withApp, createTarget } from "./helpers.ts";
 
 delete process.env.PLAYTEST_LLM_BASE_URL;
 
 test("story-draft: with no PLAYTEST_LLM_BASE_URL configured it answers 503 not_configured", async () => {
   await withApp(async ({ api }: HostedDynamic) => {
-    await api.post("/projects", { key: "p", name: "P" });
+    const project = (await api.post("/projects", { key: "p", name: "P" })).body;
+    await createTarget(api, project);
     const suite = (await api.post("/projects/p/suites", { slug: "s", name: "S" })).body;
     const seed = await api.post(`/suites/${suite.id}/commit`, {
       changes: [{ path: "playtest.yaml", content: "app:\n  base_url: http://x\n" }],

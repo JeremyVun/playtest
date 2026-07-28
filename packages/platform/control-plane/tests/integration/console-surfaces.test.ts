@@ -13,7 +13,7 @@
 //      contract has claimed since it was written.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { withApp, loadSuiteDir, REPO_ROOT } from "./helpers.ts";
+import { withApp, createTarget, loadSuiteDir, REPO_ROOT } from "./helpers.ts";
 import { writeTar } from "../../src/suites/tar.ts";
 
 const POOL = { PLAYTEST_DISPATCH: "pool" };
@@ -47,10 +47,11 @@ test("me: capabilities say whether this deployment has a runner pool at all", as
     const me = (await api.get("/me")).body;
     assert.equal(me.capabilities.pool_dispatch, false,
       "the default deployment places runs itself — runner setup would be a dead end");
-    // Stated whatever the adapter, because the console words its environment
-    // upload cap and its presence dot from these numbers, not from its own guess.
-    assert.equal(me.capabilities.app_artifact_max_mb, 512);
+    // Stated whatever the adapter, because the console words its presence dot
+    // from this number, not from its own guess.
     assert.ok(me.capabilities.runner_check_in_window_s >= 75);
+    // The platform holds no application bytes, so there is no upload cap to state.
+    assert.equal("app_artifact_max_mb" in me.capabilities, false);
   });
 
   await withApp(async ({ api }: HostedDynamic) => {
@@ -65,8 +66,7 @@ test("me: capabilities say whether this deployment has a runner pool at all", as
     const caps = (await api.get("/me")).body.capabilities;
     assert.equal(caps.runner_check_in_window_s, 75,
       "a tight heartbeat never drops the floor: an IDLE runner still polls every 25s");
-    assert.equal(caps.app_artifact_max_mb, 128, "the console states this deployment's cap, not a default");
-  }, { ...POOL, PLAYTEST_POOL_HEARTBEAT_TIMEOUT_S: "30", PLAYTEST_APP_ARTIFACT_MAX_MB: "128" });
+  }, { ...POOL, PLAYTEST_POOL_HEARTBEAT_TIMEOUT_S: "30" });
 });
 
 test("runner.status: presence rides the feed on its edges, and idles silently", async () => {
@@ -117,14 +117,14 @@ test("runner.status: presence rides the feed on its edges, and idles silently", 
 test("runner.status: a claim says which run group the runner is executing", async () => {
   await withApp(async ({ api, base }: HostedDynamic) => {
     const project = (await api.post("/projects", { key: "claimev", name: "Claim" })).body;
+    const { ring } = await createTarget(api, project, {
+      key: "todos", ringKey: "laptop", baseUrl: "http://127.0.0.1:9", runnerLabels: ["macos"],
+    });
     const suite = (await api.post(`/projects/${project.key}/suites`, { slug: "todos", name: "Todos" })).body;
     await api.postTar(`/suites/${suite.id}/import`, writeTar(loadSuiteDir(`${REPO_ROOT}/tests/fixtures/todos`)));
-    const env = (await api.post(`/projects/${project.key}/environments`, {
-      name: "laptop", runner_labels: ["macos"], config: { app: { base_url: "http://127.0.0.1:9" } },
-    })).body;
     const runner = (await api.post(`/projects/${project.key}/runners`, { name: "mac", labels: ["macos"] })).body;
     const group = (await api.post(`/projects/${project.key}/run-groups`, {
-      suite_id: suite.id, environment_id: env.id, selection: { ids: ["add-todo"] },
+      suite_id: suite.id, ring_id: ring.id, selection: { ids: ["add-todo"] },
     })).body.run_group;
 
     const agent = claimer(base, runner.credential);
@@ -145,13 +145,13 @@ test("runner.status: a claim says which run group the runner is executing", asyn
 test("run groups: ?wait=true holds for a verdict instead of answering at once", async () => {
   await withApp(async ({ api }: HostedDynamic) => {
     const project = (await api.post("/projects", { key: "waiting", name: "Waiting" })).body;
+    const { ring } = await createTarget(api, project, {
+      key: "todos", ringKey: "laptop", baseUrl: "http://127.0.0.1:9", runnerLabels: ["nobody"],
+    });
     const suite = (await api.post(`/projects/${project.key}/suites`, { slug: "todos", name: "Todos" })).body;
     await api.postTar(`/suites/${suite.id}/import`, writeTar(loadSuiteDir(`${REPO_ROOT}/tests/fixtures/todos`)));
-    const env = (await api.post(`/projects/${project.key}/environments`, {
-      name: "laptop", runner_labels: ["nobody"], config: { app: { base_url: "http://127.0.0.1:9" } },
-    })).body;
     const group = (await api.post(`/projects/${project.key}/run-groups`, {
-      suite_id: suite.id, environment_id: env.id, selection: { ids: ["add-todo"] },
+      suite_id: suite.id, ring_id: ring.id, selection: { ids: ["add-todo"] },
     })).body.run_group;
 
     // Nothing will claim this — the automation client is meant to be held, not

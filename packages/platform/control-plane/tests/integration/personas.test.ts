@@ -4,7 +4,7 @@
 // (GET /runner/snapshots/:id/tree — see api/executor-api.js snapshotTree).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { withApp } from "./helpers.ts";
+import { withApp, createTarget } from "./helpers.ts";
 import { issueRunnerToken } from "../../src/auth/runner-tokens.ts";
 import { blobKey } from "../../src/store/object-store.ts";
 
@@ -125,12 +125,14 @@ test("personas: delete removes it from the list", async () => {
 
 test("personas: a project persona shows up in the runner snapshot tree; a suite-committed file of the same slug wins", async () => {
   await withApp(async ({ api, app, base }: HostedDynamic) => {
-    await api.post("/projects", { key: "p", name: "P" });
+    const project = (await api.post("/projects", { key: "p", name: "P" })).body;
     const persona = (await api.post("/projects/p/personas", {
       name: "Grumpy Tester",
       description: "project-level prose",
     })).body;
 
+    // A suite binds to an application at creation, so the target comes first.
+    await createTarget(api, project);
     const suite = (await api.post("/projects/p/suites", { slug: "s", name: "S" })).body;
     const commit = await api.post(`/suites/${suite.id}/commit`, {
       changes: [{ path: "playtest.yaml", content: "app:\n  base_url: http://x\n" }],

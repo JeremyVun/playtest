@@ -81,6 +81,17 @@ selects the reserved, nonfunctional S3 adapter and fails when used.
 `PLAYTEST_DB_FILE` overrides the database path. Overriding either splits durable
 state across locations; a backup is then incomplete unless it covers both.
 
+**Migrations.** `migrations/NNNN_*.sql` is applied in filename order, each in its
+own transaction, and recorded in `schema_migrations`; the runner is forward-only
+with no down-migrations. Boot additionally compares the data root's applied
+ledger against the migration set this build SHIPS: a ledger naming a retired file
+fails startup with a `ServerConfigError` naming those files and telling the
+operator to point `PLAYTEST_DATA_DIR` somewhere new. That check exists because
+forward-only means a root built by a retired lineage would otherwise have the
+current schema applied on top of the old one. Applications and rings replaced
+environments with no migration path — the deployment model is greenfield — so
+such a root is recreated, never converted.
+
 **Deployment topology.** Exactly one control-plane process writes the database.
 Active-active replicas are unsupported, as are network filesystems without
 trustworthy locking and atomic rename. Startup fails with a `ServerConfigError`
@@ -164,7 +175,7 @@ and `capabilities.auto_dedupe`, whether that gateway plus the
 console uses them to present those affordances as unavailable-and-why instead of
 offering a control the server cannot answer; the routes still enforce roles.
 
-Three more describe placement and uploads, for the same reason:
+Two more describe placement, for the same reason:
 
 - `capabilities.pool_dispatch` — whether this deployment places runs on
   self-hosted runners (`PLAYTEST_DISPATCH=pool`). Under any other adapter there
@@ -175,9 +186,6 @@ Three more describe placement and uploads, for the same reason:
 - `capabilities.runner_check_in_window_s` — how long since a runner's last
   check-in still counts as present (§ Runner pool). Published so a console's
   presence and the reconciler's patience are one number, not two.
-- `capabilities.app_artifact_max_mb` — the environment app-artifact ceiling, so
-  an upload control can state the cap before someone spends four minutes
-  reaching a `413`.
 
 Project roles are cumulative:
 
@@ -190,8 +198,10 @@ admin >= developer >= reviewer >= editor >= viewer
   manages project personas.
 - `reviewer` accepts or rejects baseline candidates and triages findings —
   confirming, rejecting, merging, resolving.
-- `developer` manages executable suite files, environments, auth providers, and
-  the self-hosted runner registry (`viewer` may list runners).
+- `developer` manages executable suite files, applications and rings, auth
+  providers, and the self-hosted runner registry (`viewer` may list runners and
+  read applications and rings — an editor has to pick one to create a suite, and
+  the launch dialog is a viewer surface).
 - `admin` manages membership and project-wide administration, including
   permanent project deletion (`DELETE /api/v1/projects/:p`). Retention is a
   deployment-wide policy set by operators, not configured per project; legal
@@ -222,6 +232,25 @@ without a body. Deliberately outside all of this: streaming and Range replies
 handling), attachment downloads, and error envelopes.
 
 ## Suites and snapshots
+
+A suite belongs to exactly ONE application (`suites.application_id`), chosen at
+creation and immutable: the suite's driver is the application's driver, and the
+launch selector is `(suite, ring)`, so a suite can never launch against another
+surface's deployment. `POST /api/v1/projects/:p/suites` takes `application_id`
+(an id or a key); with exactly one application in the project it may be omitted,
+and with none the refusal says a developer has to create the first application
+rather than 404ing on a null id. Suite reads fold the binding in as
+`application_id` plus an `application` object (key, name, driver, platform).
+
+Every hosted read of a suite resolves through core in STRUCTURAL mode
+(`docs/contracts/engine.md#resolution-modes`): commit, import, listing, preview,
+validation, linting, authoring, review and Playwright export all validate cases
+and logical configuration without requiring a complete physical target. That is
+the honest mode here, because a hosted suite legitimately authors no target at
+all — the ring supplies the URL at launch, and for mobile the platform
+deliberately does not know an app path. Executable resolution, which still
+requires a complete target, happens on the runner and on the CLI. Lint follows
+the same mode, so a target-free suite is linted rather than silently skipped.
 
 Suite files retain their exact bytes. Paths use forward slashes and cannot be
 absolute, escape the suite root, or address reserved platform paths. File kinds
@@ -258,30 +287,48 @@ Snapshot blobs are content-addressed and may be shared.
 
 A launch:
 
-1. resolves and selects cases through core;
-2. validates the requested environment and discovery policy, and resolves the
-   app binary — refusing a suite-relative path the snapshot does not hold
-   (§ The app binary), and pinning the environment's app artifact when that is
-   what won;
+1. resolves and selects cases through core (structural resolution);
+2. resolves `(suite, ring)` to the application all three must agree on, and
+   validates driver and discovery policy: every resolved case's driver must
+   equal the application's — a suite has no driver column, its case files do —
+   and a selection holding discovery stories needs a ring marked
+   `discovery_allowed`;
 3. pins the suite snapshot and current baselines;
-4. creates a run group plus one run row per selected case;
-5. creates a dispatch ledger entry;
+4. creates a run group plus one run row per selected case, recording
+   `application_id` and `ring_id`;
+5. creates a dispatch ledger entry carrying this attempt's target snapshot;
 6. asks the configured placement adapter to start the runner agent.
 
+The launch request names `suite_id` and `ring_id`. Suite, ring and application
+are re-checked to agree INSIDE the launch transaction, so a stale client cannot
+pin a group whose three references contradict each other.
+
+Each dispatch attempt records a **non-secret target snapshot** — application and
+ring ids and keys, driver, platform, the ring's URL, the placement labels, and
+the logical overlay — and its offer and its group spec serve that snapshot. A
+ring edit between preview, poll, claim and exchange therefore cannot make them
+disagree. A retry or a continuation snapshots current ring state, which is the
+documented retry behavior. Secrets are never in the snapshot; they are resolved
+when the group spec is served, after the claim and the exchange.
+
 A launch may pin its placement: `runner_labels` on the launch request (and on
-its preview) overrides the environment's `runner_labels` for that group alone.
+its preview) overrides the ring's `runner_labels` for that group alone.
 It takes the role that launches (`editor`) and no other, because labels are
 routing and never authority — a runner reaches only jobs in the project its
 credential is registered to, so choosing which of that project's runners takes a
 run is the same decision scope as running it at all. Absent means "follow the
-environment"; an explicit `[]` is a decision, not an absence, and means "any
+ring"; an explicit `[]` is a decision, not an absence, and means "any
 runner in this project". The pin is recorded on the group (`runner_labels`, null
 when unpinned) and places every later attempt of that group — a continuation
-after a partial completion, an in-place retry — even if the environment's labels
-change in between. `GET /api/v1/run-groups/:id` states the outcome in
-`placement`: the attempt's `labels` and whether the launch or the environment
-chose them (`labels_source`). The launch preview reports the same pair before
-anything is created.
+after a partial completion, an in-place retry — even if the ring's labels change
+in between. `GET /api/v1/run-groups/:id` states the outcome in `placement`: the
+attempt's `labels` and whether the launch or the ring chose them
+(`labels_source`, `launch` | `ring`), and carries the group's `application` and
+`ring` by key so a reader never has to join an opaque id. The launch preview
+reports the same pair before anything is created, plus `target` (the application,
+the ring, the `resolved_base_url` for web/API, and `build_supplied_by_runner`
+for mobile) and `placement.runner_online` — whether a runner advertising these
+labels has actually checked in.
 
 Run-group states are `queued`, `running`, `done`, and `canceled`. Case states
 are `queued`, `running`, `uploading`, `pass`, `fail`, `infra`, `explored`,
@@ -332,7 +379,7 @@ page, and a run whose rows were cut still states its true story count in
 `stats.total`. `outcome=attention` keeps only runs holding a story that failed a
 check or never produced a verdict — `explored` and `canceled` are not attention,
 and a failure is retired once a newer run of the same story on the same suite
-and environment passes. The `suite` and `status` filters compose with it.
+and ring passes. The `suite` and `status` filters compose with it.
 
 ## Runner protocol
 
@@ -340,7 +387,7 @@ The runner authenticates and then uses only HTTP:
 
 1. `POST /runner/exchange`
 2. `GET /runner/groups/:group`
-3. snapshot tree, blob, app-artifact, baseline, and session-claim reads
+3. snapshot tree, blob, baseline, and session-claim reads
 4. case start
 5. case progress (optional, throttled)
 6. live staging (optional: open, step artifacts, trajectory batches)
@@ -360,9 +407,24 @@ scoped to exactly one run group or mint claim; group and mint tokens are not
 interchangeable.
 
 The group spec includes only the selected cases, pinned snapshot, baseline
-references, resolved environment (including the app artifact this group pinned,
-if any), session requirements, execution limits,
-concurrency policy, and model configuration needed by that group.
+references, this attempt's `ring` (`key`, `base_url`, the logical `config`
+overlay, `runner_labels`, and `resolved_secrets`) and `application` (`key`,
+`driver`, `platform`), session requirements, execution limits, concurrency
+policy, and model configuration needed by that group. The ring block is served
+from the attempt's target snapshot, so a ring edited mid-flight cannot change
+what an in-flight group runs against; only `resolved_secrets` is computed at
+serve time.
+
+The runner materializes the ring's `config` under `app.envs.<ring key>` and
+passes the ring's URL to core as a **runtime target**
+(`docs/contracts/engine.md#runtime-target`), applied after the complete authored
+merge. Hosted execution therefore replaces the authored physical fields —
+`base_url`, `app`, `platform`, `device`, `appium_url` — rather than merging with
+them, and a suite edit can no longer redirect which application a placed run
+reaches. Authored physical fields stay valid for direct CLI use and are simply
+inert here. The suite still wins on LOGICAL keys inside
+`app.envs.<ring key>`, exactly as before, with one carve-out: minted
+`auth_states` are operator-owned and can never be shadowed by a committed file.
 `selection.max_steps` and
 `selection.timeout_ms` are optional positive-integer, per-story overrides for
 one run group; they ride each selected case as `options.limits` and replace the
@@ -485,12 +547,12 @@ reconciler, and run-group lifecycle are the same ones every other adapter uses.
   shown once, stored as a hash like an API token, and is the only long-lived
   secret on the runner's machine. It scopes the runner to exactly one project.
 - **Labels** route work. They are not secrets, confer no authority, and appear
-  freely in environment settings and console UI. A runner may re-advertise its
+  freely in ring settings and console UI. A runner may re-advertise its
   labels at check-in; that changes which of its project's jobs match it, never
   which project it can reach. A label is spelled with letters, digits, `.`, `_`
   and `-` only (at most 32 labels, 64 characters each), enforced at one
   validator for every surface that accepts one — runner registration, an
-  environment's `runner_labels`, a per-launch pin, ephemeral CI registration and
+  a ring's `runner_labels`, a per-launch pin, ephemeral CI registration and
   check-in re-advertisement. The alphabet is narrow because labels travel
   comma-joined on the agent's `--labels` (a comma inside one would silently
   become two) and unquoted inside the start command the console hands over.
@@ -661,7 +723,7 @@ executor, and a run group states its placement: `placement` on
 `attempt`, the `isolation` its executor reported, the `runner` that claimed it
 (`null` for adapters that place work without a registered runner), and the
 `labels` that attempt was placed on with their `labels_source`
-(`launch` when the launch pinned them, `environment` otherwise).
+(`launch` when the launch pinned them, `ring` otherwise).
 
 ### The pool runner process
 
@@ -827,129 +889,115 @@ in flight; `record` caps stories driving the actor, while baseline checks fill
 unused workers. The executor preserves input order in its completion summary,
 starts workers with core's rate-limit stagger, and remains serial when no
 setting opts into concurrency. Process-isolated local execution reference-counts
-the shared environment overlay so one concurrent case cannot restore it while
+the shared ring overlay so one concurrent case cannot restore it while
 another is still running; persistent runners keep per-case container isolation.
 
-## Environments, secrets, and target authentication
+## Applications, rings, secrets, and target authentication
 
-An environment supplies a named overlay, runner capability labels, secret
-references, auth-provider bindings, and whether discovery is allowed. The
-runner materializes the overlay and delegates merge precedence to core.
+The console talks about **applications**; runner setup is an operational task
+documented separately (`docs/guidance/hosted-runners.md`).
 
-For a mobile suite the overlay also carries the device target — `config.app`'s
-`platform`, `app`, `device`, and `appium_url` — because all four belong to the
-machine the device is attached to rather than to the suite. The suite snapshot
-carries only the authored suite files; a binary is never a suite commit.
+An **application** is one executable test surface: `driver` is `web`, `api`, or
+`mobile`, and a mobile application additionally names `platform` (`ios` or
+`android`) because core has to choose XCUITest or UiAutomator2 from it. `Todo
+Web` and `Todo iOS` are two applications even when a person thinks of them as
+one product. `key` is unique within the project and immutable, as are `driver`
+and `platform`, a ring's application, and a suite's binding: runner
+configuration and run evidence address these by key, so a rename would silently
+rebind a machine. Names are editable. v1 has no rebind and no migrate, so
+delete-and-recreate is the stated remedy for a mistyped key — with one stated
+consequence, that a runner configuration still naming the old key binds the
+recreated entity.
 
-### The app binary: three sources, one precedence
+A **ring** is an application-owned deployment target — `local`, `staging`,
+`prod` — holding a URL, routing labels, a discovery flag, and a logical overlay:
 
-An app binary can reach a run from exactly three places, and they resolve most
-specific first:
+```json
+{
+  "id": "ring_…",
+  "application_id": "app_…",
+  "key": "local",
+  "name": "Local",
+  "base_url": "http://127.0.0.1:4173",
+  "runner_labels": [],
+  "discovery_allowed": true,
+  "config": {}
+}
+```
 
-1. the suite's own `app.envs.<name>.app` — the suite said something about this
-   environment, and specific wins;
-2. the environment — its uploaded **app artifact** if it has one, else the plain
-   `app` path in its overlay, which is a path on the runner's own disk;
-3. the suite's top-level `app.app` — a file committed to the suite tree.
+`key` is unique within its application and immutable, so every application may
+have its own `local`. `base_url` is **required for web/API rings and refused for
+mobile ones**, and it is evaluated **from the claiming runner's network
+position**: a loopback URL means "on the runner's own machine", and
+`runner_labels` are how such a ring is routed to a machine that can reach it.
 
-The launch preview states the outcome in `target.app`: `resolved`, `source`
-(`suite-env` | `environment-artifact` | `environment` | `suite` | null), the
-losing `suite_app` and `environment_app`, and the `artifact` reference when the
-artifact won — the same say-the-resolution-out-loud rule `base_url` follows.
+`config` is the LOGICAL overlay and nothing else — auth identities and defaults,
+`secret_env`, cookies, headers, settle, viewport, setup inputs — materialized by
+the runner as `app.envs.<ring key>`. It is validated against an **allowlist** at
+the two positions core reads (`config.app` and `config.auth`), which is what
+makes the five physical fields — `base_url`, `app`, `platform`, `device`,
+`appium_url` — unrepresentable exactly where they would take effect. A
+property-name blacklist applied at every depth would be the wrong tool twice
+over: it would reject the logical `app` container itself, and it would reject
+legitimate data that merely happens to be named `device` — an auth identity, a
+`secret_env` variable. Those are untouched. `config.app.compose` is refused too,
+because hosted execution clears it and an authored compose block must not be
+able to boot a different application under the ring's name.
 
-A launch whose resolved binary is a **suite-relative path the pinned snapshot
-does not contain** is refused with `400 bad_request` naming all three sources.
-The runner receives only the snapshot's files, so such a launch could only fail
-on a machine the person who launched cannot see. An absolute path is never
-checked: the control plane has no business asserting what exists on a runner's
-disk.
+A mobile ring therefore holds no URL, no build path, no device, and no Appium
+endpoint. Those are machine-local facts read from the claiming runner's own
+configuration file, keyed by immutable `(application key, ring key)`; no
+platform-managed record stores, serves, or displays them. Verbatim authored
+suite source is the one stated exception — suite files are stored and exported
+as written for CLI use, and hosted execution provably ignores their physical
+fields.
 
-### Environment app artifacts
+CRUD is `developer`; reads are `viewer`:
 
-`PUT /api/v1/environments/:e/app-artifact?filename=<name>` (`developer`) uploads
-the raw bytes of the app under test. The file name is required, must be a plain
-base name, and must end in `.apk`, `.aab`, `.ipa`, or `.zip` — an iOS `.app` is
-a directory, so it travels zipped and the runner unpacks it. The bytes are
-stored content-addressed under `blobs/<sha256>`, the same namespace suite files
-use, so re-uploading identical bytes is a no-op by construction; the environment
-records only the reference `{sha256, size, filename, uploaded_at, uploaded_by}`,
-which every environment view carries as `app_artifact` (null when there is
-none). `DELETE` clears the reference and is idempotent. Both audit
-(`environment.app_artifact_set`, `environment.app_artifact_cleared`).
+```text
+GET    /api/v1/projects/:p/applications[?include=rings]
+POST   /api/v1/projects/:p/applications      {key, name, driver, platform?}
+GET    /api/v1/applications/:a[?include=rings]
+PUT    /api/v1/applications/:a               {name}
+DELETE /api/v1/applications/:a
+GET    /api/v1/applications/:a/rings
+POST   /api/v1/applications/:a/rings         {key, name?, base_url?, runner_labels?, discovery_allowed?, config?}
+PUT    /api/v1/rings/:r
+DELETE /api/v1/rings/:r
+```
 
-The size cap is deployment configuration — `PLAYTEST_APP_ARTIFACT_MAX_MB`,
-default 512, refused at boot outside 1–4096 — and is deliberately separate from
-the fixed suite-file (4 MiB) and suite-import (64 MiB) caps, which bound text.
-Exceeding it is an actionable `413 payload_too_large` naming the cap in MiB, the
-variable that raises it, and the runner-local-path alternative; nothing partial
-is ever stored. Over-cap uploads are refused with that response rather than a
-dropped connection: the remainder of the request is drained and discarded so the
-refusal actually reaches the client.
+`PUT /rings/:r` merges: an omitted field keeps its stored value, so a partial
+`{discovery_allowed: true}` can never wipe the overlay, the URL, or the labels.
 
-A launch **pins** the artifact reference onto the run group when the artifact is
-what it resolved to, so a re-upload cannot change an existing group's input —
-the same immutability rule the suite snapshot follows.
-The group spec serves the pinned reference, never the environment's current one.
-The pin is also what keeps the blob alive: retention's blob GC deletes a
-`blobs/<sha256>` object only when no suite snapshot, no environment, and no run
-group names it.
+Deletion is **refuse-not-cascade**, and every refusal names the referrers. An
+application is deletable only when it has no rings, no suites, and no run
+groups; a ring only when no run group and no auth provider reference it.
+Nothing an application owns is removed as a side effect of deleting it: rings
+carry credentials and run groups are evidence. The database backs each refusal
+with `ON DELETE RESTRICT` — including `auth_providers.ring_id`, which is
+deliberately never `SET NULL`, since silently promoting a ring-bound provider to
+project-wide would move secrets policy without anyone deciding it. Permanent
+project deletion (`DELETE /api/v1/projects/:p`, `admin`) is the one operation
+that removes everything, and it spells the order out explicitly rather than
+relying on a cascade that is not there.
 
-`GET /runner/artifacts/:sha256` (runner bearer) serves the artifact the
-presenting token's own group pinned, and only that one — a scoped bearer cannot
-walk the object store by guessing hashes. The runner verifies the bytes against
-the pinned hash before installing anything; the control plane serves what is
-stored, so integrity is decided on the machine that will run it. A pinned
-artifact whose object is gone degrades like a pruned bundle: an actionable
-`404`, never a `500` and never a runner-side crash.
+A new project starts with **no** application. What a suite runs against is a
+decision — "this web app, at this URL" — and the platform cannot guess it, so
+creating the first application is the first step of the first-run path rather
+than a hidden default that quietly resolves to whatever a suite happened to
+author. A first web run is: create the application, create ring `local` with its
+URL, launch. No runner file is touched.
 
-Unpacking a `.zip` on the runner has a second, runner-side cap: the archive's
-declared expansion, summed from its central directory **before** anything is
-written, may not exceed `PLAYTEST_RUNNER_MAX_UNPACKED_MB` (default 4096, a
-positive number or the process refuses to start the unpack). Over it is an
-actionable error naming both sizes and the variable. Only a project developer
-can upload an artifact, so this is a reliability guard rather than a security
-boundary: a runner killed for running out of memory takes every group on that
-machine with it, and stops answering the heartbeats that keep them alive. Entries
-are inflated one at a time as they are written, so peak memory is the archive
-plus its single largest member.
+No hosted route accepts or serves application bytes. There is no app-artifact
+upload, no `run_groups.app_artifact` pin, no `GET /runner/artifacts/:sha256`,
+and no size cap to configure: a mobile build lives on the runner that will
+install it, and in a real deployment comes from an internal artifactory through
+a runner-side provider the platform never sees.
 
-The runner materializes the artifact into the case workspace — unpacking a
-zipped bundle with its unix modes and symlinks intact — and writes the resulting
-absolute path into the environment overlay's `app:` before core discovery runs.
-Core keeps receiving `app:` as an absolute local path per the engine contract
-and never learns the provenance. A suite that declares its own
-`app.envs.<name>.app` wins the merge, so the runner does not download a build
-that value would discard.
-
-A mobile environment whose binary is a runner-local path is only launchable on a
-runner whose labels reach the machine holding that build; one that ships an
-artifact is launchable on any runner in the project.
-
-An environment has exactly one driver (`web`, `api`, or `mobile`). Only suites
-using that driver may select it; preview and launch enforce the same boundary as
-the console, so a stale client cannot turn a web ring into a mobile one. The
-driver is explicit environment state rather than inferred from `config.app`:
-device fields and an uploaded app artifact do not redefine a ring. Uploading an
-app artifact is accepted only for a mobile environment, and changing a mobile
-environment to another driver requires removing its uploaded artifact first.
-
-An environment is owned either by the project or by one suite. A project-owned
-environment (`suite_id` null) is a deployment ring every suite may launch
-against when the drivers match. A suite-owned environment is visible and
-launchable from its own suite only when its driver matches, is refused for any
-other suite at launch and at preview, and is deleted with the suite. Both are
-the same row, the same API, and the same
-`run_groups.environment_id`: ownership decides who may choose it, never how it
-is materialized. Names are unique per project across both scopes, because the
-name is the `app.envs.<name>` overlay key and the CLI's `--env` argument, and
-one name must mean one target inside a project.
-
-Every project has an environment named `default` — created with the project,
-backfilled for existing ones that had none. It carries no URL of its own, so a
-launch against it resolves to whatever `app.base_url` each suite declares. That
-is what makes a suite's own base URL selectable at launch rather than a fourth
-thing to reason about, and it is why a project with no rings configured can
-still run.
+Hosted mobile placement is currently refused at launch with an actionable error:
+the runner binding model it needs has not landed yet, so a mobile group would
+sit on the claim board until its unclaimed timeout. Mobile cases run from the
+CLI in the meantime.
 
 Secret values are encrypted at rest and write-only through the API. The root
 encryption key is external to the database. Losing it makes stored secrets and
@@ -961,10 +1009,19 @@ Auth providers have three supported forms:
 - `token_endpoint` exchanges provider credentials for a session.
 - `script` executes trusted login code in runner isolation.
 
+A provider carries a nullable `ring_id`. Null keeps it **project-wide**: every
+ring may reference it, and its standalone mints ride the board with empty
+labels. A bound provider is reachable **only from that ring**, and its mints
+carry the ring's labels. Resolving a ring's session references accepts a
+provider only when its `ring_id` is null or that exact ring, so one ring can
+never borrow another ring's credentials by naming it in its own
+`auth.identities`; the refusal is per-identity, like every other mint failure.
+A provider may bind only a ring of its own project.
+
 Session artifacts are encrypted, expiring, and cached per provider and
 identity. Concurrent requests for the same missing session share one pending
 mint. Stories select identities with core `app.auth`; `auth: none` always means
-signed out and cannot be replaced by a default environment identity.
+signed out and cannot be replaced by a ring's default identity.
 
 Setup scripts and hooks receive only explicitly delivered secret environment
 variables or secret files. Suite files cannot shadow the platform-managed
@@ -1441,10 +1498,10 @@ group's final report has no later retrigger). Gate and signal tiers are
 fully deterministic; the keyless tier re-verifies the finding's own claim
 through the platform LLM gateway when one is configured.
 
-**Resolution is per (suite, environment, case).** One finding's evidence
-legitimately spans suites and environments, and one story fans out into one
+**Resolution is per (suite, ring, case).** One finding's evidence
+legitimately spans suites and rings, and one story fans out into one
 case per persona, so the affected set is *derived* from evidence — the
-distinct `(run_groups.suite_id, run_groups.environment_id, runs.case_id)`
+distinct `(run_groups.suite_id, run_groups.ring_id, runs.case_id)`
 triples reached through `finding_evidence` — never hand-maintained. (This is
 deliberately the same key as run-attention retirement.) Each triple carries a
 resolution stamp (`finding_resolution_stamps`: run, method, timestamp) written
@@ -1612,7 +1669,8 @@ me draft**: one editor-authorized request (`POST /api/v1/suites/:s/story-draft`)
 drafts or improves stories from a plain-language goal, a short browser-held
 clarification transcript, and — when improving — the existing story path and
 YAML. The server derives context from current suite state (defaults, compact
-story summaries, personas, and environment names/base URLs) and never sends
+story summaries, personas, and the suite's own application's ring keys/base
+URLs) and never sends
 secrets, session artifacts, or raw auth values to the model. It returns either
 a clarifying reply (`needs_input`) or `{ draft, drafts }`: `drafts` is the
 proposed set — one story by default, several (capped) within the same stateless
@@ -1745,10 +1803,9 @@ in *either* state as an owner, which is what lets it run mid-stream without
 touching a run's staged bytes.
 
 Content-addressed blobs (`blobs/<sha256>`) are reclaimed by their own sweep, and
-every referrer counts: a suite snapshot's tree, an environment's `app_artifact`,
-and a run group's pinned `app_artifact`. A build an environment has replaced
-therefore survives while any group that ran with it can still be re-run, and a
-build nobody ever launched against is reclaimed on the next cycle.
+every referrer counts. Suite-snapshot trees are the only one: the platform holds
+no application bytes, so a blob nothing any snapshot names is reclaimed on the
+next cycle.
 
 Bundle rewriting and reads are buffered and therefore subject to the
 safe-integer and upload limits enforced by the implementation. Larger artifacts
@@ -1836,12 +1893,15 @@ author stories, run them, inspect evidence, make a human decision.
   offers "Review all changed stories" only when several candidates are pending,
   and it is not on the rail. A single pending candidate is decidable from its own
   run page.
-- Settings defines six sections: **Test targets** (environments —
-  discovery permission, runner labels, browser cookies (`config.app.cookies`,
-  sent on every web run against the ring), auth identities, and secret
-  references, with the fallback base URL, provider, and raw environment JSON
-  behind Advanced; a suite's own environments are listed here too, marked with the
-  suite that owns them), **Runners** (`developer` **and**
+- **Applications** is a first-class project section (`developer` to edit,
+  `viewer` to read): create and rename applications, see their immutable keys and
+  drivers, manage each application's rings — key, name, URL for web/API, routing
+  labels, discovery permission, browser cookies (`config.app.cookies`, sent on
+  every web run against that ring), auth identities and secret references — and
+  see the suites bound to each. No URL, binary, device, or Appium control exists
+  anywhere for mobile: a mobile ring's page states that the claiming runner
+  supplies the build and links the runner operations guide.
+- Settings defines five sections: **Runners** (`developer` **and**
   `capabilities.pool_dispatch`: register a self-hosted runner, list what each
   advertises, whether it is here right now and what it is executing, revoke),
   **Runs** (project concurrency), **Models**
@@ -1862,38 +1922,18 @@ author stories, run them, inspect evidence, make a human decision.
   event feed and re-reads the clock on a slow local interval that makes no
   request, so a laptop that closed its lid goes quiet on the page without
   anything having reported it. Nothing on this surface polls.
-- **Test targets** carries the ring's driver as a first-class field. Suite
-  setup, Suite settings, and the launch dialog show only environments matching
-  the suite's driver.
-- A mobile **Test target** carries its device as first-class fields — platform,
-  the app-binary path on the runner's own disk, and the Appium server — folded
-  away until a ring has one, so a mobile ring never requires hand-written JSON.
-  The named fields and the raw config document are two views of ONE document
-  (the suite-defaults discipline applied to JSON): the fields write into it, it
-  is what saves, and a key no field knows about survives verbatim. The same
-  section uploads, replaces and clears the environment's **app artifact**,
-  stating the deployment's cap and the accepted extensions before the upload
-  and rendering the server's `413` verbatim after it.
-- **A suite is created with an identity only** — a name and a driver. Where its
-  app runs is asked once the suite exists, on its own empty page, by a
-  skippable driver-aware card: pick a ring the project already has, or create
-  one inline (suite-owned by default, with a promote-to-project toggle; names
-  are unique per project across both scopes, and a collision is surfaced in the
-  form naming what holds it). `web` and `api` accept a bare URL, which lands in
-  the suite's own `playtest.yaml` — the top-level `app.base_url` for the
-  `default` ring, `app.envs.<name>.base_url` for any other. `mobile` asks which
-  of the three binary sources applies and writes each to its owner: a
-  runner-local path and the device fields to the environment, an upload to the
-  environment's app artifact, a fixture path to the suite's own `app.app`.
-  Skipping is safe by construction — the launch dialog states the resolved
-  target and its source, and a launch with nothing to install is refused.
-- The launch dialog states **placement** beside the target: which labels this
-  run needs and whether the launch or the environment chose them, and — from
-  the runner list it already holds, never a new poll — whether anything
-  advertising them is checked in, warning in the words the unclaimed-timeout
-  failure would have used. For a mobile launch it also states the resolved
-  binary and which of the three sources supplied it, blocks a launch that
-  resolves none, and warns on a suite-relative path.
+- **Suite creation asks for the application**, because a suite runs against
+  exactly one and the binding is immutable. A developer may create one inline —
+  for web that is a name plus a ring URL, nothing more — so the affordance is
+  visible only to developers; an editor picks from the applications that exist,
+  and an empty project tells an editor that a developer has to create the first
+  one. There is no target card and no per-suite target form: the suite never
+  writes into a shared ring record.
+- The launch dialog shows suite, application, ring, the resolved URL (web/API)
+  or "build supplied by the claiming runner" (mobile), the labels this run
+  needs and whether the launch or the ring chose them, and whether anything
+  advertising those labels is checked in — warning in the words the
+  unclaimed-timeout failure would have used.
 - A run that never ran because nothing claimed it is explained as **placement,
   not the app**: the four pool failures (no runners registered, none
   advertising the labels, none polling, the claim holder went silent) each get
@@ -1937,37 +1977,18 @@ author stories, run them, inspect evidence, make a human decision.
   rules, then the cards to review, then approved, then denied — the
   order a person reads them in — and each card carries its one-line provenance,
   approve / not-a-rule / edit, and a note field that travels to the test author.
-- A suite declares where it runs; an environment declares the ring it runs in.
-  An environment owns the credentials, runner pool and discovery permission
-  shared by every suite pointed at that ring; its base URL is a *fallback* for
-  projects that test one app, edited behind Advanced. Which host a given suite
-  reaches inside a ring is the suite's to set, on Suite settings, as one row per
-  environment writing `app.envs.<name>.base_url` — and, for a web suite, the
-  cookies it sends there (`app.envs.<name>.cookies`, applied by core wholesale
-  over the suite-default `app.cookies`; the default row edits `app.cookies`
-  itself). Each row states the URL it resolves to and why, mirroring the
-  dispatcher's precedence — which is unchanged, and which cookies follow:
-  `suite env overlay` → `environment fallback` → `suite default`.
-  The launch dialog names the resolved target and which of the three won.
-- Suite settings holds one **Environments** table rather than a base-URL field
-  and a separate per-environment list: the suite's own URL (`app.base_url`) is
-  the `default` row, the project's rings follow under "Shared with every suite",
-  and the suite's own environments follow under "This suite only" with the
-  control that adds and removes them. Every URL field on that page writes this
-  suite's `playtest.yaml` and lands with Save, including the ones for suite-owned
-  environments; the environment record itself is a project-level object and is
-  created or deleted immediately, which the confirmation and the toast say out
-  loud. Adding or removing an environment needs the developer role even though
-  the rest of Suite settings is an editor's, because an environment can
-  reference credentials.
-- The launch dialog offers only the environments the chosen suite may use, and
-  each option names the host it resolves to (`staging · staging.acme.test ·
-  discovery`) rather than the environment's own URL, which is not necessarily
-  the one a launch will use. Switching suites re-derives the choice, since a
-  selection can belong to a suite that no longer applies. Directly beneath that
-  control — as the answer to what the chosen name means here — the dialog states
-  the full resolved URL, which of the three sources won, and, for a suite-owned
-  environment, that no other suite can launch against it.
+- **The ring says where a run points; the suite never does.** A ring owns the
+  URL, the credentials, the routing labels and the discovery permission for one
+  deployment of one application, and hosted execution applies that URL as the
+  runtime target — after the complete authored merge, replacing anything the
+  suite wrote. Suite settings therefore has no base-URL field and no per-ring URL
+  table. What a suite may still say per ring is LOGICAL: `app.envs.<ring key>`
+  cookies, identities, settle, viewport. The launch dialog names the ring and the
+  URL it resolves to, and there is no precedence left to explain.
+- The launch dialog offers only the rings of the suite's own application, each
+  option naming the host it resolves to (`staging · staging.acme.test ·
+  discovery`). Switching suites re-derives the choice, since a selection can
+  belong to an application that no longer applies.
 - Suite settings exposes `max_steps` and `timeout` as editable shared defaults,
   preserving either their top-level or nested `limits.*` YAML spelling. The
   launch dialog states the effective resolved limits on its Limits disclosure
@@ -2024,8 +2045,7 @@ author stories, run them, inspect evidence, make a human decision.
 
 - Primary copy says story, suite, and run. "Journey" is reserved for the
   recorded path being compared, and "case" and "run group" do not appear in the
-  interface at all — a person launches a run, of some stories, against an
-  environment.
+  interface at all — a person launches a run, of some stories, against a ring.
 - Engine tokens are translated before a person reads them.
   `packages/platform/web/src/lib/vocab.ts` owns the display words for candidate
   categories, deterministic signals, success-criterion kinds and the run-status
@@ -2067,11 +2087,9 @@ author stories, run them, inspect evidence, make a human decision.
   before it is hovered. Cancelling a run, discarding unsaved story edits, and
   synthesizing findings each name their consequence in the dialog; `.btn.danger`
   carries a resting treatment, and filled red is reserved for a confirm
-  dialog's action. The launch dialog never preselects an environment named like
+  dialog's action. The launch dialog never preselects a ring named like
   production: it defaults to where the suite last ran, else one that allows
-  discovery, else the first non-production one — preferring, among those, an
-  environment this suite actually resolves a URL for, since one it doesn't
-  cannot run at all.
+  discovery, else the first non-production ring of the suite's application.
 - What a run does to saved paths is one binary control. Mode is Auto (each story
   replays its saved path; a story with none, or whose text changed, records) or
   Agent (every story records, and each passing recording replaces that story's
@@ -2082,7 +2100,7 @@ author stories, run them, inspect evidence, make a human decision.
   choice, and the selected one's consequence is stated under the control, before
   Launch.
 - The launch dialog opens on the two decisions that spend money and touch a real
-  application — which environment, and whether the agent drives — with the plan
+  application — which ring, and whether the agent drives — with the plan
   and the estimate beside Launch itself. Which suite and which stories are
   context under the title, not controls: a launch scoped from a story row or the
   story editor (`selection.ids`) says so and stays scoped, since widening it to
@@ -2132,7 +2150,7 @@ author stories, run them, inspect evidence, make a human decision.
   `packages/platform/web/src/lib/ui.ts`): Escape closes it, Tab is trapped inside it,
   focus lands on the first control on open and returns to the opener on close,
   and a confirm dialog's default focus is Cancel.
-- Where a screen repeats a control — Delete per environment, Run per story —
+- Where a screen repeats a control — Delete per ring, Run per story —
   each instance names its object with an `aria-label`. Every input has an
   accessible name from a `<label>` or an `aria-label`; a placeholder is never
   the only name.

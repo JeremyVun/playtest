@@ -8,7 +8,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { withApp } from "./helpers.ts";
+import { withApp, createTarget } from "./helpers.ts";
 
 // ---------- scripted OpenAI-compatible model stub ----------
 
@@ -53,9 +53,11 @@ function script(...responses: HostedDynamic[]) {
   queue.push(...responses);
 }
 
-async function seedSuite(api: HostedDynamic, { project = "p" } = {}) {
-  await api.post("/projects", { key: project, name: project.toUpperCase() });
-  const suite = (await api.post(`/projects/${project}/suites`, { slug: "s", name: "S" })).body;
+async function seedSuite(api: HostedDynamic, { project: projectKey = "p" } = {}) {
+  const project = (await api.post("/projects", { key: projectKey, name: projectKey.toUpperCase() })).body;
+  // A suite binds to an application at creation, so the target pair comes first.
+  await createTarget(api, project);
+  const suite = (await api.post(`/projects/${projectKey}/suites`, { slug: "s", name: "S" })).body;
   const seed = await api.post(`/suites/${suite.id}/commit`, {
     changes: [{ path: "playtest.yaml", content: "app:\n  base_url: http://x\n" }],
     note: "seed",

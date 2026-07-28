@@ -8,7 +8,7 @@
 // reaches into another project cannot mutate a single row.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { withApp } from "./helpers.ts";
+import { withApp, createTarget } from "./helpers.ts";
 import { ulid } from "../../src/ulid.ts";
 import { intakeFinding } from "../../src/findings/intake.ts";
 import {
@@ -24,18 +24,20 @@ const SYSTEM = { system: "test" };
 
 async function seedProject(app: HostedDynamic, api: HostedDynamic, key: HostedDynamic) {
   const project = (await api.post("/projects", { key, name: key })).body;
+  // The application and its discovery-allowed ring come first: a suite binds to
+  // an application at creation, and a run group records both.
+  const { application, ring } = await createTarget(api, project, { ringKey: "staging", discoveryAllowed: true });
   const suite = (await api.post(`/projects/${key}/suites`, { slug: "s", name: "S" })).body;
   const snapshotId = ulid();
   await app.db.query(
     `INSERT INTO suite_snapshots (id, suite_id, seq, tree, created_by) VALUES ($1,$2,1,'{}',$3)`,
     [snapshotId, suite.id, app.ctx.devUserId],
   );
-  const env = (await api.post(`/projects/${key}/environments`, { name: "staging", discovery_allowed: true })).body;
   const groupId = ulid();
   await app.db.query(
-    `INSERT INTO run_groups (id, project_id, suite_id, snapshot_id, environment_id, trigger, selection, status)
-       VALUES ($1,$2,$3,$4,$5,'{}','{}','done')`,
-    [groupId, project.id, suite.id, snapshotId, env.id],
+    `INSERT INTO run_groups (id, project_id, suite_id, snapshot_id, application_id, ring_id, trigger, selection, status)
+       VALUES ($1,$2,$3,$4,$5,$6,'{}','{}','done')`,
+    [groupId, project.id, suite.id, snapshotId, application.id, ring.id],
   );
   return { project, groupId };
 }

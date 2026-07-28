@@ -183,7 +183,7 @@ export function formModal(title: WebDynamic, render: WebDynamic, opts: WebDynami
  * native popups (macOS Liquid Glass) fight the theme and can't be styled.
  * The select is hidden inside the returned wrapper; the button mirrors the
  * selected option, and the listbox rebuilds from the live options on every
- * open, so dynamically re-mounted options (the launch modal's environments)
+ * open, so dynamically re-mounted options (the launch modal's rings)
  * just work. Programmatic value changes must dispatch a "change" event.
  */
 export function enhanceSelect(sel: WebDynamic) {

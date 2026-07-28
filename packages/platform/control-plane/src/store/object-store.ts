@@ -25,9 +25,7 @@ export function makeObjectStore(cfg: ControlPlaneConfig["objectStore"]): ObjectS
 }
 
 // Content-addressed blob keys: blobs/<sha256> (deduped and immutable). Kept
-// here so writer and reader agree on layout. Two kinds of content share the
-// namespace because both have the same property — the bytes are the key: suite
-// files, and environment app artifacts. Uploading the same bytes twice is one
-// object either way, and retention's blob GC reclaims one only when no snapshot,
-// no environment, and no pinned run group names it.
+// here so writer and reader agree on layout. Suite file content lives under it,
+// keyed by its own bytes: uploading the same bytes twice is one object, and
+// retention's blob GC reclaims one only when no snapshot names it.
 export const blobKey = (sha256: string) => `blobs/${sha256}`;

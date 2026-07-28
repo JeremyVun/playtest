@@ -134,12 +134,12 @@ export async function mintComplete(ctx: HostedDynamic) {
 export async function groupSpec(ctx: HostedDynamic) {
   const runner = requireRunner(ctx, ctx.params.g);
   const group = await getGroup(ctx, ctx.params.g);
-  const [project, suite, snapshot, environment] = await Promise.all([
+  const [project, suite, snapshot] = await Promise.all([
     one(ctx, `SELECT * FROM projects WHERE id = $1`, [group.project_id], `no project "${group.project_id}"`),
     one(ctx, `SELECT * FROM suites WHERE id = $1`, [group.suite_id], `no suite "${group.suite_id}"`),
     one(ctx, `SELECT * FROM suite_snapshots WHERE id = $1`, [group.snapshot_id], `no snapshot "${group.snapshot_id}"`),
-    one(ctx, `SELECT * FROM environments WHERE id = $1`, [group.environment_id], `no environment "${group.environment_id}"`),
   ]);
+  const target = await attemptTarget(ctx, group, runner.executor_id);
   const { rows } = await ctx.db.query(
     `SELECT id, case_id, story_id, run_id, mode FROM runs
       WHERE run_group_id = $1 AND status = 'queued'
@@ -179,19 +179,28 @@ export async function groupSpec(ctx: HostedDynamic) {
     // discovery. This value is the project fallback and preserves the old
     // serial hosted behavior for projects that have never changed the setting.
     parallel: project.parallel || { total: 1, record: 1 },
-    environment: {
-      id: environment.id,
-      name: environment.name,
-      config: environment.config || {},
-      runner_labels: environment.runner_labels || [],
-      // The artifact the LAUNCH pinned, never the environment's current one: a
-      // re-upload while this group is in flight must not change the binary its
-      // remaining cases install. Null means the binary comes from somewhere
-      // else (the suite tree, or a path on the runner's own disk).
-      app_artifact: group.app_artifact ?? null,
-      resolved_secrets: await resolvedSecrets(ctx, group.project_id, environment.config || {}),
+    // The ring THIS ATTEMPT snapshotted, never the ring's current state: an edit
+    // between claim and exchange must not change what the offer promised. The
+    // runner materializes `config` as `app.envs.<key>` and applies `base_url` as
+    // core's runtime target, so hosted execution replaces the suite's authored
+    // physical fields rather than merging with them.
+    ring: {
+      id: target.ring_id,
+      key: target.ring_key,
+      base_url: target.base_url ?? null,
+      config: target.config || {},
+      runner_labels: target.labels || [],
+      // Secrets are deliberately NOT in the snapshot — they are resolved here,
+      // after the claim and the credential exchange.
+      resolved_secrets: await resolvedSecrets(ctx, group.project_id, target.config || {}),
     },
-    sessions: { needed: sessionRefs(environment.config || {}), current: {} },
+    application: {
+      id: target.application_id,
+      key: target.application_key,
+      driver: target.driver,
+      platform: target.platform ?? null,
+    },
+    sessions: { needed: sessionRefs(target.config || {}), current: {} },
     baselines: await currentBaselines(ctx, group.suite_id),
     uploads: {
       bundle_url_template: `${ctx.config.publicUrl}/api/v1/runner/runs/{run_db_id}/bundle`,
@@ -283,43 +292,28 @@ export async function blob(ctx: HostedDynamic) {
 }
 
 /**
- * GET /runner/artifacts/:sha256 — the app binary this run group pinned at
- * launch.
+ * The target snapshot THIS attempt recorded — the one its offer already
+ * advertised, so a ring edit between poll, claim and exchange cannot make the
+ * offer and the group spec disagree.
  *
- * Scoped, not open: a group token fetches the ONE artifact its own group
- * pinned, so a compromised scoped bearer cannot walk the object store by
- * guessing hashes. The runner verifies the bytes against the same hash on
- * arrival, which is what makes the download safe to cache and the store safe to
- * be wrong about.
+ * Located by the executor this bearer belongs to, which is exactly the attempt
+ * that exchanged. The newest attempt is the fallback for the paths that reach
+ * here without an executor binding yet — and for a bearer whose row a later
+ * exchange re-stamped (exchange overwrites the attempt's executor_id), where
+ * the fallback row IS its own attempt and carries the identical snapshot. The
+ * executor match must stay a preference, never a WHERE filter, or that bearer
+ * gets a 404 mid-group.
  */
-export async function appArtifact(ctx: HostedDynamic) {
-  const runner = requireRunner(ctx);
-  const sha = ctx.params.sha256;
-  if (!/^[0-9a-f]{64}$/.test(sha)) throw badRequest(`invalid app artifact sha256 "${sha}"`);
-  const group = await getGroup(ctx, runner.run_group_id);
-  const pinned = group.app_artifact;
-  if (!pinned?.sha256) {
-    throw forbidden(
-      `run group "${group.id}" pinned no app artifact — its binary comes from the suite tree or a path on this runner's own disk`,
-    );
-  }
-  if (pinned.sha256 !== sha) {
-    throw forbidden(`run group "${group.id}" pinned a different app artifact than ${sha.slice(0, 12)}`);
-  }
-  try {
-    return new HttpResult({ buffer: await ctx.store.get(blobKey(sha)), contentType: "application/octet-stream" });
-  } catch (e: HostedDynamic) {
-    // Same degradation a pruned bundle gets: say what is gone and how to get a
-    // runnable state back. Never a 500, and never a runner-side crash.
-    if (e?.code === "not_found") {
-      throw notFound(
-        `the app artifact this run group pinned (${pinned.filename ?? "app"}, sha256 ${sha.slice(0, 12)}) is no ` +
-          `longer in the object store. Upload the build to the environment again and launch a new run; this ` +
-          `group's evidence stays readable, but it cannot be re-run from the binary it used.`,
-      );
-    }
-    throw e;
-  }
+async function attemptTarget(ctx: HostedDynamic, group: HostedDynamic, executorId: HostedDynamic = null) {
+  const { rows } = await ctx.db.query(
+    `SELECT target FROM dispatches
+      WHERE kind = 'group' AND ref_id = $1
+      ORDER BY (executor_id = $2) DESC, attempt DESC, requested_at DESC LIMIT 1`,
+    [group.id, executorId],
+  );
+  const target = rows[0]?.target;
+  if (!target) throw notFound(`run group "${group.id}" has no dispatch target snapshot`);
+  return target;
 }
 
 export async function claim(ctx: HostedDynamic) {
@@ -328,22 +322,20 @@ export async function claim(ctx: HostedDynamic) {
   const body = await readJsonBody(ctx.req);
   const refs = Array.isArray(body.sessions) ? body.sessions : Array.isArray(body.refs) ? body.refs : [];
   // A runner token is scoped to one group: it may claim only the session refs
-  // that group's environment declares. Without this, any executor in the
-  // project could pull mint grants (root secrets) for unrelated providers.
-  const environment = await one(
-    ctx,
-    `SELECT * FROM environments WHERE id = $1`,
-    [group.environment_id],
-    `no environment "${group.environment_id}"`,
-  );
-  const allowed = new Set(sessionRefs(environment.config || {}));
+  // this attempt's ring declares. Without this, any executor in the project
+  // could pull mint grants (root secrets) for unrelated providers.
+  const target = await attemptTarget(ctx, group, runner.executor_id);
+  const allowed = new Set(sessionRefs(target.config || {}));
   for (const ref of refs) {
     if (!allowed.has(ref)) {
-      throw forbidden(`session ref "${ref}" is not declared by environment "${environment.name}"`);
+      throw forbidden(`session ref "${ref}" is not declared by ring "${target.application_key}/${target.ring_key}"`);
     }
   }
   const claimArgs: HostedDynamic = {
     projectId: group.project_id,
+    // Which ring is asking. A provider bound to a DIFFERENT ring is refused
+    // here, so a ring can never borrow another ring's credentials.
+    ringId: group.ring_id,
     actor: { system: "runner" },
     mintedByJob: runner.executor_id,
   };
@@ -749,10 +741,10 @@ async function resolveExchangeDispatch(ctx: HostedDynamic, body: HostedDynamic) 
   throw unauthenticated(`no active dispatch matches GitHub workflow run ${workflowRunId}`);
 }
 
-async function resolvedSecrets(ctx: HostedDynamic, projectId: HostedDynamic, envConfig: HostedDynamic) {
+async function resolvedSecrets(ctx: HostedDynamic, projectId: HostedDynamic, ringConfig: HostedDynamic) {
   const names = new Set();
-  collectSecretFileNames(envConfig, names);
-  for (const v of Object.values(envConfig.secret_env || {}) as HostedDynamic) {
+  collectSecretFileNames(ringConfig, names);
+  for (const v of Object.values(ringConfig.secret_env || {}) as HostedDynamic) {
     if (typeof v === "string" && !v.startsWith("$session:")) names.add(v);
     if (v && typeof v === "object" && v.$secret_file) names.add(v.$secret_file);
   }
@@ -764,7 +756,7 @@ async function resolvedSecrets(ctx: HostedDynamic, projectId: HostedDynamic, env
   );
   const byName = new Map(rows.map((r: HostedDynamic) => [r.name, decryptSecret(ctx.config.kmsKey, r.ciphertext)]));
   const missing = [...names].filter((n) => !byName.has(n));
-  if (missing.length) throw badRequest(`environment references missing secrets: ${missing.join(", ")}`);
+  if (missing.length) throw badRequest(`ring configuration references missing secrets: ${missing.join(", ")}`);
   return Object.fromEntries(byName);
 }
 
@@ -775,10 +767,10 @@ function collectSecretFileNames(value: HostedDynamic, out: HostedDynamic) {
   for (const v of Object.values(value)) collectSecretFileNames(v, out);
 }
 
-function sessionRefs(envConfig: HostedDynamic) {
+function sessionRefs(ringConfig: HostedDynamic) {
   const refs = new Set();
-  for (const v of Object.values(envConfig.auth?.identities || {})) collectSessionRefs(v, refs);
-  for (const v of Object.values(envConfig.secret_env || {})) collectSessionRefs(v, refs);
+  for (const v of Object.values(ringConfig.auth?.identities || {})) collectSessionRefs(v, refs);
+  for (const v of Object.values(ringConfig.secret_env || {})) collectSessionRefs(v, refs);
   return [...refs].sort();
 }
 

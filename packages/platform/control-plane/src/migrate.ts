@@ -8,6 +8,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { ServerConfigError } from "./config.ts";
 import type { Db } from "./db.ts";
 
 const MIGRATIONS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../migrations");
@@ -18,6 +19,31 @@ export function migrationFiles(dir = MIGRATIONS_DIR): string[] {
     .readdirSync(dir)
     .filter((f) => /^\d+.*\.sql$/.test(f))
     .sort();
+}
+
+/**
+ * Refuse a data root whose ledger names migrations this build no longer ships.
+ *
+ * The migrator is forward-only, so without this check a pre-rebaseline root
+ * would simply have the new baseline applied ON TOP of the legacy schema: the
+ * retired tables would survive, the new ones would collide with them, and the
+ * failure would surface as a raw SQLite error at some later query. The
+ * applications/rings model has no migration from the environments model it
+ * replaces — the deployment is greenfield — so the honest answer is to name the
+ * retired files and tell the operator to point `PLAYTEST_DATA_DIR` somewhere new.
+ */
+export function assertLedgerIsShippable(applied: readonly string[], shipped: readonly string[], file: string) {
+  const known = new Set(shipped);
+  const retired = applied.filter((f) => !known.has(f)).sort();
+  if (!retired.length) return;
+  const named = retired.slice(0, 4).join(", ") + (retired.length > 4 ? `, … (${retired.length} in all)` : "");
+  throw new ServerConfigError(
+    `the Playtest data root at ${file} was created by an older schema and cannot be upgraded: ` +
+      `its migration ledger names ${named}, which this build no longer ships. Applications and ` +
+      `rings replaced environments with no migration path, so this database has to be recreated. ` +
+      `Point PLAYTEST_DATA_DIR at a new directory (or delete the current one, losing its runs) ` +
+      `and start the server again.`,
+  );
 }
 
 /**
@@ -36,10 +62,10 @@ export async function migrate(
     )
   `);
   db.refreshSchema();
-  const applied = new Set(
-    (await db.query("SELECT filename FROM schema_migrations")).rows.map((r) => r.filename),
-  );
   const files = migrationFiles(dir);
+  const appliedRows = (await db.query("SELECT filename FROM schema_migrations")).rows.map((r) => String(r.filename));
+  assertLedgerIsShippable(appliedRows, files, db.file);
+  const applied = new Set(appliedRows);
   const ran: string[] = [];
   for (const file of files) {
     if (applied.has(file)) continue;

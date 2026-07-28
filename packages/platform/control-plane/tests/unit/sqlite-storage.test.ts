@@ -13,7 +13,7 @@ import { after, test } from "node:test";
 import { DatabaseSync } from "node:sqlite";
 import { Db, canonicalJson, connect, inClause } from "../../src/db.ts";
 import { ServerConfigError } from "../../src/config.ts";
-import { migrate, migrationFiles } from "../../src/migrate.ts";
+import { assertLedgerIsShippable, migrate, migrationFiles } from "../../src/migrate.ts";
 
 const roots: HostedDynamic[] = [];
 
@@ -49,29 +49,23 @@ test("migrations build the whole schema from an empty database and are idempoten
   const tables = (
     await db.query("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
   ).rows.map((r: HostedDynamic) => r.name);
-  // 27 baseline tables + 2 consolidation tables (0004) + 1 personas table
-  // (0005) + finding_intake_keys (0008) + rule_cards (0012) +
-  // finding_resolution_stamps (0013) + runners (0015) + the two live-staging
-  // tables (0019) + schema_migrations. The
-  // three bug-candidate tables 0003 created are dropped again by 0008: the
-  // finding is the only defect entity.
-  assert.equal(tables.length, 37, "every migration's tables plus schema_migrations");
-  for (const added of ["consolidation_plans", "consolidation_labels"]) {
-    assert.ok(tables.includes(added), `${added} is created by 0004`);
+  // The baseline's 37 tables plus schema_migrations, which the migration runner
+  // creates itself.
+  assert.equal(tables.length, 38, "the baseline's tables plus schema_migrations");
+  for (const expected of [
+    "applications", "rings", "consolidation_plans", "consolidation_labels", "personas",
+    "finding_intake_keys", "rule_cards", "finding_resolution_stamps", "runners",
+    "live_artifacts", "live_trajectory",
+  ]) {
+    assert.ok(tables.includes(expected), `${expected} is part of the baseline`);
   }
-  assert.ok(tables.includes("personas"), "personas is created by 0005");
-  assert.ok(tables.includes("finding_intake_keys"), "finding_intake_keys is created by 0008");
-  assert.ok(tables.includes("rule_cards"), "rule_cards is created by 0012");
-  assert.ok(tables.includes("finding_resolution_stamps"), "finding_resolution_stamps is created by 0013");
-  assert.ok(tables.includes("runners"), "runners is created by 0015");
-  for (const collapsed of ["bug_candidates", "bug_candidate_evidence", "bug_candidate_suppressions"]) {
-    assert.equal(tables.includes(collapsed), false, `${collapsed} was dropped by the findings collapse (0008)`);
-  }
-  for (const dropped of [
+  // Vocabulary the baseline retired outright, none of it migrated forward.
+  for (const gone of [
+    "environments", "bug_candidates", "bug_candidate_evidence", "bug_candidate_suppressions",
     "plugins", "plugin_deliveries", "integrations", "insights",
     "authoring_sessions", "legal_holds", "retention_policies",
   ]) {
-    assert.equal(tables.includes(dropped), false, `${dropped} was dropped by simplification 0009`);
+    assert.equal(tables.includes(gone), false, `${gone} is not part of the model any more`);
   }
 
   // Re-running applies nothing and leaves the recorded order intact.
@@ -115,9 +109,10 @@ test("foreign keys, cascades, and referential actions are enforced by the databa
   await db.query("INSERT INTO users (id, subject, email) VALUES ($1, $2, $3)", ["u1", "s1", "u@x"]);
   await db.query("INSERT INTO projects (id, key, name) VALUES ($1, $2, $3)", ["p1", "proj", "Proj"]);
   await db.query("INSERT INTO memberships (user_id, project_id, role) VALUES ($1, $2, $3)", ["u1", "p1", "admin"]);
-  await db.query("INSERT INTO suites (id, project_id, slug, name) VALUES ($1, $2, $3, $4)", ["s1", "p1", "a", "A"]);
+  await db.query("INSERT INTO applications (id, project_id, key, name, driver) VALUES ($1, $2, $3, $4, 'web')", ["a1", "p1", "todo", "Todo"]);
+  await db.query("INSERT INTO rings (id, application_id, key, name, base_url) VALUES ($1, $2, $3, $4, $5)", ["ri1", "a1", "local", "Local", "http://127.0.0.1:4173"]);
+  await db.query("INSERT INTO suites (id, project_id, application_id, slug, name) VALUES ($1, $2, $3, $4, $5)", ["s1", "p1", "a1", "a", "A"]);
   await db.query("INSERT INTO suite_snapshots (id, suite_id, seq, tree) VALUES ($1, $2, 1, $3)", ["sn1", "s1", {}]);
-  await db.query("INSERT INTO environments (id, project_id, name) VALUES ($1, $2, $3)", ["e1", "p1", "staging"]);
 
   await assert.rejects(
     () => db.query("INSERT INTO memberships (user_id, project_id, role) VALUES ($1, $2, $3)", ["ghost", "p1", "admin"]),
@@ -126,11 +121,22 @@ test("foreign keys, cascades, and referential actions are enforced by the databa
 
   // ON DELETE RESTRICT: a suite with a run group pinned to it cannot vanish.
   await db.query(
-    `INSERT INTO run_groups (id, project_id, suite_id, snapshot_id, environment_id, trigger, selection, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'queued')`,
-    ["g1", "p1", "s1", "sn1", "e1", { by: "test" }, { cases: [] }],
+    `INSERT INTO run_groups (id, project_id, suite_id, snapshot_id, application_id, ring_id, trigger, selection, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'queued')`,
+    ["g1", "p1", "s1", "sn1", "a1", "ri1", { by: "test" }, { cases: [] }],
   );
   await assert.rejects(() => db.query("DELETE FROM suites WHERE id = $1", ["s1"]), /FOREIGN KEY constraint failed/);
+  // Nothing about applications and rings cascades: the model refuses to delete
+  // what something still points at, and the constraint backs the API's refusal.
+  await assert.rejects(() => db.query("DELETE FROM rings WHERE id = $1", ["ri1"]), /FOREIGN KEY constraint failed/);
+  await assert.rejects(() => db.query("DELETE FROM applications WHERE id = $1", ["a1"]), /FOREIGN KEY constraint failed/);
+  // A ring-bound auth provider is RESTRICT, never SET NULL: promoting it to
+  // project-wide would move secrets policy without anyone deciding it.
+  await db.query(
+    "INSERT INTO auth_providers (id, project_id, ring_id, name, kind) VALUES ($1, $2, $3, $4, 'script')",
+    ["ap1", "p1", "ri1", "sso"],
+  );
+  await assert.rejects(() => db.query("DELETE FROM rings WHERE id = $1", ["ri1"]), /FOREIGN KEY constraint failed/);
 
   // ON DELETE CASCADE reaches transitively: project -> run_groups -> runs -> run_events.
   await db.query(
@@ -138,11 +144,42 @@ test("foreign keys, cascades, and referential actions are enforced by the databa
     ["r1", "g1", "checkout", "R1"],
   );
   await db.query("INSERT INTO run_events (run_id, seq, type) VALUES ($1, 1, 'started')", ["r1"]);
+  // Deleting a project is the one operation that removes everything, and it
+  // spells the RESTRICT chain out rather than relying on a cascade that is not
+  // there (src/api/projects.ts deleteProject).
+  await db.query("DELETE FROM run_groups WHERE project_id = $1", ["p1"]);
+  await db.query("DELETE FROM auth_providers WHERE project_id = $1", ["p1"]);
+  await db.query("DELETE FROM suites WHERE project_id = $1", ["p1"]);
+  await db.query("DELETE FROM rings WHERE application_id IN (SELECT id FROM applications WHERE project_id = $1)", ["p1"]);
+  await db.query("DELETE FROM applications WHERE project_id = $1", ["p1"]);
   await db.query("DELETE FROM projects WHERE id = $1", ["p1"]);
-  for (const table of ["memberships", "suites", "run_groups", "runs", "run_events", "environments"]) {
-    assert.equal((await db.query(`SELECT COUNT(*) AS c FROM ${table}`)).rows[0].c, 0, `${table} cascaded`);
+  for (const table of ["memberships", "suites", "run_groups", "runs", "run_events", "applications", "rings"]) {
+    assert.equal((await db.query(`SELECT COUNT(*) AS c FROM ${table}`)).rows[0].c, 0, `${table} is gone`);
   }
   await db.end();
+});
+
+test("a data root built by the retired schema fails boot with an actionable reset message", async () => {
+  // Gate 12. The migrator is forward-only, so a pre-rebaseline root would
+  // otherwise have the new baseline applied ON TOP of the legacy schema and
+  // fail much later as a raw SQLite error.
+  const { db } = await freshDb();
+  await db.query("INSERT INTO schema_migrations (filename) VALUES ($1)", ["0001_control_plane.sql"]);
+  await db.query("INSERT INTO schema_migrations (filename) VALUES ($1)", ["0020_environment_drivers.sql"]);
+  await assert.rejects(
+    () => migrate(db),
+    (e: HostedDynamic) =>
+      e instanceof ServerConfigError &&
+      /0001_control_plane\.sql/.test(e.message) &&
+      /0020_environment_drivers\.sql/.test(e.message) &&
+      /PLAYTEST_DATA_DIR/.test(e.message) &&
+      !/at Object/.test(e.message),
+  );
+  await db.end();
+
+  // The probe is pure and says nothing about a ledger this build still ships.
+  assert.equal(assertLedgerIsShippable(migrationFiles(), migrationFiles(), "x"), undefined);
+  assert.equal(assertLedgerIsShippable([], migrationFiles(), "x"), undefined);
 });
 
 test("uniqueness constraints, including the partial active-fingerprint index, hold", async () => {
@@ -150,11 +187,39 @@ test("uniqueness constraints, including the partial active-fingerprint index, ho
   await db.query("INSERT INTO projects (id, key, name) VALUES ($1, $2, $3)", ["p1", "proj", "Proj"]);
   await assert.rejects(
     () => db.query(
-      "INSERT INTO environments (id, project_id, name, driver) VALUES ($1, $2, $3, $4)",
-      ["e-bad", "p1", "staging", "desktop"],
+      "INSERT INTO applications (id, project_id, key, name, driver) VALUES ($1, $2, $3, $4, $5)",
+      ["a-bad", "p1", "todo", "Todo", "desktop"],
     ),
     /CHECK constraint failed/,
-    "an environment belongs to one supported driver",
+    "an application is one of the three drivers core can execute",
+  );
+  await assert.rejects(
+    () => db.query(
+      "INSERT INTO applications (id, project_id, key, name, driver, platform) VALUES ($1, $2, $3, $4, 'mobile', NULL)",
+      ["a-bad2", "p1", "todo-ios", "Todo iOS"],
+    ),
+    /CHECK constraint failed/,
+    "a mobile application must name its platform — core picks XCUITest or UiAutomator2 from it",
+  );
+  await assert.rejects(
+    () => db.query(
+      "INSERT INTO applications (id, project_id, key, name, driver, platform) VALUES ($1, $2, $3, $4, 'web', 'ios')",
+      ["a-bad3", "p1", "todo-web", "Todo Web"],
+    ),
+    /CHECK constraint failed/,
+    "and only a mobile application may name one",
+  );
+  await db.query("INSERT INTO applications (id, project_id, key, name, driver) VALUES ('a1','p1','todo','Todo','web')");
+  await assert.rejects(
+    () => db.query("INSERT INTO applications (id, project_id, key, name, driver) VALUES ('a2','p1','todo','Other','api')"),
+    /UNIQUE constraint failed/,
+    "an application key is unique in its project",
+  );
+  await db.query("INSERT INTO rings (id, application_id, key, name) VALUES ('r1','a1','local','Local')");
+  await assert.rejects(
+    () => db.query("INSERT INTO rings (id, application_id, key, name) VALUES ('r2','a1','local','Again')"),
+    /UNIQUE constraint failed/,
+    "a ring key is unique within its application",
   );
 
   await assert.rejects(
@@ -215,12 +280,13 @@ test("JSON columns store canonical JSON and read back as JS values", async () =>
     `INSERT INTO runs (id, run_group_id, case_id, run_id, status, mode) VALUES ($1, $1, $1, $1, 'pass', 'act')`,
     ["r0"],
   ).catch(() => {}); // FK-rejected; use a real graph below instead.
-  await db.query("INSERT INTO suites (id, project_id, slug, name) VALUES ('s','p1','a','A')");
+  await db.query("INSERT INTO applications (id, project_id, key, name, driver) VALUES ('a','p1','todo','Todo','web')");
+  await db.query("INSERT INTO suites (id, project_id, application_id, slug, name) VALUES ('s','p1','a','a','A')");
   await db.query("INSERT INTO suite_snapshots (id, suite_id, seq, tree) VALUES ('sn','s',1,$1)", [{}]);
-  await db.query("INSERT INTO environments (id, project_id, name) VALUES ('e','p1','staging')");
+  await db.query("INSERT INTO rings (id, application_id, key, name, base_url) VALUES ('e','a','staging','Staging','https://staging.test')");
   await db.query(
-    `INSERT INTO run_groups (id, project_id, suite_id, snapshot_id, environment_id, trigger, selection, status)
-       VALUES ('g','p1','s','sn','e',$1,$1,'queued')`,
+    `INSERT INTO run_groups (id, project_id, suite_id, snapshot_id, application_id, ring_id, trigger, selection, status)
+       VALUES ('g','p1','s','sn','a','e',$1,$1,'queued')`,
     [{}],
   );
   await db.query(
@@ -231,13 +297,13 @@ test("JSON columns store canonical JSON and read back as JS values", async () =>
   assert.deepEqual(run.retention_provenance, {}, "an empty document is {}, not NULL");
 
   // Empty arrays are [], never NULL — the one surviving Postgres text[] column.
-  const [env] = (await db.query("SELECT runner_labels FROM environments WHERE id = 'e'")).rows;
-  assert.deepEqual(env.runner_labels, []);
-  await db.query("UPDATE environments SET runner_labels = $1 WHERE id = 'e'", [["linux", "gpu"]]);
-  assert.deepEqual((await db.query("SELECT runner_labels FROM environments WHERE id = 'e'")).rows[0].runner_labels, ["linux", "gpu"]);
+  const [ring] = (await db.query("SELECT runner_labels FROM rings WHERE id = 'e'")).rows;
+  assert.deepEqual(ring.runner_labels, []);
+  await db.query("UPDATE rings SET runner_labels = $1 WHERE id = 'e'", [["linux", "gpu"]]);
+  assert.deepEqual((await db.query("SELECT runner_labels FROM rings WHERE id = 'e'")).rows[0].runner_labels, ["linux", "gpu"]);
   // json_each is how membership is queried now.
   const hit = await db.query(
-    "SELECT COUNT(*) AS c FROM environments, json_each(environments.runner_labels) WHERE json_each.value = $1",
+    "SELECT COUNT(*) AS c FROM rings, json_each(rings.runner_labels) WHERE json_each.value = $1",
     ["gpu"],
   );
   assert.equal(hit.rows[0].c, 1);

@@ -1,4 +1,3 @@
-import path from "node:path";
 import YAML from "yaml";
 import { ulid } from "../ulid.ts";
 import { audit, actorOf } from "../audit.ts";
@@ -9,31 +8,57 @@ import { newRunId } from "@playtest/core/artifacts";
 import { defaultModels } from "@playtest/core/llm";
 import { emitPlatformEvent } from "../events/outbox.ts";
 import { inClause } from "../db.ts";
+import { checkInWindowMs } from "./pool.ts";
+import { labelsMatch } from "../auth/runner-credentials.ts";
 
 const ACTIVE_DISPATCHES = ["requested", "scheduled", "running"];
 
 /**
  * Which labels place this group. A launch may pin them (`runner_labels` on the
- * launch request), which OVERRIDES the environment's for that group only — the
- * CI case: two concurrent pipelines share one environment but each has to reach
- * its own build's runner, and an environment per pipeline would be a permanent
- * object created for a five-minute job.
+ * launch request), which OVERRIDES the ring's for that group only — the CI case:
+ * two concurrent pipelines share one ring but each has to reach its own build's
+ * runner, and a ring per pipeline would be a permanent object created for a
+ * five-minute job.
  *
  * The pin rides the group, so every later attempt (continuation after a partial
  * completion, in-place retry) is placed the way the original was even if someone
- * edits the environment in between.
+ * edits the ring in between.
  */
-export function groupDispatchLabels(group: HostedDynamic, environment: HostedDynamic): string[] {
-  return group?.runner_labels ?? environment?.runner_labels ?? [];
+export function groupDispatchLabels(group: HostedDynamic, ring: HostedDynamic): string[] {
+  return group?.runner_labels ?? ring?.runner_labels ?? [];
 }
 
-export async function createRunGroup(ctx: HostedDynamic, { principal, project, suite, environment, selection, note = null, runnerLabels = null }: HostedDynamic) {
+/**
+ * The NON-SECRET target snapshot a dispatch attempt records, and the only thing
+ * its offer and its group spec ever serve. A ring edit between preview, poll,
+ * claim and exchange therefore cannot make them disagree; a retry snapshots
+ * current ring state, which is the documented retry behavior.
+ *
+ * Secrets are deliberately absent — they are resolved when the group spec is
+ * served, after the claim and the credential exchange.
+ */
+export function targetSnapshot(application: HostedDynamic, ring: HostedDynamic, labels: string[]) {
+  return {
+    application_id: application.id,
+    application_key: application.key,
+    ring_id: ring.id,
+    ring_key: ring.key,
+    driver: application.driver,
+    platform: application.platform ?? null,
+    base_url: ring.base_url ?? null,
+    labels,
+    config: ring.config ?? {},
+  };
+}
+
+export async function createRunGroup(ctx: HostedDynamic, { principal, project, suite, application, ring, selection, note = null, runnerLabels = null }: HostedDynamic) {
   selection = normalizeSelection(selection);
   if (!ctx.github?.enabled) {
     // A test/local mock sets ctx.github.enabled=true. Without that or real GitHub
     // App config, launching would create a permanently queued group.
     throw new AppError("config_error", "GitHub dispatch is not configured and no local dispatch mock is installed");
   }
+  requireDispatchableDriver(application);
   const active = await ctx.db.query(
     `SELECT COUNT(*) AS n FROM dispatches
       WHERE project_id = $1 AND status IN (${inClause(ACTIVE_DISPATCHES, 2)})`,
@@ -47,13 +72,8 @@ export async function createRunGroup(ctx: HostedDynamic, { principal, project, s
   const resolved = await resolveSnapshotCases(snapshot.id, () => loadTreeFiles(ctx.store, snapshot.tree));
   const cases = selectCases(resolved.cases, selection);
   if (!cases.length) throw badRequest("run selection matched no cases");
-  requireEnvironmentDriver(cases, environment);
-  requireDiscoveryAllowed(cases, environment);
-  // Which of the three sources supplies the app binary, decided HERE so a
-  // configuration the runner could never satisfy is refused at the click
-  // instead of surfacing as a crash on someone's laptop ten seconds later.
-  const app = resolveAppTarget(resolved.defaults, environment);
-  requireResolvableApp(app, { environment, snapshotTree: snapshot.tree });
+  requireApplicationDriver(cases, application);
+  requireDiscoveryAllowed(cases, application, ring);
 
   // The snapshot tree carries no results/ dir, so core next_run always says
   // "record" — hosted, the baselines table is the source of truth for whether
@@ -79,29 +99,42 @@ export async function createRunGroup(ctx: HostedDynamic, { principal, project, s
     mode: plannedMode(c, selection, baselineStories),
   }));
 
-  // Pinned at launch, or inherited from the environment. `runner_labels` on the
-  // group is NULL unless this launch pinned them, so a group reads back saying
-  // whether its placement was a launch decision or the environment's standing one.
-  const labels = runnerLabels ?? environment.runner_labels ?? [];
+  // Pinned at launch, or inherited from the ring. `runner_labels` on the group
+  // is NULL unless this launch pinned them, so a group reads back saying whether
+  // its placement was a launch decision or the ring's standing one.
+  const labels = runnerLabels ?? ring.runner_labels ?? [];
+  const target = targetSnapshot(application, ring, labels);
 
   await ctx.db.withTx(async (tx: HostedDynamic) => {
+    // The launch transaction is where suite, ring and application are made to
+    // agree: a stale client or a hand-written API call must not be able to pin a
+    // group whose three references contradict each other.
+    const agree = await tx.query(
+      `SELECT s.application_id AS suite_app, r.application_id AS ring_app
+         FROM suites s, rings r WHERE s.id = $1 AND r.id = $2`,
+      [suite.id, ring.id],
+    );
+    const row = agree.rows[0];
+    if (!row || row.suite_app !== application.id || row.ring_app !== application.id) {
+      throw conflict(
+        `suite "${suite.slug}" and ring "${ring.key}" no longer agree on their application — ` +
+          `reload the launch dialog and pick a ring of this suite's application`,
+      );
+    }
     await tx.query(
       `INSERT INTO run_groups
-         (id, project_id, suite_id, snapshot_id, environment_id, trigger, selection, status, runner_labels, app_artifact)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'queued', $8, $9)`,
+         (id, project_id, suite_id, snapshot_id, application_id, ring_id, trigger, selection, status, runner_labels)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'queued', $9)`,
       [
         groupId,
         project.id,
         suite.id,
         snapshot.id,
-        environment.id,
+        application.id,
+        ring.id,
         triggerFor(principal, note),
         normalizeSelection(selection),
         runnerLabels,
-        // The artifact hash is pinned exactly when the artifact is what this
-        // launch resolved to — the same immutability rule the snapshot follows,
-        // and what keeps the blob alive for as long as this group can be re-run.
-        app.artifact,
       ],
     );
     for (const r of runs) {
@@ -111,13 +144,13 @@ export async function createRunGroup(ctx: HostedDynamic, { principal, project, s
         [r.id, r.run_group_id, r.case_id, r.story_id, r.run_id, r.status, r.mode],
       );
     }
-    // The labels snapshot rides the ledger row, written in the same transaction:
-    // under pull-based placement this row IS the claim-board entry, so a runner
-    // must never be able to read it before its routing labels are durable.
+    // The labels and target snapshots ride the ledger row, written in the same
+    // transaction: under pull-based placement this row IS the claim-board entry,
+    // so a runner must never be able to read it before what places it is durable.
     await tx.query(
-      `INSERT INTO dispatches (id, project_id, kind, ref_id, attempt, status, labels)
-         VALUES ($1, $2, 'group', $3, 1, 'requested', $4)`,
-      [dispatchId, project.id, groupId, labels],
+      `INSERT INTO dispatches (id, project_id, kind, ref_id, attempt, status, labels, target)
+         VALUES ($1, $2, 'group', $3, 1, 'requested', $4, $5)`,
+      [dispatchId, project.id, groupId, labels, target],
     );
     await audit(tx, {
       actor: actorOf(principal),
@@ -128,13 +161,13 @@ export async function createRunGroup(ctx: HostedDynamic, { principal, project, s
       detail: {
         suite_id: suite.id,
         snapshot_id: snapshot.id,
-        environment_id: environment.id,
+        application: application.key,
+        ring: ring.key,
         cases: runs.length,
         note,
-        // Placement is auditable: a pin says who chose it, the environment's own
-        // labels are already readable from the environment.
+        // Placement is auditable: a pin says who chose it; the ring's own labels
+        // are already readable from the ring.
         ...(runnerLabels ? { runner_labels: runnerLabels } : {}),
-        ...(app.artifact ? { app_artifact: { sha256: app.artifact.sha256, filename: app.artifact.filename } } : {}),
       },
     });
     await emitPlatformEvent(tx, {
@@ -161,18 +194,31 @@ export async function createRunGroup(ctx: HostedDynamic, { principal, project, s
 }
 
 /**
- * The staging-only guardrail: discovery agents
- * genuinely click buy/delete/submit, so discovery cases only run on an
- * environment a developer explicitly marked `discovery_allowed`.
+ * Hosted mobile is dark until runner bindings land (R3 of the runner refactor).
+ * Refuse the launch here rather than letting a group nothing can execute sit on
+ * the claim board until its unclaimed timeout.
  */
-function requireDiscoveryAllowed(cases: HostedDynamic, environment: HostedDynamic) {
+function requireDispatchableDriver(application: HostedDynamic) {
+  if (application.driver !== "mobile") return;
+  throw badRequest(
+    `"${application.key}" is a mobile application, and hosted mobile placement lands with runner bindings — ` +
+      `a runner declares which application and ring it can build for in its own configuration file, and no ` +
+      `runner can claim this work yet. Run mobile cases from the CLI in the meantime.`,
+  );
+}
+
+/**
+ * The staging-only guardrail: discovery agents genuinely click buy/delete/submit,
+ * so discovery cases only run on a ring a developer explicitly opened.
+ */
+function requireDiscoveryAllowed(cases: HostedDynamic, application: HostedDynamic, ring: HostedDynamic) {
   const discovery = cases.filter((c: HostedDynamic) => c.mode === "discovery");
-  if (discovery.length && !environment.discovery_allowed) {
+  if (discovery.length && !ring.discovery_allowed) {
     throw badRequest(
       `this selection includes ${discovery.length} discovery ${discovery.length === 1 ? "story" : "stories"}, ` +
-        `but environment "${environment.name}" is not marked as allowing discovery. Discovery agents really ` +
-        `click buy, delete and submit — point the study at a staging environment and enable ` +
-        `"Allow discovery studies" for it under Settings → Environments.`,
+        `but ring "${application.key}/${ring.key}" is not marked as allowing discovery. Discovery agents really ` +
+        `click buy, delete and submit — point the study at a staging ring and enable ` +
+        `"Allow discovery studies" for it.`,
     );
   }
 }
@@ -184,12 +230,13 @@ function requireDiscoveryAllowed(cases: HostedDynamic, environment: HostedDynami
  * suite's own finished runs (per story+mode, falling back to per mode); a
  * story with no history estimates null, never a made-up number.
  */
-export async function previewRunGroup(ctx: HostedDynamic, { project, suite, environment, selection, runnerLabels = null }: HostedDynamic) {
+export async function previewRunGroup(ctx: HostedDynamic, { project, suite, application, ring, selection, runnerLabels = null }: HostedDynamic) {
   selection = normalizeSelection(selection);
   const snapshot = await latestSnapshot(ctx, suite.id);
   const resolved = await resolveSnapshotCases(snapshot.id, () => loadTreeFiles(ctx.store, snapshot.tree));
   const cases = selectCases(resolved.cases, selection);
-  requireEnvironmentDriver(cases, environment);
+  requireApplicationDriver(cases, application);
+  const labels = runnerLabels ?? ring.runner_labels ?? [];
   const baselineStories = new Set(
     (
       await ctx.db.query(
@@ -226,109 +273,60 @@ export async function previewRunGroup(ctx: HostedDynamic, { project, suite, envi
     },
     discovery: {
       runs: discovery.length,
-      allowed: environment.discovery_allowed === true,
+      allowed: ring.discovery_allowed === true,
     },
-    // Placement said out loud before launch, the way `target` says the URL: the
-    // labels this run would need and who chose them.
+    // Placement said out loud before launch: the labels this run would need, who
+    // chose them, and whether a runner advertising them is actually online.
     placement: {
-      runner_labels: runnerLabels ?? environment.runner_labels ?? [],
-      labels_source: runnerLabels ? "launch" : "environment",
+      runner_labels: labels,
+      labels_source: runnerLabels ? "launch" : "ring",
+      runner_online: await labelMatchingRunnerOnline(ctx, project.id, labels),
     },
+    // The target, stated as the model states it: the application and ring this
+    // launch resolves to, and the URL a web/API run points at. For mobile there
+    // is no URL and no binary to report — the claiming runner supplies the
+    // build, and the platform never inspects one.
     target: {
-      ...resolveTarget(resolved.defaults, environment),
-      // The mobile half of "say the resolution out loud": which of the three
-      // sources supplies the binary, stated before anyone launches.
-      app: resolveAppTarget(resolved.defaults, environment),
+      application: { id: application.id, key: application.key, name: application.name, driver: application.driver, platform: application.platform ?? null },
+      ring: { id: ring.id, key: ring.key, name: ring.name },
+      resolved_base_url: ring.base_url ?? null,
+      build_supplied_by_runner: application.driver === "mobile",
     },
     models: resolveModels(resolved.defaults, project),
   };
 }
 
 /**
- * An environment is a target for one driver, never a bag of web and device
- * settings that changes meaning according to the last suite that edited it.
- * Enforce this at preview and launch as well as in the console: stale clients
- * and hand-written API calls must not be able to cross the boundary.
+ * Is a runner advertising these labels checked in right now? A preview that says
+ * "nothing here can take this" beats a launch that sits queued until its
+ * unclaimed timeout. Null when this deployment does not place on the pool.
  */
-function requireEnvironmentDriver(cases: HostedDynamic[], environment: HostedDynamic) {
-  const drivers = [...new Set(cases.map((c: HostedDynamic) => c.driver ?? "web"))];
-  const wrong = drivers.filter((driver) => driver !== environment.driver);
-  if (!wrong.length) return;
-  const suiteDrivers = drivers.map((driver) => `"${driver}"`).join(", ");
-  throw badRequest(
-    `this selection uses the ${suiteDrivers} driver, but environment "${environment.name}" is for ` +
-      `"${environment.driver}" suites — choose or create a matching environment`,
+async function labelMatchingRunnerOnline(ctx: HostedDynamic, projectId: HostedDynamic, labels: string[]) {
+  if (!ctx.config.dispatch.pool?.enabled) return null;
+  const windowMs = checkInWindowMs(ctx.config.dispatch.pool);
+  const { rows } = await ctx.db.query(
+    `SELECT labels FROM runners
+      WHERE project_id = $1 AND revoked_at IS NULL AND last_seen_at IS NOT NULL AND last_seen_at > $2`,
+    [projectId, new Date(Date.now() - windowMs)],
   );
+  return rows.some((r: HostedDynamic) => labelsMatch(labels, r.labels || []));
 }
 
 /**
- * Where does this launch's app binary come from? (DESIGN § Three sources for
- * the binary.) Three sources, one precedence, mirroring the materialization the
- * runner performs:
- *
- * 1. `app.envs.<name>.app` in the suite's own `playtest.yaml` — the suite has
- *    said something specific about this environment, and specific wins;
- * 2. the environment: its uploaded artifact if it has one, else the plain
- *    `app` path in its overlay (a build on the runner's own disk);
- * 3. the suite's top-level `app.app` — a file committed to the suite tree.
- *
- * The artifact's resolved value is its FILENAME, because the path it becomes
- * only exists once a runner materializes it; the reference travels beside it so
- * a console can render size and upload time without a second request.
+ * A suite has no driver column — its case files do. So the one check that
+ * survives is: every resolved case's driver must equal the application's. A
+ * `driver: mobile` case inside a web application's suite stays expressible and
+ * must be refused here, at preview and at launch, so a stale client or a
+ * hand-written API call cannot cross the boundary either.
  */
-export function resolveAppTarget(defaultsYaml: HostedDynamic, environment: HostedDynamic) {
-  let app: HostedDynamic = {};
-  try {
-    app = YAML.parse(defaultsYaml || "")?.app || {};
-  } catch { /* unparseable defaults — the validate path reports that; preview degrades */ }
-  const str = (v: HostedDynamic) => (typeof v === "string" && v.trim() ? v.trim() : null);
-  const suiteEnvApp = str(app?.envs?.[environment.name]?.app);
-  const artifact = environment.app_artifact ?? null;
-  const envApp = str(environment.config?.app?.app);
-  const suiteApp = str(app?.app);
-  const source = suiteEnvApp ? "suite-env" : artifact ? "environment-artifact" : envApp ? "environment" : suiteApp ? "suite" : null;
-  const artifactName: HostedDynamic = artifact?.filename ?? null;
-  return {
-    resolved: suiteEnvApp || artifactName || envApp || suiteApp || null,
-    source,
-    // Present only when the artifact is what won: a group pins what it runs,
-    // and a preview shows what a launch would pin.
-    artifact: source === "environment-artifact" ? artifact : null,
-    suite_app: suiteApp,
-    environment_app: envApp,
-  };
-}
-
-/**
- * The launch guardrail. A resolved binary that is a SUITE-RELATIVE path the
- * pinned snapshot does not contain can never be materialized: the runner
- * receives only the snapshot's files, so the case would die installing a file
- * that is not there. Refuse it here, naming all three places a binary can come
- * from, rather than letting it surface as an infrastructure failure on a
- * machine the person who launched cannot see.
- *
- * An absolute path passes through untouched — that is the co-located-runner
- * case, and this control plane has no business asserting what exists on a disk
- * it will never see.
- */
-function requireResolvableApp(app: HostedDynamic, { environment, snapshotTree }: HostedDynamic) {
-  if (!app.resolved || app.source === "environment-artifact") return;
-  if (path.isAbsolute(app.resolved)) return;
-  const rel = path.posix.normalize(app.resolved).replace(/^\.\//, "");
-  if (!rel.startsWith("..") && Object.hasOwn(snapshotTree || {}, rel)) return;
-  const declaredIn =
-    app.source === "suite-env"
-      ? `the suite's own app.envs.${environment.name}.app`
-      : app.source === "environment"
-        ? `environment "${environment.name}"`
-        : `the suite's top-level app.app`;
+function requireApplicationDriver(cases: HostedDynamic[], application: HostedDynamic) {
+  const drivers = [...new Set(cases.map((c: HostedDynamic) => c.driver ?? "web"))];
+  const wrong = drivers.filter((driver) => driver !== application.driver);
+  if (!wrong.length) return;
   throw badRequest(
-    `this run needs the app binary "${app.resolved}" (${declaredIn}), but that is a path relative to the suite ` +
-      `and the pinned snapshot does not contain it — the runner would have nothing to install. A hosted mobile ` +
-      `run gets its binary from one of three places: commit the file into the suite tree (fine for a small ` +
-      `fixture app, but real builds exceed the suite upload caps); upload it to the environment ` +
-      `(PUT /api/v1/environments/${environment.id}/app-artifact), which is the usual choice; or point the ` +
-      `environment's app overlay at an ABSOLUTE path on the runner's own disk, for a runner sitting beside the build.`,
+    `this selection has ${wrong.map((d) => `"${d}"`).join(", ")} ${wrong.length === 1 ? "case" : "cases"}, ` +
+      `but they belong to application "${application.key}", which is a "${application.driver}" surface — ` +
+      `move those stories to a suite bound to a matching application`,
   );
 }
 
@@ -357,32 +355,6 @@ function resolveModels(defaultsYaml: HostedDynamic, project: HostedDynamic) {
     };
   };
   return { actor_model: pick("actor_model"), grader_model: pick("grader_model") };
-}
-
-/**
- * Where will this launch actually point? Mirrors the materialization precedence
- * (runner workspace.ts mergeOverlay + core app.envs): the suite's own
- * app.envs.<name> beats the environment record's declared keys, which beat the
- * suite's top-level base_url. Silent-wrong-target was the launch dialog's worst
- * trap — the UI says the resolved URL and who won out loud.
- * `defaultsYaml` is the snapshot's raw playtest.yaml (cache entry), or null.
- */
-function resolveTarget(defaultsYaml: HostedDynamic, environment: HostedDynamic) {
-  let app: HostedDynamic = {};
-  try {
-    app = YAML.parse(defaultsYaml || "")?.app || {};
-  } catch { /* unparseable defaults — the validate path reports that; preview degrades */ }
-  const str = (v: HostedDynamic) => (typeof v === "string" && v.trim() ? v.trim() : null);
-  const suiteEnvBase = str(app?.envs?.[environment.name]?.base_url);
-  const envBase = str(environment.config?.app?.base_url);
-  const suiteBase = str(app?.base_url);
-  const resolved = suiteEnvBase ?? envBase ?? suiteBase;
-  return {
-    resolved_base_url: resolved,
-    source: suiteEnvBase ? "suite-env" : envBase ? "environment" : suiteBase ? "suite" : null,
-    suite_base_url: suiteBase,
-    environment_base_url: envBase,
-  };
 }
 
 /**
@@ -453,18 +425,21 @@ export async function dispatchAttempt(ctx: HostedDynamic, { dispatchId, projectI
 
 export async function dispatchContinuation(ctx: HostedDynamic, groupId: HostedDynamic) {
   const group = await getRunGroup(ctx, groupId);
-  const env = await getEnvironment(ctx, group.environment_id);
+  const { application, ring } = await groupTarget(ctx, group);
   const attemptRow = await ctx.db.query(
     `SELECT COALESCE(MAX(attempt), 0) + 1 AS attempt FROM dispatches WHERE kind = 'group' AND ref_id = $1`,
     [group.id],
   );
   const attempt = attemptRow.rows[0].attempt;
   const dispatchId = ulid();
-  const labels = groupDispatchLabels(group, env);
+  const labels = groupDispatchLabels(group, ring);
+  // A continuation snapshots CURRENT ring state, exactly as a retry does: the
+  // next attempt runs against the ring as it is now, and its own snapshot is
+  // what its offer and group spec will serve.
   await ctx.db.query(
-    `INSERT INTO dispatches (id, project_id, kind, ref_id, attempt, status, labels)
-       VALUES ($1, $2, 'group', $3, $4, 'requested', $5)`,
-    [dispatchId, group.project_id, group.id, attempt, labels],
+    `INSERT INTO dispatches (id, project_id, kind, ref_id, attempt, status, labels, target)
+       VALUES ($1, $2, 'group', $3, $4, 'requested', $5, $6)`,
+    [dispatchId, group.project_id, group.id, attempt, labels, targetSnapshot(application, ring, labels)],
   );
   await dispatchAttempt(ctx, {
     dispatchId,
@@ -504,8 +479,13 @@ export async function getRunGroupView(ctx: HostedDynamic, id: HostedDynamic) {
       ORDER BY r.case_id`,
     [id],
   );
+  const { application, ring } = await groupTarget(ctx, group);
   return {
     ...group,
+    // Where this group ran, by name rather than by opaque id — the Runs index
+    // and the run page both read it, and neither should have to join.
+    application: { id: application.id, key: application.key, name: application.name, driver: application.driver, platform: application.platform ?? null },
+    ring: { id: ring.id, key: ring.key, name: ring.name, base_url: ring.base_url ?? null },
     runs: rows.map(runView),
     placement: await placementView(ctx, group),
   };
@@ -536,17 +516,34 @@ async function placementView(ctx: HostedDynamic, group: HostedDynamic) {
     isolation: row.isolation ?? null,
     runner: row.runner_id ? { id: row.runner_id, name: row.runner_name ?? null } : null,
     // Which labels this attempt was placed on, and whether the launch chose them
-    // or the environment did. Placement is auditable after the fact, not only in
-    // the moment someone clicked launch.
+    // or the ring did. Placement is auditable after the fact, not only in the
+    // moment someone clicked launch.
     labels: row.labels ?? [],
-    labels_source: group.runner_labels ? "launch" : "environment",
+    labels_source: group.runner_labels ? "launch" : "ring",
   };
 }
 
-async function getEnvironment(ctx: HostedDynamic, id: HostedDynamic) {
-  const { rows } = await ctx.db.query(`SELECT * FROM environments WHERE id = $1`, [id]);
-  if (!rows[0]) throw notFound(`no environment "${id}"`);
-  return rows[0];
+/** The (application, ring) a group pinned at launch. Both are ON DELETE RESTRICT, so both exist. */
+export async function groupTarget(ctx: HostedDynamic, group: HostedDynamic) {
+  const { rows } = await ctx.db.query(
+    `SELECT r.*, a.key AS application_key, a.name AS application_name,
+            a.driver AS application_driver, a.platform AS application_platform
+       FROM rings r JOIN applications a ON a.id = r.application_id
+      WHERE r.id = $1`,
+    [group.ring_id],
+  );
+  if (!rows[0]) throw notFound(`no ring "${group.ring_id}"`);
+  const row = rows[0];
+  return {
+    ring: row,
+    application: {
+      id: row.application_id,
+      key: row.application_key,
+      name: row.application_name,
+      driver: row.application_driver,
+      platform: row.application_platform ?? null,
+    },
+  };
 }
 
 async function latestSnapshot(ctx: HostedDynamic, suiteId: HostedDynamic) {

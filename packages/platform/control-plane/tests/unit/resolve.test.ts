@@ -66,7 +66,33 @@ test("lintTree: flags a journey with no success criteria", async () => {
   assert.ok(findings.some((f) => /no success criteria/.test(f.message)));
 });
 
-test("lintTree: never throws on an invalid tree (returns no findings)", async () => {
+test("lintTree: a tree that cannot be resolved at all yields no findings instead of throwing", async () => {
+  // Unresolvable for a STRUCTURAL reason — an unknown key. There is genuinely
+  // nothing to lint, and validateTree is what reports it; lint never fails a
+  // request. This catch must stay narrow (see the next test).
   const files = { "stories/bad.yaml": "story: x\nsucces: bad\n" };
   assert.deepEqual(await lintTree(files), []);
+});
+
+test("lintTree: a suite authoring no target still lints, with real findings", async () => {
+  // The swallow above used to hide this case: hosted suites author no base_url
+  // (the ring supplies it at launch), so under executable resolution every one
+  // of them fell into the catch and silently reported zero findings. Structural
+  // resolution is what makes lint mean something for a hosted suite (gate 14).
+  const files = { "stories/empty.yaml": "story: do a thing\nsuccess: []\n" };
+  const findings: HostedDynamic = await lintTree(files);
+  assert.ok(
+    findings.some((f: HostedDynamic) => /no success criteria/.test(f.message)),
+    "a target-free suite is linted, not skipped",
+  );
+});
+
+test("resolveCases and validateTree accept a suite with no physical target", async () => {
+  // Gate 14's editing half: commit, listing, preview and authoring all read
+  // through these two, and a hosted suite legitimately declares no URL.
+  const files = { "stories/a.yaml": "story: do a thing\nsuccess:\n  - url_matches: /a\n" };
+  const cases: HostedDynamic = await resolveCases(files);
+  assert.deepEqual(cases.map((c: HostedDynamic) => c.id), ["a"]);
+  const res: HostedDynamic = await validateTree(files);
+  assert.equal(res.ok, true, JSON.stringify(res.errors));
 });

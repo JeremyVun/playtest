@@ -7,7 +7,7 @@
 // hosted plumbing around it.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { withApp } from "./helpers.ts";
+import { withApp, createTarget } from "./helpers.ts";
 
 const JOURNEY_CASE = [
   "description: Add a todo.",
@@ -92,16 +92,16 @@ test("models: project defaults set, merge per key, clear, and validate", async (
 
 test("models: the launch preview says which model each role uses and whose choice it was", async () => {
   await withApp(async ({ api }: HostedDynamic) => {
-    await api.post("/projects", { key: "p", name: "P" });
+    const project = (await api.post("/projects", { key: "p", name: "P" })).body;
+    const { ring } = await createTarget(api, project, { key: "checkout", name: "Checkout", baseUrl: "http://checkout.example" });
     await api.put("/projects/p/models", { grader_model: "sonnet" });
     // The suite chose its actor; it says nothing about the grader.
     const suite = await seedSuite(api, "p", "checkout",
       "actor_model: opus\napp:\n  base_url: http://checkout.example\n");
-    const env = (await api.get("/projects/p/environments")).body.items[0];
 
     const { status, body } = await api.post("/projects/p/run-groups/preview", {
       suite_id: suite.id,
-      environment_id: env.id,
+      ring_id: ring.id,
       selection: {},
     });
     assert.equal(status, 200, JSON.stringify(body));
@@ -114,7 +114,7 @@ test("models: the launch preview says which model each role uses and whose choic
     const plain = await seedSuite(api, "p", "plain", "app:\n  base_url: http://plain.example\n");
     const fallthrough = (await api.post("/projects/p/run-groups/preview", {
       suite_id: plain.id,
-      environment_id: env.id,
+      ring_id: ring.id,
       selection: {},
     })).body;
     assert.equal(fallthrough.models.actor_model.source, "default");
@@ -125,14 +125,14 @@ test("models: the launch preview says which model each role uses and whose choic
 
 test("models: the runner spec carries the project's policy for the workspace to apply", async () => {
   await withApp(async ({ api, base }: HostedDynamic) => {
-    await api.post("/projects", { key: "p", name: "P" });
+    const project = (await api.post("/projects", { key: "p", name: "P" })).body;
+    const { ring } = await createTarget(api, project, { key: "checkout", name: "Checkout", baseUrl: "http://checkout.example" });
     await api.put("/projects/p/models", { actor_model: "sonnet", grader_model: "gpt5_5" });
     const suite = await seedSuite(api, "p", "checkout", "app:\n  base_url: http://checkout.example\n");
-    const env = (await api.get("/projects/p/environments")).body.items[0];
 
     const launched = await api.post("/projects/p/run-groups", {
       suite_id: suite.id,
-      environment_id: env.id,
+      ring_id: ring.id,
       selection: {},
     });
     assert.equal(launched.status, 200, JSON.stringify(launched.body));

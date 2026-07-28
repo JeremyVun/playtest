@@ -15,6 +15,7 @@ import { suiteSettingsPage } from "./pages/suite-settings.js";
 import { historyPage } from "./pages/history.js";
 import { settingsPage } from "./pages/settings.js";
 import { personasPage } from "./pages/personas.js";
+import { applicationsPage } from "./pages/applications.js";
 import { runsPage } from "./pages/runs.js";
 import { runDetailPage } from "./pages/run.js";
 import { reviewPage } from "./pages/review.js";
@@ -79,6 +80,7 @@ function registerRoutes() {
   route("/p/:key/insights/:id", redirect);
   route("/p/:key/search", redirect);
   // Personas are project-wide: one list, reused by every suite's stories.
+  route("/p/:key/applications", (p: WebDynamic) => applicationsPage(p.key));
   route("/p/:key/personas", (p: WebDynamic) => personasPage(p.key));
   route("/p/:key/settings", (p: WebDynamic) => settingsPage(p.key));
   route("/p/:key/settings/:tab", (p: WebDynamic) => settingsPage(p.key, p.tab));

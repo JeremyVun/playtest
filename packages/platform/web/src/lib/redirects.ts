@@ -7,6 +7,8 @@
 //                     authoring assistant is replaced by inline story drafting)
 //   - files         → Suite settings (the raw file tree is gone from the web
 //                     app; playtest.yaml is a form, the code tier is CLI/.tar)
+//   - test targets  → Applications (environments became applications and their
+//                     rings, and they are a first-class section, not a tab)
 // Suite-detail, run, finding, and viewer deep links are NOT redirected — they
 // stay stable. The `/review` batch view also stays reachable (contextual, off
 // the rail), so it is deliberately absent here.
@@ -22,6 +24,7 @@ const RULES: WebDynamic = [
   { rx: /^\/p\/([^/]+)\/candidates\/?$/, to: (m: WebDynamic) => `/p/${m[1]}/findings?filter=review` },
   { rx: /^\/p\/([^/]+)\/candidates\/([^/]+)\/?$/, to: (m: WebDynamic) => `/p/${m[1]}/findings/${m[2]}` },
   { rx: /^\/p\/([^/]+)\/search\/?$/, to: (m: WebDynamic) => `/p/${m[1]}` },
+  { rx: /^\/p\/([^/]+)\/settings\/test-targets\/?$/, to: (m: WebDynamic) => `/p/${m[1]}/applications` },
 ];
 
 /**

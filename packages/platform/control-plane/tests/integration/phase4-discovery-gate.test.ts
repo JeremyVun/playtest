@@ -2,13 +2,13 @@
 // (dispatcher.js previewRunGroup/requireDiscoveryAllowed, api/runs.js previewGroup):
 // preview fans out personas (a journey + a 2-persona discovery study = 3 planned
 // runs), reports honest cost estimates (null with no history, real once seeded),
-// surfaces discovery.allowed per environment, and — the enforced half — launching
-// discovery cases against a non-discovery_allowed environment is a 400 that
+// surfaces discovery.allowed per ring, and — the enforced half — launching
+// discovery cases against a non-discovery_allowed ring is a 400 that
 // creates NOTHING (no run_groups/runs/dispatches row), while a discovery_allowed
-// environment lets the same selection through with mode "explore".
+// ring lets the same selection through with mode "explore".
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { withApp } from "./helpers.ts";
+import { withApp, createTarget } from "./helpers.ts";
 
 const DISCOVERY_CASE = [
   "description: Where do users look for export?",
@@ -30,9 +30,16 @@ const JOURNEY_CASE = [
   "",
 ].join("\n");
 
-async function seedSuiteWithFanOut(api: HostedDynamic, { project = "p" } = {}) {
-  await api.post("/projects", { key: project, name: project.toUpperCase() });
-  const suite = (await api.post(`/projects/${project}/suites`, { slug: "s", name: "S" })).body;
+/** One web application with one ring, plus the fan-out suite bound to it. The
+ * ring is what carries `discovery_allowed`, so every test here names the ring
+ * shape it wants. */
+async function seedSuiteWithFanOut(
+  api: HostedDynamic,
+  { project: projectKey = "p", ringKey = "prod", discoveryAllowed = false } = {},
+) {
+  const project = (await api.post("/projects", { key: projectKey, name: projectKey.toUpperCase() })).body;
+  const { application, ring } = await createTarget(api, project, { ringKey, discoveryAllowed });
+  const suite = (await api.post(`/projects/${projectKey}/suites`, { slug: "s", name: "S" })).body;
   const seed = await api.post(`/suites/${suite.id}/commit`, {
     changes: [
       { path: "playtest.yaml", content: "app:\n  base_url: http://x\n" },
@@ -42,18 +49,28 @@ async function seedSuiteWithFanOut(api: HostedDynamic, { project = "p" } = {}) {
     note: "seed",
   });
   assert.equal(seed.status, 200, JSON.stringify(seed.body));
-  return suite;
+  return { project, application, ring, suite };
 }
 
-test("launch preview: fans out a journey + a 2-persona discovery study; discovery.allowed reflects the environment; no history -> null estimate", async () => {
+/** A second ring on the same application — every application may hold its own
+ * `local`, `staging` and `prod`. */
+async function addRing(api: HostedDynamic, application: HostedDynamic, over: HostedDynamic) {
+  const res = await api.post(`/applications/${application.id}/rings`, {
+    base_url: "http://127.0.0.1:4173",
+    ...over,
+  });
+  assert.equal(res.status, 201, JSON.stringify(res.body));
+  return res.body;
+}
+
+test("launch preview: fans out a journey + a 2-persona discovery study; discovery.allowed reflects the ring; no history -> null estimate", async () => {
   await withApp(async ({ api }: HostedDynamic) => {
-    const suite = await seedSuiteWithFanOut(api);
-    const envOff = (await api.post("/projects/p/environments", { name: "prod" })).body;
-    const envOn = (await api.post("/projects/p/environments", { name: "staging", discovery_allowed: true })).body;
+    const { application, ring: ringOff, suite } = await seedSuiteWithFanOut(api);
+    const ringOn = await addRing(api, application, { key: "staging", name: "staging", discovery_allowed: true });
 
     const previewOff = await api.post("/projects/p/run-groups/preview", {
       suite_id: suite.id,
-      environment_id: envOff.id,
+      ring_id: ringOff.id,
       selection: {},
     });
     assert.equal(previewOff.status, 200, JSON.stringify(previewOff.body));
@@ -78,7 +95,7 @@ test("launch preview: fans out a journey + a 2-persona discovery study; discover
 
     const previewOn = await api.post("/projects/p/run-groups/preview", {
       suite_id: suite.id,
-      environment_id: envOn.id,
+      ring_id: ringOn.id,
       selection: {},
     });
     assert.equal(previewOn.status, 200, JSON.stringify(previewOn.body));
@@ -87,7 +104,7 @@ test("launch preview: fans out a journey + a 2-persona discovery study; discover
 
     const overridden = await api.post("/projects/p/run-groups/preview", {
       suite_id: suite.id,
-      environment_id: envOn.id,
+      ring_id: ringOn.id,
       selection: { max_steps: 80, timeout_ms: 360_000 },
     });
     assert.equal(overridden.status, 200, JSON.stringify(overridden.body));
@@ -98,12 +115,11 @@ test("launch preview: fans out a journey + a 2-persona discovery study; discover
 
 test("launch limits reject non-positive and non-integer overrides", async () => {
   await withApp(async ({ api }: HostedDynamic) => {
-    const suite = await seedSuiteWithFanOut(api);
-    const env = (await api.post("/projects/p/environments", { name: "staging", discovery_allowed: true })).body;
+    const { ring, suite } = await seedSuiteWithFanOut(api, { ringKey: "staging", discoveryAllowed: true });
     for (const selection of [{ max_steps: 0 }, { max_steps: 1.5 }, { timeout_ms: -1 }]) {
       const res = await api.post("/projects/p/run-groups/preview", {
         suite_id: suite.id,
-        environment_id: env.id,
+        ring_id: ring.id,
         selection,
       });
       assert.equal(res.status, 400, JSON.stringify({ selection, body: res.body }));
@@ -113,12 +129,11 @@ test("launch limits reject non-positive and non-integer overrides", async () => 
 
 test("launch preview: a selection narrows the fan-out; cost estimate becomes non-null once history is seeded", async () => {
   await withApp(async ({ api, app }: HostedDynamic) => {
-    const suite = await seedSuiteWithFanOut(api);
-    const env = (await api.post("/projects/p/environments", { name: "staging" })).body;
+    const { project, application, ring, suite } = await seedSuiteWithFanOut(api, { ringKey: "staging" });
 
     const narrowed = await api.post("/projects/p/run-groups/preview", {
       suite_id: suite.id,
-      environment_id: env.id,
+      ring_id: ring.id,
       selection: { ids: ["add-todo"] },
     });
     assert.equal(narrowed.status, 200, JSON.stringify(narrowed.body));
@@ -128,15 +143,14 @@ test("launch preview: a selection narrows the fan-out; cost estimate becomes non
 
     // Seed a finished "record" run of add-todo with a known cost — the estimate
     // averages the suite's own finished runs per (story, mode).
-    const project = (await api.get("/projects/p")).body;
     const snapshot = (
       await app.db.query(`SELECT id FROM suite_snapshots WHERE suite_id = $1 ORDER BY seq DESC LIMIT 1`, [suite.id])
     ).rows[0];
     const groupId = "g_hist";
     await app.db.query(
-      `INSERT INTO run_groups (id, project_id, suite_id, snapshot_id, environment_id, trigger, selection, status)
-         VALUES ($1,$2,$3,$4,$5,'{}','{}','done')`,
-      [groupId, project.id, suite.id, snapshot.id, env.id],
+      `INSERT INTO run_groups (id, project_id, suite_id, snapshot_id, application_id, ring_id, trigger, selection, status)
+         VALUES ($1,$2,$3,$4,$5,$6,'{}','{}','done')`,
+      [groupId, project.id, suite.id, snapshot.id, application.id, ring.id],
     );
     await app.db.query(
       `INSERT INTO runs (id, run_group_id, case_id, story_id, run_id, status, mode, totals)
@@ -146,7 +160,7 @@ test("launch preview: a selection narrows the fan-out; cost estimate becomes non
 
     const withHistory = await api.post("/projects/p/run-groups/preview", {
       suite_id: suite.id,
-      environment_id: env.id,
+      ring_id: ring.id,
       selection: { ids: ["add-todo"] },
     });
     assert.equal(withHistory.status, 200, JSON.stringify(withHistory.body));
@@ -158,7 +172,8 @@ test("launch preview: a selection narrows the fan-out; cost estimate becomes non
 
 test("launch preview: a healed replay does not inflate the next clean replay estimate", async () => {
   await withApp(async ({ api, app }: HostedDynamic) => {
-    await api.post("/projects", { key: "p", name: "P" });
+    const project = (await api.post("/projects", { key: "p", name: "P" })).body;
+    const { application, ring } = await createTarget(api, project, { ringKey: "staging" });
     const suite = (await api.post("/projects/p/suites", { slug: "s", name: "S" })).body;
     const seed = await api.post(`/suites/${suite.id}/commit`, {
       changes: [
@@ -170,16 +185,14 @@ test("launch preview: a healed replay does not inflate the next clean replay est
       note: "seed",
     });
     assert.equal(seed.status, 200, JSON.stringify(seed.body));
-    const env = (await api.post("/projects/p/environments", { name: "staging" })).body;
-    const project = (await api.get("/projects/p")).body;
     const snapshot = (
       await app.db.query(`SELECT id FROM suite_snapshots WHERE suite_id = $1 ORDER BY seq DESC LIMIT 1`, [suite.id])
     ).rows[0];
 
     await app.db.query(
-      `INSERT INTO run_groups (id, project_id, suite_id, snapshot_id, environment_id, trigger, selection, status)
-         VALUES ('g_hist',$1,$2,$3,$4,'{}','{}','done')`,
-      [project.id, suite.id, snapshot.id, env.id],
+      `INSERT INTO run_groups (id, project_id, suite_id, snapshot_id, application_id, ring_id, trigger, selection, status)
+         VALUES ('g_hist',$1,$2,$3,$4,$5,'{}','{}','done')`,
+      [project.id, suite.id, snapshot.id, application.id, ring.id],
     );
     const histories = [
       ["checked", "pass", "act", "heal", 0.4],
@@ -211,7 +224,7 @@ test("launch preview: a healed replay does not inflate the next clean replay est
 
     const preview = await api.post("/projects/p/run-groups/preview", {
       suite_id: suite.id,
-      environment_id: env.id,
+      ring_id: ring.id,
       selection: {},
     });
     assert.equal(preview.status, 200, JSON.stringify(preview.body));
@@ -225,20 +238,22 @@ test("launch preview: a healed replay does not inflate the next clean replay est
   });
 });
 
-test("discovery gate: launching discovery cases against a non-discovery_allowed environment is a 400 naming it, and creates NOTHING", async () => {
+test("discovery gate: launching discovery cases against a non-discovery_allowed ring is a 400 naming it, and creates NOTHING", async () => {
   const github = { enabled: true, dispatchWorkflow: async () => ({}), cancelRun: async () => {} };
   await withApp(
     async ({ api, app }: HostedDynamic) => {
-      const suite = await seedSuiteWithFanOut(api);
-      const env = (await api.post("/projects/p/environments", { name: "prod" })).body; // discovery_allowed defaults false
+      // discovery_allowed defaults false on the ring
+      const { ring, suite } = await seedSuiteWithFanOut(api, { ringKey: "prod" });
 
       const launch = await api.post("/projects/p/run-groups", {
         suite_id: suite.id,
-        environment_id: env.id,
+        ring_id: ring.id,
         selection: { ids: ["export-study@tester", "export-study@exploratory"] },
       });
       assert.equal(launch.status, 400, JSON.stringify(launch.body));
-      assert.match(launch.body.error.message, /prod/);
+      // The refusal names the ring by its qualified application/ring key, which is
+      // what a reader has to go and change.
+      assert.match(launch.body.error.message, /app\/prod/);
       assert.match(launch.body.error.message, /discovery/i);
 
       const groups = await app.db.query(`SELECT COUNT(*) AS n FROM run_groups`);
@@ -253,16 +268,15 @@ test("discovery gate: launching discovery cases against a non-discovery_allowed 
   );
 });
 
-test("discovery gate: a mixed selection (journey + discovery) is ALSO blocked when the environment disallows discovery", async () => {
+test("discovery gate: a mixed selection (journey + discovery) is ALSO blocked when the ring disallows discovery", async () => {
   const github = { enabled: true, dispatchWorkflow: async () => ({}), cancelRun: async () => {} };
   await withApp(
     async ({ api, app }: HostedDynamic) => {
-      const suite = await seedSuiteWithFanOut(api);
-      const env = (await api.post("/projects/p/environments", { name: "prod" })).body;
+      const { ring, suite } = await seedSuiteWithFanOut(api, { ringKey: "prod" });
 
       const launch = await api.post("/projects/p/run-groups", {
         suite_id: suite.id,
-        environment_id: env.id,
+        ring_id: ring.id,
         selection: {}, // everything: the journey AND both discovery personas
       });
       assert.equal(launch.status, 400, JSON.stringify(launch.body));
@@ -274,16 +288,15 @@ test("discovery gate: a mixed selection (journey + discovery) is ALSO blocked wh
   );
 });
 
-test("discovery gate: a discovery_allowed environment lets the launch through, planning mode 'explore' for the discovery runs", async () => {
+test("discovery gate: a discovery_allowed ring lets the launch through, planning mode 'explore' for the discovery runs", async () => {
   const github = { enabled: true, dispatchWorkflow: async () => ({}), cancelRun: async () => {} };
   await withApp(
     async ({ api }: HostedDynamic) => {
-      const suite = await seedSuiteWithFanOut(api);
-      const env = (await api.post("/projects/p/environments", { name: "staging", discovery_allowed: true })).body;
+      const { ring, suite } = await seedSuiteWithFanOut(api, { ringKey: "staging", discoveryAllowed: true });
 
       const launch = await api.post("/projects/p/run-groups", {
         suite_id: suite.id,
-        environment_id: env.id,
+        ring_id: ring.id,
         selection: { ids: ["export-study@tester", "export-study@exploratory"] },
       });
       assert.equal(launch.status, 200, JSON.stringify(launch.body));

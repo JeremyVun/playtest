@@ -26,7 +26,7 @@ control plane ----serves----> web console + embedded run viewer
 
 - The `/api/v1` HTTP API and its error, caching, and authorization conventions.
 - Development and OIDC authentication, roles, sessions, and API tokens.
-- Projects, suite snapshots, environments, personas, secrets, and rule cards.
+- Projects, suite snapshots, applications and rings, personas, secrets, and rule cards.
 - Run placement, runner exchange, progress, reconciliation, and cancellation.
 - Baseline review, findings intake, consolidation, and automatic resolution.
 - Audit events, retention, health and operations status, and media export.

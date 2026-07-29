@@ -52,31 +52,33 @@ Prior evidence:
       links. Every core journey must complete without a confusion event, or the
       report must name the residual as an accepted trade-off.
 
-### Runner refactor: applications, rings, one placement model
+### Runner trust, administration, and target provisioning
 
-Design: [`docs/backlog/runner-refactor/DESIGN.md`](backlog/runner-refactor/DESIGN.md).
-Plan: [`docs/backlog/runner-refactor/BUILD_PLAN.md`](backlog/runner-refactor/BUILD_PLAN.md).
-Greenfield replacement — no migration.
+Deferred follow-ups from the applications/rings + claim-board refactor
+(shipped 2026-07-29; the contracts under `docs/contracts/` are the record).
 
-- [ ] **R0 — Core seams:** checkpoint the tree, add the `runtimeTarget`
-      override to core resolution, move the mobile preflight into a core
-      export.
-- [ ] **R1 — Applications and rings:** replace environments with
-      project-owned applications and application-owned rings (web/API rings
-      hold the base URL); bind suites to applications; delete app artifacts
-      and binary-source precedence.
-- [ ] **R2 — One placement model:** delete GitHub and local dispatch; the
-      claim board (with a bounded offer page and offer target block) is the
-      only placement; `npm run hosted` runs a peer local runner; insecure
-      exchange removed.
-- [ ] **R3 — Mobile via runner config:** runner config file v1 with mobile
-      bindings, claim compatibility, managed/external Appium, post-claim
-      preflight, and the runtime target override end to end.
-- [ ] **R4 — Console and guides:** Applications-first product surfaces;
-      operational runner setup lives only in
-      `docs/guidance/hosted-runners.md`.
-- [ ] **R5 — Contracts and sweep:** rewrite the owning contracts, prove the
-      deletions, map every acceptance gate to a named test.
+- [ ] **Runner trust and administration:** console CRUD for site-scoped
+      runners; production site-admin token provisioning (today only the
+      dev-auth admin may manage them, so non-dev deployments have no site
+      runners); per-project runner grants; hardened key-based enrolment; a
+      multi-project long-poll waker replacing the accepted one-second
+      cross-project rescan; and executor-bearer scope hardening — the
+      snapshot-tree, blob, and baseline-trajectory routes accept any valid
+      runner bearer today, guarded only by id unguessability; scope them to
+      the claimed group's suite and refuse mint-scoped bearers.
+- [ ] **Runner-side artifact providers:** pull mobile builds from an
+      internal artifactory or registry by version behind the same
+      application/ring binding (the stated v2 in
+      `docs/guidance/hosted-runners.md`); immutable target pins, build and
+      release registries, and revision verification ride the same seam.
+- [ ] **Smaller deferrals:** key tombstones (delete-and-recreate silently
+      rebinds a runner config still naming the old key — accepted and tested
+      v1 behavior); device profiles or any platform-visible device
+      selection; runner-config hot reload; multi-group concurrency per
+      runner; board pagination beyond the bounded offer page; web/API ring
+      URLs resolved from runner config (revisit only with a concrete need);
+      manifest-recorded device/backend facts beyond application, ring, and
+      runner identity.
 
 ## Polish backlog
 
@@ -101,5 +103,8 @@ Greenfield replacement — no migration.
 - [ ] Improve Playwright export with opt-in idiomatic locators, API-driver
       export to `node --test`, and a viewer-reachable hosted download action.
 - [ ] Add an opt-in semantic LLM pass to `playtest lint`.
+- [ ] Validate ring `config` values by shape, not just key: the allowlist
+      accepts `app.settle: 250` but core refuses that shape when the overlay
+      materializes, so a bad value saves fine and fails at run time.
 - [ ] Scope and complete the Lumen migration when its external dependency
       lands.

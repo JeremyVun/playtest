@@ -9,6 +9,7 @@ import { ApiClient } from "./api-client.ts";
 import { materializeWorkspace } from "./workspace.ts";
 import { CONTAINER_WS, runCaseIsolated, stopActiveContainers } from "./case-runner.ts";
 import { liveUploader } from "./live-uploader.ts";
+import { platformEvidence } from "./evidence.ts";
 import { cleanupWorkspace, sweepDocker } from "./janitor.ts";
 import { runMintScript } from "./mint.ts";
 import { makeMasker, makeRedactor, secretMasks, collectSecretValues, redactDeep } from "./redact.ts";
@@ -477,6 +478,17 @@ function failedSessionLabels(spec: RunnerDynamic, failedSessions: Record<string,
   return out;
 }
 
+/**
+ * Seal one case's evidence and upload it.
+ *
+ * The bundle is evidence the platform stores and serves, so it is built from a
+ * SANITIZED STAGING COPY of the run directory (evidence.ts) rather than from the
+ * run directory itself: every textual entry goes through the group's needles,
+ * binary payloads are byte-identical, and the resulting index, sizes and hashes
+ * therefore describe the bytes actually sent. The run directory is this
+ * machine's own diagnostic record and is never mutated — its raw text stays in
+ * the runner's log, where it is still the answer to "what did it actually dial".
+ */
 export async function uploadBundle(
   api: RunnerDynamic,
   runDbId: string,
@@ -485,39 +497,16 @@ export async function uploadBundle(
 ): Promise<RunnerDynamic> {
   if (!runDir) return { artifact: null };
   const out = path.join(os.tmpdir(), `playtest-${process.pid}-${runDbId}.ptrun`);
+  let staged: string | null = null;
   try {
-    // The bundle is sealed evidence the platform stores and serves, so its
-    // manifest may not carry what the report is scrubbed of. Rewritten HERE,
-    // on the runner's own copy, before the zip is written: the run directory is
-    // this machine's and its raw text stays in the runner's log.
-    scrubManifestError(runDir, redactor);
-    writeBundle(runDir, out);
+    staged = await platformEvidence(redactor).stage(runDir);
+    writeBundle(staged, out);
     return await api.putBytes(`/runner/runs/${runDbId}/bundle`, await fsp.readFile(out), "application/vnd.playtest.run-bundle");
   } finally {
     await fsp.rm(out, { force: true }).catch(() => {});
+    await fsp.rm(`${out}.idx.json`, { force: true }).catch(() => {});
+    if (staged) await fsp.rm(staged, { recursive: true, force: true }).catch(() => {});
   }
-}
-
-/**
- * Rewrite the infra cause in a run directory's `manifest.json` through the
- * redactor. `result.error` is where core records why a run died
- * (runner.ts finishInfra) and the one field in a manifest that carries a
- * driver's own words; everything else in there is the engine's vocabulary, and
- * a manifest is a comparability record, so nothing else is touched. A manifest
- * with nothing to scrub is left byte-for-byte alone.
- */
-export function scrubManifestError(runDir: string, redactor: (value: unknown) => string): void {
-  const file = path.join(runDir, "manifest.json");
-  const manifest = readJson(file);
-  const error = manifest?.result?.error;
-  if (typeof error !== "string" || !error) return;
-  const scrubbed = redactor(error);
-  if (scrubbed === error) return;
-  manifest.result.error = scrubbed;
-  try {
-    // Core's own manifest bytes (trajectory.ts writeManifest).
-    fs.writeFileSync(file, JSON.stringify(manifest, null, 2) + "\n");
-  } catch {}
 }
 
 function readSideEffects(caseFile: string): RunnerDynamic {

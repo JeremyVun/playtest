@@ -442,6 +442,62 @@ Case execution is isolated:
   derived session artifacts.
 - Secret values must not appear in logs, events, manifests, or error messages.
 
+**What counts as a secret needle.** The executor masks two kinds of value, with
+deliberately different policies:
+
+- **Secrets** — a ring's resolved secrets, a mint grant's environment, an
+  external Appium credential, and every leaf value inside a minted session's
+  storage state — become `[redacted]`. A structured secret contributes its
+  **leaf values, one needle each**, recursively: a session cookie's value and a
+  token nested inside `origins[].localStorage[]` are what appear in a run's
+  evidence, and the serialized parent document is a byte sequence that appears
+  nowhere. Keys that name a *location* rather than a value — a cookie's `name`,
+  `domain` and `path`, an `origin`, a `url` — are not secrets and are not
+  masked; masking them would shred unrelated text. **No non-empty configured
+  secret value is ever dropped for being short.**
+- **Physical facts** — the build path, device and Appium endpoint this runner
+  resolved from its own config — become a placeholder naming the kind of fact
+  (`<path>`, `<device>`, `<endpoint>`), so the surrounding text stays a
+  diagnosis. These keep a minimum needle length, because a degenerate one is
+  worth nothing and would shred the diagnosis it appears in.
+
+Every needle is matched in both its **raw and JSON-escaped** forms, so a value
+holding a quote or a backslash is caught inside a JSON document as well as in
+plain text, and the rewritten document is still parseable.
+
+### The platform evidence boundary
+
+**Every textual byte a runner sends to the platform is sanitized, by one
+sanitizer, on every route that carries run bytes.** The manifest is not a
+special case and never was the only leak: `events.jsonl`, a trajectory envelope,
+a grade summary, an accessibility dump and a HAR body all carry free text a
+driver, a model or a customer's own script wrote.
+
+- **Local raw stays local.** The run directory on the runner's disk is that
+  machine's diagnostic record and is never mutated. What crosses is a sanitized
+  copy: the bundle is sealed from a staging tree, and live uploads are sanitized
+  in flight.
+- **Metadata describes what was sent.** Because the seal is built from the
+  staging tree, the bundle's index, entry sizes and hashes are the sanitized
+  bytes' own — never a description of bytes that stayed on the runner.
+- **Classification is by artifact media type, not by path**
+  ([Artifact contracts](artifacts.md#entry-media-types)). `steps/` holds a
+  screenshot and its accessibility text side by side; the text is rewritten and
+  the screenshot crosses byte-for-byte. Binary payloads are never transformed.
+  An entry the run vocabulary does not name is decided by its own bytes:
+  anything holding a NUL or failing to decode as UTF-8 is treated as a payload,
+  and everything else is sanitized, because an unrecognized text artifact is
+  exactly where a value would hide.
+- **The live stream and the seal agree byte-for-byte.** The staging routes
+  verify resent trajectory lines against what they hold and the platform serves
+  the sealed bundle afterwards, so the same sanitizer, the same needles and
+  deterministic replacement markers are a correctness requirement, not a
+  preference. Two redactors would be two answers and the route would call the
+  second one `divergent`.
+- **Masking is deterministic and idempotent-in-effect**: identical input
+  produces identical output, and an entry with nothing to mask keeps its own
+  bytes.
+
 Case progress (`POST /runner/groups/:g/cases/:run_id/progress`) is telemetry,
 never load-bearing: while a case runs, the executor folds the engine's progress
 events into one small snapshot — step and step budget, the mode word from core
@@ -473,7 +529,7 @@ behavior.
 | Route | Meaning |
 |---|---|
 | `POST /runner/groups/:g/cases/:run_id/open` | `{ manifest }` — the placeholder manifest, and every later snapshot of it |
-| `PUT /runner/runs/:r/live/<entry-path>` | one staged step artifact, raw bytes |
+| `PUT /runner/runs/:r/live/<entry-path>` | one staged step artifact, as bytes |
 | `POST /runner/runs/:r/live/trajectory` | `{ from_line, lines }` — a batch of whole `trajectory.jsonl` lines |
 
 **Every answer is an explicit JSON ack, never a silent success**: either
@@ -513,7 +569,12 @@ from a constant it compiled in. A runner may keep the advertised route *path*
 while dialling its own origin: `publicUrl` is not necessarily the address the
 runner was pointed at.
 
-**The uploader's posture.** The runner-agent ships this stream from one
+**The uploader's posture.** Everything it sends crosses
+[the platform evidence boundary](#the-platform-evidence-boundary) first: the
+manifest snapshot, each trajectory line and each textual step artifact go
+through the same sanitizer the sealed bundle is built with, so a staged line and
+its sealed twin are the same bytes, and a screenshot is staged byte-for-byte.
+The runner-agent ships this stream from one
 serialized, single-flight queue per case, on the progress reporter's ~2 s
 coalescing floor — a floor, not a heartbeat: a tick where nothing completed
 sends nothing, and inactivity is read server-side from absence. It opens on
@@ -595,7 +656,9 @@ No long-lived runner secret lands in repository settings.
   (default 3600, floor 60, ceiling 21600 — GitHub's own per-job limit, because a
   credential outliving its job is a credential nobody is watching). An expired
   credential is refused at poll, claim and exchange exactly like a revoked one,
-  with its own message. Expiry never interrupts work in flight: an exchanged
+  with its own message — and at the claim that refusal is *transactional*, so
+  expiring mid-claim loses the race (see the claim board below). Expiry never
+  interrupts work in flight: an exchanged
   group runs on under its already-issued scoped bearer, and keeps heartbeating
   its claim. An expired registration is also excluded from the unclaimed-timeout
   diagnostic below, because it is invisible in Settings and cannot be restarted —
@@ -651,6 +714,17 @@ three runner-credential-authenticated routes are:
    receives `409 conflict` and returns to polling. The winning claim stamps the
    runner, moves the dispatch to `scheduled`, flips the group to running, and
    emits the `run.status` provisioning event.
+
+   **"Live" is the same two facts the credential was authorized on** — not
+   revoked *and* not expired — and both are restated inside the mutating
+   `WHERE`, not merely checked before it. Authorization and mutation are two
+   moments; a credential that is revoked or whose ephemeral registration expires
+   between them loses the race and creates no claim. The distinction matters
+   because a claim is not the end of the exchange: an expired credential can
+   never trade its claim for a scoped bearer, so a claim it won would strand the
+   dispatch `scheduled` under a runner that cannot come back for it. A zero-row
+   update is authorization loss, reported as the same `409 conflict` any other
+   loser receives.
 3. `POST /runner/pool/claims/:dispatch/heartbeat` — coarse group-level liveness
    between claim and completion, on the order of tens of seconds. Case-level
    telemetry remains the progress route. Only the claim holder may heartbeat it,

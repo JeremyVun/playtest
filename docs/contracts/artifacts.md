@@ -933,6 +933,19 @@ byte ranges. Deflate uses a stable compression level. Writers sort entries by
 path and zero ZIP timestamps; the same input tree produces the same bundle
 bytes and SHA-256.
 
+### Entry media types
+
+`artifactMediaType(entry)` names what a run-directory entry **is**, and
+`isTextualMediaType` answers whether those bytes are characters. This is the one
+vocabulary a consumer asks before deciding whether it may rewrite an entry, and
+it is deliberately not a question about location: `steps/` holds a screenshot and
+its accessibility text side by side, so only the entry itself can answer.
+`manifest.json`, `trajectory.jsonl`, `events.jsonl`, `context.jsonl`,
+`grade.json`, `drift-report.json`, `har.json`, `baseline.jsonl`, `*.a11y.txt`,
+`*.vtt` and `*.mhtml` are text; screenshots, video, clips and `trace.zip` are
+payloads. An entry the vocabulary does not name returns `null` — the function
+does not guess, and the caller states its own default.
+
 ### Index sidecar
 
 Writers create `<bundle>.idx.json`:
@@ -969,6 +982,15 @@ viewer behavior as an unpacked run directory, including media Range requests.
 The writer runs only after core finishes all post-execution work and closes
 artifact writers. Hosted runners upload the bundle and sidecar, report their
 size and SHA-256, and treat local copies as disposable.
+
+A hosted runner seals from a **sanitized staging copy**, never from the run
+directory itself
+([Hosted contracts](hosted.md#the-platform-evidence-boundary)): the local raw
+run directory is that machine's own diagnostic record and is not mutated, and
+the bundle's entry list, sizes, CRCs and SHA-256s therefore describe the bytes
+that were actually sent. Textual entries are rewritten; payload entries are
+byte-identical; an entry with nothing to mask keeps its own bytes, so an
+unaffected run seals the byte-identical bundle it always did.
 
 A run bundle records nothing about where it was placed. **Placement facts are the
 platform's**: which application and ring a group ran against, and which runner

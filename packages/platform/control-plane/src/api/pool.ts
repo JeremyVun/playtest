@@ -358,12 +358,18 @@ export async function claimDispatch(ctx: HostedDynamic) {
           AND canceled_at IS NULL
           AND kind IN ('group','mint')
           -- The runner is still live AND still in scope for this project: its
-          -- own project, or every project when it is site-scoped. Restated here
-          -- rather than trusted from the read above, so a revocation landing
-          -- mid-claim loses the race rather than slipping through it.
+          -- own project, or every project when it is site-scoped. "Live" is the
+          -- same two facts the credential was authorized on — not revoked, not
+          -- expired — restated here rather than trusted from that check, so a
+          -- revocation OR an ephemeral registration's expiry landing in the gap
+          -- loses the race rather than slipping through it. A credential that
+          -- expires in that gap must win nothing: the claim it would make can
+          -- never be exchanged, so the dispatch would sit scheduled under a
+          -- runner that cannot come back for it.
           AND EXISTS (
                 SELECT 1 FROM runners r
                  WHERE r.id = $2 AND r.revoked_at IS NULL
+                   AND (r.expires_at IS NULL OR r.expires_at > now())
                    AND (r.project_id IS NULL OR r.project_id = dispatches.project_id))
           AND NOT EXISTS (
                 SELECT 1 FROM dispatches held
@@ -475,7 +481,7 @@ function claimLost(ctx: HostedDynamic, before: HostedDynamic, runner: HostedDyna
   if (before.canceled_at) return conflict(`dispatch "${before.id}" was canceled before it was claimed`);
   return conflict(
     `dispatch "${before.id}" is no longer claimable by runner "${runner.name}" — it was taken, canceled, ` +
-      `or the runner was revoked while claiming`,
+      `or the runner was revoked or expired while claiming`,
   );
 }
 

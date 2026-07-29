@@ -17,7 +17,7 @@ import fsp from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
-import { claimGroupSessions, scrubManifestError, uploadBundle } from "../../src/exec-group.ts";
+import { claimGroupSessions, uploadBundle } from "../../src/exec-group.ts";
 import { execMint } from "../../src/exec-mint.ts";
 import { mobilePhysicalMasks } from "../../src/mobile.ts";
 import { makeMasker, redactDeep, secretMasks } from "../../src/redact.ts";
@@ -86,7 +86,7 @@ test("a session-boundary failure reaches the platform with no path, device or en
   assert.equal(redactor(`token=${SECRET} app=${APP}`), "token=[redacted] app=<path>");
 });
 
-test("the sealed bundle's manifest is scrubbed before the runner zips it", async () => {
+test("the sealed bundle's manifest is scrubbed, and the runner's own copy is not", async () => {
   const runDir = freshDir("bundle");
   try {
     const manifest = {
@@ -94,7 +94,8 @@ test("the sealed bundle's manifest is scrubbed before the runner zips it", async
       pins: { driver: "mobile" },
       result: { status: "infra", end_reason: "infra", error: WDIO_ERROR, gate: { pass: false, checks: [] } },
     };
-    fs.writeFileSync(path.join(runDir, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
+    const rawManifest = JSON.stringify(manifest, null, 2) + "\n";
+    fs.writeFileSync(path.join(runDir, "manifest.json"), rawManifest);
     fs.writeFileSync(path.join(runDir, "trajectory.jsonl"), "");
 
     let uploaded: Buffer | null = null;
@@ -108,10 +109,9 @@ test("the sealed bundle's manifest is scrubbed before the runner zips it", async
     const res = await uploadBundle(api, "db_1", runDir, mobileRedactor());
     assert.equal(res.artifact.key, "runs/run_01.ptrun");
 
-    // On this machine's disk first — the zip is sealed from it…
-    const onDisk = JSON.parse(fs.readFileSync(path.join(runDir, "manifest.json"), "utf8"));
-    assertClean("the run directory's manifest.json", JSON.stringify(onDisk));
-    assert.deepEqual(onDisk.pins, manifest.pins, "nothing but the infra cause is rewritten");
+    // The run directory is this machine's own diagnostic record: the seal is
+    // built from a sanitized copy, so the raw words stay right here.
+    assert.equal(fs.readFileSync(path.join(runDir, "manifest.json"), "utf8"), rawManifest);
 
     // …and inside the bundle the platform actually stores and serves.
     const bundleFile = path.join(runDir, "uploaded.ptrun");
@@ -120,24 +120,39 @@ test("the sealed bundle's manifest is scrubbed before the runner zips it", async
     assert.ok(sealed, "the bundle carries a manifest");
     assertClean("the sealed bundle's manifest.json", sealed!);
     assert.match(JSON.parse(sealed!).result.error, /Bad app: <path>\./);
+    assert.deepEqual(JSON.parse(sealed!).pins, manifest.pins, "nothing but the infra cause is rewritten");
   } finally {
     await fsp.rm(runDir, { recursive: true, force: true });
   }
 });
 
-test("scrubManifestError leaves a manifest with nothing to scrub byte-for-byte alone", () => {
+test("a run with nothing to mask seals the byte-identical bundle it always did", async () => {
   const runDir = freshDir("noop");
   try {
-    const file = path.join(runDir, "manifest.json");
-    const bytes = JSON.stringify({ result: { status: "pass", error: null } }, null, 2) + "\n";
-    fs.writeFileSync(file, bytes);
-    scrubManifestError(runDir, mobileRedactor());
-    assert.equal(fs.readFileSync(file, "utf8"), bytes);
+    const bytes = JSON.stringify({ run_id: "run_02", result: { status: "pass", error: null } }, null, 2) + "\n";
+    fs.writeFileSync(path.join(runDir, "manifest.json"), bytes);
+    fs.writeFileSync(path.join(runDir, "trajectory.jsonl"), `${JSON.stringify({ step: 1 })}\n`);
+
+    const seal = async () => {
+      let uploaded: Buffer | null = null;
+      await uploadBundle(
+        { putBytes: async (_p: string, b: Buffer) => ((uploaded = b), { artifact: { key: "k" } }) },
+        "db_2",
+        runDir,
+        mobileRedactor(),
+      );
+      return uploaded!;
+    };
+    // Deterministic markers, deterministic staging: the same input tree seals
+    // the same bundle bytes, which is what the format promises.
+    assert.deepEqual(await seal(), await seal());
+    assert.equal(fs.readFileSync(path.join(runDir, "manifest.json"), "utf8"), bytes);
+
     // A run directory that never existed is not an error: a case can fail
     // before core writes anything.
-    scrubManifestError(path.join(runDir, "missing"), mobileRedactor());
+    assert.deepEqual(await uploadBundle({}, "db_3", null, mobileRedactor()), { artifact: null });
   } finally {
-    fs.rmSync(runDir, { recursive: true, force: true });
+    await fsp.rm(runDir, { recursive: true, force: true });
   }
 });
 

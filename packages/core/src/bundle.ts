@@ -108,6 +108,51 @@ export function isBundlePath(file: unknown): boolean {
 }
 
 /**
+ * What a run-directory entry IS, as a media type
+ * (docs/contracts/artifacts.md#run-directory). One vocabulary, so a consumer
+ * deciding "may I rewrite these bytes?" never has to guess from where the entry
+ * lives: `steps/` holds both screenshots and accessibility text, and only the
+ * entry itself says which is which.
+ *
+ * `null` means the run vocabulary does not name this entry. A caller decides
+ * what to do with an unknown — this function does not guess.
+ */
+export function artifactMediaType(rel: string): string | null {
+  const ext = path.extname(String(rel)).toLowerCase();
+  return ARTIFACT_MEDIA_TYPES[ext] ?? null;
+}
+
+/** Is this media type text a reader (or a redactor) may treat as characters? */
+export function isTextualMediaType(mediaType: string | null | undefined): boolean {
+  if (!mediaType) return false;
+  const type = mediaType.replace(/;.*$/, "").trim();
+  return type.startsWith("text/") || TEXTUAL_MEDIA_TYPES.has(type) || type.endsWith("+json") || type.endsWith("+xml");
+}
+
+const ARTIFACT_MEDIA_TYPES: Record<string, string> = {
+  ".json": "application/json",
+  ".jsonl": "application/x-ndjson",
+  ".txt": "text/plain; charset=utf-8",
+  ".vtt": "text/vtt",
+  ".mhtml": "multipart/related",
+  ".html": "text/html; charset=utf-8",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".mp4": "video/mp4",
+  ".webm": "video/webm",
+  ".zip": "application/zip",
+};
+
+const TEXTUAL_MEDIA_TYPES = new Set([
+  "application/json",
+  "application/x-ndjson",
+  "application/javascript",
+  "multipart/related",
+]);
+
+/**
  * The `core` RETENTION tier's keep filter — what survives when a finished
  * bundle is aged down (docs/contracts/hosted.md#retention). Not to be confused
  * with the `artifacts: core` RECORDING profile

@@ -25,6 +25,7 @@ import { probeMobileClient } from "@playtest/core/suite";
 import { PLATFORM_DRIVER, probeAppiumStatus } from "./appium.ts";
 import type { AppiumHandle, AppiumDeps } from "./appium.ts";
 import type { MobileBinding } from "./runner-config.ts";
+import { MIN_PHYSICAL_NEEDLE } from "./redact.ts";
 import type { Mask } from "./redact.ts";
 
 export interface MobilePreflightFailure {
@@ -122,6 +123,12 @@ export function mobileRuntimeTarget(binding: MobileBinding, handle: AppiumHandle
  *
  * The host:port form is listed beside the URL because that is how a socket
  * error names an endpoint — no scheme.
+ *
+ * Every one of them carries the PHYSICAL minimum length (redact.ts): these
+ * masks exist to keep a diagnosis readable, so a degenerate needle — a
+ * one-character device name, a build sitting at the filesystem root — is
+ * dropped rather than allowed to shred the text around it. Secret masks have no
+ * such floor.
  */
 export function mobilePhysicalMasks(binding: MobileBinding, handle: AppiumHandle): Mask[] {
   return [
@@ -131,7 +138,7 @@ export function mobilePhysicalMasks(binding: MobileBinding, handle: AppiumHandle
     { value: binding.device, with: "<device>" },
     { value: handle.url, with: "<endpoint>" },
     { value: hostPort(handle.url), with: "<endpoint>" },
-  ];
+  ].map((mask) => ({ ...mask, min: MIN_PHYSICAL_NEEDLE }));
 }
 
 function hostPort(url: string): string | null {

@@ -178,9 +178,14 @@ test("a project with no model defaults leaves the suite file's model keys absent
   }
 });
 
-test("redactor replaces configured secret values", () => {
+test("redactor replaces configured secret values, however short", () => {
   const redact = makeRedactor(["secret-token", "abc"]);
-  assert.equal(redact("seed=secret-token cookie=abc"), "seed=[redacted] cookie=abc");
+  // A three-character secret is a poor secret, but declining to redact one an
+  // operator configured is a leak, not tidiness: no non-empty value is dropped.
+  assert.equal(redact("seed=secret-token cookie=abc"), "seed=[redacted] cookie=[redacted]");
+  // An empty value is the one thing that is not a needle — it matches
+  // everywhere and protects nothing.
+  assert.equal(makeRedactor(["", null, 7])("nothing to mask"), "nothing to mask");
 });
 
 function sha(s: string): string {

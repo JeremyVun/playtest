@@ -1,7 +1,9 @@
 export {
+  artifactMediaType,
   BundleProvider,
   coreBundleKeepPath,
   isBundlePath,
+  isTextualMediaType,
   rewriteBundle,
   writeBundle,
 } from "../bundle.ts";

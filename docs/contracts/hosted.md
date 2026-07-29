@@ -442,6 +442,29 @@ Case execution is isolated:
   derived session artifacts.
 - Secret values must not appear in logs, events, manifests, or error messages.
 
+**What counts as a secret needle.** The executor masks two kinds of value, with
+deliberately different policies:
+
+- **Secrets** — a ring's resolved secrets, a mint grant's environment, an
+  external Appium credential, and every leaf value inside a minted session's
+  storage state — become `[redacted]`. A structured secret contributes its
+  **leaf values, one needle each**, recursively: a session cookie's value and a
+  token nested inside `origins[].localStorage[]` are what appear in a run's
+  evidence, and the serialized parent document is a byte sequence that appears
+  nowhere. Keys that name a *location* rather than a value — a cookie's `name`,
+  `domain` and `path`, an `origin`, a `url` — are not secrets and are not
+  masked; masking them would shred unrelated text. **No non-empty configured
+  secret value is ever dropped for being short.**
+- **Physical facts** — the build path, device and Appium endpoint this runner
+  resolved from its own config — become a placeholder naming the kind of fact
+  (`<path>`, `<device>`, `<endpoint>`), so the surrounding text stays a
+  diagnosis. These keep a minimum needle length, because a degenerate one is
+  worth nothing and would shred the diagnosis it appears in.
+
+Every needle is matched in both its **raw and JSON-escaped** forms, so a value
+holding a quote or a backslash is caught inside a JSON document as well as in
+plain text, and the rewritten document is still parseable.
+
 Case progress (`POST /runner/groups/:g/cases/:run_id/progress`) is telemetry,
 never load-bearing: while a case runs, the executor folds the engine's progress
 events into one small snapshot — step and step budget, the mode word from core

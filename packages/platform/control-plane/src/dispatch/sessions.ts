@@ -3,6 +3,7 @@ import { AppError, badRequest, conflict, forbidden, notFound } from "../errors.t
 import { encryptSecret, decryptSecret } from "../crypto/secrets.ts";
 import { audit } from "../audit.ts";
 import { targetSnapshot } from "./dispatcher.ts";
+import { concludeMintDispatchesFor } from "./state.ts";
 
 // A script mint grant expires after this long; past it the claim is abandoned
 // and the next claimer takes over the mint (single-flight with takeover, §3a).
@@ -297,11 +298,7 @@ export async function standaloneMintGrant(ctx: HostedDynamic, { claimId, executo
 
 /** Conclude the `mint` dispatch ledger row once its claim is fulfilled/failed. */
 export async function concludeMintDispatch(ctx: HostedDynamic, claimId: HostedDynamic, error = null) {
-  await ctx.db.query(
-    `UPDATE dispatches SET status = 'concluded', concluded_at = now(), error = $2
-      WHERE kind = 'mint' AND ref_id = $1 AND status IN ('requested','scheduled','running')`,
-    [claimId, error ? String(error).slice(0, 500) : null],
-  );
+  await concludeMintDispatchesFor(ctx.db, claimId, { error: error ? String(error).slice(0, 500) : null });
 }
 
 export async function listProviderSessions(ctx: HostedDynamic, providerId: HostedDynamic) {

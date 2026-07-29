@@ -1,3 +1,35 @@
+// OWED BY B4 (standalone mint resume and idempotency), and deliberately not
+// written yet:
+//
+// "Simulate a successful mint script followed by a transient completion request
+// failure. Prove the script is not rerun and the result is retried
+// idempotently."
+//
+// `runMintScript` — this file's subject — already separates cleanly: it either
+// returns a storage state or throws. What conflates the two is its CALLERS, and
+// both of them: `exec-mint.ts` and the in-group path in `exec-group.ts`
+// (`claimGroupSessions`) each wrap the script AND the completion POST in one
+// catch, so a transport failure after a successful mint is reported on the
+// claim as if the customer's script had failed. There is no seam to test today
+// because there is no boundary between the two outcomes.
+//
+// B4 must split them and then satisfy:
+//
+//   1. a completion request that fails transiently is RETRIED, and the mint
+//      script runs exactly once (assert an invocation counter, not a timing);
+//   2. the claim never carries a script error that the script did not produce;
+//   3. mint completion is idempotent for the CURRENT executor, with enough
+//      result state stored to redeliver without re-minting;
+//   4. a runner that crashes between mint exchange and completion can resume:
+//      the same authorized runner re-exchanges, a new current executor is
+//      installed and the pending claim rebound, and the pre-crash bearer then
+//      fails the identity check with `executor_conflict` — the fence B2 already
+//      built, which is why B4 needs no revocation list. Today the opposite is
+//      true and is pinned as the current behavior in the control plane's
+//      pool-claim-board suite ("a mint exchange that can never be won concludes
+//      the dispatch instead of being re-offered"); that test encodes what B4
+//      replaces and should be rewritten with the change.
+//
 // Pins runMintScript: clean-room execution of a
 // `script` auth provider's mint grant with isolation "process" — only the
 // grant's resolved env reaches the script, stdout must parse as a

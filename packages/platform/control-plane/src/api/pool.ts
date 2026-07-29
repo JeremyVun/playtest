@@ -37,6 +37,7 @@ import { randomBytes } from "node:crypto";
 import { holdUntil } from "../events/hold.ts";
 import { emitPlatformEvent } from "../events/outbox.ts";
 import { checkInWindowMs } from "../dispatch/pool.ts";
+import { claimDispatchForRunner, markGroupRunning } from "../dispatch/state.ts";
 
 /** Hold window cap, the same one the browser feed uses. */
 const MAX_WAIT_S = 25;
@@ -349,43 +350,16 @@ export async function claimDispatch(ctx: HostedDynamic) {
     }
     // Idempotent for the winner: re-claiming what it already holds is not a race.
     if (held && held.id === dispatchId) return held;
-    const won = await tx.query(
-      `UPDATE dispatches
-          SET status = 'scheduled', runner_id = $2, claimed_at = now(), heartbeat_at = now()
-        WHERE id = $1
-          AND status = 'requested'
-          AND claimed_at IS NULL
-          AND canceled_at IS NULL
-          AND kind IN ('group','mint')
-          -- The runner is still live AND still in scope for this project: its
-          -- own project, or every project when it is site-scoped. "Live" is the
-          -- same two facts the credential was authorized on — not revoked, not
-          -- expired — restated here rather than trusted from that check, so a
-          -- revocation OR an ephemeral registration's expiry landing in the gap
-          -- loses the race rather than slipping through it. A credential that
-          -- expires in that gap must win nothing: the claim it would make can
-          -- never be exchanged, so the dispatch would sit scheduled under a
-          -- runner that cannot come back for it.
-          AND EXISTS (
-                SELECT 1 FROM runners r
-                 WHERE r.id = $2 AND r.revoked_at IS NULL
-                   AND (r.expires_at IS NULL OR r.expires_at > now())
-                   AND (r.project_id IS NULL OR r.project_id = dispatches.project_id))
-          AND NOT EXISTS (
-                SELECT 1 FROM dispatches held
-                 WHERE held.runner_id = $2 AND held.status IN ('requested','scheduled','running'))
-          AND NOT EXISTS (
-                SELECT 1 FROM json_each(COALESCE(dispatches.labels, '[]')) want
-                 WHERE want.value NOT IN (
-                   SELECT value FROM json_each((SELECT COALESCE(labels, '[]') FROM runners WHERE id = $2))))
-        RETURNING *`,
-      [dispatchId, runner.id],
-    );
-    if (!won.rows[0]) throw claimLost(ctx, dispatch, runner);
-    const row = won.rows[0];
+    // The transition, and its whole precondition, belong to the state module
+    // (docs/contracts/hosted.md, "Dispatch state"); this route decides who is
+    // asking and what a loss means.
+    const row = await claimDispatchForRunner(tx, { dispatchId, runnerId: runner.id });
+    if (!row) throw claimLost(ctx, dispatch, runner);
     await tx.query(`UPDATE runners SET last_seen_at = now() WHERE id = $1`, [runner.id]);
     if (row.kind === "group") {
-      await tx.query(`UPDATE run_groups SET status = 'running', updated_at = now() WHERE id = $1`, [row.ref_id]);
+      // Through the state module, so a group that settled between the board read
+      // and this write is not flipped back to `running`.
+      await markGroupRunning(tx, row.ref_id);
       await emitPlatformEvent(tx, {
         projectId: row.project_id,
         type: "run.status",

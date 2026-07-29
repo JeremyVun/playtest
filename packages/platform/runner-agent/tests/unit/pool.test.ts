@@ -584,3 +584,54 @@ test("pool: the startup banner states server, project, labels, isolation and tha
   const bare = startupLines(options("http://127.0.0.1:4177", { labels: [] }) as LegacyTestValue, null);
   assert.match(bare.join("\n"), /labels\s+none — takes any job in this project/);
 });
+
+// --------------------------------------------------- stale-owner conflicts
+
+test("a stale-owner conflict is classified, and it is never a fatal refusal", async () => {
+  const { isStaleExecutorError, EXECUTOR_CONFLICT_CODE } = await import("../../src/api-client.ts");
+  const stale = new RunnerApiError(409, {
+    error: {
+      code: EXECUTOR_CONFLICT_CODE,
+      message: "a newer executor owns attempt 1 of this work",
+      details: { reason: "executor_replaced" },
+    },
+  });
+  assert.equal(isStaleExecutorError(stale), true);
+  assert.equal(stale.details.reason, "executor_replaced");
+  // Everything adjacent stays what it was: a plain 409 race, a scope refusal and
+  // a transport error are different answers with different remedies.
+  assert.equal(isStaleExecutorError(new RunnerApiError(409, { error: { code: "conflict", message: "already claimed" } })), false);
+  assert.equal(isStaleExecutorError(new RunnerApiError(403, { error: { code: "forbidden", message: "not scoped" } })), false);
+  assert.equal(isStaleExecutorError(new Error("socket hang up")), false);
+});
+
+test("pool: work the control plane fenced ends that claim and returns to the board", async () => {
+  // A replacement executor took this attempt (or it ended). The executor stops
+  // and throws; the loop must treat it as one finished claim and go back to
+  // polling — never as a configuration error that stops the process.
+  const stub = await board([groupOffer]);
+  const lines: string[] = [];
+  try {
+    const result = await runPool(options(stub.url), {
+      execGroupImpl: async () => {
+        throw new RunnerApiError(409, {
+          error: {
+            code: "executor_conflict",
+            message: "a newer executor owns attempt 1 of this work",
+            details: { reason: "executor_replaced" },
+          },
+        });
+      },
+      log: (line) => lines.push(line),
+      maxIterations: 1,
+    });
+    assert.equal(result.executed, 1, "the claim is finished, not retried");
+    assert.ok(
+      lines.some((l) => l.includes("ended with an error") && l.includes("newer executor")),
+      `the loop says why it let go: ${JSON.stringify(lines)}`,
+    );
+    assert.ok(lines.includes("waiting for work"), "and it goes straight back to the board");
+  } finally {
+    await stub.close();
+  }
+});

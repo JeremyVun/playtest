@@ -159,6 +159,11 @@ JSON API routes live under `/api/v1`. Client-facing failures use:
 `details` is optional. Validation failures carry the core validators' messages.
 Raw stack traces and bare internal errors never reach clients.
 
+One code is reserved for the executor protocol. `409 executor_conflict` is the
+single stale-ownership answer across every runner route, and its
+`details.reason` is machine-readable so a runner acts on it without parsing
+prose (§ [Current executor fencing](#current-executor-fencing)).
+
 An optional capability this deployment was not configured with is
 `503 not_configured`, never a 500: the request was well-formed and authorized
 and nothing crashed, so reporting a deployment choice as "Internal Server Error"
@@ -338,9 +343,111 @@ be considered complete.
 
 Cancellation stops new case starts and marks the claim canceled; nothing can
 call a runner, so the runner learns at its next heartbeat and runs the teardown
-a SIGTERM triggers. A dead executor cannot strand a group indefinitely: the
+a SIGTERM triggers. It also concludes every live attempt of the group, which is
+what actually fences the cancelled executor: its next call answers
+`executor_conflict`. A dead executor cannot strand a group indefinitely: the
 reconciler marks unreported work as infrastructure failure and may dispatch a
 bounded remainder. Retries never duplicate an already accepted case report.
+
+### Dispatch state
+
+One control-plane module
+(`packages/platform/control-plane/src/dispatch/state.ts`) owns dispatch
+creation, executor exchange, reconciliation, cancellation, and every terminal
+transition. Nothing outside it writes `dispatches.status`,
+`dispatches.executor_id`, or `run_groups.status`.
+
+- **Every transition is a compare-and-set from named allowed states.** A read
+  followed by an unconditional write is not a transition: the gap between them
+  is where a cancel, a completion, or a reconcile pass lands. A zero-row update
+  means the caller lost, and the loser reads back the state that won rather
+  than repairing it with a second write.
+- **Terminal is monotonic and idempotent.** Dispatch `concluded` and
+  `reconciled_dead` are ends; group `done` and `canceled` are ends. The one
+  authorized reopen is the in-place retry (`POST /run-groups/:g/retry`), which
+  is a person's decision, carries its own `done`-only precondition, and is
+  refused for a cancelled group.
+- **Attempt allocation and dispatch creation are one transaction.** `attempt`
+  IS the generation of a `(kind, ref_id)`.
+
+SQLite enforces both structural invariants rather than leaving them to
+application code:
+
+| Index | Invariant |
+|---|---|
+| `dispatches_ref_idx` — unique `(kind, ref_id, attempt)` | attempts are unique and only increase |
+| `dispatches_active_group_idx` — partial unique on `ref_id` where `kind = 'group'` and the status is active | a run group has at most one active dispatch |
+
+The active states are `requested`, `scheduled`, and `running`; the partial index
+restates exactly that list, and changing one without the other is a bug.
+
+### Current executor fencing
+
+Every exchange inserts a fresh `executors` row, so "who owns this attempt right
+now?" is an identity question the database answers:
+
+- `executors.dispatch_id` is the **immutable** executor→dispatch link, written
+  once, inside the exchange transaction. It is how every executor-facing route
+  resolves the attempt a bearer belongs to. There is no fallback scan.
+- `dispatches.executor_id` is the **mutable current-executor pointer**,
+  advanced only inside the exchange compare-and-set. It is the fence.
+
+Ownership is decided by identity equality against that pointer. Executor ids are
+ULIDs and never recur, so no counter, clock, or runner-supplied value is
+consulted, and no ordering comparison is ever made. The bearer format does not
+change: it already carries `executor_id`, and that is all the check needs.
+
+One guard (`requireCurrentExecutor`) stands in front of every executor-facing
+read and write — group spec, snapshot tree, blob, baseline trajectory, session
+claim and fulfillment, case start, progress, live open, live entry, live
+trajectory, bundle upload, case report, group completion, and both standalone
+mint routes. It verifies that:
+
+1. the token's executor row exists;
+2. it links to a dispatch, and that dispatch is the one being addressed;
+3. mint-scoped and group-scoped executors have not crossed routes;
+4. the dispatch is in a state the operation means something in — which, given
+   the partial unique index, is also what makes it the group's single active
+   dispatch;
+5. the dispatch's current-executor pointer still equals this executor; and
+6. the run group has not settled underneath it.
+
+A refusal is always `409 executor_conflict` with one of these
+`details.reason` values:
+
+| `reason` | Meaning |
+|---|---|
+| `unknown_executor` | the bearer names an executor row that does not exist |
+| `scope_mismatch` | a mint bearer on a group route, or the reverse |
+| `executor_replaced` | a later exchange installed a new current executor |
+| `dispatch_not_active` | the attempt concluded, died, or was cancelled |
+| `group_settled` | the run group is `done` or `canceled` |
+| `run_not_owned` | the story is claimed by a different executor |
+
+A bearer scoped to a different run group remains `403 forbidden`: it never owned
+that work and never will, which is a scope failure rather than a stale one.
+
+**The runner's posture.** `executor_conflict` is FINAL for that work. The runner
+stops executing, stops uploading, posts no report and no completion — the
+attempt's outcome is not its to declare any more — and returns to the claim
+board. It is never retried and never backed off: repeating the request is the
+one thing that can never help.
+
+**Case ownership.** `runs.executor_id` is the story's database-recorded owner.
+Case start claims a `queued` story for the current executor with a
+compare-and-set, so the owner's own repeat is idempotent and a late start cannot
+flip a finished story back to `running`. Progress, bundle upload, and the final
+report all compare against that owner: a stale report never overwrites a
+replacement's run, even holding a still-valid bearer. A story left `running`
+under a stale executor is not silently handed to its replacement — the group
+spec offers only `queued` work — because that is dead work for the reconciler or
+the group's completion to resolve, not work a second process picks up mid-flight.
+A story that never started may still be claimed by a terminal report, which is
+how an executor reports `infra` for a case it never got to run.
+
+Group completion is the one route that stays meaningful after its own dispatch
+concluded, so an owner's retry is idempotent. It is refused after the reconciler
+declared the attempt dead, and refused for a cancelled group.
 
 `POST /api/v1/run-groups/:id/retry` is an editor-authorized, in-place retry for
 a finished group's stories that never started (`infra` or `lost` with no
@@ -396,14 +503,24 @@ The runner authenticates and then uses only HTTP:
 Runner routes are under `/api/v1`; the abbreviated paths above identify the
 protocol rather than a second namespace.
 
-An exchange binds one executor to one active dispatch, and there is exactly one
-way to obtain it: the runner presents its registration credential plus the
-dispatch it CLAIMED on the board. A credential alone resolves no dispatch, so it
-can never fetch a snapshot, a blob, a session grant, or post a report, and a
-runner that did not win a claim cannot exchange for it. There is no development
-shortcut past this boundary — no insecure exchange, under any auth mode. The
-returned bearer is short-lived and scoped to exactly one run group or mint
-claim; group and mint tokens are not interchangeable.
+An exchange installs one executor as the CURRENT executor of one active
+dispatch, and there is exactly one way to obtain it: the runner presents its
+registration credential plus the dispatch it CLAIMED on the board. A credential
+alone resolves no dispatch, so it can never fetch a snapshot, a blob, a session
+grant, or post a report, and a runner that did not win a claim cannot exchange
+for it. There is no development shortcut past this boundary — no insecure
+exchange, under any auth mode. The returned bearer is short-lived and scoped to
+exactly one run group or mint claim; group and mint tokens are not
+interchangeable.
+
+Inserting the executor, writing its immutable dispatch link, advancing the
+dispatch to `running`, and moving the group to `running` are one atomic
+operation, and eligibility is revalidated inside it — never read before it. A
+cancel or a reconcile landing in that gap wins; the exchange answers
+`409 conflict` naming the state that won, installs no current executor, and
+leaves no executor row behind. A second exchange for the same claim (a
+crash-resumed runner) succeeds and makes the previous bearer stale from that
+instant (§ [Current executor fencing](#current-executor-fencing)).
 
 The group spec includes only the selected cases, pinned snapshot, baseline
 references, this attempt's `ring` (`id`, `key`, `base_url`, the logical `config`
@@ -511,20 +628,26 @@ with `payload.type: "progress"`. It lands only while the case is `running` or
 finished run's truth is its manifest, and a late tick must never repaint a
 finished row as live. A runner that never posts progress is fully conformant.
 
-Case start, upload, report, and group completion are retry-safe. Completion may
-be partial when the executor approaches its runtime budget; the control plane
-dispatches only the remaining cases. A case report is accepted only for its
-group, run id, and current executor binding.
+Case start, upload, report, and group completion are retry-safe **for the
+current executor**: each is a compare-and-set on the recorded owner, so the
+owner's repeat is idempotent and everyone else is refused with
+`executor_conflict` (§ [Current executor fencing](#current-executor-fencing)).
+Completion may be partial when the executor approaches its runtime budget; the
+control plane dispatches only the remaining cases. A case report is accepted
+only for its group, run id, and current executor binding.
 
 ### Live staging routes
 
 Three optional routes stream a case's evidence in ahead of its bundle, so the
 run is viewable while it executes ([Live runs](#live-runs)). All three ride the
-existing group-scoped runner bearer with the same run-group check the bundle PUT
-applies — no new principal and no new exchange — and all three answer refused or
-no-op once the run is terminal. A runner that never calls them is fully
-conformant; the run is then invisible until it seals, which is the older
-behavior.
+existing group-scoped runner bearer behind the same current-executor guard and
+run ownership check the bundle PUT applies (§
+[Current executor fencing](#current-executor-fencing)) — no new principal and no
+new exchange — and all three answer refused or no-op once the run is terminal. A
+stale executor is refused with `executor_conflict` before any ack is computed,
+and the uploader stops itself on it exactly as it does on any other 4xx. A
+runner that never calls them is fully conformant; the run is then invisible
+until it seals, which is the older behavior.
 
 | Route | Meaning |
 |---|---|

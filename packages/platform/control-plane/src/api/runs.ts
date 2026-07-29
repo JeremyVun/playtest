@@ -12,6 +12,13 @@ import {
   targetSnapshot,
   dispatchAttempt,
 } from "../dispatch/dispatcher.ts";
+import {
+  ACTIVE_DISPATCH_STATES,
+  cancelGroup as cancelGroupStatus,
+  concludeGroupDispatches,
+  createGroupDispatch,
+  reopenGroupForRetry,
+} from "../dispatch/state.ts";
 import { applicationById, ringById } from "./applications.ts";
 import { normalizeLabels } from "../auth/runner-credentials.ts";
 import { normalizeClipRequest, startClip } from "../media/clip.ts";
@@ -329,26 +336,25 @@ export async function cancelGroup(ctx: HostedDynamic) {
   guard(ctx, group.project_id, "editor");
   const { rows } = await ctx.db.query(
     `SELECT * FROM dispatches
-      WHERE kind = 'group' AND ref_id = $1 AND status IN ('requested','scheduled','running')
+      WHERE kind = 'group' AND ref_id = $1 AND status IN (${inClause(ACTIVE_DISPATCH_STATES, 2)})
       ORDER BY attempt DESC`,
-    [group.id],
+    [group.id, ...ACTIVE_DISPATCH_STATES],
   );
   // Nothing can be called: the mark on the claim IS the channel, and the runner
   // observes it at its next heartbeat.
   for (const d of rows) await ctx.board.cancelDispatch(d.id);
   await ctx.db.withTx(async (tx: HostedDynamic) => {
-    await tx.query(`UPDATE run_groups SET status = 'canceled', updated_at = now() WHERE id = $1`, [group.id]);
+    // Cancellation is terminal and monotonic: a group that already settled is
+    // not re-settled, and an executor arriving a moment later is fenced by the
+    // concluded dispatch rather than by a status string it might overwrite.
+    await cancelGroupStatus(tx, group.id);
     await tx.query(
       `UPDATE runs
           SET status = 'canceled', finished_at = COALESCE(finished_at, now()), progress = NULL, updated_at = now()
         WHERE run_group_id = $1 AND status NOT IN ('pass','fail','infra','explored','canceled','lost')`,
       [group.id],
     );
-    await tx.query(
-      `UPDATE dispatches SET status = 'concluded', concluded_at = now(), error = 'canceled by user'
-        WHERE kind = 'group' AND ref_id = $1 AND status IN ('requested','scheduled','running')`,
-      [group.id],
-    );
+    await concludeGroupDispatches(tx, group.id, { error: "canceled by user" });
     await audit(tx, {
       actor: actorOf(principal),
       action: "run_group.canceled",
@@ -417,22 +423,20 @@ export async function retryGroup(ctx: HostedDynamic) {
           AND status IN ('infra','lost') AND started_at IS NULL`,
       ids,
     );
-    const attempts = await tx.query(
-      `SELECT COALESCE(MAX(attempt), 0) + 1 AS attempt
-         FROM dispatches WHERE kind = 'group' AND ref_id = $1`,
-      [group.id],
-    );
-    attempt = attempts.rows[0].attempt;
-    await tx.query(
-      `INSERT INTO dispatches (id, project_id, kind, ref_id, attempt, status, labels, target)
-       VALUES ($1, $2, 'group', $3, $4, 'requested', $5, $6)`,
-      [dispatchId, group.project_id, group.id, attempt, labels, target],
-    );
-    await tx.query(
-      `UPDATE run_groups SET status = 'queued', exit_summary = NULL, updated_at = now()
-        WHERE id = $1 AND status = 'done'`,
-      [group.id],
-    );
+    // Allocation and insert in one transaction, and the "no live attempt"
+    // precondition restated in the write: a double click produces one attempt.
+    const posted = await createGroupDispatch(tx, {
+      projectId: group.project_id,
+      groupId: group.id,
+      labels,
+      target,
+      dispatchId,
+    });
+    if (!posted) throw conflict(`run "${group.id}" is already active or cannot be retried`);
+    attempt = posted.attempt;
+    // The ONE authorized reopen of a settled group, and it is a person's
+    // decision carrying its own precondition — never a race.
+    await reopenGroupForRetry(tx, group.id);
     await audit(tx, {
       actor: actorOf(principal),
       action: "run_group.retried",

@@ -5,7 +5,7 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { ApiClient } from "./api-client.ts";
+import { ApiClient, isStaleExecutorError } from "./api-client.ts";
 import { materializeWorkspace } from "./workspace.ts";
 import { CONTAINER_WS, runCaseIsolated, stopActiveContainers } from "./case-runner.ts";
 import { liveUploader } from "./live-uploader.ts";
@@ -53,9 +53,22 @@ export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
   // runner's heartbeat instead — nothing can dial in to signal it — and aborts
   // `opts.signal` to run this same path.
   let canceled = false;
+  // The platform said this bearer is no longer the current executor for this
+  // attempt (409 executor_conflict). That is FINAL for this work: stop starting
+  // cases, stop what is running, post nothing further — a replacement owns it,
+  // or it has ended — and let the pool loop return to the board.
+  let fenced = false;
   const onSignal = () => {
     canceled = true;
     stopActiveContainers();
+  };
+  const fence = (e: RunnerDynamic): boolean => {
+    if (!isStaleExecutorError(e)) return false;
+    fenced = true;
+    canceled = true;
+    stopActiveContainers();
+    log(`this runner no longer owns this work (${firstLine(e)}) — stopping and returning to the board`);
+    return true;
   };
   process.on("SIGTERM", onSignal);
   process.on("SIGINT", onSignal);
@@ -149,7 +162,18 @@ export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
       };
     });
     const orderedResults: RunnerDynamic[] = new Array(work.length);
-    await schedulePool(work, budget, async ({ index, item, resolvedCase }: RunnerDynamic) => {
+    // One wrapper around the whole case body: a stale-owner refusal from ANY of
+    // its calls (start, report, bundle) ends this executor's participation
+    // rather than being retried or reported as an infra failure it caused.
+    await schedulePool(work, budget, async (unit: RunnerDynamic) => {
+      if (fenced) return;
+      try {
+        await runOneCase(unit);
+      } catch (e) {
+        if (!fence(e)) throw e;
+      }
+    });
+    async function runOneCase({ index, item, resolvedCase }: RunnerDynamic) {
       if (canceled) {
         const report = { status: "canceled", error: "canceled before the case started" };
         await api.json("POST", `/runner/groups/${spec.run_group_id}/cases/${item.run_id}/report`, report);
@@ -265,21 +289,27 @@ export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
       const posted = redactDeep(report, redactor);
       await api.json("POST", `/runner/groups/${spec.run_group_id}/cases/${item.run_id}/report`, posted);
       orderedResults[index] = posted;
-    });
-    results.push(...orderedResults);
+    }
+    results.push(...orderedResults.filter(Boolean));
     // Janitor before complete so its findings ride the completion report (§3).
     warnings.push(...(await cleanupWorkspace(workspace)));
     if (opts.isolation === "container") warnings.push(...sweepDocker());
-    await api.json("POST", `/runner/groups/${spec.run_group_id}/complete`, {
-      ...(canceled ? { partial: true, error: "canceled" } : {}),
-      summary: { cases: results.map((r) => ({ status: r.status })) },
-      janitor: warnings,
-    });
+    // A fenced executor completes nothing: the attempt belongs to someone else
+    // (or has ended), and its outcome is not this process's to declare.
+    if (!fenced) {
+      await api.json("POST", `/runner/groups/${spec.run_group_id}/complete`, {
+        ...(canceled ? { partial: true, error: "canceled" } : {}),
+        summary: { cases: results.map((r) => ({ status: r.status })) },
+        janitor: warnings,
+      });
+    }
   } catch (e: RunnerDynamic) {
-    await api.json("POST", `/runner/groups/${spec.run_group_id}/complete`, {
-      partial: true,
-      error: redactor(e.message || String(e)),
-    }).catch(() => {});
+    if (!fence(e) && !fenced) {
+      await api.json("POST", `/runner/groups/${spec.run_group_id}/complete`, {
+        partial: true,
+        error: redactor(e.message || String(e)),
+      }).catch(() => {});
+    }
     throw e;
   } finally {
     process.removeListener("SIGTERM", onSignal);

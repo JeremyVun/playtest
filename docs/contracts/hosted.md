@@ -559,6 +559,47 @@ Case execution is isolated:
   derived session artifacts.
 - Secret values must not appear in logs, events, manifests, or error messages.
 
+**Every case runs in a child process, under both isolations.** There is one case
+protocol (`packages/platform/runner-agent/src/case-runner-child.ts`): one JSON
+payload in on stdin, `{"event": …}` NDJSON lines out for engine progress, then
+exactly one `{"result": …}` line. A container case reaches that entry inside the
+pinned job image and translates host paths to and from the `/ws` mount; a
+process-mode case reaches the same entry beside the repository checkout on the
+runner's own disk and translates nothing. A group's environment — including its
+resolved secrets — is delivered through the spawn environment or the structured
+payload, never through command-line arguments, and never by mutating the
+long-lived agent's own `process.env`: each child owns its environment, so two
+concurrent cases of one group may carry different values for one variable.
+
+### Process-mode cancellation
+
+**Cancelling a group stops the work, not only its bookkeeping.** A cancel
+reaches the runner on its heartbeat, a `SIGTERM` reaches it from its operator,
+and a stale-owner `executor_conflict` reaches it from any executor route; all
+three run the same teardown:
+
+- A container case is stopped through docker (`docker stop`, then `docker kill`).
+- A process-mode case is spawned **detached**, so it leads its own process group,
+  and is stopped by signalling that **group** — `SIGTERM`, then `SIGKILL` after a
+  bounded grace period of five seconds (`CANCEL_GRACE_MS`). Signalling the pid
+  alone would orphan the browser, the ffmpeg, and every other descendant the
+  engine started, which is the whole reason the boundary is a process group and
+  not a cooperative `AbortSignal`: third-party hooks and drivers may ignore a
+  signal, and a mobile driver call can block for minutes.
+- The mobile Appium backend stays in the agent for the group's lifetime; the case
+  child reaches it over loopback through the runtime target, exactly as a
+  container case reaches a service on the runner host.
+- A case the executor stopped is classified `canceled` — never a product verdict
+  and never a plain infrastructure failure — whatever exit status the race
+  produced, including a success the child reached in the gap.
+- Cancellation also concludes the group's dispatch, so every later executor call
+  answers `executor_conflict`: no post-cancellation case report, live upload, or
+  bundle write is accepted, and the runner stops trying rather than retrying
+  (§ [Current executor fencing](#current-executor-fencing)).
+
+Child listeners, the force-kill timer, and the runner's active-case registry are
+released on every exit path — success, product failure, crash, and cancellation.
+
 **What counts as a secret needle.** The executor masks two kinds of value, with
 deliberately different policies:
 

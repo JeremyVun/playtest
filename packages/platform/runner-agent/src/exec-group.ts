@@ -7,7 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import { ApiClient, isStaleExecutorError } from "./api-client.ts";
 import { materializeWorkspace } from "./workspace.ts";
-import { CONTAINER_WS, runCaseIsolated, stopActiveContainers } from "./case-runner.ts";
+import { CONTAINER_WS, runCaseIsolated, stopActiveCases } from "./case-runner.ts";
 import { liveUploader } from "./live-uploader.ts";
 import { platformEvidence } from "./evidence.ts";
 import { cleanupWorkspace, sweepDocker } from "./janitor.ts";
@@ -48,10 +48,11 @@ export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
   // The catch below posts errors through the redactor; it must exist before the
   // claim/materialize steps that could throw (secrets arrive with the claims).
   let redactor = (s: RunnerDynamic): string => String(s);
-  // SIGTERM/SIGINT: stop starting cases, `docker stop` whatever is in flight,
-  // report what we have, post a best-effort complete. A cancel arrives on the
-  // runner's heartbeat instead — nothing can dial in to signal it — and aborts
-  // `opts.signal` to run this same path.
+  // SIGTERM/SIGINT: stop starting cases, STOP THE CASE IN FLIGHT — its container
+  // or its process group, bounded by the documented grace period
+  // (case-runner.ts) — report what we have, post a best-effort complete. A
+  // cancel arrives on the runner's heartbeat instead — nothing can dial in to
+  // signal it — and aborts `opts.signal` to run this same path.
   let canceled = false;
   // The platform said this bearer is no longer the current executor for this
   // attempt (409 executor_conflict). That is FINAL for this work: stop starting
@@ -60,13 +61,13 @@ export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
   let fenced = false;
   const onSignal = () => {
     canceled = true;
-    stopActiveContainers();
+    stopActiveCases();
   };
   const fence = (e: RunnerDynamic): boolean => {
     if (!isStaleExecutorError(e)) return false;
     fenced = true;
     canceled = true;
-    stopActiveContainers();
+    stopActiveCases();
     log(`this runner no longer owns this work (${firstLine(e)}) — stopping and returning to the board`);
     return true;
   };

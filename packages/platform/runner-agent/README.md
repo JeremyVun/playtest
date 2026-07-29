@@ -71,8 +71,8 @@ src/cli.ts                the `runner-agent` executable (pool mode only)
 src/pool.ts               claim-board poll, claim, exchange, and supervision loop
 src/runner-config.ts      --config parse, validation, and target bindings
 src/exec-group.ts         group exchange, scheduling, progress, and reporting
-src/case-runner.ts        process and container isolation
-src/case-runner-child.ts  one-case container protocol
+src/case-runner.ts        child supervision for both isolations, and cancellation
+src/case-runner-child.ts  the one-case protocol, in the image and on this machine
 src/workspace.ts          snapshot, baseline, ring-overlay, and secret materialization
 src/api-client.ts         authenticated runner-protocol client
 src/exec-mint.ts          hosted mint-claim lifecycle

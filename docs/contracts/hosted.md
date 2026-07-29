@@ -595,7 +595,9 @@ No long-lived runner secret lands in repository settings.
   (default 3600, floor 60, ceiling 21600 — GitHub's own per-job limit, because a
   credential outliving its job is a credential nobody is watching). An expired
   credential is refused at poll, claim and exchange exactly like a revoked one,
-  with its own message. Expiry never interrupts work in flight: an exchanged
+  with its own message — and at the claim that refusal is *transactional*, so
+  expiring mid-claim loses the race (see the claim board below). Expiry never
+  interrupts work in flight: an exchanged
   group runs on under its already-issued scoped bearer, and keeps heartbeating
   its claim. An expired registration is also excluded from the unclaimed-timeout
   diagnostic below, because it is invisible in Settings and cannot be restarted —
@@ -651,6 +653,17 @@ three runner-credential-authenticated routes are:
    receives `409 conflict` and returns to polling. The winning claim stamps the
    runner, moves the dispatch to `scheduled`, flips the group to running, and
    emits the `run.status` provisioning event.
+
+   **"Live" is the same two facts the credential was authorized on** — not
+   revoked *and* not expired — and both are restated inside the mutating
+   `WHERE`, not merely checked before it. Authorization and mutation are two
+   moments; a credential that is revoked or whose ephemeral registration expires
+   between them loses the race and creates no claim. The distinction matters
+   because a claim is not the end of the exchange: an expired credential can
+   never trade its claim for a scoped bearer, so a claim it won would strand the
+   dispatch `scheduled` under a runner that cannot come back for it. A zero-row
+   update is authorization loss, reported as the same `409 conflict` any other
+   loser receives.
 3. `POST /runner/pool/claims/:dispatch/heartbeat` — coarse group-level liveness
    between claim and completion, on the order of tens of seconds. Case-level
    telemetry remains the progress route. Only the claim holder may heartbeat it,

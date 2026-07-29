@@ -12,9 +12,11 @@ import { MASK, maskSecretEnv, literalSecretKeys } from "../src/lib/secret-mask.j
 import {
   FINDING_BUCKETS, DEFAULT_BUCKET, bucketId, bucketCounts, findingStateLabel, findingStateTone,
 } from "../src/lib/finding-buckets.js";
-import { categoryLabel, signalLabel, criterionLabel, humanize, nextRunLabel } from "../src/lib/vocab.js";
+import {
+  categoryLabel, signalLabel, criterionLabel, criterionHelp, criterionExample, humanize, nextRunLabel,
+} from "../src/lib/vocab.js";
 import { CATEGORIES } from "@playtest/core/findings";
-import { SUCCESS_KINDS } from "../src/lib/caseform.js";
+import { SUCCESS_KINDS, NUMERIC_KINDS } from "../src/lib/caseform.js";
 
 test("nav: primary project navigation is exactly six items", () => {
   // The original four, plus Personas (project-wide, and the story editor's
@@ -166,11 +168,40 @@ test("vocab: every engine enum a person can see has a plain-English word", () =>
   }
   // Unknown tokens (a new engine signal, ahead of a web release) stay usable.
   assert.equal(humanize("some_future_signal"), "some future signal");
+  assert.equal(criterionLabel("some_future_kind"), "some future kind");
   assert.equal(categoryLabel("some_future_thing"), "some future thing");
   assert.equal(signalLabel(null), "an unrecognized signal");
   assert.equal(categoryLabel(""), "Uncategorized");
   // NEXT RUN keeps the CLI's own words (core `list`).
   assert.deepEqual(["record", "check", "explore"].map(nextRunLabel), ["record", "check", "explore"]);
+});
+
+test("vocab: a success criterion is named, explained, and shown an example", () => {
+  // The story form's picker used to offer sentence fragments the value
+  // completed — "Outcome, in words", "Console errors at most", "Accessibility
+  // issues ≤" — and said nothing anywhere about what a kind actually looked at.
+  // Every built-in kind now carries all three, because the form shows all
+  // three: the name in the picker, the help line under the value, and the
+  // example inside the empty field.
+  for (const k of Object.keys(SUCCESS_KINDS)) {
+    const label = criterionLabel(k);
+    const help = criterionHelp(k);
+    const example = criterionExample(k);
+    assert.ok(label && !/,|≤|\bat most\b/.test(label), `kind "${k}" is not a name you can pick from a list: ${label}`);
+    assert.ok(help && /\.$/.test(help), `kind "${k}" needs one sentence saying what it checks, got ${help}`);
+    assert.ok(example, `kind "${k}" needs an example value`);
+  }
+  // The claim the grader judges is called what it is called everywhere else in
+  // the product — an assertion.
+  assert.equal(criterionLabel("assert"), "Assertion");
+  assert.match(criterionHelp("assert") || "", /grader/);
+  // A ceiling is typed as a count, and its example is one.
+  for (const k of NUMERIC_KINDS) assert.match(criterionExample(k), /^\d+$/);
+  // A kind this console has never heard of (a suite's custom assertion) keeps a
+  // readable name and volunteers no definition it cannot have.
+  assert.equal(criterionLabel("ledger_balances"), "ledger balances");
+  assert.equal(criterionHelp("ledger_balances"), null);
+  assert.equal(criterionExample("ledger_balances"), "");
 });
 
 test("settings: exactly five sections, and targets are not one of them", () => {

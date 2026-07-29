@@ -528,7 +528,7 @@ case-ID-based filenames.
 
 `@playtest/runner-agent` ships one executable, `runner-agent`, and it has ONE
 mode. There is one placement model — the claim board
-([Hosted contracts](hosted.md#runner-pool)) — so there is one arrival:
+([Hosted runner contracts](hosted-runners.md#claim-board)) — so there is one arrival:
 
 ```text
 runner-agent pool --server <url> [--labels a,b] [--isolation process|container]
@@ -628,7 +628,8 @@ mobile:
 Labels are the server's filter. Beyond them, a runner decides locally, sends
 nothing, and never mutates the advertisement — an offer it refuses is logged once
 per session with its reason and named in the next poll's `skip` list, and a
-capable runner claims it unaffected ([Hosted contracts](hosted.md#runner-pool)).
+capable runner claims it unaffected
+([Hosted runner contracts](hosted-runners.md#claim-board)).
 
 Web and API groups, and every mint, need no local configuration. A **mobile**
 group is claimable only when all of the following hold:

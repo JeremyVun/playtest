@@ -19,7 +19,7 @@ import { createTarget, loadSuiteDir, withApp, REPO_ROOT } from "../integration/h
 import { claimer, registerRunner } from "../integration/exec-helpers.ts";
 import { writeTar } from "../../src/suites/tar.ts";
 
-/** A project with one labelled ring and one launchable suite. */
+/** A project with one labelled environment and one launchable suite. */
 async function seedLaunchable(api: HostedDynamic) {
   const project = (await api.post("/projects", { key: "checkout", name: "Checkout" })).body;
   const { application, ring } = await createTarget(api, project, {
@@ -53,12 +53,12 @@ test("the launch dialog says where a run is placed, and follows the fleet while 
       await page.getByRole("button", { name: "▶ Run" }).click();
       const launch = page.locator("#modal-root .modal");
 
-      // "Runs on": the labels, and whose decision they were. The ring's, here —
+      // "Runs on": the labels, and whose decision they were. The environment's, here —
       // this launch pinned nothing.
       const placement = launch.locator(".launch-placement");
       await placement.getByText("Runs on", { exact: true }).waitFor();
       await placement.getByText("a runner advertising macos", { exact: true }).waitFor();
-      await placement.getByText("the ring's labels", { exact: true }).waitFor();
+      await placement.getByText("the environment's labels", { exact: true }).waitFor();
 
       // Nothing advertises that label, so the dialog says so in the words the
       // failure would have used, and offers the remedy rather than a dead end.
@@ -165,7 +165,7 @@ test("the Runners tab hands over a start command with --config, and holds no tar
       // The tab says where a machine declares what it holds — a file on its own
       // disk — and never lists targets itself.
       await page.getByText(/--config <file>/).first().waitFor();
-      await page.getByText(/keyed by application and ring|per application and ring/).first().waitFor();
+      await page.getByText(/keyed by application and environment|per application and environment/).first().waitFor();
       assert.equal(
         await page.getByText(ring.base_url, { exact: true }).count(),
         0,

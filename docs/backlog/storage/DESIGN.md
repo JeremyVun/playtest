@@ -219,7 +219,7 @@ Each implementation phase updates the shipped contracts in the same change:
 | Hosted SQLite boundary, single-node constraint, configuration, events, retention, and backup duties | `docs/contracts/hosted.md` |
 | Object placement, immutable writes, hashes, range reads, and `.ptrun` recovery | `docs/contracts/artifacts.md` |
 | Local database path and CLI operations | `docs/contracts/interfaces.md` |
-| Shared findings identity and lifecycle | `docs/contracts/hosted.md` and `docs/contracts/interfaces.md` |
+| Shared findings identity and lifecycle | `docs/contracts/hosted-findings.md` and `docs/contracts/interfaces.md` |
 
 `CLAUDE.md`, the control-plane README, deployment templates, and test commands
 are updated when PostgreSQL is actually removed. They must not advertise the

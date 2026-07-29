@@ -1,0 +1,14 @@
+-- Discovery is a story mode, not a permission.
+--
+-- `rings.discovery_allowed` gated launches: a selection holding discovery
+-- stories was refused unless a developer had ticked "Allow discovery studies"
+-- on the ring. The gate was the wrong shape for what it was protecting. Every
+-- hosted run drives a real browser against a real deployment and can click the
+-- buttons it finds, so a journey run against production was always permitted
+-- while an explore run against the same URL was not — a distinction the flag
+-- could not justify. What actually helps is saying, at launch, what a run is
+-- about to do; that warning stays and does not need a stored column.
+--
+-- Dropping it is safe: no index, constraint or foreign key references it, and
+-- the launch path no longer reads it.
+ALTER TABLE rings DROP COLUMN discovery_allowed;

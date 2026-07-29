@@ -407,7 +407,6 @@ function render(main: WebDynamic, st: WebDynamic) {
       return h("div.env-row", {},
         h("div.env-row-name", {},
           h("span.id", {}, key),
-          ring.discovery_allowed ? h("span.chip", {}, "discovery") : null,
           h("div.env-row-sub.faint", {}, ring.name && ring.name !== key ? ring.name : " ")),
         h("div.dim", {},
           driver === "mobile"
@@ -419,25 +418,25 @@ function render(main: WebDynamic, st: WebDynamic) {
     });
 
     return h("div.card.pad", { style: "margin-top:14px" },
-      h("div.label", { style: "margin-bottom:6px" }, "Rings"),
+      h("div.label", { style: "margin-bottom:6px" }, "Environments"),
       h("p.dim", { style: "margin-bottom:14px" },
         application
           ? h("span", {}, "Where this suite runs, chosen at launch. ", h("span.mono", {}, application.key),
-              " owns these rings and their URLs; what this file may say per ring is logical only — the cookies a web run carries there.")
-          : "Where this suite runs, chosen at launch from its application's rings."),
+              " owns these environments and their URLs; what this file may say per environment is logical only — the cookies a web run carries there.")
+          : "Where this suite runs, chosen at launch from its application's environments."),
       st.rings.length
         ? h("div.env-section", {},
             h("div.env-group", {},
-              h("span", {}, application ? `Rings of ${application.name || application.key}` : "Rings"),
+              h("span", {}, application ? `Environments of ${application.name || application.key}` : "Environments"),
               hasRole(st.project.id, "developer")
                 ? link(`/p/${projectKey}/applications`, h("span.btn.btn-sm", {}, "Manage"))
                 : null),
             ...rows)
         : h("p.faint", { style: "font-size:12.5px;margin:2px 0 0" },
             hasRole(st.project.id, "developer")
-              ? h("span", {}, "This application has no ring yet, so there is nowhere to launch. Add one under ",
+              ? h("span", {}, "This application has no environment yet, so there is nowhere to launch. Add one under ",
                   link(`/p/${projectKey}/applications`, "Applications"), ".")
-              : "This application has no ring yet, so there is nowhere to launch. A developer adds one under Applications."),
+              : "This application has no environment yet, so there is nowhere to launch. A developer adds one under Applications."),
     );
 
     /** What cookies a launch actually carries, said under the field. */
@@ -446,7 +445,7 @@ function render(main: WebDynamic, st: WebDynamic) {
       if (!cookies) return null;
       const list = h("span.mono", {}, formatCookieList(cookies));
       if (source === "suite-ring") return h("span", {}, "Sends cookies ", list, " — this suite's own for ", ringKey, ".");
-      if (source === "ring") return h("span", {}, "Sends cookies ", list, " — set on the ", ringKey, " ring itself.");
+      if (source === "ring") return h("span", {}, "Sends cookies ", list, " — set on the ", ringKey, " environment itself.");
       return h("span", {}, "Sends cookies ", list, " — this suite's default.");
     }
 

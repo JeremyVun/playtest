@@ -82,4 +82,4 @@ npm run hosted
 Use `npm run hosted` to exercise the real UI; it builds the browser packages and
 starts the complete platform at `http://127.0.0.1:4177`. Shared UI/API
 guarantees are defined in
-[`docs/contracts/hosted.md`](../../../docs/contracts/hosted.md).
+[`docs/contracts/hosted-web.md`](../../../docs/contracts/hosted-web.md).

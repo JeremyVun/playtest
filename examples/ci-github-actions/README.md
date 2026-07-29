@@ -94,5 +94,6 @@ launch and the runner agree on the label.
 
 More: [`docs/guidance/hosted-runners.md`](../../docs/guidance/hosted-runners.md) for the runner
 walkthrough and the CI recipe in prose,
-[`docs/contracts/hosted.md`](../../docs/contracts/hosted.md#runner-pool) for the
+[`docs/contracts/hosted-runners.md`](../../docs/contracts/hosted-runners.md#claim-board)
+for the
 contract.

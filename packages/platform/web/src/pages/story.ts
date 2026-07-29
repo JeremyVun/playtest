@@ -11,12 +11,13 @@ import { link, navigate } from "../lib/router.js";
 import { page } from "../lib/shell.js";
 import { hasRole, hasLlm, LLM_UNAVAILABLE } from "../lib/state.js";
 import { toast, toastError, confirmModal, errorState, formField, enhanceSelect, formModal, statusChip } from "../lib/ui.js";
-import { parseYaml, applyModelToText, toModel, kindsForDriver } from "../lib/caseform.js";
-import { criterionLabel } from "../lib/vocab.js";
+import { parseYaml, applyModelToText, toModel, kindsForDriver, NUMERIC_KINDS } from "../lib/caseform.js";
+import { criterionLabel, criterionHelp, criterionExample } from "../lib/vocab.js";
 import { getSuiteBySlug } from "./suite.js";
 import { launchModal } from "./runs.js";
 import { projectPage } from "../lib/project-page.js";
 import { sourceEditor } from "../lib/source-editor.js";
+import { assistantMessageBlocks } from "../lib/assistant-message.js";
 
 // A new story starts EMPTY. The template used to ship its own instructions as
 // file content ("Describe what the user is trying to do…", "describe the
@@ -305,6 +306,7 @@ function helpMeDraft(st: WebDynamic, onApply: WebDynamic) {
   let draft: WebDynamic = null;
   let drafts: WebDynamic[] = []; // a proposed SET (2+): reviewed together, saved with one commit
   let errMsg = "";
+  let thinkingStatus = "Drafting";
 
   const bodyEl = h("div.draft-modal");
   const repaint = () => {
@@ -317,15 +319,52 @@ function helpMeDraft(st: WebDynamic, onApply: WebDynamic) {
   };
   const close = formModal("Help me draft a story", () => { repaint(); return bodyEl; });
 
+  const inlineAssistantText = (text: string) => {
+    const parts = text.split(/(\*\*[^*\n]+\*\*)/g);
+    return parts.filter(Boolean).map((part) =>
+      part.startsWith("**") && part.endsWith("**")
+        ? h("strong", {}, part.slice(2, -2))
+        : part,
+    );
+  };
+
+  const assistantCopy = (content: unknown) =>
+    assistantMessageBlocks(content).map((block) => {
+      if (block.kind === "unordered-list") {
+        return h("ul", {}, ...block.items.map((item) => h("li", {}, inlineAssistantText(item))));
+      }
+      if (block.kind === "ordered-list") {
+        return h("ol", { start: block.start === 1 ? null : block.start },
+          ...block.items.map((item) => h("li", {}, inlineAssistantText(item))));
+      }
+      return h("p", {}, inlineAssistantText(block.text));
+    });
+
+  const assistantMessage = (content: unknown) =>
+    h("div.msg.assistant.assistant-copy", {}, ...assistantCopy(content));
+
   function build() {
     // The goal travels as its own request field, not a transcript turn, so the
     // log must render it explicitly or the exchange opens on the assistant.
     const log = h("div.chat-log", { "aria-live": "polite" },
       goal ? h("div.msg.user", {}, goal) : null,
       ...transcript.map((m: WebDynamic) =>
-        m.role === "user" ? h("div.msg.user", {}, m.content) : h("div.msg.assistant", {}, m.content)),
+        m.role === "user" ? h("div.msg.user", {}, m.content) : assistantMessage(m.content)),
     );
-    if (phase === "thinking") log.append(h("div.msg.assistant.thinking", {}, h("span.dim", {}, "drafting…")));
+    if (phase === "thinking") {
+      log.append(
+        h("div.msg.assistant.thinking", {},
+          h("span.drafting-indicator", { role: "status", "aria-label": thinkingStatus },
+            h("span", { "aria-hidden": "true" }, thinkingStatus),
+            h("span.drafting-dots", { "aria-hidden": "true" },
+              h("span", {}),
+              h("span", {}),
+              h("span", {}),
+            ),
+          ),
+        ),
+      );
+    }
 
     // One reviewed story: path + verdict, rationale, verbatim validator/lint
     // findings, and the YAML behind a disclosure. Shared by the single-draft
@@ -333,7 +372,7 @@ function helpMeDraft(st: WebDynamic, onApply: WebDynamic) {
     const draftCard = (d: WebDynamic, lead: WebDynamic = null) => {
       const ok = d.validation?.ok === true;
       return h("div.card.pad", {},
-        lead ? h("p", {}, lead) : null,
+        lead ? h("div.assistant-copy", {}, ...assistantCopy(lead)) : null,
         h("div.draft-head", { style: "display:flex;align-items:center;gap:8px" },
           h("span.mono", {}, d.path),
           ok ? statusChip("pass", "valid") : statusChip("fail", "needs work")),
@@ -363,7 +402,7 @@ function helpMeDraft(st: WebDynamic, onApply: WebDynamic) {
       });
       return h("div.stack", {},
         log,
-        reply ? h("p", {}, reply) : null,
+        reply ? h("div.assistant-copy", {}, ...assistantCopy(reply)) : null,
         ...drafts.map((d: WebDynamic) => draftCard(d)),
         errMsg ? h("div.chat-error", {}, statusChip("fail", "couldn't save"), h("span.dim", {}, ` ${errMsg}`)) : null,
         h("div.field", {}, h("label", { for: "draft-goal" }, "Want changes first?"), ta),
@@ -412,7 +451,7 @@ function helpMeDraft(st: WebDynamic, onApply: WebDynamic) {
       : phase === "next" ? "Describe the next story"
       : st.isNew ? "Describe the journey you want to test" : "What should change about this story?";
     const ta = h("textarea#draft-goal", {
-      style: "min-height:88px",
+      style: `min-height:${phase === "goal" ? "120px" : "88px"}`,
       placeholder: st.isNew
         ? 'e.g. "A new user signs up and lands on their dashboard"'
         : 'e.g. "Add a check that the confirmation email is shown"',
@@ -503,12 +542,24 @@ function helpMeDraft(st: WebDynamic, onApply: WebDynamic) {
     if (!value || busy) return;
     if (phase === "goal") goal = value;
     else transcript.push({ role: "user", content: value });
-    busy = true; errMsg = ""; phase = "thinking";
+    busy = true; errMsg = ""; phase = "thinking"; thinkingStatus = "Drafting";
     repaint();
     try {
       const payload: WebDynamic = { goal, transcript };
       if (!st.isNew) { payload.existing_path = st.path; payload.existing_yaml = st.raw; }
-      const res = await api.post(`/suites/${st.suiteId}/story-draft`, payload);
+      const res = await api.postEvents(`/suites/${st.suiteId}/story-draft`, payload, (event) => {
+        if (event.event === "retry") {
+          const attempt = Number(event.data?.attempt);
+          const maxAttempts = Number(event.data?.max_attempts);
+          if (Number.isSafeInteger(attempt) && Number.isSafeInteger(maxAttempts)) {
+            thinkingStatus = `Retrying ${attempt} of ${maxAttempts}`;
+            repaint();
+          }
+        } else if (event.event === "working" && thinkingStatus !== "Drafting") {
+          thinkingStatus = "Drafting";
+          repaint();
+        }
+      });
       reply = res.reply || "";
       if (res.drafts?.length > 1) {
         // A proposed set. The YAMLs live only in `drafts`; the transcript gets
@@ -587,38 +638,39 @@ function buildForm(st: WebDynamic, model: WebDynamic, onChange: WebDynamic) {
   const paintPersona = () => mount(personaSlot, personaPicker(st, model, onChange, paintPersona));
   paintPersona();
 
-  const critList = h("div");
-  const paintCrit = () => {
+  const critList = h("div.criteria");
+  // `focus` names the row whose value input should hold the caret after a
+  // repaint: adding a criterion, or changing one's kind, is always followed by
+  // typing its value, and a repaint that dropped focus made you reach for the
+  // mouse again to finish the thing you just started.
+  const paintCrit = (focus: WebDynamic = null) => {
     clear(critList);
+    if (!model.success.length) {
+      critList.append(h("div.crit-empty", {}, "No criteria — nothing is checked deterministically, and the grader alone decides whether this story passed."));
+    }
     model.success.forEach((row: WebDynamic, i: WebDynamic) => {
-      // Each row reads as one sentence: "An element is present  [data-testid=…]".
-      const kindSel = h("select", {
-        "aria-label": `Criterion ${i + 1} — kind`,
-        onchange: (e: WebDynamic) => { row.kind = e.target.value; paintCrit(); onChange(); },
-      },
-        ...kinds.map((k) => h("option", { value: k, selected: row.kind === k }, criterionLabel(k))),
-        kinds.includes(row.kind) ? null : h("option", { value: row.kind, selected: true }, criterionLabel(row.kind)),
-      );
-      // These inputs had no <label> and no accessible name at all — their only
-      // description was a placeholder. This is the form of the tool that scores
-      // other apps on exactly this.
-      const val = h("input", {
-        type: "text", value: row.value, placeholder: hint(row.kind),
-        "aria-label": `Criterion ${i + 1} — ${criterionLabel(row.kind)}`,
-        oninput: (e: WebDynamic) => { row.value = e.target.value; onChange(); },
-      });
-      const del = h("button.btn.btn-sm.ghost", {
-        title: "remove this criterion",
-        "aria-label": `Remove criterion ${i + 1}`,
-        onclick: () => { model.success.splice(i, 1); paintCrit(); onChange(); },
-      }, "⌫");
-      critList.append(h("div.criterion", {}, namedSelect(kindSel), val, del));
+      critList.append(criterionRow(row, i, kinds, {
+        onChange,
+        repaint: paintCrit,
+        onRemove: () => { model.success.splice(i, 1); paintCrit(); onChange(); },
+      }));
     });
-    critList.append(h("button.btn.btn-sm", { style: "margin-top:4px", onclick: () => { model.success.push({ kind: kinds[0], value: "", label: "" }); paintCrit(); onChange(); } }, "+ add criterion"));
+    critList.append(h("button.btn.btn-sm", {
+      style: "margin-top:4px",
+      onclick: () => {
+        model.success.push({ kind: kinds[0], value: "", label: "" });
+        paintCrit(model.success.length - 1);
+        onChange();
+      },
+    }, "+ Add criterion"));
+    if (focus !== null) critList.querySelector(`[data-crit-value="${focus}"]`)?.focus();
+    const fitAll = () => critList.querySelectorAll(".crit-claim").forEach(fitClaim);
+    fitAll();
+    requestAnimationFrame(fitAll);
   };
   // An empty story opens with one blank criterion rather than none: the row's
-  // own placeholders explain what a criterion is, and an empty row is never
-  // written to the file (applyModelToText drops criteria with no value).
+  // own help line and example explain what a criterion is, and an empty row is
+  // never written to the file (applyModelToText drops criteria with no value).
   if (!model.success.length) model.success.push({ kind: kinds[0], value: "", label: "" });
   paintCrit();
 
@@ -632,9 +684,160 @@ function buildForm(st: WebDynamic, model: WebDynamic, onChange: WebDynamic) {
     fieldBlock("Mode", mode),
     h("div.field", {},
       h("label", {}, "Success criteria"),
-      h("div.hint", { style: "margin:-2px 0 8px" }, "What has to be true for this story to count as passing."),
+      h("div.hint", { style: "margin:-2px 0 10px" },
+        "Checked on every run, on top of the grader's own reading of the story. Every one of them has to hold for this story to pass."),
       critList),
   );
+}
+
+/**
+ * One success criterion: WHAT to check, WHAT it must be, and — under the value
+ * — one line saying what that kind actually looks at.
+ *
+ * The row used to be three controls and a placeholder: a picker of sentence
+ * fragments, an unlabelled text box, and a ⌫. Nothing on the screen said what
+ * `element_exists` matched against, which of the kinds cost a model call, or
+ * that the number next to "Console errors at most" was a ceiling — all of it
+ * lived in the schema. Each of those is now one short line under the value it
+ * explains, so the vocabulary is learned in place and only once.
+ *
+ * The optional cosmetic `label` is editable here for the same reason: the form
+ * has always PRESERVED one (it rides through applyModelToText untouched), but
+ * an author who had named a criterion in YAML could neither see nor change the
+ * name in the form.
+ */
+function criterionRow(row: WebDynamic, i: WebDynamic, kinds: WebDynamic, { onChange, repaint, onRemove }: WebDynamic) {
+  const numeric = NUMERIC_KINDS.has(row.kind);
+  const name = criterionLabel(row.kind);
+
+  const kindSel = h("select", {
+    "aria-label": `Criterion ${i + 1} — what to check`,
+    onchange: (e: WebDynamic) => {
+      const next = e.target.value;
+      row.value = valueForKind(row.value, next);
+      row.kind = next;
+      // The whole row changes with the kind — the input's type, its example,
+      // and the line under it — so it is rebuilt rather than patched.
+      repaint(i);
+      onChange();
+    },
+  },
+    ...kinds.map((k: WebDynamic) => h("option", { value: k, selected: row.kind === k }, criterionLabel(k))),
+    // A kind this driver doesn't offer (a suite's custom assertion, or a story
+    // authored for another driver) stays selectable and stays selected: the
+    // form must never silently rewrite a criterion it doesn't recognise.
+    kinds.includes(row.kind) ? null : h("option", { value: row.kind, selected: true }, name),
+  );
+
+  // An assertion is a SENTENCE, and a sentence does not fit on one line of a
+  // 400px input: a claim like "the results show that the buyer is not eligible
+  // for any government home-buying scheme" scrolled out of sight the moment it
+  // was written, so the one criterion you most need to re-read was the one you
+  // could not see. It grows to its own text instead (fitClaim) — still one
+  // value, still one line in the file, just fully visible.
+  const prose = row.kind === "assert";
+  const val = prose
+    ? h("textarea.crit-claim", {
+        rows: 1,
+        value: row.value,
+        placeholder: criterionExample(row.kind),
+        "aria-label": `Criterion ${i + 1} — ${name}`,
+        "data-crit-value": i,
+        // Enter would put a newline in a value the schema types as one string;
+        // a pasted paragraph collapses to spaces for the same reason.
+        onkeydown: (e: WebDynamic) => { if (e.key === "Enter") e.preventDefault(); },
+        oninput: (e: WebDynamic) => {
+          if (/[\r\n]/.test(e.target.value)) e.target.value = e.target.value.replace(/\s*[\r\n]+\s*/g, " ");
+          row.value = e.target.value;
+          fitClaim(e.target);
+          onChange();
+        },
+      })
+    // A count is typed as a count: a stepper, a numeric keypad on touch, and no
+    // way to type prose into a field the schema types as a number.
+    : h(numeric ? "input.crit-num" : "input.crit-text.mono", {
+        type: numeric ? "number" : "text",
+        min: numeric ? "0" : null,
+        step: numeric ? "1" : null,
+        inputmode: numeric ? "numeric" : null,
+        // Selectors, globs and JSON paths are code — autocorrect only damages them.
+        spellcheck: "false",
+        autocapitalize: "off",
+        autocomplete: "off",
+        value: row.value,
+        placeholder: criterionExample(row.kind),
+        "aria-label": `Criterion ${i + 1} — ${name}`,
+        "data-crit-value": i,
+        oninput: (e: WebDynamic) => { row.value = e.target.value; onChange(); },
+      });
+  const valCell = numeric
+    ? h("div.crit-val", {}, h("span.crit-affix", { "aria-hidden": "true" }, "at most"), val)
+    : h("div.crit-val", {}, val);
+
+  const del = h("button.btn.btn-sm.ghost.crit-del", {
+    type: "button",
+    title: "remove this criterion",
+    "aria-label": `Remove criterion ${i + 1}`,
+    onclick: onRemove,
+  }, "⌫");
+
+  // The optional name, shown once there is one to show or once someone asks for
+  // one. Revealing and collapsing it move the two nodes themselves instead of
+  // repainting the list: a blur handler that rebuilt the row would destroy the
+  // control the blur was on its way to (the ⌫ next to it, or the row below).
+  const nameInput = h("input", {
+    type: "text", value: row.label || "",
+    placeholder: "e.g. Delivery window shown",
+    "aria-label": `Criterion ${i + 1} — name (optional)`,
+    oninput: (e: WebDynamic) => { row.label = e.target.value; onChange(); },
+    onblur: () => { if (!row.label) hideName(); },
+  });
+  // Prefixed, and smaller than the value it hangs under: two identical boxes in
+  // one column would leave which one is the CHECK to be guessed.
+  const nameCell = h("div.crit-name", {}, h("span.crit-affix", { "aria-hidden": "true" }, "Name"), nameInput);
+  const nameBtn = h("button.linkish.crit-name-btn", {
+    type: "button",
+    title: "Give this criterion a short name — it appears in run summaries and burned clips",
+    onclick: () => { showName(); nameInput.focus(); },
+  }, "Name it");
+  const help = h("div.crit-help", {}, criterionHelp(row.kind) || "A check this suite's own assertions define.");
+
+  const el = h("div.criterion", {}, namedSelect(kindSel), valCell, del, help);
+  function showName() { row.naming = true; nameBtn.remove(); el.insertBefore(nameCell, help); }
+  function hideName() { row.naming = false; nameCell.remove(); help.append(nameBtn); }
+  if (row.label || row.naming) showName(); else help.append(nameBtn);
+  return el;
+}
+
+/**
+ * Grow a claim field to the text it holds. `scrollHeight` is only meaningful
+ * once the element is in the document, so paintCrit also re-fits every claim on
+ * the next frame — the form is built detached and mounted by the editor.
+ */
+function fitClaim(el: WebDynamic) {
+  if (!el?.isConnected) return;
+  el.style.height = "auto";
+  el.style.height = `${el.scrollHeight}px`;
+}
+
+/**
+ * The value to carry across a kind change. A criterion's value only means
+ * anything under its own kind — "the cart shows three items" is not a ceiling
+ * and 0 is not a selector — so a value the new kind could never accept is
+ * replaced by that kind's own starting point instead of being left behind for
+ * the server to reject. Anything that could plausibly still be meant is kept:
+ * retyping a long assert because you looked at a neighbouring kind would be a
+ * worse trade than one stale value.
+ */
+function valueForKind(prev: WebDynamic, kind: WebDynamic) {
+  const s = String(prev ?? "").trim();
+  if (!s) return prev;
+  // A count: keep a count, and start every other value at the ceiling worth
+  // asking for — none.
+  if (NUMERIC_KINDS.has(kind)) return /^\d+$/.test(s) ? s : "0";
+  // A bare number is a real status ("200"), and nothing else here.
+  if (kind === "response_status") return prev;
+  return /^\d+$/.test(s) ? "" : prev;
 }
 
 /**
@@ -790,8 +993,6 @@ function renderChecks(validation: WebDynamic, findings: WebDynamic, st: WebDynam
 
 const checkItem = (cls: WebDynamic, glyph: WebDynamic, msg: WebDynamic) => h(`li.check-item.${cls}`, {}, h("span.g", {}, glyph), h("span.msg", {}, msg));
 const fieldBlock = formField;
-const HINTS: WebDynamic = { assert: "the observable outcome, in words", element_exists: "[data-testid=…]", url_matches: "/path or regex", api_called: "POST /api/…", console_errors: "0", accessibility_violations: "0", response_status: "200" };
-const hint = (kind: WebDynamic) => HINTS[kind] || "";
 const caseIdFromPath = (p: WebDynamic) => String(p || "").replace(/\.ya?ml$/, "").replace(/^stories\//, "");
 
 /**

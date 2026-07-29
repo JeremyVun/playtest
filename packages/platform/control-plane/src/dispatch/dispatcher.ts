@@ -68,7 +68,6 @@ export async function createRunGroup(ctx: HostedDynamic, { principal, project, s
   const cases = selectCases(resolved.cases, selection);
   if (!cases.length) throw badRequest("run selection matched no cases");
   requireApplicationDriver(cases, application);
-  requireDiscoveryAllowed(cases, application, ring);
 
   // The snapshot tree carries no results/ dir, so core next_run always says
   // "record" — hosted, the baselines table is the source of truth for whether
@@ -112,8 +111,8 @@ export async function createRunGroup(ctx: HostedDynamic, { principal, project, s
     const row = agree.rows[0];
     if (!row || row.suite_app !== application.id || row.ring_app !== application.id) {
       throw conflict(
-        `suite "${suite.slug}" and ring "${ring.key}" no longer agree on their application — ` +
-          `reload the launch dialog and pick a ring of this suite's application`,
+        `suite "${suite.slug}" and environment "${ring.key}" no longer agree on their application — ` +
+          `reload the launch dialog and pick an environment of this suite's application`,
       );
     }
     await tx.query(
@@ -187,22 +186,6 @@ export async function createRunGroup(ctx: HostedDynamic, { principal, project, s
 }
 
 /**
- * The staging-only guardrail: discovery agents genuinely click buy/delete/submit,
- * so discovery cases only run on a ring a developer explicitly opened.
- */
-function requireDiscoveryAllowed(cases: HostedDynamic, application: HostedDynamic, ring: HostedDynamic) {
-  const discovery = cases.filter((c: HostedDynamic) => c.mode === "discovery");
-  if (discovery.length && !ring.discovery_allowed) {
-    throw badRequest(
-      `this selection includes ${discovery.length} discovery ${discovery.length === 1 ? "story" : "stories"}, ` +
-        `but ring "${application.key}/${ring.key}" is not marked as allowing discovery. Discovery agents really ` +
-        `click buy, delete and submit — point the study at a staging ring and enable ` +
-        `"Allow discovery studies" for it.`,
-    );
-  }
-}
-
-/**
  * Launch preview: the same resolution + planning a
  * launch would do, read-only — one row per would-be run (personas fanned out,
  * planned mode decided) plus an HONEST cost estimate. Estimates come from this
@@ -250,10 +233,11 @@ export async function previewRunGroup(ctx: HostedDynamic, { project, suite, appl
       est_total_usd: known.length ? known.reduce((a: HostedDynamic, r: HostedDynamic) => a + r.est_cost_usd, 0) : null,
       known_runs: known.length,
     },
-    discovery: {
-      runs: discovery.length,
-      allowed: ring.discovery_allowed === true,
-    },
+    // How many of these runs explore rather than follow a story. Reported, not
+    // gated: both modes drive the same browser against the same deployment, so
+    // a permission that let one through and refused the other was drawing a
+    // line where there wasn't one. The console says what a launch will do.
+    discovery: { runs: discovery.length },
     // Placement said out loud before launch: the labels this run would need, who
     // chose them, and whether a runner advertising them is actually online.
     placement: {

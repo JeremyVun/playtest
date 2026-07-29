@@ -7,7 +7,10 @@ relevant to the change:
 |---|---|
 | [Artifact contracts](contracts/artifacts.md) | Persisted run formats, manifests, trajectories, baselines, pins, compatibility, storage providers, and `.ptrun` bundles |
 | [Engine contracts](contracts/engine.md) | Configuration resolution, drivers, model protocols, execution modes, gates, grading, hooks, events, and concurrency |
-| [Hosted platform contracts](contracts/hosted.md) | Hosted system boundaries, authorization, snapshots, dispatch, runner protocol, review, findings, external automation, events, retention, and web invariants |
+| [Hosted platform contracts](contracts/hosted.md) | Hosted storage, authorization, suites, applications, runs, review, events, and retention |
+| [Hosted runner contracts](contracts/hosted-runners.md) | Placement, dispatch, executor fencing, runner trust and isolation, claims, mint recovery, and live evidence upload |
+| [Hosted findings contracts](contracts/hosted-findings.md) | Finding identity and lifecycle, consolidation, auto-resolution, rule cards, synthesis, and assisted authoring |
+| [Hosted web contracts](contracts/hosted-web.md) | Console information architecture, vocabulary, launch and review UX, live presentation, operations, and accessibility |
 | [Interface contracts](contracts/interfaces.md) | Supported package imports, CLI behavior and JSON, the runner agent CLI and its configuration file, reporting, viewer HTTP routes, URL parameters, and degradation |
 | [Script contracts](contracts/scripts.md) | Script suites: the entry contract, the injected client, the check report, runner semantics, the coverage-obligation manifest, the two-column verdict, the risk profile, the leak scan, the HAR lifecycle, and the execution trust boundaries |
 

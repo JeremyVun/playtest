@@ -1,8 +1,8 @@
 // Settings → Runners, the launch dialog's placement line, and the words a
 // placement failure gets. These modules are DOM-free on purpose (siblings of
 // web-ia.test.ts), so the offline gate can pin what a runner surface lives or
-// dies on: the exact command a person pastes, that the credential is a genuine
-// one-time reveal, that presence is derived rather than polled for, and that a
+// dies on: that the start line it shows is secret-free, that the credential is
+// a genuine one-time reveal, that presence is derived rather than polled for, and that a
 // run nothing can claim says so BEFORE anyone spends money on it.
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -13,34 +13,22 @@ import {
 import { SETTINGS_SECTIONS, visibleSections } from "../src/lib/settings-sections.js";
 import { ago } from "../src/lib/labels.js";
 
-test("runners: registering yields one pasteable command, and the credential never rides argv", () => {
-  const command = startCommand({
-    server: "https://playtest.example.com/",
-    credential: "ptr_2vT7lqf",
-    labels: ["macos", "ios-sim"],
-  });
+test("runners: the start line is an example that carries no secret and no label", () => {
+  // The credential is what registration hands over; this line is documentation,
+  // so it must stay retypeable — no secret in it, and no labels to drift from
+  // the ones the runner was registered with.
   assert.equal(
-    command,
-    "PLAYTEST_RUNNER_CREDENTIAL='ptr_2vT7lqf' ./node_modules/.bin/runner-agent pool --server https://playtest.example.com --labels macos,ios-sim",
+    startCommand({ server: "https://playtest.example.com/" }),
+    "runner-agent pool --server https://playtest.example.com",
   );
-  // The secret is an environment assignment, never an argument: it must not be
-  // readable from another user's `ps` on that machine.
-  const args = command.slice(command.indexOf("./node_modules")).split(" ");
-  assert.equal(args.some((a) => a.includes("ptr_")), false, command);
-  // A runner that advertises nothing takes any of its project's work, and the
-  // command says nothing about labels rather than passing an empty flag.
-  assert.equal(
-    startCommand({ server: "http://127.0.0.1:4177", credential: "ptr_x" }),
-    "PLAYTEST_RUNNER_CREDENTIAL='ptr_x' ./node_modules/.bin/runner-agent pool --server http://127.0.0.1:4177",
-  );
-  assert.match(startCommand({ server: "http://h", credential: "ptr_x", isolation: "container" }), /--isolation container$/);
+  assert.equal(startCommand({ server: "http://127.0.0.1:4177" }), "runner-agent pool --server http://127.0.0.1:4177");
+  assert.match(startCommand({ server: "http://h", isolation: "container" }), /--isolation container$/);
 });
 
-test("runners: a label the start command could not carry is refused in the form", () => {
+test("runners: a label the agent could not carry is refused in the form", () => {
   // The field is comma separated, so a comma inside a label is not a label with
   // a comma in it — it is two labels, silently, all the way down to the agent's
-  // `--labels`. And the command is pasted into a shell, where a space or a
-  // metacharacter is worse than a typo.
+  // `--labels`. The rest of the charset keeps a label safe to hand to a shell.
   assert.deepEqual(parseLabels(" macos , ios-sim ,, macos "), ["macos", "ios-sim"]);
   assert.equal(labelProblem(["macos", "ios-sim", "ci-run-1234567", "node_20", "macos.14"]), null);
   assert.equal(labelProblem([]), null);
@@ -52,11 +40,6 @@ test("runners: a label the start command could not carry is refused in the form"
   }
   assert.match(labelProblem(Array.from({ length: 33 }, (_, i) => `l${i}`))!, /at most 32 labels/);
   assert.match(labelProblem(["x".repeat(65)])!, /at most 64 characters/);
-  // The command a conforming label produces is unchanged.
-  assert.equal(
-    startCommand({ server: "https://playtest.example.com", credential: "ptr_x", labels: parseLabels("macos, ios-sim") }),
-    "PLAYTEST_RUNNER_CREDENTIAL='ptr_x' ./node_modules/.bin/runner-agent pool --server https://playtest.example.com --labels macos,ios-sim",
-  );
 });
 
 test("runners: the credential is revealed exactly once and is never retrievable again", () => {
@@ -73,8 +56,8 @@ test("runners: the credential is revealed exactly once and is never retrievable 
 test("runners: a listed runner reads as its labels and when it last checked in", () => {
   assert.equal(runnerLabelsText(["macos", "ios-sim"]), "macos, ios-sim");
   // An unlabelled runner is not "—": it means something specific, so say it.
-  assert.equal(runnerLabelsText([]), "any job in this project");
-  assert.equal(runnerLabelsText(null), "any job in this project");
+  assert.equal(runnerLabelsText([]), "any runner");
+  assert.equal(runnerLabelsText(null), "any runner");
 
   // Last-seen uses the console's one relative-time vocabulary.
   assert.equal(ago(new Date(Date.now() - 30_000).toISOString()), "just now");

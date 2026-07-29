@@ -217,6 +217,26 @@ test("pool: a re-exchange fences the earlier bearer and serves only the new one"
     // reading the same inputs and reporting the same cases.
     const first = await one.exchange({ dispatch_id: dispatchId, isolation: "process" });
     assert.equal(first.status, 200, JSON.stringify(first.body));
+    const firstHeaders = { authorization: `Bearer ${first.body.token}`, "content-type": "application/json" };
+    const firstSpec = await fetch(`${base}/api/v1/runner/groups/${groupId}`, { headers: firstHeaders }).then((r) => r.json());
+    const interrupted = firstSpec.cases[0];
+    assert.equal(
+      (await fetch(`${base}/api/v1/runner/groups/${groupId}/cases/${interrupted.run_id}/start`, {
+        method: "POST",
+        headers: firstHeaders,
+        body: "{}",
+      })).status,
+      200,
+    );
+    assert.equal(
+      (await fetch(`${base}/api/v1/runner/groups/${groupId}/cases/${interrupted.run_id}/progress`, {
+        method: "POST",
+        headers: firstHeaders,
+        body: JSON.stringify({ doing: "recording", step: 18, max_steps: 50 }),
+      })).status,
+      200,
+    );
+
     const second = await one.exchange({ dispatch_id: dispatchId, isolation: "process" });
     assert.equal(second.status, 200, JSON.stringify(second.body));
     assert.notEqual(second.body.executor_id, first.body.executor_id);
@@ -233,7 +253,25 @@ test("pool: a re-exchange fences the earlier bearer and serves only the new one"
       headers: { authorization: `Bearer ${second.body.token}` },
     });
     assert.equal(spec.status, 200, "the current bearer serves the group spec");
-    assert.equal((await spec.json()).ring.key, ring.key, "the spec carries the attempt's ring snapshot");
+    const resumedSpec = await spec.json();
+    assert.equal(resumedSpec.ring.key, ring.key, "the spec carries the attempt's ring snapshot");
+    assert.deepEqual(resumedSpec.cases, [], "a started story is never handed to a replacement executor");
+
+    const resumedHeaders = { authorization: `Bearer ${second.body.token}`, "content-type": "application/json" };
+    assert.equal(
+      (await fetch(`${base}/api/v1/runner/groups/${groupId}/complete`, {
+        method: "POST",
+        headers: resumedHeaders,
+        body: JSON.stringify({ summary: { cases: [] } }),
+      })).status,
+      200,
+    );
+    const healed = await api.get(`/run-groups/${groupId}`);
+    assert.equal(healed.body.status, "done");
+    assert.equal(healed.body.exit_summary.exit_code, 2);
+    assert.equal(healed.body.runs[0].status, "infra");
+    assert.equal(healed.body.runs[0].progress, null, "the pre-restart recording snapshot is cleared");
+    assert.match(healed.body.runs[0].error, /runner restarted before this story completed/);
 
     // Both executors exist as history; only one is the dispatch's current one,
     // and each one records the attempt it belongs to immutably.
@@ -277,9 +315,10 @@ test("pool: a revoked credential is refused at poll, claim, and exchange", async
     assert.equal((await keeper.claim(dispatchId)).status, 200);
     assert.equal((await keeper.exchange({ dispatch_id: dispatchId })).status, 200);
     assert.equal((await api.get(`/run-groups/${groupId}`)).body.status, "running");
-    // A revoked runner stays listed with its revocation, so history reads.
+    // A revoked runner holding no claim leaves the fleet list outright — it is
+    // history, and the audit log is where history is read.
     const listed = await api.get(`/projects/${project.key}/runners`);
-    assert.ok(listed.body.items.find((r: HostedDynamic) => r.id === runner.id).revoked_at);
+    assert.equal(listed.body.items.find((r: HostedDynamic) => r.id === runner.id), undefined);
   });
 });
 
@@ -315,6 +354,10 @@ test("pool: revoking mid-group refuses new work and lets the group already excha
     assert.equal(beat.body.canceled, false);
     const beaten = await app.db.query(`SELECT heartbeat_at FROM dispatches WHERE id = $1`, [dispatchId]);
     assert.ok(beaten.rows[0].heartbeat_at, "the heartbeat is recorded, so the reconciler still sees a live executor");
+    // And it stays on the fleet list while it holds that claim, so the run in
+    // flight is not being executed by a machine nobody can see.
+    const listed = await api.get(`/projects/${project.key}/runners`);
+    assert.ok(listed.body.items.find((r: HostedDynamic) => r.id === registered.id)?.revoked_at);
     // A revoked runner still cannot heartbeat someone else's claim.
     const other = claimer(base, (await register(api, project, { name: "keeper", labels: ["macos"] })).credential);
     assert.equal((await other.heartbeat(dispatchId)).status, 403);
@@ -371,11 +414,11 @@ test("pool: a revoked runner's name is free again, and two live runners may not 
     const again = await register(api, project, { name: "adas-laptop", labels: ["macos"] });
     assert.notEqual(again.id, first.id);
     assert.notEqual(again.credential, first.credential);
-    // History keeps both, so a run placed on the old row still reads.
+    // The row the person replaced does not linger beside its replacement: the
+    // list is the live fleet, so the reused name appears exactly once.
     const listed = await api.get(`/projects/${project.key}/runners`);
     const own = listed.body.items.filter((r: HostedDynamic) => r.scope === "project");
-    assert.deepEqual(own.map((r: HostedDynamic) => r.name), ["adas-laptop", "adas-laptop"]);
-    assert.equal(own.filter((r: HostedDynamic) => r.revoked_at).length, 1);
+    assert.deepEqual(own.map((r: HostedDynamic) => r.id), [again.id]);
   });
 });
 

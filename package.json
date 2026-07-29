@@ -22,6 +22,7 @@
     "test:mobile": "npm run test:mobile --workspace=@playtest/core && npm run test:mobile --workspace=@playtest/control-plane",
     "test:all": "npm test && npm run test:browser",
     "hosted": "bash scripts/hosted-server.sh",
+    "hosted:ios": "bash scripts/hosted-ios.sh",
     "hosted:migrate": "bash scripts/hosted-server.sh migrate",
     "hosted:test": "npm run build:web && npm test --workspace=@playtest/control-plane",
     "runner:test": "npm test --workspace=@playtest/runner-agent",

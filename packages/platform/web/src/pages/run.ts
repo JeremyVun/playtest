@@ -723,8 +723,8 @@ const ISOLATION_GLOSS: WebDynamic = {
 /** Which labels this attempt was placed on, and whose decision that was. */
 function placementTitle(placement: WebDynamic) {
   const labels = (placement.labels || []).join(", ");
-  if (!labels) return "claimed from the board by this runner — the ring asked for no particular labels";
-  return `claimed from the board by this runner, placed on ${labels} (${placement.labels_source === "launch" ? "pinned by the launch" : "the ring's labels"})`;
+  if (!labels) return "claimed from the board by this runner — the environment asked for no particular labels";
+  return `claimed from the board by this runner, placed on ${labels} (${placement.labels_source === "launch" ? "pinned by the launch" : "the environment's labels"})`;
 }
 
 /**
@@ -773,9 +773,9 @@ function infraCause(r: WebDynamic, ringUrl: WebDynamic, projectKey: WebDynamic =
       return h("span", {},
         `Nothing was advertising ${pool.labels.length === 1 ? "the label" : "the labels"} `,
         h("span.mono", {}, pool.labels.join(", ")),
-        " that this ring asks for, so this run waited on the board and then gave up. Either give a running runner ",
+        " that this environment asks for, so this run waited on the board and then gave up. Either give a running runner ",
         pool.labels.length === 1 ? "that label" : "those labels", " under ", setup,
-        ", or change the ring's runner labels under Applications.");
+        ", or change the environment's runner labels under Applications.");
     }
     if (pool.kind === "idle") {
       return h("span", {},
@@ -788,10 +788,10 @@ function infraCause(r: WebDynamic, ringUrl: WebDynamic, projectKey: WebDynamic =
   }
   if (r.status === "lost") return h("span", {}, "The runner stopped reporting, so Playtest can't say what happened. Running it again is safe.");
   if (/ECONNREFUSED|ERR_CONNECTION_REFUSED/i.test(err)) {
-    return h("span", {}, "Playtest couldn't reach ", target, " — nothing was listening. Check the ring's URL under Applications, and that the app is up.");
+    return h("span", {}, "Playtest couldn't reach ", target, " — nothing was listening. Check the environment's URL under Applications, and that the app is up.");
   }
   if (/ENOTFOUND|ERR_NAME_NOT_RESOLVED|EAI_AGAIN/i.test(err)) {
-    return h("span", {}, "That host doesn't resolve: ", target, ". Check the ring's URL for a typo.");
+    return h("span", {}, "That host doesn't resolve: ", target, ". Check the environment's URL for a typo.");
   }
   if (/ETIMEDOUT|ERR_TIMED_OUT|timeout/i.test(err)) {
     return h("span", {}, "The app took too long to answer at ", target, " — it may be starting up, or too slow to reach from the runner.");
@@ -800,7 +800,7 @@ function infraCause(r: WebDynamic, ringUrl: WebDynamic, projectKey: WebDynamic =
     return h("span", {}, "The TLS certificate at ", target, " wasn't accepted.");
   }
   if (/401|403|unauthor|forbidden/i.test(err)) {
-    return h("span", {}, "The run was refused before it could start — check the ring's auth identity and secrets.");
+    return h("span", {}, "The run was refused before it could start — check the environment's auth identity and secrets.");
   }
   if (!r.started_at) return h("span", {}, "The runner never picked this story up, so nothing was captured.");
   return h("span", {}, "The run stopped before it could reach a verdict. Nothing here says anything about your app.");

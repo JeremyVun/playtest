@@ -7,11 +7,14 @@ import { h, mount, clear } from "../lib/dom.js";
 import { link, navigate } from "../lib/router.js";
 import { renderFrame, page } from "../lib/shell.js";
 import { state, loadProjects, hasRole } from "../lib/state.js";
-import { toast, toastError, emptyState, formModal, statusChip, sparkline, formField } from "../lib/ui.js";
+import { toast, toastError, emptyState, formModal, statusChip, sparkline, formField, srOnly } from "../lib/ui.js";
 import { ago } from "../lib/labels.js";
 import { findingStateLabel } from "../lib/finding-buckets.js";
 import { initialDefaultsYaml } from "../lib/defaults-form.js";
-import { applicationLine, keyFromName, keyProblem, ringUrlProblem } from "../lib/rings.js";
+import {
+  DRIVERS, PLATFORMS, driverLabel, driverGist,
+  applicationLine, keyFromName, keyProblem, ringUrlProblem,
+} from "../lib/rings.js";
 import { projectPage } from "../lib/project-page.js";
 
 export async function projectsList() {
@@ -134,6 +137,11 @@ export async function projectHome(projectKey: WebDynamic) {
   // the words "no graded runs this week" told a new project's owner nothing
   // they could act on. The checklist replaces it until a run exists.
   const everRan = (health?.suites || []).length > 0;
+  // Health is what knows whether a run ever happened, so its failure is not
+  // evidence that none did: a dropped request used to tell a team with a year
+  // of runs to go create their first application. No health, no checklist —
+  // the suite table alone is the honest degraded page.
+  const showChecklist = !!health && !everRan;
 
   // A compact pass-rate summary, not a wall of equal-weight tiles. Review,
   // runs-today, spend, and storage no longer compete with the run verdict for
@@ -236,7 +244,18 @@ export async function projectHome(projectKey: WebDynamic) {
     : emptyState("No suites yet", "A suite is a set of user-journey stories for one app.",
         canEdit ? h("button.btn.primary", { onclick: () => newSuiteModal(projectKey) }, "New suite") : null);
 
-  const checklist = everRan ? null : firstRunChecklist(projectKey, project, suites, canEdit);
+  // Step one of the checklist is "create an application", and only the
+  // applications list can say whether that happened — suites are a later step,
+  // so inferring it from them left the step unticked after the user did it.
+  // Only a project that has never run renders the checklist, so the extra read
+  // is scoped to exactly those projects; a failure leaves the step unticked
+  // rather than the page broken.
+  let applications: WebDynamic = [];
+  if (showChecklist) {
+    applications = await api.cached(`/projects/${projectKey}/applications`, { ttl: 15_000 })
+      .then((r: WebDynamic) => r.items || [], () => []);
+  }
+  const checklist = showChecklist ? firstRunChecklist(projectKey, project, suites, applications, canEdit) : null;
 
   mount(main, page({
     title: "Suites",
@@ -260,39 +279,51 @@ export async function projectHome(projectKey: WebDynamic) {
  * three: create the application, give ring `local` its URL, and every suite
  * bound to it is launchable.
  */
-function firstRunChecklist(projectKey: WebDynamic, project: WebDynamic, suites: WebDynamic, canEdit: WebDynamic) {
+function firstRunChecklist(projectKey: WebDynamic, project: WebDynamic, suites: WebDynamic, applications: WebDynamic, canEdit: WebDynamic) {
   const firstSuite = suites[0] || null;
   const stories = suites.reduce((n: WebDynamic, s: WebDynamic) => n + (s.story_count || 0), 0);
   const canManage = hasRole(project.id, "developer");
   const steps: WebDynamic = [
     {
-      // Done is inferred from the suites that exist: a suite cannot be created
-      // without an application, so one suite proves one application.
-      done: suites.length > 0,
-      title: "Create an application target",
-      why: "One executable surface — a web app, an HTTP API, a mobile build — and a ring with the URL its runs point at.",
+      // The applications list is the only honest answer: a suite proves an
+      // application exists, but an application can exist with no suite yet —
+      // which is the state the user is in right after doing this step.
+      done: applications.length > 0 || suites.length > 0,
+      title: "Create an application",
+      why: "One executable surface — a web app, an HTTP API, a mobile build — and an environment with the URL its runs point at.",
+      // Every control on this list repeats its step's own words, and does that
+      // step: `?new=1` opens the create form on arrival, so the button creates
+      // an application rather than dropping the reader on a page that has one.
       action: canManage
-        ? link(`/p/${projectKey}/applications`, h("span.btn.btn-sm", {}, "Applications"))
-        : h("span.faint", { style: "font-size:12px" }, "needs the developer role"),
+        ? link(`/p/${projectKey}/applications?new=1`, h("span.btn.btn-sm", {}, "Create an application"))
+        : h("span.faint", { style: "font-size:12px" }, "ask a developer on this project"),
     },
     {
       done: suites.length > 0,
       title: "Create a suite",
       why: "A set of user-journey stories, bound to one of those applications.",
-      action: canEdit ? h("button.btn.btn-sm", { onclick: () => newSuiteModal(projectKey) }, "New suite") : null,
+      // A step with a blank Do column read as broken. Every step says either
+      // how to do it or who can.
+      action: canEdit
+        ? h("button.btn.btn-sm", { onclick: () => newSuiteModal(projectKey) }, "Create a suite")
+        : h("span.faint", { style: "font-size:12px" }, "ask an editor on this project"),
     },
     {
       done: stories > 0,
       title: "Write your first story",
       why: "One thing a user is trying to do, in their words. Playtest works out the clicks.",
+      // The hint tells the reader what to do next, not what state the app is
+      // in: "after the suite exists" made them infer the instruction.
       action: canEdit && firstSuite
-        ? link(`/p/${projectKey}/suites/${firstSuite.slug}/new`, h("span.btn.btn-sm", {}, "New story"))
-        : h("span.faint", { style: "font-size:12px" }, "after the suite exists"),
+        ? link(`/p/${projectKey}/suites/${firstSuite.slug}/new`, h("span.btn.btn-sm", {}, "Write a story"))
+        : canEdit
+          ? h("span.faint", { style: "font-size:12px" }, "create a suite first")
+          : h("span.faint", { style: "font-size:12px" }, "ask an editor on this project"),
     },
   ];
   const left = steps.filter((s: WebDynamic) => !s.done).length;
   return h("div", {},
-    h("div.label", { style: "margin:4px 0 8px" }, "Get to your first run"),
+    h("div.label", { style: "margin:4px 0 8px" }, "Set up your first run"),
     h("div.card", {}, h("ul.checklist", {}, ...steps.map((s: WebDynamic, i: WebDynamic) =>
       h(`li${s.done ? ".done" : ""}`, {},
         h("span.tick", { "aria-hidden": "true" }, s.done ? "✓" : String(i + 1)),
@@ -305,13 +336,9 @@ function firstRunChecklist(projectKey: WebDynamic, project: WebDynamic, suites: 
     left === 0
       ? h("div.dim", { style: "margin-top:8px;font-size:12.5px" }, "That's everything — open a suite and press ▶ Run.")
       : null,
-    // Not a step: runs work without it. It is the answer to the question the
-    // list raises next — "what about the one that needs a login?".
-    canManage
-      ? h("div.faint", { style: "margin-top:8px;font-size:12px" },
-          "Testing somewhere that needs sign-in, or its own machines? A ring carries the identities and the routing labels — set them under ",
-          link(`/p/${projectKey}/applications`, "Applications"), ".")
-      : null,
+    // Sign-in and runner labels used to be answered here, in a footnote under
+    // three steps. They belong where they are configured — the application and
+    // its environments — not in the way of the first run.
   );
 }
 
@@ -455,8 +482,31 @@ export function newSuiteModal(projectKey: WebDynamic) {
     const application = h("select", { "aria-label": "Application", onchange: paintInline },
       h("option", { value: "" }, "Loading…"));
     const inlineSlot = h("div");
+    // The application dialog's own questions, asked here in its own words: a
+    // person who creates one from this dialog and one from Applications should
+    // not have to notice they are two forms.
     const appName = h("input", { type: "text", placeholder: "Todo Web" });
+    const appDriver = h("select", { "aria-label": "Surface", onchange: paintAppDriver },
+      ...DRIVERS.map((d) => h("option", { value: d }, driverLabel(d))));
+    const appDriverHint = h("div.hint", {}, driverGist("web"));
+    const appPlatform = h("select", { "aria-label": "Platform" },
+      ...PLATFORMS.map((p) => h("option", { value: p }, p === "ios" ? "iOS" : "Android")));
+    const appPlatformSlot = h("div");
     const appUrl = h("input", { type: "text", placeholder: "http://127.0.0.1:4173" });
+    // The environment question comes last, because it is the one thing the
+    // application dialog does NOT ask — a suite created here is launchable, and
+    // that costs one field.
+    const appUrlField = field("Where do runs point?", appUrl, "Environment “local” gets this URL.");
+    // A fieldset, so "Name" inside it is announced as the application's rather
+    // than as a second suite name. The legend is for that reader only: the
+    // option that opened this block already said it on screen.
+    const inlineForm = h("fieldset.subform", {},
+      h("legend", {}, srOnly("New application")),
+      field("Name", appName),
+      h("div.field", {}, h("div.field-label", {}, "Surface"), appDriver, appDriverHint),
+      appPlatformSlot,
+      appUrlField,
+    );
     const err = h("div", { style: "font-size:var(--fs-sm)" });
     const submitBtn = h("button.btn.primary", { type: "submit" }, "Create");
     let applications: WebDynamic = null;
@@ -464,8 +514,7 @@ export function newSuiteModal(projectKey: WebDynamic) {
     loadApplications();
     return h("form", { onsubmit: submit },
       field("Name", name, where),
-      field("Application", application,
-        "The surface these stories drive. A suite runs against one application for its whole life, and launches against that application's rings."),
+      field("Application", application),
       inlineSlot,
       err,
       h("div.modal-actions", {},
@@ -480,7 +529,7 @@ export function newSuiteModal(projectKey: WebDynamic) {
       } catch (loadErr: WebDynamic) { applications = []; toastError(loadErr); }
       mount(application,
         ...applications.map((a: WebDynamic) =>
-          h("option", { value: a.id }, `${a.name || a.key} — ${applicationLine(a)}`)),
+          h("option", { value: a.id }, applicationLine(a))),
         canManage ? h("option", { value: NEW }, "＋ Create an application…") : null);
       if (!applications.length && canManage) application.value = NEW;
       paintInline();
@@ -497,12 +546,20 @@ export function newSuiteModal(projectKey: WebDynamic) {
         return;
       }
       submitBtn.disabled = false;
-      mount(inlineSlot, application.value === NEW
-        ? h("div", {},
-            field("Application name", appName, "A web surface. For an API or a mobile build, create it under Applications instead."),
-            field("Ring URL", appUrl,
-              "Ring “local” gets this URL. It is read from the claiming runner's network position, so a loopback URL means that runner's own machine."))
+      // Built once and shown or hidden: re-mounting it would take the field
+      // being typed into with it.
+      paintAppDriver();
+      mount(inlineSlot, application.value === NEW ? inlineForm : null);
+    }
+
+    /** The surface decides whether there is a platform to name, or a URL to ask for. */
+    function paintAppDriver() {
+      appDriverHint.textContent = driverGist(appDriver.value);
+      mount(appPlatformSlot, appDriver.value === "mobile"
+        ? field("Platform", appPlatform, "Core picks XCUITest or UiAutomator2 from it, so a mobile application names one.")
         : null);
+      // A mobile environment holds no URL: the claiming runner supplies the build.
+      appUrlField.style.display = appDriver.value === "mobile" ? "none" : "";
     }
 
     async function submit(e: WebDynamic) {
@@ -547,16 +604,23 @@ export function newSuiteModal(projectKey: WebDynamic) {
       } catch (err2: WebDynamic) { submitBtn.disabled = false; toastError(err2); }
     }
 
-    /** A web application and its `local` ring, in one gesture. */
+    /** An application and its `local` environment, in one gesture. */
     async function createApplicationInline() {
       const label = appName.value.trim() || name.value.trim();
+      const driver = appDriver.value;
       const key = keyFromName(label);
       const keyBad = keyProblem(key, applications || [], { kind: "application" });
       if (keyBad) { submitBtn.disabled = false; appName.focus(); mount(err, h("span.status.fail", {}, h("span.glyph", {}, "✗"), keyBad)); return null; }
-      const urlBad = ringUrlProblem(appUrl.value, "web");
+      const urlBad = ringUrlProblem(driver === "mobile" ? "" : appUrl.value, driver);
       if (urlBad) { submitBtn.disabled = false; appUrl.focus(); mount(err, h("span.status.fail", {}, h("span.glyph", {}, "✗"), urlBad)); return null; }
-      const created = await api.post(`/projects/${projectKey}/applications`, { key, name: label, driver: "web" });
-      await api.post(`/applications/${created.id}/rings`, { key: "local", name: "Local", base_url: appUrl.value.trim() });
+      const created = await api.post(`/projects/${projectKey}/applications`, {
+        key, name: label, driver,
+        ...(driver === "mobile" ? { platform: appPlatform.value } : {}),
+      });
+      await api.post(`/applications/${created.id}/rings`, {
+        key: "local", name: "Local",
+        ...(driver === "mobile" ? {} : { base_url: appUrl.value.trim() }),
+      });
       return created;
     }
   });

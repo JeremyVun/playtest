@@ -314,6 +314,106 @@ export function enhanceSelect(sel: WebDynamic) {
   return wrap;
 }
 
+/**
+ * A few mutually exclusive short choices as one segmented control instead of a
+ * dropdown. A dropdown shows one option and hides the rest behind a click,
+ * which is the wrong trade for a two-way policy: what it is set to and what
+ * else it could be are the same question, and both fit on one line.
+ *
+ * Radio-group semantics, and the same keyboard contract as the launch dialog's
+ * mode picker: arrows move within the group, Tab leaves it, and only the
+ * selected button is a tab stop.
+ *
+ * @param {{ label: string, options: { value: any, label: string }[],
+ *           value: any, onchange: (value: any) => void }} opts
+ * @returns {HTMLElement} the radio group
+ */
+export function choiceGroup({ label, options, value, onchange }: WebDynamic) {
+  const btns = radioSet({
+    options, value, onchange,
+    button: (o: WebDynamic, click: WebDynamic, key: WebDynamic) =>
+      h("button.choice", { type: "button", role: "radio", onclick: click, onkeydown: key }, o.label),
+  });
+  return h("div.choices", { role: "radiogroup", "aria-label": label }, ...btns);
+}
+
+/**
+ * The same control, stacked, when the options need a sentence each to be
+ * choosable. A segmented row can only carry labels, so a question whose answers
+ * differ in what the system may do WITHOUT ASKING gets explained in a hint that
+ * has to describe every option at once — the explanation ends up next to the
+ * question instead of next to the answer it belongs to. Here each option owns
+ * its own sentence, and the order down the list is the order of autonomy.
+ *
+ * @param {{ label: string,
+ *           options: { value: any, label: string, description?: string }[],
+ *           value: any, onchange: (value: any) => void }} opts
+ * @returns {HTMLElement} the radio group
+ */
+export function choiceList({ label, options, value, onchange }: WebDynamic) {
+  const btns = radioSet({
+    options, value, onchange,
+    button: (o: WebDynamic, click: WebDynamic, key: WebDynamic) => {
+      // The option is NAMED by its label and DESCRIBED by its sentence. Left as
+      // one run of text, the accessible name is the whole paragraph — an answer
+      // announced as a paragraph, and an answer no one can address by the words
+      // on it, since every option contains every other option's vocabulary.
+      const descId = o.description ? `choice-desc-${++choiceSeq}` : null;
+      return h("button.choice-option", {
+        type: "button", role: "radio", onclick: click, onkeydown: key,
+        "aria-label": o.label, ...(descId ? { "aria-describedby": descId } : {}),
+      },
+        h("span.choice-option-label", {}, o.label),
+        descId ? h("span.choice-option-desc", { id: descId }, o.description) : null);
+    },
+  });
+  return h("div.choice-list", { role: "radiogroup", "aria-label": label }, ...btns);
+}
+let choiceSeq = 0;
+
+/**
+ * What both shapes above have in common: one tab stop for the whole group,
+ * arrows move the selection, Tab leaves, and the selected state is an attribute
+ * as well as a colour. Only the furniture differs, so it is the only thing the
+ * callers pass.
+ */
+function radioSet({ options, value, onchange, button }: WebDynamic) {
+  let current = value;
+  const btns = options.map((o: WebDynamic) => button(o, () => pick(o.value), onKey));
+  paint();
+  return btns;
+
+  function pick(v: WebDynamic) {
+    if (v === current) return;
+    current = v;
+    paint();
+    onchange(v);
+  }
+  function paint() {
+    let selected = -1;
+    options.forEach((o: WebDynamic, i: WebDynamic) => {
+      const on = o.value === current;
+      if (on) selected = i;
+      btns[i].classList.toggle("on", on);
+      btns[i].setAttribute("aria-checked", on ? "true" : "false");
+      btns[i].tabIndex = on ? 0 : -1;
+    });
+    // A value matching no option would leave the group with no tab stop at all
+    // — reachable by nothing, which is worse than showing an arbitrary one.
+    if (selected < 0) btns[0].tabIndex = 0;
+  }
+  function onKey(e: WebDynamic) {
+    const step = ["ArrowRight", "ArrowDown"].includes(e.key) ? 1
+      : ["ArrowLeft", "ArrowUp"].includes(e.key) ? -1 : 0;
+    if (!step) return;
+    e.preventDefault();
+    const at = options.findIndex((o: WebDynamic) => o.value === current);
+    const next = (at + step + options.length) % options.length;
+    pick(options[next].value);
+    btns[next].focus();
+  }
+}
+
 /** Field-helper shim: selects get the themed dropdown, everything else passes through. */
 export function asControl(input: WebDynamic) {
   return input.tagName === "SELECT" ? enhanceSelect(input) : input;
@@ -328,6 +428,33 @@ export function formField(label: WebDynamic, input: WebDynamic, hint?: WebDynami
   const target = control === input ? input : control.querySelector("button");
   if (!target.id) target.id = `field-${++fieldSeq}`;
   return h("div.field", {}, h("label", { for: target.id }, label), control, hint ? h("div.hint", {}, hint) : null);
+}
+
+/**
+ * A block of literal text with its own Copy button, wrapping rather than
+ * scrolling: a value someone has to get onto another machine is unusable if
+ * part of it is off-screen, and a copy affordance three inches away from the
+ * thing it copies is a guess. The button says "Copied" for a moment because a
+ * clipboard write is otherwise invisible.
+ */
+export function copyBox(text: string, { label, onCopy }: { label: string; onCopy?: (ok: boolean) => void }) {
+  const btn = h("button.copybox-btn", {
+    type: "button",
+    "aria-label": `Copy ${label}`,
+    onclick: async () => {
+      const ok = await copyText(text);
+      onCopy?.(ok);
+      btn.classList.toggle("ok", ok);
+      mount(btn, ok ? "Copied" : "Press ⌘C");
+      setTimeout(() => { btn.classList.remove("ok"); mount(btn, "Copy"); }, 1600);
+    },
+  }, "Copy");
+  return h("div.copybox", {},
+    // Selectable as one unit for people who copy with the keyboard: the button
+    // is a convenience, never the only way out of this box.
+    h("pre.mono", { tabindex: "0", "aria-label": label }, text),
+    btn,
+  );
 }
 
 /** Copy text to the clipboard; resolves false when the browser refuses. */

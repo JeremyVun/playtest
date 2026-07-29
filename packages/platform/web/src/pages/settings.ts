@@ -10,16 +10,16 @@ import { h, mount } from "../lib/dom.js";
 import { link, navigate, onPageLeave } from "../lib/router.js";
 import { page } from "../lib/shell.js";
 import { state, hasRole, loadMe, loadProjects } from "../lib/state.js";
-import { toast, toastError, confirmModal, formModal, emptyState, errorState, formField, enhanceSelect, copyText } from "../lib/ui.js";
+import { toast, toastError, confirmModal, formModal, emptyState, errorState, formField, enhanceSelect, copyBox } from "../lib/ui.js";
 import { visibleSections } from "../lib/settings-sections.js";
-import { modelField } from "../lib/model-select.js";
 import { humanize as words, categoryLabel } from "../lib/vocab.js";
-import { startCommand, oneShot, runnerLabelsText, runnerPresence, labelProblem, parseLabels } from "../lib/runners.js";
+import { startCommand, oneShot, runnerPresence, labelProblem, parseLabels } from "../lib/runners.js";
 import { RUNNER_GUIDE } from "../lib/rings.js";
 import { subscribeFeed } from "../lib/feed.js";
 import { ago } from "../lib/labels.js";
 import { projectPage } from "../lib/project-page.js";
 import { runsSettingsTab } from "./settings-runs.js";
+import { modelsTab } from "./settings-models.js";
 
 const RENDER: WebDynamic = {
   runners: runnersTab,
@@ -114,76 +114,94 @@ async function runnersTab(projectKey: WebDynamic, project: WebDynamic, slot: Web
     if (!first && sig === ctl.sig) return;
     ctl.sig = sig;
 
-    const add = h("button.btn.primary", { "data-fk": "runner:add", onclick: () => registerRunnerModal(projectKey, refresh) }, "+ Register runner");
     const here = rows.filter(({ presence }: WebDynamic) => presence.tone !== "off").length;
 
-    const body = rows.length
-      ? h("div", { style: "display:flex;flex-direction:column;gap:12px" }, ...rows.map(({ r, presence }: WebDynamic) =>
-          h("div.card.pad", {},
-            h("div", { style: "display:flex;align-items:center;gap:10px;flex-wrap:wrap" },
-              h("span.id", {}, r.name),
-              presenceChip(presence),
-              // A machine the site operator shares with every project. It is
-              // listed because this project's runs really do land on it, and it
-              // is read-only because retiring it is not this project's call.
-              r.scope === "site" ? h("span.chip", { title: "Shared across every project on this deployment — administered by the site operator" }, "shared") : null,
-              h("div", { style: "flex:1" }),
-              // Every row repeats one verb, so the accessible name carries the runner.
-              r.revoked_at || r.managed_here === false
-                ? null
-                : h("button.btn.btn-sm.danger", {
-                    "aria-label": `Revoke runner ${r.name}`,
-                    "data-fk": `runner:revoke:${r.id}`,
-                    onclick: () => revokeRunner(projectKey, r, refresh),
-                  }, "Revoke"),
-            ),
-            fieldLine("labels", runnerLabelsText(r.labels)),
-            fieldLine("last seen", r.last_seen_at
-              ? `${ago(r.last_seen_at)} (${new Date(r.last_seen_at).toLocaleString()})`
-              : "never — it has not checked in yet"),
-            // What it is doing right now, as a link to the run itself: a busy
-            // runner without a way to see the run it is busy with is a dead end.
-            r.claim?.run_group_id
-              ? h("div.dim", { style: "margin-top:6px;font-size:12px" },
-                  "running: ",
-                  link(`/p/${projectKey}/runs/${r.claim.run_group_id}`, "this run"),
-                  r.claim.claimed_at ? h("span.faint", {}, ` · claimed ${ago(r.claim.claimed_at)}`) : null)
-              // A shared runner's other tenant is none of this project's
-              // business: it is busy, and that is the whole of what is said.
-              : r.claim?.foreign
-                ? fieldLine("running", `busy in another project${r.claim.claimed_at ? ` · since ${ago(r.claim.claimed_at)}` : ""}`)
-                : r.claim
-                  ? fieldLine("running", "minting an auth session")
-                  : null,
-            r.revoked_at ? fieldLine("revoked", new Date(r.revoked_at).toLocaleString()) : null,
-          )))
-      : emptyState(
-          "No runners registered",
-          "A self-hosted runner runs your suites on a machine you control — your laptop, a build box, a CI job — so a run can reach an app on localhost, a device simulator, or anything behind your firewall. It dials out to Playtest; nothing ever connects to it.",
-        );
+    // Tiled like personas, and the add affordance is a CELL of that grid rather
+    // than a hero button floated into the whitespace on the right, where it was
+    // both far from the cards it adds to and the loudest thing on the page.
+    const body = h("div.runner-grid", {},
+      ...rows.map(({ r, presence }: WebDynamic) => runnerCard(projectKey, r, presence, refresh)),
+      h("button.card.runner-add", {
+        type: "button",
+        "data-fk": "runner:add",
+        onclick: () => registerRunnerModal(projectKey, refresh),
+      },
+        h("span.ra-title", {}, "+ Register runner"),
+        h("span.ra-why", {}, rows.length
+          ? "Another machine for this project's runs."
+          : "A machine you control — a laptop, a build box, a CI job — so a run can reach localhost, a simulator, or anything behind your firewall. It dials out; nothing connects to it."),
+      ),
+    );
 
     const focusKey = document.activeElement instanceof HTMLElement ? document.activeElement.dataset.fk || null : null;
     mount(slot, h("div.stack", {},
       h("section", {},
         h("h3.section-title", { style: "margin-top:0" }, "Runners"),
-        h("p.dim", { style: "font-size:12.5px;margin:-4px 0 8px" },
-          "Machines that execute this project's runs. Register one here, start it with the command shown, then give a ring the same labels under Applications — a run is placed on a runner advertising every label its ring asks for."),
-        // What each machine can reach is that machine's own business, so this
-        // page holds no target inventory — just where a machine declares one.
-        h("p.faint", { style: "font-size:11.5px;margin:0 0 12px" },
-          "A runner that tests mobile builds also starts with ", h("span.mono", {}, "--config <file>"),
-          ", a file on its own disk naming the build, device and Appium server per application and ring — the format is in ",
-          h("span.mono", {}, RUNNER_GUIDE), "."),
-        h("div.section-actions", {}, add),
+        // One line that fits on one line. How a run reaches a particular machine
+        // is the Labels field's business, said where labels are typed.
+        h("p.dim", { style: "font-size:12.5px;margin:-4px 0 14px" },
+          "Machines that execute this project's runs."),
         body,
         rows.length && !here
           ? h("p.faint", { style: "font-size:11.5px;margin-top:12px" },
-              `Nothing is checked in. Runs placed on this project wait on the board and then fail with the labels nothing served — start a runner with its command, or check that the process is still up. A runner counts as here if it checked in within ${Math.round(windowS / 60) >= 1 ? `${Math.round(windowS / 60)} minutes` : `${windowS} seconds`}.`)
+              `Nothing is checked in, so runs will wait and then fail. Start a runner, or check that its process is still up — a runner counts as here if it checked in within ${Math.round(windowS / 60) >= 1 ? `${Math.round(windowS / 60)} minutes` : `${windowS} seconds`}.`)
           : null,
       ),
     ));
     if (focusKey) slot.querySelector(`[data-fk="${focusKey}"]`)?.focus();
   }
+}
+
+/**
+ * One machine. Four facts at most: what it is called, whether it is here, what
+ * work it will take, and when it was last heard from.
+ *
+ * Labels are CHIPS rather than a `labels:` line, because the unlabelled case has
+ * no value to put after that colon — "labels: any job in this project" answered
+ * a question nobody asked. An unlabelled runner takes anything, so the card says
+ * that, in words, as the answer to "what does it run".
+ */
+function runnerCard(projectKey: WebDynamic, r: WebDynamic, presence: WebDynamic, refresh: WebDynamic) {
+  const labels = r.labels || [];
+  return h("div.card.runner-card", {},
+    h("div.rc-head", {},
+      h("span.rc-name", {}, r.name),
+      presenceChip(presence),
+      // A machine the site operator shares with every project. It is listed
+      // because this project's runs really do land on it, and it is read-only
+      // because retiring it is not this project's call.
+      r.scope === "site" ? h("span.chip", { title: "Shared across every project on this deployment — administered by the site operator" }, "shared") : null,
+    ),
+    h("div.rc-labels", {}, labels.length
+      ? labels.map((l: string) => h("span.chip.tag", {}, l))
+      : h("span.faint", {}, "Takes any run in this project")),
+    // What it is doing right now, as a link to the run itself: a busy runner
+    // without a way to see the run it is busy with is a dead end.
+    r.claim?.run_group_id
+      ? h("div.rc-now", {}, "Running ", link(`/p/${projectKey}/runs/${r.claim.run_group_id}`, "this run"),
+          r.claim.claimed_at ? h("span.faint", {}, ` · ${ago(r.claim.claimed_at)}`) : null)
+      // A shared runner's other tenant is none of this project's business: it is
+      // busy, and that is the whole of what is said.
+      : r.claim?.foreign
+        ? h("div.rc-now", {}, "Busy in another project")
+        : r.claim
+          ? h("div.rc-now", {}, "Minting an auth session")
+          : null,
+    h("div.rc-foot", {},
+      // The relative time is what anyone reads; the exact stamp is one hover
+      // away rather than a second clause in the same sentence.
+      h("span.rc-seen", r.last_seen_at ? { title: new Date(r.last_seen_at).toLocaleString() } : {},
+        r.last_seen_at ? `Last seen ${ago(r.last_seen_at)}` : "Never checked in"),
+      r.revoked_at || r.managed_here === false
+        ? null
+        // Every card repeats one verb, so the accessible name carries the runner.
+        : h("button.btn.btn-sm.danger", {
+            "aria-label": `Revoke runner ${r.name}`,
+            "data-fk": `runner:revoke:${r.id}`,
+            onclick: () => revokeRunner(projectKey, r, refresh),
+          }, "Revoke"),
+    ),
+  );
 }
 
 /** Presence as a dot AND a word — the dot is the scan target, the word is what
@@ -206,8 +224,8 @@ function registerRunnerModal(projectKey: WebDynamic, refresh: WebDynamic) {
     const labels = h("input", { type: "text", placeholder: "macos, ios-sim" });
     const submitBtn = h("button.btn.primary", { type: "submit" }, "Register");
     return h("form", { onsubmit: submit },
-      fld("Name", name, "How this machine appears in run history. Unique among this project's live runners — a revoked machine's name is free again."),
-      fld("Labels", labels, "What this machine can do — a ring asking for these labels places its runs here. Comma separated, using letters, digits, “.”, “_” and “-”; leave blank to take any of this project's runs."),
+      fld("Name", name, "How this machine appears in run history."),
+      fld("Labels", labels, "Optional. An environment asking for these labels places its runs here; blank takes any of this project's runs."),
       h("div.modal-actions", {}, h("button.btn.ghost", { type: "button", onclick: () => close() }, "Cancel"), submitBtn),
     );
     async function submit(e: WebDynamic) {
@@ -233,73 +251,67 @@ function registerRunnerModal(projectKey: WebDynamic, refresh: WebDynamic) {
  * place in the console where dismissing a modal destroys something: Escape or a
  * stray scrim click would take the only copy of a secret the server cannot
  * reissue. So this dialog — and only this dialog — asks before it goes, and
- * stops asking once the command has been copied somewhere it can be pasted from.
+ * stops asking once the credential has been copied somewhere it can be kept.
+ *
+ * The credential is the whole point of the dialog: it is the one value that
+ * cannot be reconstructed later, so it is shown first and on its own. The start
+ * line follows, complete with the credential in it, because someone standing at
+ * the machine wants one thing to paste — but it is the second box, not the
+ * first, so what is precious is never mistaken for what is merely convenient.
  */
 function revealRunnerCredential(runner: WebDynamic, refresh: WebDynamic) {
   // A one-shot box, not a variable: a re-render, a reopened dialog or a stray
   // reference cannot show this twice, because the server itself cannot.
   const secret = oneShot(runner.credential);
-  const command = startCommand({ server: location.origin, credential: secret.take() || "", labels: runner.labels || [] });
+  const credential = secret.take() || "";
+  // The credential is an environment assignment even here, so nothing that ends
+  // up in a process list carries it.
+  const command = `PLAYTEST_RUNNER_CREDENTIAL='${credential}' ${startCommand({ server: location.origin })}`;
   let copied = false;
-  let copyBtn: WebDynamic = null;
+  let credentialBox: WebDynamic = null;
   let leave: WebDynamic = null;
   // Empty until it is needed: an alert built up front would put two hidden
   // buttons ahead of Copy in the dialog's focus order.
   const guard = h("div.preview-warn", { role: "alert", hidden: true, style: "margin:12px 0 0" });
+  // Either copy is proof enough that the secret now exists somewhere else, which
+  // is all the dismissal guard is waiting for.
+  const took = (ok: WebDynamic) => { copied = copied || ok; };
 
   formModal(`${runner.name} is registered`, (done: WebDynamic) => {
     leave = () => { done(); refresh(); };
-    copyBtn = h("button.btn.primary", {
-      onclick: async () => {
-        const ok = await copyText(command);
-        // A successful copy is the only proof we can get cheaply that the
-        // credential now exists somewhere else. It is enough to stop nagging.
-        copied = copied || ok;
-        toast(ok ? "Command copied" : "Couldn't copy", ok ? "Paste it into a terminal on that machine." : "Select the command and copy it manually.", ok ? "ok" : "err");
-      },
-    }, "Copy command");
+    credentialBox = copyBox(credential, { label: "runner credential", onCopy: took });
     return h("div", {},
-      h("p.dim.section-caption", {},
-        "Run this on the machine you want your suites to execute on. It is the only time this credential is shown — Playtest stores a hash of it and cannot show it again."),
-      h("pre.mono", {
-        style: "background:var(--bg2);padding:12px;border-radius:6px;overflow:auto;font-size:12px;white-space:pre-wrap;word-break:break-all",
-        // The command is the payload of this dialog; make it selectable as one
-        // unit for people who copy with the keyboard rather than the button.
-        tabindex: "0",
-        "aria-label": "Runner start command",
-      }, command),
-      h("p.faint", { style: "font-size:11.5px;margin:10px 0 0" },
-        "Run it from your Playtest checkout. The credential travels in the process environment, never as an argument, so it stays out of your process list. The runner then waits for work and prints what it is doing."),
-      h("p.faint", { style: "font-size:11.5px;margin:6px 0 0" },
-        "Pasted this way it also lands in your shell history. On a machine you share, put the credential in a file only you can read and start the runner with ",
-        h("span.mono", {}, "--credential-file <path>"), " instead."),
-      h("p.faint", { style: "font-size:11.5px;margin:6px 0 0" },
-        "For mobile runs, add ", h("span.mono", {}, "--config <file>"),
-        " — a file on that machine naming the build it holds, the device and the Appium server, keyed by application and ring. The format is in ",
-        h("span.mono", {}, RUNNER_GUIDE), "."),
-      h("p.faint", { style: "font-size:11.5px;margin:6px 0 0" },
-        `Give a ring the ${(runner.labels || []).length ? `labels ${runnerLabelsText(runner.labels)}` : "runner labels you want"} under Applications to place its runs here.`),
+      h("p.dim.section-caption", { style: "margin-bottom:8px" }, "Copy the credential — it is never shown again."),
+      credentialBox,
+      h("p.faint", { style: "font-size:11.5px;margin:14px 0 4px" }, "Start the runner on that machine:"),
+      copyBox(command, { label: "runner start command", onCopy: took }),
+      h("p.faint", { style: "font-size:11.5px;margin:8px 0 0" }, "Options, including mobile: ", h("span.mono", {}, RUNNER_GUIDE)),
       guard,
-      h("div.modal-actions", {}, copyBtn, h("button.btn.ghost", { onclick: leave }, "Done")),
+      // Done goes through the same guard as Escape: leaving on purpose without
+      // having copied anything loses exactly as much as leaving by accident.
+      h("div.modal-actions", {}, h("button.btn.primary", { onclick: () => { if (askBeforeLeaving()) leave(); } }, "Done")),
     );
   }, {
     // Escape and scrim-click are the only ways to lose this dialog by accident,
     // and losing it costs a registration. Ask once, and never again once the
-    // command has been copied somewhere it can be pasted from.
-    confirmDismiss: () => {
-      if (copied) return true;
-      mount(guard,
-        h("div", {}, "This credential cannot be shown again — Playtest stores only a hash of it. Close now and this runner has to be registered over."),
-        h("div", { style: "display:flex;gap:8px;margin-top:8px" },
-          h("button.btn.btn-sm", { type: "button", onclick: () => { mount(guard); guard.hidden = true; copyBtn?.focus(); } }, "Copy it first"),
-          h("button.btn.btn-sm.danger", { type: "button", onclick: leave }, "Close anyway"),
-        ),
-      );
-      guard.hidden = false;
-      guard.querySelector("button")?.focus();
-      return false;
-    },
+    // credential has been copied somewhere it can be kept.
+    confirmDismiss: () => askBeforeLeaving(),
   });
+
+  /** True when leaving is safe; otherwise it says what leaving costs, in place. */
+  function askBeforeLeaving() {
+    if (copied) return true;
+    mount(guard,
+      h("div", {}, "Close now and this credential is gone — the runner has to be registered over."),
+      h("div", { style: "display:flex;gap:8px;margin-top:8px" },
+        h("button.btn.btn-sm", { type: "button", onclick: () => { mount(guard); guard.hidden = true; credentialBox?.querySelector("button")?.focus(); } }, "Copy it first"),
+        h("button.btn.btn-sm.danger", { type: "button", onclick: leave }, "Close anyway"),
+      ),
+    );
+    guard.hidden = false;
+    guard.querySelector("button")?.focus();
+    return false;
+  }
 }
 
 async function revokeRunner(projectKey: WebDynamic, runner: WebDynamic, refresh: WebDynamic) {
@@ -314,137 +326,6 @@ async function revokeRunner(projectKey: WebDynamic, runner: WebDynamic, refresh:
   catch (err: WebDynamic) { toastError(err); }
 }
 
-// ---------- models ----------
-// The project's default actor and grader — a cost/quality policy set once
-// instead of repeated in every suite. Precedence is per key, most specific
-// wins: a story's own value > the suite's playtest.yaml > these > the engine
-// defaults. A suite that chose always wins, so nothing set here can override
-// it; the caption under each field says what a blank field means, so leaving
-// one empty is an informed choice.
-async function modelsTab(projectKey: WebDynamic, project: WebDynamic, slot: WebDynamic) {
-  let catalog: WebDynamic = { tiers: [], defaults: {} };
-  try { catalog = await api.cached(`/models`, { ttl: Infinity }); } catch { /* the dropdown degrades to a text field; saving still works */ }
-  const saveBtn = h("button.btn.primary", { onclick: save }, "Save");
-  // What each field currently says, committed together by Save. null = inherit
-  // (the engine default) — the dropdown's first option, never an empty box.
-  const pending: WebDynamic = {
-    actor_model: project.models?.actor_model || null,
-    grader_model: project.models?.grader_model || null,
-    consolidation_model: project.models?.consolidation_model || null,
-    auto_resolve_model: project.models?.auto_resolve_model || null,
-  };
-  const field = (key: WebDynamic, label: WebDynamic, role: WebDynamic) => modelField({
-    label,
-    hint: role,
-    value: pending[key] || "",
-    tiers: catalog.tiers || [],
-    inheritLabel: catalog.defaults?.[key] ? `Engine default — ${catalog.defaults[key]}` : "Engine default",
-    onchange: (v: WebDynamic) => { pending[key] = v; },
-  });
-
-  // The auto-dedupe sweep toggle lives beside the model that powers it.
-  // Tri-state: inherit the deployment default, or pin on/off for this project.
-  // The manual "Find duplicates" flow follows this: it exists only when the
-  // sweep is off (docs/contracts/hosted.md, "Consolidation").
-  const cap = state.me?.capabilities || {};
-  let pendingAuto = project.auto_dedupe ?? null;
-  const autoSel = h("select", {
-    "aria-label": "Automatic dedupe",
-    onchange: () => { pendingAuto = autoSel.value === "" ? null : autoSel.value === "on"; },
-  },
-    h("option", { value: "", selected: pendingAuto == null || undefined },
-      `Deployment default — ${cap.auto_dedupe ? "on" : "off"}`),
-    h("option", { value: "on", selected: pendingAuto === true || undefined }, "On"),
-    h("option", { value: "off", selected: pendingAuto === false || undefined }, "Off"));
-  const autoField = formField("Automatic dedupe", autoSel,
-    cap.llm === false
-      ? "Merges duplicate findings after each run reports. This deployment has no model gateway (PLAYTEST_LLM_BASE_URL), so the sweep cannot run whatever this is set to."
-      : "Merges duplicate findings automatically after each run reports — switching it on runs a catch-up pass over the current queue. Off brings back the manual Find duplicates flow.");
-
-  // The auto-resolve pin, beside the dedupe pin it mirrors. Gate and signal
-  // checks are deterministic; judgment-call findings are re-verified through
-  // the gateway when one is configured.
-  let pendingResolve = project.auto_resolve ?? null;
-  const resolveSel = h("select", {
-    "aria-label": "Automatic resolve",
-    onchange: () => { pendingResolve = resolveSel.value === "" ? null : resolveSel.value === "on"; },
-  },
-    h("option", { value: "", selected: pendingResolve == null || undefined },
-      `Deployment default — ${cap.auto_resolve ? "on" : "off"}`),
-    h("option", { value: "on", selected: pendingResolve === true || undefined }, "On"),
-    h("option", { value: "off", selected: pendingResolve === false || undefined }, "Off"));
-  const resolveField = formField("Automatic resolve", resolveSel,
-    "Resolves a finding when a later run demonstrates the fix — the same gate check passing again, or the recorded signal gone from a rerun. Judgment-call findings are re-checked against the newer run's page content by the fix verification model.");
-
-  // What a VERIFIED fix of a judgment-call finding may do: suggest ("semi",
-  // a person confirms) or resolve outright ("full").
-  let pendingMode = project.auto_resolve_mode ?? null;
-  const modeSel = h("select", {
-    "aria-label": "Verified fixes",
-    onchange: () => { pendingMode = modeSel.value === "" ? null : modeSel.value; },
-  },
-    h("option", { value: "", selected: pendingMode == null || undefined },
-      `Deployment default — ${cap.auto_resolve_mode === "full" ? "resolve automatically" : "confirm first"}`),
-    h("option", { value: "semi", selected: pendingMode === "semi" || undefined }, "Confirm first (semi)"),
-    h("option", { value: "full", selected: pendingMode === "full" || undefined }, "Resolve automatically (full)"));
-  const modeField = formField("Verified fixes", modeSel,
-    cap.llm === false
-      ? "Whether a verified fix of a judgment-call finding resolves it outright or waits for your confirmation. This deployment has no model gateway (PLAYTEST_LLM_BASE_URL), so fixes cannot be verified and only \"looks fixed\" suggestions from graded passing runs appear."
-      : "Whether a verified fix of a judgment-call finding resolves it outright or waits for your confirmation. Gate and signal findings always resolve on deterministic evidence; findings linked to an external ticket always wait.");
-  mount(slot, h("section", {},
-    h("h3.section-title", { style: "margin-top:0" }, "Models"),
-    h("p.dim.section-caption", {},
-      "The models every run in this project uses unless a suite — or a single story — chooses its own; the more specific choice always wins."),
-    h("div.card.pad", {},
-      field("actor_model", "Actor model", "Plays the user against the app. A capable actor recovers from friction far more reliably than a cheap one."),
-      field("grader_model", "Grader model", "Grades finished runs and checks assertions."),
-      field("consolidation_model", "Dedupe model", "Judges whether differently worded findings describe the same bug — used by the automatic post-run dedupe and by manual Find duplicates."),
-      field("auto_resolve_model", "Fix verification model", "Re-checks a judgment-call finding's claim against a newer run's recorded page content — used by the auto-resolve sweep to say fixed, not fixed, or indeterminate."),
-      autoField,
-      resolveField,
-      modeField,
-      h("div", { style: "display:flex;justify-content:flex-end" }, saveBtn),
-    ),
-  ));
-  async function save() {
-    saveBtn.disabled = true;
-    try {
-      const updated = await api.put(`/projects/${projectKey}/models`, {
-        actor_model: pending.actor_model,
-        grader_model: pending.grader_model,
-        consolidation_model: pending.consolidation_model,
-        auto_resolve_model: pending.auto_resolve_model,
-      });
-      if (pendingAuto !== (project.auto_dedupe ?? null)) {
-        const p2 = await api.put(`/projects/${projectKey}/auto-dedupe`, { enabled: pendingAuto });
-        project.auto_dedupe = p2.auto_dedupe;
-      }
-      if (pendingResolve !== (project.auto_resolve ?? null) || pendingMode !== (project.auto_resolve_mode ?? null)) {
-        const p3 = await api.put(`/projects/${projectKey}/auto-resolve`, { enabled: pendingResolve, mode: pendingMode });
-        project.auto_resolve = p3.auto_resolve;
-        project.auto_resolve_mode = p3.auto_resolve_mode;
-      }
-      // Keep the in-memory project honest: Suite settings' "Project default —
-      // …" inherit options read state.projectByKey, not the server, until the
-      // next full load.
-      project.models = updated.models;
-      const m = updated.models;
-      toast("Models saved",
-        m.actor_model || m.grader_model || m.consolidation_model || m.auto_resolve_model
-          ? [
-              m.actor_model && `actor ${m.actor_model}`,
-              m.grader_model && `grader ${m.grader_model}`,
-              m.consolidation_model && `dedupe ${m.consolidation_model}`,
-              m.auto_resolve_model && `verify ${m.auto_resolve_model}`,
-            ].filter(Boolean).join(" · ")
-          : "engine defaults",
-        "ok");
-    } catch (err: WebDynamic) { toastError(err); }
-    saveBtn.disabled = false;
-  }
-}
-
-const fieldLine = (k: WebDynamic, v: WebDynamic) => h("div.dim", { style: "margin-top:6px;font-size:12px" }, `${k}: `, h("span.mono", {}, v));
 
 // ---------- members ----------
 async function membersTab(projectKey: WebDynamic, project: WebDynamic, slot: WebDynamic) {
@@ -669,14 +550,15 @@ function auditSentence(a: WebDynamic, who: WebDynamic) {
 // control plane — keep it in step when a new one lands; anything missing falls
 // back to the verb above.
 const AUDIT_SENTENCES: WebDynamic = {
-  // Applications and their rings. Both are addressed by key, which is what
-  // runner configuration binds, so the sentence says the key, not the name.
+  // Applications and their environments. Both are addressed by key, which is
+  // what runner configuration binds, so the sentence says the key, not the name.
+  // (`ring` is the stored action name; the sentence a person reads is not.)
   "application.created": (d: WebDynamic) => `created application ${d.key || nameOf(d)}${d.driver ? ` — a ${[d.driver, d.platform].filter(Boolean).join(" ")} surface` : ""}`,
   "application.updated": (d: WebDynamic) => `renamed application ${d.key || nameOf(d)} to ${nameOf(d)}`,
   "application.deleted": (d: WebDynamic) => `deleted application ${d.key || nameOf(d)}`,
-  "ring.created": (d: WebDynamic) => `created ring ${ringOf(d)}${d.base_url ? ` → ${d.base_url}` : ""}${d.discovery_allowed ? ", discovery allowed" : ""}`,
-  "ring.updated": (d: WebDynamic) => `updated ring ${ringOf(d)}${d.base_url ? ` → ${d.base_url}` : ""} — discovery ${d.discovery_allowed ? "allowed" : "not allowed"}`,
-  "ring.deleted": (d: WebDynamic) => `deleted ring ${ringOf(d)}`,
+  "ring.created": (d: WebDynamic) => `added environment ${ringOf(d)}${d.base_url ? ` → ${d.base_url}` : ""}`,
+  "ring.updated": (d: WebDynamic) => `updated environment ${ringOf(d)}${d.base_url ? ` → ${d.base_url}` : ""}`,
+  "ring.deleted": (d: WebDynamic) => `deleted environment ${ringOf(d)}`,
   "auth_provider.created": (d: WebDynamic) => `added auth provider ${nameOf(d)}${d.kind ? ` (${words(d.kind)})` : ""}`,
   "auth_provider.updated": (d: WebDynamic) => `updated auth provider ${nameOf(d)}${d.enabled === false ? " — now disabled" : ""}`,
   "auth_provider.deleted": (d: WebDynamic) => `deleted auth provider ${nameOf(d)}`,

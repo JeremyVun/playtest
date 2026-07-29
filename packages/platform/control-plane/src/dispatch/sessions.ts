@@ -633,8 +633,8 @@ async function getProvider(q: HostedDynamic, projectId: HostedDynamic, name: Hos
   const provider = rows[0];
   if (provider.ring_id && provider.ring_id !== ringId) {
     throw forbidden(
-      `auth provider "${name}" is bound to another ring — a ring may use its own providers and the ` +
-        `project-wide ones, never another ring's credentials`,
+      `auth provider "${name}" is bound to another environment — an environment may use its own providers and ` +
+        `the project-wide ones, never another environment's credentials`,
     );
   }
   return provider;

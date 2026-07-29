@@ -244,7 +244,7 @@ export function resolveDecisions(finding: HostedDynamic, triples: HostedDynamic,
 export function autoResolveReason(finding: HostedDynamic, triples: HostedDynamic, decision: HostedDynamic = null) {
   const tier = tierOf(finding);
   const n = triples.length;
-  const scope = n > 1 ? `, everywhere it was seen (${n} suite/ring combinations)` : "";
+  const scope = n > 1 ? `, everywhere it was seen (${n} suite/environment combinations)` : "";
   if (tier === "gate") {
     const spec = finding.summary?.gate?.spec;
     return spec

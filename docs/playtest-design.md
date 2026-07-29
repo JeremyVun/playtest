@@ -502,7 +502,9 @@ The design choices worth knowing:
   artifacts live beside it in the object store. `PLAYTEST_DATA_DIR` is the
   single storage knob.
 
-Contract: [`contracts/hosted.md`](contracts/hosted.md).
+Contracts: [hosted platform](contracts/hosted.md),
+[runner](contracts/hosted-runners.md), and
+[findings](contracts/hosted-findings.md).
 
 ---
 

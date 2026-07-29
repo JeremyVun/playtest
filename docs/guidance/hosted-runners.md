@@ -28,7 +28,7 @@ Claiming assigns work; **exchanging** authorizes it. A registration credential o
 its own cannot read a suite, a secret, or a snapshot — it can only take a job off
 the board and trade that claim for a short-lived bearer scoped to that one job.
 The contract for the board, credentials, labels, and loss handling is
-[`contracts/hosted.md`](../contracts/hosted.md#runner-pool).
+[`contracts/hosted-runners.md`](../contracts/hosted-runners.md#claim-board).
 
 ## 1. Register the runner
 
@@ -37,15 +37,15 @@ In the console: **Settings → Runners → Register runner**.
 - **Name** — how this machine appears in run history (`adas-laptop`). Unique
   among the project's live runners; revoking one frees its name again.
 - **Labels** — what this machine can do (`macos, ios-sim`). Labels are routing,
-  not authority: a ring asking for `ios-sim` places its runs on a runner
+  not authority: an environment asking for `ios-sim` places its runs on a runner
   advertising `ios-sim`. Leave blank and this runner accepts any of the project's
   runs. A label is spelled with letters, digits, `.`, `_` and `-` — the field is
-  comma separated, so a comma inside a label would be two labels, and the start
-  command below is pasted straight into a shell.
+  comma separated, so a comma inside a label would be two labels, and a label
+  reaches the agent through a shell.
 
-Registering mints a credential and shows it **once**, with the exact command to
-start the runner. Playtest stores only a hash and cannot show it again; if you
-lose it, revoke that runner and register it again under the same name.
+Registering mints a credential and shows it **once**. Copy it before closing the
+dialog: Playtest stores only a hash and cannot show it again, and if you lose it
+the remedy is to revoke that runner and register it again under the same name.
 
 A registered runner's row says whether it is here right now — online, running a
 job with a link to that run, offline with how long the silence has been, or never
@@ -54,13 +54,15 @@ itself.
 
 ## 2. Start it on that machine
 
-Copy the command from the dialog and paste it into a terminal in your Playtest
-checkout:
+From a Playtest checkout, with the credential you copied:
 
 ```sh
 PLAYTEST_RUNNER_CREDENTIAL='ptr_…' ./node_modules/.bin/runner-agent pool \
-  --server https://playtest.example.com --labels macos,ios-sim
+  --server https://playtest.example.com
 ```
+
+The runner advertises the labels it was registered with, so the start line does
+not repeat them; `--labels` is an override, not a requirement.
 
 The credential travels in the environment, never as an argument, so it stays out
 of your process list and out of anyone else's `ps`. Pasted this way it does land
@@ -70,12 +72,13 @@ you can read and point `--credential-file` at that instead:
 ```sh
 umask 077 && printf 'ptr_…' > ~/.playtest/runner-credential
 ./node_modules/.bin/runner-agent pool --server https://playtest.example.com \
-  --labels macos,ios-sim --credential-file ~/.playtest/runner-credential
+  --credential-file ~/.playtest/runner-credential
 ```
 
-`npm link --workspace=@playtest/runner-agent` puts `runner-agent` on your PATH if
-you prefer the bare command. `pool` is the only mode there is: the agent is a
-long-lived process, and nothing ever starts it per job.
+`npm link --workspace=@playtest/runner-agent` puts `runner-agent` on your PATH,
+which is the bare `runner-agent pool …` the console shows. `pool` is the only
+mode there is: the agent is a long-lived process, and nothing ever starts it per
+job.
 
 The runner states what it is before it does anything:
 
@@ -85,7 +88,7 @@ Playtest runner "adas-laptop" — project acme
   labels     macos, ios-sim
   isolation  process — cases run directly on this machine
   work dir   /tmp/playtest-runner
-waiting for work — launch a run against a ring whose runner labels this runner advertises
+waiting for work — launch a run against an environment whose runner labels this runner advertises
 ```
 
 If that banner names the wrong project, the wrong labels, or never appears, stop
@@ -100,7 +103,7 @@ and exits. Restarting a runner that was mid-group resumes the same group.
 | Flag | Meaning |
 |---|---|
 | `--server <url>` | The control plane to dial. Also `PLAYTEST_SERVER_URL`. |
-| `--labels a,b` | What this machine advertises. Also `PLAYTEST_RUNNER_LABELS`. |
+| `--labels a,b` | Override what this machine advertises; without it the runner advertises the labels it was registered with. Also `PLAYTEST_RUNNER_LABELS`. |
 | `--isolation process\|container` | `process` runs cases directly (a laptop, an ephemeral CI machine); `container` runs each case in its own container. Runs record which one produced them. |
 | `--work-dir <dir>` | Where suites are materialized. Cleaned up after each group. |
 | `--credential-file <path>` | Read the credential from a file instead of the environment. Also `PLAYTEST_RUNNER_CREDENTIAL_FILE`. |
@@ -108,18 +111,18 @@ and exits. Restarting a runner that was mid-group resumes the same group.
 
 A credential passed as an argument is refused, not accepted quietly.
 
-## 3. Route work to it with ring labels
+## 3. Route work to it with environment labels
 
-A **ring** is one deployment of one application — its URL, its authorization, and
-its placement. Under **Applications → (your application) → (your ring)**, set
+A **environment** is one deployment of one application — its URL, its authorization, and
+its placement. Under **Applications → (your application) → (your environment)**, set
 **Runner labels** to the labels that should route work here (`macos, ios-sim`),
 using the same alphabet the runner's own labels use. A run is placed on a runner
-advertising *every* label its ring asks for; a ring with no labels runs anywhere
+advertising *every* label its environment asks for; an environment with no labels runs anywhere
 in the project.
 
-A web or API ring also carries a **base URL, evaluated from the claiming
+A web or API environment also carries a **base URL, evaluated from the claiming
 runner's network position**. `http://127.0.0.1:4173` therefore means "on the
-runner's own machine" — start the service there, point the ring at it, and
+runner's own machine" — start the service there, point the environment at it, and
 launch. The control plane never resolves that address; the runner does, because
 it is the one making the request. Nothing about that URL lives on the runner.
 
@@ -143,9 +146,25 @@ What it does for you, under `PLAYTEST_AUTH=dev` only:
   runs need nothing in it; uncommenting it is the whole of mobile setup (see
   [Mobile](#7-mobile-the-runner-supplies-the-build)).
 
-A first web run locally is therefore: create an application, create a ring
+A first web run locally is therefore: create an application, create an environment
 `local` with `http://127.0.0.1:4173`, launch. No runner file is touched and no
 credential is copied anywhere.
+
+For a local iOS Simulator demo, the repository helper builds the checked-in
+`TodoFixture.app`, checks Appium and XCUITest, boots the simulator, writes the
+site-qualified binding to that same `runner.yaml`, and starts the console plus
+its peer runner:
+
+```sh
+npm run hosted:ios -- <project-key>
+```
+
+The console application must be Mobile/iOS; the helper defaults its immutable
+application and environment keys to `todo/local` and its simulator to
+`iPhone 16`. `npm run hosted:ios -- --help` lists overrides for all three, an
+existing `.app`, and configure-only use. A hand-maintained, non-generated
+`runner.yaml` is never replaced unless `--replace` is explicit, and then it is
+backed up first.
 
 If a launch sits unclaimed, check that the agent is up: the server's own log
 names the credential file it wrote, and the agent prints its banner on the same
@@ -235,8 +254,8 @@ job's launch pins it:
 { "suite_id": "…", "ring_id": "…", "runner_labels": ["ci-run-1234567"] }
 ```
 
-`runner_labels` on a launch overrides the ring's labels for that run group only,
-so one shared CI ring serves every pull request.
+`runner_labels` on a launch overrides the environment's labels for that run group only,
+so one shared CI environment serves every pull request.
 
 **Without it, concurrent pull requests test each other's builds.** Two jobs
 running at once, both advertising a shared label like `ci`, are two runners
@@ -247,7 +266,7 @@ code. A per-run label makes each job's work claimable by exactly one runner: its
 own.
 
 The pin travels with the group, so a retry of that run is placed the same way
-even if the ring changed since.
+even if the environment changed since.
 
 ### What the deployment has to allow
 
@@ -272,7 +291,7 @@ work. Scope that token to the one project the pipeline gates.
 
 A mobile build's path on disk, the Appium server that drives it, and the device
 it targets are facts only the runner can know, and no platform record holds any
-of them. A ring for a mobile application therefore carries no URL, no binary and
+of them. An environment for a mobile application therefore carries no URL, no binary and
 no device: the claiming runner supplies all three, from a file on its own disk.
 
 That file is the runner configuration file, and `--config` is how the agent finds
@@ -294,7 +313,7 @@ version: 1
 
 targets:
   todo-ios:                          # the application key, from the console
-    local:                           # the ring key
+    local:                           # the environment key
       platform: ios                  # ios | android
       app: /Users/ada/build/Todo.app # your build; relative paths resolve here
       backend: local-ios
@@ -310,7 +329,7 @@ mobile:
 
 Three things about the keys, because they are the join between two places:
 they are the **immutable** keys the console shows on the application and the
-ring, not their display names; they never change once created; and nothing else
+environment, not their display names; they never change once created; and nothing else
 in the file is visible to the platform. Rename an application freely — the
 binding holds.
 
@@ -318,8 +337,8 @@ binding holds.
 already on this disk, however it got there — Xcode, a CI artifact download, a
 copy from a colleague. Pulling a build from an internal artifactory or registry
 by version is the stated v2: a runner-side provider behind the same
-application/ring binding, so when it lands nothing changes on the platform, the
-ring, or this file's keys.
+application/environment binding, so when it lands nothing changes on the platform, the
+environment, or this file's keys.
 
 The runner validates the whole file at startup and refuses to run on a problem it
 can see from here: a target naming a backend you never declared, a platform that
@@ -336,7 +355,7 @@ Playtest runner "adas-laptop" — project acme
   config     /Users/ada/.playtest/runner.yaml
   targets    todo-ios/local — ios via backend "local-ios"
   backends   local-ios — ios, managed Appium (started here)
-waiting for work — launch a run against a ring whose runner labels this runner advertises
+waiting for work — launch a run against an environment whose runner labels this runner advertises
 ```
 
 Build paths and devices are deliberately absent from that banner, and from
@@ -418,7 +437,7 @@ Two behaviors worth knowing:
   failing strangely: a container reaches neither the device, nor a loopback
   Appium, nor a build outside the workspace. Run mobile on `--isolation process`.
 
-A first mobile run is therefore: create the application and its ring in the
+A first mobile run is therefore: create the application and its environment in the
 console, add the three lines above to this file, restart the runner, launch.
 
 ## 8. Revoking a runner
@@ -436,7 +455,7 @@ heartbeats included — revoking never kills work you are waiting on.
 
 | What you see | What it means |
 |---|---|
-| The run sits in `queued`, then fails naming labels | Nothing that advertises those labels checked in. Compare the ring's runner labels with the runner's banner. |
+| The run sits in `queued`, then fails naming labels | Nothing that advertises those labels checked in. Compare the environment's runner labels with the runner's banner. |
 | `no runner has checked in … this project has none registered` | Nothing is polling for this project. Register and start one — or, locally, check that `npm run hosted` still has its peer runner up. |
 | `runner "…" claimed this run and stopped checking in` | The runner process died, slept, or lost the network mid-group. The story is reported as an infrastructure failure and the remainder is placed once more. |
 | `this runner credential is not registered` | The credential was revoked, or belongs to another deployment or another data root. Register the runner again. |

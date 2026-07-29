@@ -813,6 +813,13 @@ export async function complete(ctx: HostedDynamic) {
       }
     }
     if (!dispatchMore) {
+      // A crash-resume replaces the dispatch executor, but a story that the old
+      // process had already started deliberately stays owned by that executor
+      // and is omitted from the replacement's group spec. Completion is the
+      // boundary that resolves it. Without this pass the replacement completes
+      // an empty spec, the group becomes `done`, and the abandoned story remains
+      // `running` with its last progress snapshot.
+      await resolveAbandonedRuns(tx, { group, executorId: runner.executorId, error: body.error });
       const summary = await exitSummary(tx, group.id);
       // A user cancel may land while the executor is still winding down; its
       // best-effort complete must not flip a canceled group back to done.
@@ -838,6 +845,48 @@ export async function complete(ctx: HostedDynamic) {
   // `requested` rows would be two runners executing the same cases.
   if (dispatchMore) dispatchMore = (await dispatchContinuation(ctx, group.id)) != null;
   return { ok: true, redispatched: dispatchMore };
+}
+
+async function resolveAbandonedRuns(
+  tx: HostedDynamic,
+  { group, executorId, error }: { group: HostedDynamic; executorId: string; error?: unknown },
+) {
+  const { rows } = await tx.query(
+    `SELECT * FROM runs
+      WHERE run_group_id = $1 AND status IN ('queued','running','uploading')
+      ORDER BY case_id`,
+    [group.id],
+  );
+  for (const run of rows) {
+    const reason =
+      run.executor_id && run.executor_id !== executorId
+        ? "runner restarted before this story completed"
+        : error
+          ? `executor stopped before this story completed: ${String(error).split("\n")[0].slice(0, 300)}`
+          : run.executor_id
+            ? "executor completed the group without reporting this story"
+            : "executor completed the group before this story started";
+    const updated = await tx.query(
+      `UPDATE runs
+          SET status = 'infra', finished_at = now(), error = $2,
+              progress = NULL, updated_at = now()
+        WHERE id = $1 AND status IN ('queued','running','uploading')`,
+      [run.id, reason],
+    );
+    if (updated.rowCount === 0) continue;
+    await appendRunEvent(tx, {
+      runDbId: run.id,
+      projectId: group.project_id,
+      type: "case_report",
+      payload: { case_id: run.case_id, status: "infra", error: reason },
+    });
+    await emitRunStatus(tx, {
+      projectId: group.project_id,
+      runGroupId: group.id,
+      runDbId: run.id,
+      status: "infra",
+    });
+  }
 }
 
 /**
@@ -881,7 +930,7 @@ async function resolvedSecrets(ctx: HostedDynamic, projectId: HostedDynamic, rin
   );
   const byName = new Map(rows.map((r: HostedDynamic) => [r.name, decryptSecret(ctx.config.kmsKey, r.ciphertext)]));
   const missing = [...names].filter((n) => !byName.has(n));
-  if (missing.length) throw badRequest(`ring configuration references missing secrets: ${missing.join(", ")}`);
+  if (missing.length) throw badRequest(`environment configuration references missing secrets: ${missing.join(", ")}`);
   return Object.fromEntries(byName);
 }
 

@@ -197,14 +197,14 @@ export async function deleteApplication(ctx: HostedDynamic) {
     const suites = (await tx.query(`SELECT slug FROM suites WHERE application_id = $1 ORDER BY slug`, [app.id])).rows;
     const groups = (await tx.query(`SELECT COUNT(*) AS n FROM run_groups WHERE application_id = $1`, [app.id])).rows[0].n;
     const blockers = [
-      listBlocker(rings.map((r: HostedDynamic) => r.key), "ring", "rings"),
+      listBlocker(rings.map((r: HostedDynamic) => r.key), "environment", "environments"),
       listBlocker(suites.map((s: HostedDynamic) => s.slug), "suite", "suites"),
       groups > 0 ? `${groups} run group${groups === 1 ? "" : "s"}` : null,
     ].filter(Boolean);
     if (blockers.length) {
       throw conflict(
         `application "${app.key}" still has ${joinList(blockers as string[])} — delete them first. ` +
-          `Nothing is removed on your behalf: rings carry credentials and run groups are evidence.`,
+          `Nothing is removed on your behalf: environments carry credentials and run groups are evidence.`,
       );
     }
     await tx.query(`DELETE FROM applications WHERE id = $1`, [app.id]);
@@ -229,7 +229,7 @@ export async function listRings(ctx: HostedDynamic) {
   return { items: (await ringsOf(ctx, app.id)).map(ringView) };
 }
 
-/** POST /applications/:a/rings {key, name, base_url?, runner_labels?, discovery_allowed?, config?} */
+/** POST /applications/:a/rings {key, name, base_url?, runner_labels?, config?} */
 export async function createRing(ctx: HostedDynamic) {
   const p = requireAuth(ctx);
   const app = await applicationById(ctx, ctx.params.a);
@@ -242,9 +242,9 @@ export async function createRing(ctx: HostedDynamic) {
     let rows;
     try {
       ({ rows } = await tx.query(
-        `INSERT INTO rings (id, application_id, key, name, base_url, runner_labels, discovery_allowed, config)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-        [id, app.id, fields.key, fields.name, fields.base_url, fields.runner_labels, fields.discovery_allowed, fields.config],
+        `INSERT INTO rings (id, application_id, key, name, base_url, runner_labels, config)
+           VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+        [id, app.id, fields.key, fields.name, fields.base_url, fields.runner_labels, fields.config],
       ));
     } catch (e: HostedDynamic) {
       if (/UNIQUE constraint failed/.test(e.message)) throw ringKeyConflict(fields.key, app.key);
@@ -261,7 +261,6 @@ export async function createRing(ctx: HostedDynamic) {
         key: fields.key,
         name: fields.name,
         base_url: fields.base_url,
-        discovery_allowed: fields.discovery_allowed,
       },
     });
     return rows[0];
@@ -271,8 +270,8 @@ export async function createRing(ctx: HostedDynamic) {
 
 /**
  * PUT /rings/:r [developer] — merge-on-update: an omitted field keeps its stored
- * value, so a partial `{discovery_allowed: true}` can never silently wipe the
- * auth/secret_env overlay, the URL, or the routing labels.
+ * value, so a partial `{runner_labels: [...]}` can never silently wipe the
+ * auth/secret_env overlay or the URL.
  */
 export async function updateRing(ctx: HostedDynamic) {
   const p = requireAuth(ctx);
@@ -281,10 +280,10 @@ export async function updateRing(ctx: HostedDynamic) {
   const body = await readJsonBody(ctx.req);
   if (!body || typeof body !== "object" || Array.isArray(body)) throw badRequest("body must be a JSON object");
   refuseImmutable(body, ring, {
-    key: `a ring's key is part of its identity — runner configuration binds "${application.key}/${ring.key}". Create a new ring instead`,
+    key: `an environment's key is part of its identity — runner configuration binds "${application.key}/${ring.key}". Create a new environment instead`,
   });
   if ("application_id" in body && body.application_id !== ring.application_id) {
-    throw badRequest(`a ring belongs to one application for its whole life — create a ring on the other application instead`);
+    throw badRequest(`an environment belongs to one application for its whole life — create one on the other application instead`);
   }
   const fields = validateRingFields(
     {
@@ -292,7 +291,6 @@ export async function updateRing(ctx: HostedDynamic) {
       name: "name" in body ? body.name : ring.name,
       base_url: "base_url" in body ? body.base_url : ring.base_url,
       runner_labels: "runner_labels" in body ? body.runner_labels : ring.runner_labels,
-      discovery_allowed: "discovery_allowed" in body ? body.discovery_allowed : ring.discovery_allowed,
       config: "config" in body ? body.config : ring.config,
     },
     application,
@@ -301,10 +299,9 @@ export async function updateRing(ctx: HostedDynamic) {
 
   const row = await ctx.db.withTx(async (tx: HostedDynamic) => {
     const { rows } = await tx.query(
-      `UPDATE rings SET name = $2, base_url = $3, runner_labels = $4, discovery_allowed = $5,
-                        config = $6, updated_at = now()
+      `UPDATE rings SET name = $2, base_url = $3, runner_labels = $4, config = $5, updated_at = now()
          WHERE id = $1 RETURNING *`,
-      [ring.id, fields.name, fields.base_url, fields.runner_labels, fields.discovery_allowed, fields.config],
+      [ring.id, fields.name, fields.base_url, fields.runner_labels, fields.config],
     );
     await audit(tx, {
       actor: actorOf(p),
@@ -316,7 +313,6 @@ export async function updateRing(ctx: HostedDynamic) {
         application: application.key,
         key: ring.key,
         base_url: fields.base_url,
-        discovery_allowed: fields.discovery_allowed,
       },
     });
     return rows[0];
@@ -357,9 +353,9 @@ export async function deleteRing(ctx: HostedDynamic) {
     ].filter(Boolean);
     if (blockers.length) {
       throw conflict(
-        `ring "${application.key}/${ring.key}" has ${joinList(blockers as string[])} and can't be deleted — ` +
+        `environment "${application.key}/${ring.key}" has ${joinList(blockers as string[])} and can't be deleted — ` +
           `run history records where it pointed, and a bound auth provider would lose its scope. ` +
-          `Change the ring's URL instead, or leave it unused.`,
+          `Change its URL instead, or leave it unused.`,
       );
     }
     await tx.query(`DELETE FROM rings WHERE id = $1`, [ring.id]);
@@ -391,7 +387,7 @@ export async function ringById(ctx: HostedDynamic, id: HostedDynamic) {
       WHERE r.id = $1`,
     [id],
   );
-  if (!rows[0]) throw notFound(`no ring "${id}"`);
+  if (!rows[0]) throw notFound(`no environment "${id}"`);
   const application = await applicationById(ctx, rows[0].application_id);
   return { ring: rows[0], application };
 }
@@ -441,8 +437,7 @@ function validateRingFields(body: HostedDynamic, application: HostedDynamic, { k
   // Through the same validator the runner registry uses, so a ring can never ask
   // for a label a runner is not allowed to advertise.
   const runner_labels = normalizeLabels(body.runner_labels, "runner_labels");
-  const discovery_allowed = body.discovery_allowed === true;
-  return { key, name, base_url, config, runner_labels, discovery_allowed };
+  return { key, name, base_url, config, runner_labels };
 }
 
 /**
@@ -455,7 +450,7 @@ function validateBaseUrl(raw: HostedDynamic, application: HostedDynamic) {
   if (application.driver === "mobile") {
     if (value) {
       throw badRequest(
-        `"${application.key}" is a mobile application, so its rings hold no URL — the claiming runner ` +
+        `"${application.key}" is a mobile application, so its environments hold no URL — the claiming runner ` +
           `supplies the build, the device and the Appium endpoint from its own configuration file`,
       );
     }
@@ -463,7 +458,7 @@ function validateBaseUrl(raw: HostedDynamic, application: HostedDynamic) {
   }
   if (!value) {
     throw badRequest(
-      `"base_url" is required for a ${application.driver} ring — it is the address this ring's runs point at, ` +
+      `"base_url" is required for a ${application.driver} environment — it is the address its runs point at, ` +
         `evaluated from the claiming runner's network position (a loopback URL means the runner's own machine)`,
     );
   }
@@ -497,7 +492,7 @@ export function validateRingConfig(config: HostedDynamic) {
   for (const key of Object.keys(config)) {
     if (!CONFIG_KEYS.includes(key)) {
       throw badRequest(
-        `"config.${key}" is not part of a ring's configuration (expected ${CONFIG_KEYS.map(q).join(", ")})`,
+        `"config.${key}" is not part of an environment's configuration (expected ${CONFIG_KEYS.map(q).join(", ")})`,
       );
     }
     if (config[key] != null && (typeof config[key] !== "object" || Array.isArray(config[key]))) {
@@ -509,7 +504,7 @@ export function validateRingConfig(config: HostedDynamic) {
   }
   for (const key of Object.keys(config.auth ?? {})) {
     if (!RING_AUTH_KEYS.includes(key)) {
-      throw badRequest(`"config.auth.${key}" is not part of a ring's authorization (expected ${RING_AUTH_KEYS.map(q).join(", ")})`);
+      throw badRequest(`"config.auth.${key}" is not part of an environment's authorization (expected ${RING_AUTH_KEYS.map(q).join(", ")})`);
     }
   }
   if (config.auth?.identities != null && (typeof config.auth.identities !== "object" || Array.isArray(config.auth.identities))) {
@@ -521,28 +516,28 @@ export function validateRingConfig(config: HostedDynamic) {
 /** Why this `config.app` key is refused — physical, structural, or unknown. */
 function ringAppKeyError(key: string) {
   if (key === "base_url") {
-    return `"config.app.base_url" is not a ring overlay key — a ring's URL is its own "base_url" field`;
+    return `"config.app.base_url" is not an environment overlay key — an environment's URL is its own "base_url" field`;
   }
   if (PHYSICAL_APP_KEYS.includes(key)) {
     return (
-      `"config.app.${key}" is a physical target the claiming runner resolves, not ring configuration — ` +
+      `"config.app.${key}" is a physical target the claiming runner resolves, not environment configuration — ` +
       `a mobile build's path, its device and its Appium endpoint live in the runner's own configuration ` +
-      `file, keyed by application and ring key`
+      `file, keyed by application and environment key`
     );
   }
   if (key === "compose") {
     return (
-      `"config.app.compose" would boot a different application under this ring's name, and hosted execution ` +
-      `clears it — point the ring's "base_url" at the deployment instead`
+      `"config.app.compose" would boot a different application under this environment's name, and hosted execution ` +
+      `clears it — point its "base_url" at the deployment instead`
     );
   }
   if (key === "driver") {
-    return `"config.app.driver" is the application's driver, not the ring's — create a separate application for another surface`;
+    return `"config.app.driver" is the application's driver, not the environment's — create a separate application for another surface`;
   }
   if (key === "envs") {
-    return `"config.app.envs" is the suite's own overlay map; a ring IS one entry in it and cannot nest another`;
+    return `"config.app.envs" is the suite's own overlay map; an environment IS one entry in it and cannot nest another`;
   }
-  return `"config.app.${key}" is not a ring overlay key (allowed: ${LOGICAL_APP_KEYS.join(", ")})`;
+  return `"config.app.${key}" is not an environment overlay key (allowed: ${LOGICAL_APP_KEYS.join(", ")})`;
 }
 
 /** Refuse an immutable field the caller tried to change, with its own reason. */
@@ -560,9 +555,9 @@ const q = (s: string) => `"${s}"`;
 const keyConflict = (key: HostedDynamic) => conflict(`an application with key "${key}" already exists in this project`);
 
 const ringKeyConflict = (key: HostedDynamic, appKey: HostedDynamic) =>
-  conflict(`application "${appKey}" already has a ring named "${key}"`);
+  conflict(`application "${appKey}" already has an environment named "${key}"`);
 
-/** `2 rings ("local", "prod")` — the referrers, named, capped so a refusal stays readable. */
+/** `2 environments ("local", "prod")` — the referrers, named, capped so a refusal stays readable. */
 function listBlocker(values: string[], singular: string, plural: string) {
   if (!values.length) return null;
   const shown = values.slice(0, 5).map(q).join(", ");
@@ -600,7 +595,6 @@ export function ringView(r: HostedDynamic, application: HostedDynamic = null): H
     // Null for a mobile ring: the claiming runner supplies the build.
     base_url: r.base_url ?? null,
     runner_labels: r.runner_labels ?? [],
-    discovery_allowed: r.discovery_allowed,
     config: r.config ?? {},
     updated_at: r.updated_at,
   };

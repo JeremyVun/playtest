@@ -104,6 +104,7 @@ Unit and integration tests use temporary SQLite data roots and need no database
 service or Docker. A clip integration case additionally needs `ffmpeg` with the
 `drawtext` and `subtitles` filters.
 
-Cross-component guarantees, deployment topology, API conventions, and the
-runner protocol are defined in
-[`docs/contracts/hosted.md`](../../../docs/contracts/hosted.md).
+Cross-component guarantees, deployment topology, and API conventions are
+defined in [`docs/contracts/hosted.md`](../../../docs/contracts/hosted.md).
+Runner placement and execution are defined in
+[`docs/contracts/hosted-runners.md`](../../../docs/contracts/hosted-runners.md).

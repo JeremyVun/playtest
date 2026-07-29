@@ -182,7 +182,7 @@ export async function resolveProposalSpec(declaration: HostedDynamic) {
   if (declaration.url || declaration.discover) {
     throw badRequest(
       "the control plane does not fetch an OpenAPI document from a URL — paste or upload the document " +
-        "(a spec URL becomes ring configuration when hosted authoring jobs land)",
+        "(a spec URL becomes environment configuration when hosted authoring jobs land)",
     );
   }
   const workDir = await fsp.mkdtemp(path.join(os.tmpdir(), "pt-spec-"));

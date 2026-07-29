@@ -80,7 +80,7 @@ function registerRoutes() {
   route("/p/:key/insights/:id", redirect);
   route("/p/:key/search", redirect);
   // Personas are project-wide: one list, reused by every suite's stories.
-  route("/p/:key/applications", (p: WebDynamic) => applicationsPage(p.key));
+  route("/p/:key/applications", (p: WebDynamic, q: WebDynamic) => applicationsPage(p.key, q));
   route("/p/:key/applications/:applicationKey", (p: WebDynamic) => applicationPage(p.key, p.applicationKey));
   route("/p/:key/personas", (p: WebDynamic) => personasPage(p.key));
   route("/p/:key/settings", (p: WebDynamic) => settingsPage(p.key));

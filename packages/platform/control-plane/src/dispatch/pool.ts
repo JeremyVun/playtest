@@ -159,7 +159,7 @@ export class ClaimBoard {
         `no runner with ${missing.length === 1 ? "the label" : "the labels"} ${named} has checked in for ` +
         `${minutes} minute${minutes === 1 ? "" : "s"} — ${runners.length} runner${runners.length === 1 ? " is" : "s are"} ` +
         `available to this project (${runners.map((r: DbRow) => `"${r.name}": ${(r.labels || []).join(", ") || "no labels"}`).join("; ")}). ` +
-        `Give this ring's runner labels to a running runner, or start one advertising them.`
+        `Give this environment's runner labels to a running runner, or start one advertising them.`
       );
     }
     return (

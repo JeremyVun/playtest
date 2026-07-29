@@ -99,4 +99,4 @@ npm test --workspace=@playtest/runner-agent
 The unit suite is hermetic and exercises process isolation without requiring a
 running control plane or Docker. Hosted behavior and the executor protocol are
 specified in
-[`docs/contracts/hosted.md`](../../../docs/contracts/hosted.md).
+[`docs/contracts/hosted-runners.md`](../../../docs/contracts/hosted-runners.md).

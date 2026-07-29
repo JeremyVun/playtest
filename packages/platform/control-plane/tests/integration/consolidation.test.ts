@@ -26,7 +26,7 @@ async function seedProject(app: HostedDynamic, api: HostedDynamic, key: HostedDy
   const project = (await api.post("/projects", { key, name: key })).body;
   // The application and its discovery-allowed ring come first: a suite binds to
   // an application at creation, and a run group records both.
-  const { application, ring } = await createTarget(api, project, { ringKey: "staging", discoveryAllowed: true });
+  const { application, ring } = await createTarget(api, project, { ringKey: "staging" });
   const suite = (await api.post(`/projects/${key}/suites`, { slug: "s", name: "S" })).body;
   const snapshotId = ulid();
   await app.db.query(

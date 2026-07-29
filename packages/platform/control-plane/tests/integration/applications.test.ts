@@ -4,7 +4,7 @@
 // Covered here, by acceptance gate:
 //   1  independent surfaces per project, keys immutable and unique in scope
 //   2  a suite launches only against its own application's rings, and a ring's
-//      session references cannot borrow another ring's provider
+//      session references cannot borrow another environment's provider
 //   3  a web ring is "a base URL plus logical policy" and needs no runner setup
 //   8  (platform side) the group spec carries the ring target, and authored
 //      physical fields are inert under hosted execution
@@ -82,7 +82,7 @@ test("applications: a project owns independent surfaces; keys, drivers and platf
     assert.equal((await api.post(`/applications/${ios.id}/rings`, { key: "local" })).status, 201);
     const dupRing = await api.post(`/applications/${web.id}/rings`, { key: "local", base_url: "http://127.0.0.1:4173" });
     assert.equal(dupRing.status, 409);
-    assert.match(dupRing.body.error.message, /already has a ring named "local"/);
+    assert.match(dupRing.body.error.message, /already has an environment named "local"/);
 
     const listed = await api.get(`/projects/${p.key}/applications?include=rings`);
     assert.deepEqual(listed.body.items.map((a: HostedDynamic) => a.key), ["todo-ios", "todo-web"]);
@@ -101,7 +101,7 @@ test("rings: a web ring is a base URL plus logical policy — the five physical 
     // A web ring must have a URL; a mobile ring must not.
     const noUrl = await api.post(`/applications/${web.id}/rings`, { key: "staging" });
     assert.equal(noUrl.status, 400);
-    assert.match(noUrl.body.error.message, /"base_url" is required for a web ring/);
+    assert.match(noUrl.body.error.message, /"base_url" is required for a web environment/);
     assert.match(noUrl.body.error.message, /claiming runner's network position/);
     const badUrl = await api.post(`/applications/${web.id}/rings`, { key: "staging", base_url: "staging.acme.test" });
     assert.equal(badUrl.status, 400);
@@ -116,12 +116,12 @@ test("rings: a web ring is a base URL plus logical policy — the five physical 
     // The five physical keys are refused at the ONE position where core would
     // read them, each with its own reason.
     for (const [key, value, pattern] of [
-      ["base_url", "https://staging.acme.test", /a ring's URL is its own "base_url" field/],
+      ["base_url", "https://staging.acme.test", /an environment's URL is its own "base_url" field/],
       ["app", "/Users/me/build/Todo.app", /physical target the claiming runner resolves/],
       ["platform", "ios", /physical target the claiming runner resolves/],
       ["device", "iPhone 16", /physical target the claiming runner resolves/],
       ["appium_url", "http://127.0.0.1:4723", /physical target the claiming runner resolves/],
-      ["compose", "docker-compose.yml", /boot a different application under this ring's name/],
+      ["compose", "docker-compose.yml", /boot a different application under this environment's name/],
     ] as HostedDynamic[]) {
       const res = await api.post(`/applications/${web.id}/rings`, {
         key: `probe-${key.replace(/_/g, "-")}`,
@@ -140,7 +140,6 @@ test("rings: a web ring is a base URL plus logical policy — the five physical 
       name: "Staging",
       base_url: "https://staging.acme.test",
       runner_labels: ["linux"],
-      discovery_allowed: true,
       config: {
         app: { viewport: { width: 1280, height: 720 }, settle: 250 },
         auth: { default: "member", identities: { app: { $session: "sso/app" }, device: { $session: "sso/device" } } },
@@ -158,9 +157,9 @@ test("rings: a web ring is a base URL plus logical policy — the five physical 
       config: { runner: {} },
     });
     assert.equal(stray.status, 400);
-    assert.match(stray.body.error.message, /not part of a ring's configuration/);
+    assert.match(stray.body.error.message, /not part of an environment's configuration/);
 
-    // A ring key is identity too, and a ring never moves between applications.
+    // An environment key is identity too, and one never moves between applications.
     const rename = await api.put(`/rings/${ok.body.id}`, { key: "prod" });
     assert.equal(rename.status, 400);
     assert.match(rename.body.error.message, /key is part of its identity/);
@@ -169,9 +168,9 @@ test("rings: a web ring is a base URL plus logical policy — the five physical 
     assert.match(rebind.body.error.message, /belongs to one application for its whole life/);
 
     // Merge-on-update: a partial PUT never wipes the overlay it did not mention.
-    const flipped = await api.put(`/rings/${ok.body.id}`, { discovery_allowed: false });
+    const flipped = await api.put(`/rings/${ok.body.id}`, { name: "Staging EU" });
     assert.equal(flipped.status, 200);
-    assert.equal(flipped.body.discovery_allowed, false);
+    assert.equal(flipped.body.name, "Staging EU");
     assert.equal(flipped.body.base_url, "https://staging.acme.test");
     assert.deepEqual(flipped.body.runner_labels, ["linux"]);
     assert.equal(flipped.body.config.secret_env.APP, "APP_TOKEN");
@@ -213,7 +212,7 @@ test("launch: a suite may only launch against its own application's rings", asyn
   });
 });
 
-test("sessions: a ring cannot borrow an auth provider bound to another ring", async () => {
+test("sessions: an environment cannot borrow an auth provider bound to another one", async () => {
   await withApp(async ({ api, base }: HostedDynamic) => {
     const p = await project(api, "gate2b");
     const { application, ring: borrower } = await createTarget(api, p, {
@@ -247,7 +246,7 @@ test("sessions: a ring cannot borrow an auth provider bound to another ring", as
       ring_id: outsider.id,
     });
     assert.equal(stolen.status, 404, JSON.stringify(stolen.body));
-    assert.match(stolen.body.error.message, /no ring .* in this project/);
+    assert.match(stolen.body.error.message, /no environment .* in this project/);
 
     const suite = await suiteWithStories(api, p);
     const groupId = (
@@ -260,7 +259,7 @@ test("sessions: a ring cannot borrow an auth provider bound to another ring", as
     const token = await claimAndExchange(api, base, p, groupId);
 
     // The runner asks for the ring's declared reference, and the resolution
-    // refuses it: the provider belongs to another ring.
+    // refuses it: the provider belongs to another environment.
     const claimed = await fetch(`${base}/api/v1/runner/sessions/claim`, {
       method: "POST",
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
@@ -268,7 +267,7 @@ test("sessions: a ring cannot borrow an auth provider bound to another ring", as
     }).then((r) => r.json());
     assert.match(
       claimed.sessions["sso/member"].error,
-      /bound to another ring/,
+      /bound to another environment/,
       `expected a ring-scope refusal, got ${JSON.stringify(claimed)}`,
     );
   });
@@ -428,12 +427,12 @@ test("deletion: refused while referenced, naming the referrers; unreferenced del
     // A ring blocks its application.
     let res = await api.del(`/applications/${application.id}`);
     assert.equal(res.status, 409, JSON.stringify(res.body));
-    assert.match(res.body.error.message, /still has 1 ring \("local"\)/);
+    assert.match(res.body.error.message, /still has 1 environment \("local"\)/);
 
     const suite = await suiteWithStories(api, p);
     res = await api.del(`/applications/${application.id}`);
     assert.equal(res.status, 409);
-    assert.match(res.body.error.message, /1 ring \("local"\) and 1 suite \("todos"\)/);
+    assert.match(res.body.error.message, /1 environment \("local"\) and 1 suite \("todos"\)/);
 
     // A ring-bound auth provider blocks its ring, and is never promoted to
     // project-wide behind anyone's back.
@@ -503,7 +502,7 @@ test("boot: a data root built by the retired schema fails with an actionable res
         e instanceof ServerConfigError &&
         /0017_app_artifacts\.sql/.test(e.message) &&
         /PLAYTEST_DATA_DIR/.test(e.message) &&
-        /Applications and rings replaced environments/.test(e.message) &&
+        /Applications and environments replaced the previous target model/.test(e.message) &&
         !/at Object/.test(e.message),
     );
   } finally {

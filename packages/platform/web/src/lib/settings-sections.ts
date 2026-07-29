@@ -9,7 +9,7 @@
 // section, not a tab under Settings. Kept DOM-free so the hermetic gate can
 // assert the section set and role disclosure without a browser.
 export const SETTINGS_SECTIONS: WebDynamic = [
-  // Runners is the other half of "where does a run happen": a ring says what a
+  // Runners is the other half of "where does a run happen": an environment says what a
   // run points at, Runners says which machine executes it. Registering and
   // revoking are developer acts, like the rings they serve. The claim board is
   // the ONE placement model, so this section is always present.

@@ -70,7 +70,13 @@ export function modelField({ label, hint, value = "", tiers = [], inheritLabel =
     h("option", { value: CUSTOM, selected: isCustom || undefined }, "Custom model name…"),
   );
   const field = formField(label, sel, hint);
-  // The custom input lives inside the field, between the dropdown and the hint.
-  field.insertBefore(custom, field.querySelector(".hint"));
+  // The dropdown and the name it may reveal are ONE control, so they are one
+  // element: stacked, they look the same as they always did, but a layout that
+  // gives the answer a column of its own (Settings → Models) gets a single
+  // thing to put there instead of two children to place separately.
+  const box = h("div.field-control", {});
+  const enhanced = field.querySelector(".selectw");
+  field.insertBefore(box, enhanced);
+  box.append(enhanced, custom);
   return field;
 }

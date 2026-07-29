@@ -72,23 +72,34 @@ test("composeSystemPrompt: states the assistant can never save — the human sav
   assert.match(prompt, /more:true on every story except the last/);
 });
 
-test("composeSystemPrompt: rings ride as key + URL + discovery flag, and the target is stated as the ring's — never secrets", async () => {
+test("composeSystemPrompt: names the story-type choice, stays black-box, and requires scannable replies", async () => {
+  const skill = await skillBody();
+  const prompt = composeSystemPrompt({ skill, suiteSlug: "s", defaultsYaml: "", cases: [], personaFiles: [] });
+  assert.match(prompt, /Regression journey — a repeatable pass\/fail check/);
+  assert.match(prompt, /Discovery story — an open-ended study/);
+  assert.match(prompt, /works black-box/);
+  assert.match(prompt, /Never offer to examine the site first/);
+  assert.match(prompt, /each decision or\n  option on its own line/);
+  assert.match(prompt, /blank line between distinct\n  paragraphs/);
+});
+
+test("composeSystemPrompt: environments ride as key + URL, and the target is stated as theirs — never secrets", async () => {
   const skill = await skillBody();
   const prompt = composeSystemPrompt({
     skill, suiteSlug: "s", defaultsYaml: "", cases: [], personaFiles: [],
     rings: [
-      { key: "staging", base_url: "https://staging.example", discovery_allowed: true },
-      { key: "production", base_url: "https://app.example", discovery_allowed: false },
-      { key: "local", base_url: null, discovery_allowed: false },
+      { key: "staging", base_url: "https://staging.example" },
+      { key: "production", base_url: "https://app.example" },
+      { key: "local", base_url: null },
     ],
   });
-  assert.match(prompt, /- staging — https:\/\/staging\.example \(discovery allowed\)/);
+  assert.match(prompt, /- staging — https:\/\/staging\.example/);
   assert.match(prompt, /- production — https:\/\/app\.example/);
-  // A URL-less ring is a mobile one; the prompt says who supplies the build
-  // rather than inviting the model to author a path.
+  // A URL-less environment is a mobile one; the prompt says who supplies the
+  // build rather than inviting the model to author a path.
   assert.match(prompt, /- local — the claiming runner supplies the build/);
-  // The physical target belongs to the ring, and the assistant is told to draft
-  // logical overlays only.
+  // The physical target belongs to the environment, and the assistant is told
+  // to draft logical overlays only.
   assert.match(prompt, /its URL replaces any\n`app\.base_url` a suite authors/);
   assert.match(prompt, /never a mobile build path, device or Appium endpoint/);
   assert.match(prompt, /never written into suite files/);

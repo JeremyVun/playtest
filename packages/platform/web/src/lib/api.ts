@@ -1,6 +1,7 @@
 // API client. Wraps fetch against /api/v1, parses the JSON body, and turns the §2
 // error envelope { error: { code, message, details } } into a thrown ApiError so
 // callers can render the friendly message + field details (never a raw 500).
+import { decodeServerEvent } from "./server-events.js";
 
 export class ApiError extends Error {
   declare status: number;
@@ -66,6 +67,60 @@ async function request(method: HttpMethod, path: string, { body, raw, headers, s
   return buf;
 }
 
+async function postEvents(
+  path: string,
+  body: unknown,
+  onEvent: (event: { event: string; data: WebDynamic }) => void,
+): Promise<unknown> {
+  const res = await fetch(`/api/v1${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "text/event-stream" },
+    body: JSON.stringify(body),
+  });
+  const contentType = res.headers.get("content-type") || "";
+
+  // Backward compatibility with a control plane that does not offer progress:
+  // it returns the ordinary final JSON envelope and the caller still works.
+  if (contentType.includes("application/json")) {
+    const data = await res.json();
+    if (!res.ok) throw new ApiError(res.status, data);
+    cache.clear();
+    return data;
+  }
+  if (!res.ok || !contentType.includes("text/event-stream") || !res.body) {
+    throw new ApiError(res.status, { error: { message: `HTTP ${res.status}` } });
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let pending = "";
+  let result: unknown;
+  for (;;) {
+    const chunk = await reader.read();
+    pending += decoder.decode(chunk.value, { stream: !chunk.done });
+    let boundary;
+    while ((boundary = pending.indexOf("\n\n")) >= 0) {
+      const block = pending.slice(0, boundary);
+      pending = pending.slice(boundary + 2);
+      const message = decodeServerEvent(block);
+      if (!message) continue;
+      if (message.event === "result") result = message.data;
+      else if (message.event === "error") {
+        const status = Number(message.data?.status) || 500;
+        throw new ApiError(status, { error: message.data?.error });
+      } else {
+        onEvent(message);
+      }
+    }
+    if (chunk.done) break;
+  }
+  if (result === undefined) {
+    throw new ApiError(502, { error: { message: "the drafting response ended before a result arrived — try again" } });
+  }
+  cache.clear();
+  return result;
+}
+
 export const api = {
   // `opts.signal` lets a caller abandon a request it no longer needs. The long
   // poll in lib/feed.js depends on it: a browser allows only ~6 connections per
@@ -87,6 +142,11 @@ export const api = {
     return entry.promise.then((value) => structuredClone(value) as T);
   },
   post: <T = WebDynamic>(path: string, body: unknown) => request("POST", path, { body }) as Promise<T>,
+  postEvents: <T = WebDynamic>(
+    path: string,
+    body: unknown,
+    onEvent: (event: { event: string; data: WebDynamic }) => void,
+  ) => postEvents(path, body, onEvent) as Promise<T>,
   put: <T = WebDynamic>(path: string, body: unknown) => request("PUT", path, { body }) as Promise<T>,
   patch: <T = WebDynamic>(path: string, body: unknown) => request("PATCH", path, { body }) as Promise<T>,
   del: <T = WebDynamic>(path: string, body?: unknown) => request("DELETE", path, { body }) as Promise<T>,

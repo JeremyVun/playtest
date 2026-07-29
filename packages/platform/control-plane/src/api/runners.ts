@@ -23,6 +23,8 @@ import { emitPlatformEvent } from "../events/outbox.ts";
  * when it last checked in, and what it is working on right now. Ephemeral CI
  * registrations are excluded; they are pipeline scaffolding, not fleet, and one
  * busy repository would otherwise bury the machines a person actually keeps.
+ * Revoked runners are excluded for the same reason — they are history, not
+ * fleet — until the run one was still holding finishes.
  *
  * Site-scoped runners appear here too, because this project's launches really
  * are claimable by them — but read-only (`scope: "site"`), and projected FOR
@@ -43,7 +45,11 @@ export async function listRunners(ctx: HostedDynamic) {
          ON d.runner_id = r.id AND d.status IN ${ACTIVE_DISPATCH_STATES_SQL}
       WHERE (r.project_id = $1 OR r.project_id IS NULL)
         AND r.ephemeral = 0
-        AND (r.project_id IS NOT NULL OR r.revoked_at IS NULL)
+        -- Revocation retires a machine, so it leaves the fleet list — the act is
+        -- recorded in the audit log and in the run history it already earned.
+        -- The one exception is a revoked runner still finishing the run it had
+        -- claimed: that work is visible until it lands, then the row goes.
+        AND (r.revoked_at IS NULL OR d.id IS NOT NULL)
       ORDER BY r.project_id IS NULL, r.name`,
     [project.id],
   );
@@ -129,7 +135,7 @@ export async function deleteRunner(ctx: HostedDynamic) {
       throw forbidden(
         `runner "${site[0].name}" is site-scoped: it serves every project on this deployment, so only a site ` +
           `operator can revoke it (DELETE /api/v1/site/runners/${ctx.params.r}). This project can stop using it ` +
-          `by giving its rings runner labels that machine does not advertise.`,
+          `by giving its environments runner labels that machine does not advertise.`,
       );
     }
     throw notFound(`no runner "${ctx.params.r}" in project "${project.key}"`);

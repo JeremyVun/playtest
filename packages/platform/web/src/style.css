@@ -246,54 +246,80 @@ code, .mono { font-family: var(--mono); font-size: var(--fs-sm); }
 #main { overflow-y: auto; min-height: 0; }
 
 /* ---------- system status bar ----------
-   Always on, under every project page: whether this console is live, how deep
-   the dispatch queue is, how long a run waits for an executor, whether the
-   reconciler is beating, and what the models have cost. It is a glance, not a
-   dashboard — one line of quiet numbers, each one carrying its state in words
-   (never colour alone), with the dispatch ledger in a drawer that opens OVER
-   the page rather than pushing it. */
+   Always on, under every project page. It is a glance, not a dashboard: whether
+   this console is live, what is running right now, anything that is actually
+   wrong, and what the models have cost. Machinery that is behaving is silent
+   here — heartbeats, queue percentiles and the cap wait in the drawer, which
+   opens OVER the page rather than pushing it. Every state carries its meaning
+   in words; colour only ranks what the words already say. */
 #statusbar { position: relative; background: var(--bg1); border-top: 1px solid var(--line); }
 .sb-bar {
-  display: flex; align-items: center; gap: 18px; height: 30px; padding: 0 14px;
-  font-size: var(--fs-micro); color: var(--dim); white-space: nowrap; overflow: hidden;
+  display: flex; align-items: center; gap: 12px; height: 32px; padding: 0 14px;
+  font-size: var(--fs-xs); color: var(--dim); white-space: nowrap; overflow: hidden;
 }
-.sb-live, .sb-item { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
-/* The items live in a wrapper the repaint can swap wholesale, but they must lay
-   out as if they were the bar's own children — hence `contents`, so the bar's
-   flex gap still separates them. */
-.sb-items { display: contents; }
-.sb-k { color: var(--faint); letter-spacing: .06em; text-transform: uppercase; }
+.sb-live, .sb-spend { display: inline-flex; align-items: center; gap: 6px; min-width: 0; flex: none; }
+/* Activity is the sentence the bar exists for, so it sits first after the
+   connection state and is divided from it rather than merely spaced. */
+.sb-activity {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--ink);
+  padding-left: 12px; border-left: 1px solid var(--line2);
+}
+.sb-activity.accent { color: var(--accent); }
+.sb-activity.neutral { color: var(--dim); }
+/* The faults, which are usually absent — `contents` keeps the bar's own flex gap
+   between them when they are not. */
+.sb-alerts { display: contents; }
+.sb-alert {
+  display: inline-flex; align-items: center; gap: 6px; flex: none;
+  padding: 1px 9px; border-radius: 999px; font-weight: var(--fw-med);
+  color: var(--warn); background: var(--warn-soft);
+}
+.sb-alert::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.sb-k { color: var(--faint); letter-spacing: .06em; text-transform: uppercase; font-size: var(--fs-micro); }
 .sb-v { color: var(--ink); font-variant-numeric: tabular-nums; }
-.sb-v.pass { color: var(--pass); }
-.sb-v.infra { color: var(--warn); }
-.sb-v.accent { color: var(--accent); }
-.sb-v.neutral { color: var(--dim); }
+/* A healthy connection is ambient and recedes; a dropped one is the loudest
+   thing in the bar, because nothing else on screen can be trusted while it is. */
+.sb-live .sb-v { color: var(--dim); }
+.sb-live.infra .sb-v { color: var(--warn); font-weight: var(--fw-med); }
 .sb-dot { width: 6px; height: 6px; border-radius: 50%; flex: none; background: var(--dim); }
 .sb-dot.pass { background: var(--pass); }
 .sb-dot.infra { background: var(--warn); }
 .sb-spacer { flex: 1; }
 .sb-toggle {
   display: inline-flex; align-items: center; gap: 6px; flex: none;
-  padding: 2px 8px; border-radius: 6px; color: var(--dim); font-size: var(--fs-micro);
+  padding: 2px 8px; border-radius: 6px; color: var(--dim); font-size: var(--fs-xs);
 }
 .sb-toggle:hover, .sb-toggle[aria-expanded="true"] { background: var(--bg2); color: var(--ink); }
 .sb-chev { font-size: 9px; }
 .sb-panel {
   position: absolute; left: 0; right: 0; bottom: 100%; z-index: 30;
-  max-height: 46vh; overflow-y: auto; padding: 14px 16px 16px;
+  max-height: 46vh; overflow-y: auto; padding: 16px 16px 18px;
   background: var(--bg1); border-top: 1px solid var(--line2);
   /* The drawer opens upward, so its shadow falls upward too — the stock
      downward --shadow would be cast behind the bar, where nobody can see it. */
   box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.28);
 }
-/* The sentence behind each number in the bar. A `title` is unreachable by
-   keyboard and invisible on touch, so the notes get a home on screen too. */
-.sb-panel .sb-notes {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 4px 20px;
-  font-size: var(--fs-xs); color: var(--dim); margin-bottom: 14px;
+/* A sentence stretched across a 2000px display is unreadable, and a four-column
+   table with that much air says less than a narrow one. The drawer's content
+   keeps a page's measure and lets the rest of the width alone. */
+.sb-inner { max-width: 1180px; }
+/* The numbers the bar leaves out, each with the sentence behind it: a `title` is
+   unreachable by keyboard and invisible on touch. Columns are capped, not
+   stretched, so wide screens get whitespace instead of 500px-wide labels. */
+.sb-stats {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 260px));
+  gap: 14px 26px; margin-bottom: 18px;
 }
-.sb-panel .sb-notes b { color: var(--ink); font-weight: var(--fw-semi); }
-.sb-panel .section-title { margin-bottom: 8px; }
+.sb-stat .sb-k { display: block; margin-bottom: 3px; }
+.sb-statv { color: var(--ink); font-size: var(--fs-md); font-variant-numeric: tabular-nums; }
+.sb-statv.pass { color: var(--pass); }
+.sb-statv.infra { color: var(--warn); }
+.sb-statv.accent { color: var(--accent); }
+.sb-statv.neutral { color: var(--dim); }
+.sb-note { color: var(--dim); font-size: var(--fs-xs); line-height: 1.45; }
+.sb-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.sb-head .section-title { margin-bottom: 0; }
+.sb-empty { color: var(--faint); font-size: var(--fs-sm); }
 .page { max-width: 1180px; margin: 0 auto; padding: 22px 26px 60px; }
 .page-head { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; flex-wrap: wrap; }
 .page-head h1 { font-size: var(--fs-lg); font-weight: var(--fw-semi); }
@@ -324,6 +350,44 @@ code, .mono { font-family: var(--mono); font-size: var(--fs-sm); }
 .btn.primary.danger:hover { filter: brightness(1.06); background: var(--fail); }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 .btn-sm { padding: 4px 9px; font-size: var(--fs-xs); }
+
+/* The fleet, tiled: each runner is four short facts, so a column of full-width
+   cards wasted the width and made three machines read as a report. The add
+   affordance is a cell of this grid (as on Personas), which is why there is no
+   hero button floated off to the right of the section heading. */
+.runner-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; align-items: stretch; }
+.runner-card { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; }
+.rc-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rc-name { font-size: var(--fs-md); font-weight: var(--fw-semi); overflow-wrap: anywhere; }
+.rc-labels { display: flex; gap: 6px; flex-wrap: wrap; font-size: var(--fs-xs); }
+.rc-now { font-size: var(--fs-sm); color: var(--dim); }
+/* The footer is pushed down so a card with a claim and a card without still end
+   at the same line: a row of tiles reads as a set only if their feet line up. */
+.rc-foot { margin-top: auto; padding-top: 4px; display: flex; align-items: center; gap: 10px; }
+.rc-seen { font-size: var(--fs-xs); color: var(--faint); flex: 1; min-width: 0; }
+.card.runner-add {
+  display: flex; flex-direction: column; align-items: stretch; text-align: left; gap: 6px;
+  padding: 14px 16px; border-style: dashed; background: transparent;
+}
+.card.runner-add:hover, .card.runner-add:focus-visible { border-color: var(--accent); border-style: solid; }
+.runner-add .ra-title { font-weight: var(--fw-semi); }
+.runner-add .ra-why { color: var(--dim); font-size: var(--fs-sm); line-height: 1.5; }
+
+/* A literal value with its own Copy button. It WRAPS: a credential or a command
+   that scrolls sideways hides the part you needed, and selecting it by hand then
+   costs a drag past the edge of the box. */
+.copybox { position: relative; }
+.copybox pre {
+  margin: 0; padding: 12px 78px 12px 12px; background: var(--bg2); border: 1px solid var(--line);
+  border-radius: 6px; font-size: var(--fs-sm); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.copybox-btn {
+  position: absolute; top: 8px; right: 8px; padding: 4px 9px; border-radius: 6px;
+  border: 1px solid var(--line2); background: var(--bg1); color: var(--dim);
+  font-size: var(--fs-xs); font-weight: var(--fw-med);
+}
+.copybox-btn:hover { border-color: var(--accent); color: var(--ink); }
+.copybox-btn.ok { color: var(--pass); border-color: var(--pass); }
 
 .card { background: var(--bg1); border: 1px solid var(--line); border-radius: var(--radius); }
 .card.pad { padding: 16px 18px; }
@@ -827,7 +891,9 @@ a.story-watch-link:focus-visible { outline: 2px solid var(--accent); outline-off
 
 /* ---------- forms ---------- */
 .field { margin-bottom: 14px; }
-.field > label { display: block; margin-bottom: 5px; font-weight: var(--fw-med); font-size: var(--fs-sm); }
+/* `.field-label` is the same wording in the same place for a control a `<label
+   for>` cannot address — a radio group names itself with `aria-label`. */
+.field > label, .field > .field-label { display: block; margin-bottom: 5px; font-weight: var(--fw-med); font-size: var(--fs-sm); }
 .field .hint { color: var(--faint); font-size: var(--fs-xs); margin-top: 4px; }
 input[type=text], input[type=email], input[type=password], input[type=number], textarea, select {
   width: 100%; background: var(--bg2); border: 1px solid var(--line2); border-radius: 7px;
@@ -836,6 +902,10 @@ input[type=text], input[type=email], input[type=password], input[type=number], t
 textarea { resize: vertical; min-height: 72px; font-family: var(--mono); font-size: var(--fs-sm); line-height: 1.55; }
 textarea.code { min-height: 320px; white-space: pre; overflow-wrap: normal; tab-size: 2; }
 .inline { display: flex; gap: 8px; align-items: center; }
+/* A second thing being created inside one dialog's form. The rule down the
+   side is what keeps its "Name" from reading as the outer form's. */
+.subform { border: 0; border-left: 2px solid var(--line2); padding: 0 0 0 14px; margin: 0 0 14px; min-inline-size: 0; }
+.subform > .field:last-child { margin-bottom: 0; }
 .check { display: inline-flex; gap: 7px; align-items: center; }
 .check input { width: auto; }
 
@@ -905,9 +975,54 @@ textarea.code { min-height: 320px; white-space: pre; overflow-wrap: normal; tab-
 .check-item .msg { color: var(--ink); }
 .check-item.err .msg { color: var(--fail); }
 
-/* the kind reads as words now, not an enum token — it needs the room */
-.criterion { display: grid; grid-template-columns: 190px 1fr auto; gap: 8px; align-items: center; margin-bottom: 6px; }
+/* Success criteria. A row is one check read left to right — what to look at,
+   what it has to be, and (under the value, where the eye already is) one line
+   saying what that kind actually checks. The kind reads as words, not an enum
+   token, so it needs the room. */
+.criteria { display: flex; flex-direction: column; align-items: flex-start; }
+.criterion {
+  display: grid; grid-template-columns: minmax(150px, 190px) minmax(0, 1fr) auto;
+  gap: 6px 8px; align-items: start; align-self: stretch; margin-bottom: 12px;
+}
 .criterion select { padding: 6px 8px; }
+.crit-val { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.crit-val input { min-width: 0; }
+/* A claim is prose: it wraps and grows with what it says (fitClaim sizes it)
+   instead of scrolling the sentence out of the box. Not the mono, tall,
+   resizable textarea the story field wants — it has to sit in a row of inputs
+   and pass for one. */
+textarea.crit-claim {
+  width: 100%; min-width: 0; min-height: 0; height: 38px; padding: 8px 10px;
+  font-family: inherit; font-size: inherit; line-height: 1.4;
+  resize: none; overflow: hidden;
+}
+/* A count is a count: a short field with its ceiling said out loud, rather than
+   a full-width box after a label ending in "≤". */
+.crit-affix { color: var(--dim); font-size: var(--fs-sm); white-space: nowrap; }
+input.crit-num { width: 96px; flex: none; }
+.crit-del { justify-self: end; }
+.crit-help, .crit-name { grid-column: 2 / 3; }
+.crit-help { display: flex; align-items: baseline; gap: 12px; margin-top: -1px; color: var(--faint); font-size: var(--fs-xs); line-height: var(--lh-tight); }
+/* Naming a criterion is cosmetic and rare, so it sits at the end of the line it
+   belongs to and only shows on the row you are working in — four standing blue
+   links down the side of the form would out-shout the criteria themselves.
+   Opacity, not display, so it keeps its place and stays keyboard-reachable. */
+.crit-name-btn { margin-left: auto; flex: none; color: var(--faint); opacity: 0; transition: opacity .12s ease-out; }
+.criterion:hover .crit-name-btn, .criterion:focus-within .crit-name-btn { opacity: 1; }
+button.crit-name-btn:hover, button.crit-name-btn:focus-visible { color: var(--accent); opacity: 1; }
+@media (hover: none) { .crit-name-btn { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .crit-name-btn { transition: none; } }
+.crit-name { display: flex; align-items: center; gap: 8px; margin-top: 1px; }
+.crit-name input { padding: 5px 9px; font-size: var(--fs-sm); }
+.crit-empty { color: var(--faint); font-size: var(--fs-sm); line-height: var(--lh-tight); margin-bottom: 10px; }
+/* Under ~640px the three columns stop being three: the kind and the ⌫ share a
+   line and the value takes the width it needs to be readable. */
+@media (max-width: 640px) {
+  .criterion { grid-template-columns: minmax(0, 1fr) auto; }
+  .criterion > .selectw { grid-column: 1 / 2; }
+  .crit-del { grid-column: 2 / 3; grid-row: 1; }
+  .crit-val, .crit-help, .crit-name { grid-column: 1 / 3; }
+}
 
 /* toasts + modal */
 #toasts { position: fixed; bottom: 18px; right: 18px; display: flex; flex-direction: column; gap: 8px; z-index: 100; }
@@ -925,6 +1040,22 @@ textarea.code { min-height: 320px; white-space: pre; overflow-wrap: normal; tab-
 .modal { background: var(--bg1); border: 1px solid var(--line2); border-radius: 10px; box-shadow: var(--shadow); width: 100%; max-width: 460px; padding: 20px 22px; }
 .modal .modal-title { font-size: var(--fs-md); font-weight: var(--fw-semi); margin-bottom: 10px; }
 .modal .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
+
+/* A dialog that opts in with .modal-body/.modal-foot keeps its actions on
+   screen: the body scrolls inside the dialog and the footer — with the error
+   it carries — is pinned to the bottom. The environment form was the case that
+   forced this: seven fields put Create, and the refusal above it, a thousand
+   pixels below the fold, so the only way to discover the submit button was to
+   scroll past everything you had just been told. Opt-in, so every short dialog
+   stays exactly as it was. */
+.modal:has(.modal-body) { max-height: calc(100vh - 40px); display: flex; flex-direction: column; }
+.modal:has(.modal-body) > .modal-title { flex: none; }
+.modal:has(.modal-body) > form { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.modal:has(.env-form) { max-width: 580px; }
+.modal-body { flex: 1; min-height: 0; overflow-y: auto; margin: 0 -22px; padding: 2px 22px 4px; }
+.modal-foot { flex: none; margin: 0 -22px -20px; padding: 12px 22px 14px; border-top: 1px solid var(--line); background: var(--bg1); border-radius: 0 0 10px 10px; }
+.modal-foot .modal-actions { margin-top: 0; }
+.modal-foot .preview-warn { margin-bottom: 10px; }
 
 .spark { display: inline-block; vertical-align: middle; }
 
@@ -1128,9 +1259,27 @@ a.quiet-link:hover .tile, a.quiet-link:hover .att-row { border-color: var(--acce
 .msg { max-width: 82%; padding: 9px 13px; border-radius: 12px; font-size: var(--fs-base); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .msg.user { align-self: flex-end; background: var(--accent-soft); border: 1px solid transparent; border-bottom-right-radius: 4px; }
 .msg.assistant { align-self: flex-start; background: var(--bg2); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+.assistant-copy p { margin: 0; white-space: pre-wrap; }
+.assistant-copy p + p, .assistant-copy p + ul, .assistant-copy p + ol,
+.assistant-copy ul + p, .assistant-copy ol + p { margin-top: 10px; }
+.assistant-copy ul, .assistant-copy ol { margin: 0; padding-left: 22px; }
+.assistant-copy li + li { margin-top: 4px; }
 .msg.thinking { color: var(--dim); }
-.msg.thinking .dots { letter-spacing: 2px; animation: pt-pulse 1.2s ease-in-out infinite; }
-@keyframes pt-pulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+.drafting-indicator { display: inline-flex; align-items: baseline; gap: 7px; }
+.drafting-dots { display: inline-flex; align-items: center; gap: 3px; }
+.drafting-dots > span {
+  width: 4px; height: 4px; border-radius: 50%; background: currentColor;
+  animation: pt-drafting-dot 1.2s ease-in-out infinite;
+}
+.drafting-dots > span:nth-child(2) { animation-delay: 120ms; }
+.drafting-dots > span:nth-child(3) { animation-delay: 240ms; }
+@keyframes pt-drafting-dot {
+  0%, 60%, 100% { opacity: .25; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-3px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .drafting-dots > span { animation: none; opacity: .65; }
+}
 .msg-tool { align-self: flex-start; font-size: var(--fs-xs); color: var(--dim); background: var(--bg2); border: 1px dashed var(--line2); border-radius: 999px; padding: 3px 11px; }
 .msg-tool.ok { color: var(--pass); border-color: var(--pass); border-style: solid; background: var(--pass-soft); }
 .msg-tool.err { color: var(--fail); border-color: var(--fail); border-style: solid; background: var(--fail-soft); }
@@ -1222,7 +1371,6 @@ a.quiet-link:hover .tile, a.quiet-link:hover .att-row { border-color: var(--acce
 }
 .launch-where { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 14px; }
 .launch-form .field { margin-bottom: 0; }
-.launch-form .field > .field-label { display: block; margin-bottom: 5px; font-weight: var(--fw-med); font-size: var(--fs-sm); }
 
 /* The resolved target hangs off the Ring select like a hint, because that is
    exactly what it is: the answer to what "production" means here. */
@@ -1350,6 +1498,9 @@ a.quiet-link:hover .app-row { border-color: var(--accent); }
    with :has because .section-head elsewhere stacks a title over a gloss. */
 .section-head:has(> .label) { display: flex; align-items: center; gap: 10px; margin: 22px 0 10px; }
 .section-head:has(> .label) > .faint { font-size: var(--fs-xs); flex: 1; min-width: 0; }
+/* The section's own control sits at the right edge whether or not a gloss
+   between them is claiming the space. */
+.section-head:has(> .label) > .btn { margin-left: auto; }
 
 /* A ring's facts: key column, value, one-line why underneath the value. */
 .ring-facts { display: grid; grid-template-columns: max-content 1fr; gap: 10px 18px; margin-top: 12px; font-size: var(--fs-sm); }
@@ -1360,7 +1511,10 @@ a.quiet-link:hover .app-row { border-color: var(--accent); }
   .ring-fact > .k { padding-top: 10px; }
 }
 
-/* The ring form's identity editor: name · source · reference · remove. */
+/* An environment's key, wherever it is the thing being identified. */
+.env-key { font-family: var(--mono); font-weight: var(--fw-semi); }
+
+/* The environment form's identity editor: name · source · reference · remove. */
 .identity-rows { display: flex; flex-direction: column; gap: 8px; }
 .identity-row { display: flex; gap: 8px; align-items: center; }
 .identity-row > input { width: 150px; flex: none; }
@@ -1369,8 +1523,132 @@ a.quiet-link:hover .app-row { border-color: var(--accent); }
 .identity-ref > select:first-child { width: 200px; flex: none; }
 .identity-ref > :last-child { flex: 1; width: auto; min-width: 0; }
 
+/* ---------- a form that answers rather than explains ---------- */
+
+/* "Called staging · Rename" — a derived fact with one way to override it,
+   rather than a second field asking what the URL just said. */
+.env-naming-line { display: flex; align-items: baseline; gap: 8px; margin-top: 13px; font-size: var(--fs-sm); }
+.env-naming-line > .id { font-family: var(--mono); font-weight: var(--fw-semi); }
+
+/* Feedback under a field — what a cookie string parsed to, which runners a
+   label set reaches, what a loopback URL means. This is what replaced the
+   paragraph of helper text: a rule is shown happening, not described, and
+   nothing appears under a field it isn't true of. */
+.field-note { color: var(--dim); font-size: var(--fs-xs); line-height: var(--lh-tight); margin: 5px 0 0; }
+.field-note.warn { color: var(--warn); }
+.field-note-slot:empty { display: none; }
+.field + .field-note, .field + .field-note-slot > .field-note { margin: -10px 0 14px; }
+
+/* A titled group inside a long form: one caption at most, never one per field. */
+.form-section { margin-top: 20px; }
+.form-section-title {
+  font-size: var(--fs-sm); font-weight: var(--fw-semi); margin: 0 0 12px;
+  padding-bottom: 6px; border-bottom: 1px solid var(--line);
+}
+.form-section > .section-caption { margin: -4px 0 10px; }
+
+/* A button that reads as the quiet override beside a value, not as a control. */
+button.linkish { background: none; border: 0; padding: 0; font: inherit; font-size: var(--fs-xs); color: var(--accent); cursor: pointer; }
+button.linkish:hover { text-decoration: underline; }
+
 /* Repeated page grammar: section explanation, section-level action, and the
    submit row at the end of a form card. */
 .section-caption { font-size: 12.5px; margin: -4px 0 12px; }
 .section-actions { display: flex; justify-content: flex-end; margin-bottom: 12px; }
 .form-actions { display: flex; justify-content: flex-end; margin-top: 14px; }
+
+/* A settings group: one question per row, the question on the left and the
+   answer in a column of its own. A policy form stacked full-width reads as one
+   undifferentiated column of paragraphs — the rule between rows makes each
+   setting a thing, and the answer column makes "what has this project actually
+   changed?" a single vertical scan instead of seven close readings. Controls
+   are placed by exclusion, so a field can carry an extra input (the custom
+   model name) and it lands under its dropdown rather than beside the wording. */
+/* A form is read at a measure, not at whatever width the window happens to be:
+   uncapped, the wording and the control it belongs to end up a third of a
+   screen apart and stop reading as one row. */
+.settings-form { max-width: 1000px; }
+.setting-rows > .field {
+  display: grid;
+  /* Wide enough for the longest segmented answer to stay on one line; the
+     dropdowns are content-indifferent and simply follow it. */
+  grid-template-columns: minmax(0, 1fr) minmax(200px, 360px);
+  /* wording · what it does · what follows from the current answer. The last
+     row takes up any slack, so a control taller than its wording never pushes
+     the wording away from its own explanation. */
+  grid-template-rows: auto auto 1fr;
+  column-gap: 28px; align-items: start;
+  margin: 0; padding: 15px 0; border-top: 1px solid var(--line);
+}
+.setting-rows > .field:first-child { border-top: 0; padding-top: 2px; }
+.setting-rows > .field:last-child { padding-bottom: 2px; }
+.setting-rows > .field > label,
+.setting-rows > .field > .field-label { grid-column: 1; grid-row: 1; margin: 0; }
+.setting-rows > .field > .hint { grid-column: 1; grid-row: 2; margin: 4px 0 0; }
+.setting-rows > .field > .field-note { grid-column: 1; grid-row: 3; margin: 5px 0 0; }
+.setting-rows > .field > :not(label, .field-label, .hint, .field-note) {
+  grid-column: 2; grid-row: 1 / -1; align-self: start; margin: 0;
+}
+/* A dropdown takes the column; a segmented control is only as wide as its own
+   answers — stretched, the empty half reads as part of the control. */
+.setting-rows > .field > .choices { justify-self: start; }
+/* Answered, and currently doing nothing — because the switch above it is off.
+   Dimmed rather than disabled: not applying right now is no reason to stop
+   someone setting it before they turn the thing on. */
+.setting-rows > .field.inert > label,
+.setting-rows > .field.inert > .field-label,
+.setting-rows > .field.inert > .hint,
+.setting-rows > .field.inert > :not(label, .field-label, .hint, .field-note) { opacity: .55; }
+/* A question whose answers each need a sentence cannot use the answer column:
+   three stacked explanations in a third of the row are read a word at a time,
+   and they have to be read in ORDER to be a scale at all. So the row gives up
+   its two columns and lets the options run underneath the wording. */
+.setting-rows > .field.field-wide { grid-template-columns: minmax(0, 1fr); }
+.setting-rows > .field.field-wide > * { grid-column: 1; grid-row: auto; justify-self: stretch; }
+.setting-rows > .field.field-wide > .choice-list { margin-top: 8px; }
+/* The exceptions belong to the list, so they end where the list ends rather
+   than running the width of the card. */
+.setting-rows > .field.field-wide > .field-note { max-width: 640px; }
+@media (max-width: 820px) {
+  .setting-rows > .field { grid-template-columns: minmax(0, 1fr); }
+  /* Source order is already label → control → hint → note; let it flow. */
+  .setting-rows > .field > * { grid-column: 1; grid-row: auto; }
+}
+
+/* A few mutually exclusive short choices, shown instead of hidden behind a
+   dropdown. The same shape as .seg, but a form control rather than navigation:
+   it carries radio-group semantics, so the selected state is readable and not
+   only visible. */
+.choices { display: inline-flex; flex-wrap: wrap; background: var(--bg2); border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.choices .choice { padding: 6px 12px; color: var(--dim); font-size: var(--fs-sm); border-left: 1px solid var(--line); }
+.choices .choice:first-child { border-left: 0; }
+.choices .choice:hover { color: var(--ink); }
+.choices .choice.on { background: var(--accent-soft); color: var(--accent); font-weight: var(--fw-med); }
+.choices .choice:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* The same control stacked, for a question whose options differ by more than a
+   word — one setting per line, each with the sentence that makes it choosable,
+   read top to bottom as a scale. A real radio mark, not just a highlight: with
+   three lines of prose in play, "which one is on" has to be legible from the
+   left edge without comparing background tints. */
+.choice-list { display: grid; gap: 6px; max-width: 640px; }
+.choice-list .choice-option {
+  display: grid; grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 10px; row-gap: 3px; text-align: left;
+  padding: 9px 12px; border: 1px solid var(--line); border-radius: 7px;
+  /* Unfilled: three filled blocks in a row read as three buttons to press, and
+     only one of these is ever pressed. The fill is what marks the answer. */
+  background: none; color: var(--ink);
+}
+.choice-list .choice-option::before {
+  content: ""; grid-column: 1; grid-row: 1; align-self: start; margin-top: 2px;
+  width: 12px; height: 12px; border-radius: 50%;
+  border: 1px solid var(--line2); background: var(--bg1);
+}
+.choice-list .choice-option:hover { border-color: var(--line2); background: var(--bg2); }
+.choice-list .choice-option.on { border-color: var(--accent); background: var(--accent-soft); }
+.choice-list .choice-option.on::before { border-color: var(--accent); background: var(--accent); box-shadow: inset 0 0 0 2px var(--bg1); }
+.choice-list .choice-option.on .choice-option-label { color: var(--accent); }
+.choice-list .choice-option:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.choice-option-label { grid-column: 2; font-size: var(--fs-sm); font-weight: var(--fw-med); }
+.choice-option-desc { grid-column: 2; color: var(--dim); font-size: var(--fs-xs); line-height: var(--lh-tight); }

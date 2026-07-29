@@ -403,6 +403,26 @@ export const SURFACES = [
     note: "Applications, their rings, auth identities, secrets. The densest form in the app.",
   },
   {
+    id: "settings-models",
+    title: "Settings — Models",
+    path: (d) => `/p/${d.projectKey}/settings/models`,
+    note: "Four model choices and two automation policies. Does the page read as groups or as a list of questions?",
+  },
+  {
+    id: "settings-models-edited",
+    title: "Settings — Models, mid-edit",
+    path: (d) => `/p/${d.projectKey}/settings/models`,
+    act: async (page) => {
+      // Closing by hand is the one answer that changes the shape of the page:
+      // the model that verifies fixes goes inert, and the save bar appears
+      // because there is now an uncommitted decision.
+      await page.getByRole("radiogroup", { name: "Closing a finding a later run has fixed" })
+        .getByRole("radio", { name: "By hand" }).click();
+      await page.waitForTimeout(200);
+    },
+    note: "Does an answered-but-inactive setting read as inactive, and is the pending change obvious?",
+  },
+  {
     id: "settings-team",
     title: "Settings — Team",
     path: (d) => `/p/${d.projectKey}/settings/team`,

@@ -139,7 +139,10 @@ function rowToCriterion(row: WebDynamic) {
 // also accepts a structured operation selector object; the form does not author
 // one.) Ajv runs without coerceTypes, so a number fails validation for the most
 // common api-driver criterion.
-const NUMERIC: WebDynamic = new Set(["console_errors", "accessibility_violations"]);
+// Exported because the form draws these rows as a number input with an "at
+// most" affix: what is written as a number and what is TYPED as one have to be
+// the same set, or a row would round-trip through the file as a quoted string.
+export const NUMERIC_KINDS: WebDynamic = new Set(["console_errors", "accessibility_violations"]);
 function coerce(kind: WebDynamic, value: WebDynamic) {
   const s = String(value).trim();
   // The structured form of an operation selector or an invariant policy, as
@@ -154,7 +157,7 @@ function coerce(kind: WebDynamic, value: WebDynamic) {
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed;
     } catch {}
   }
-  if (NUMERIC.has(kind) && /^\d+$/.test(s)) return Number(value);
+  if (NUMERIC_KINDS.has(kind) && /^\d+$/.test(s)) return Number(value);
   return value;
 }
 

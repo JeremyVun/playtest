@@ -1,21 +1,30 @@
-// Applications and rings, as the console models them.
+// Applications and environments, as the console models them.
 //
 // An APPLICATION is one executable test surface — a web app, an HTTP API, or a
-// mobile build for one platform. A RING is an application-owned deployment
-// target (`local`, `staging`, `prod`) holding a URL, routing labels, a discovery
-// permission and a logical overlay. A suite belongs to exactly one application
-// and launches against exactly one of its rings.
+// mobile build for one platform. An ENVIRONMENT is an application-owned
+// deployment (`local`, `staging`, `production`) holding a URL, routing labels
+// and a logical overlay. A suite belongs to exactly one application and launches
+// against exactly one of its environments.
 //
-// Two rules run through everything here, and both are the server's:
+// ONE WORD, TWO SPELLINGS. The schema, the API, the runner protocol and the
+// contracts call this a `ring`; every word a person reads calls it an
+// environment. That is deliberate rather than sloppy: the engine has always
+// materialized one as `app.envs.<key>` and selected it with `--env`, so
+// "environment" is what the artifacts, the CLI and the suite files already say —
+// a console that said anything else was teaching a second word for one thing.
+// The wire keeps `ring` because renaming a live protocol buys nothing. Anything
+// a person reads goes through this module; nothing here should print "ring".
+//
+// Two rules run through everything, and both are the server's:
 //
 //   * Keys are IMMUTABLE. Runner configuration and run evidence address an
-//     application and a ring by key, so the form presents a key as identity —
-//     asked once, never editable, delete-and-recreate as the stated remedy.
-//   * A ring holds LOGICAL policy plus, for web/API, one base URL. The five
-//     physical fields — `base_url`, `app`, `platform`, `device`, `appium_url` —
-//     are unrepresentable in its overlay, because the claiming runner resolves
-//     them. The console refuses them here so a person reads the reason while
-//     typing rather than after a 400.
+//     application and an environment by key, so a key is derived once at
+//     creation and then presented as identity, never as a field.
+//   * An environment holds LOGICAL policy plus, for web/API, one base URL. The
+//     five physical fields — `base_url`, `app`, `platform`, `device`,
+//     `appium_url` — are unrepresentable in its overlay, because the claiming
+//     runner resolves them. The console refuses them here so a person reads the
+//     reason while typing rather than after a 400.
 //
 // DOM-free on purpose: the hermetic gate holds these rules without a browser.
 
@@ -34,30 +43,22 @@ const DRIVER_WORDS: Record<string, { label: string; gist: string }> = {
 export const driverLabel = (driver: string): string => DRIVER_WORDS[driver]?.label ?? driver;
 export const driverGist = (driver: string): string => DRIVER_WORDS[driver]?.gist ?? "";
 
-/**
- * Why a key can never change — one sentence, said wherever a key is presented as
- * identity rather than as a field. Written once so the create form, the identity
- * card and the edit dialog cannot drift into three different explanations of the
- * same rule.
- */
-export const KEY_IS_PERMANENT: Record<string, string> = {
-  application:
-    "Runner configuration binds this key and every run's evidence records it, so nothing can change it later. "
-    + "While nothing has used it, delete and recreate is the way to fix a typo.",
-  ring:
-    "A runner binds the pair application/ring, so neither key can change. "
-    + "While nothing has used it, delete and recreate is the way to fix a typo.",
-};
-
-/** The one sentence a mobile ring answers "where does this run?" with. */
+/** The one sentence a mobile environment answers "where does this run?" with. */
 export const BUILD_FROM_RUNNER = "the claiming runner supplies the build";
 
 /** The operations guide, named where the console has to send someone to it. */
 export const RUNNER_GUIDE = "docs/guidance/hosted-runners.md";
 
-/** How an application reads in one line: `Todo Web · todo-web · web`. */
-export function applicationLine(application: { key?: string; driver?: string; platform?: string | null }): string {
-  return [application?.key, application?.driver, application?.platform].filter(Boolean).join(" · ");
+/**
+ * How an application reads in one line: what it is called, then only the facts
+ * the name does not already give. `Todo Web · todo-web · web`, but `gss · web`
+ * when the name and the key are the same word — a picker that prints one word
+ * twice reads as two things.
+ */
+export function applicationLine(application: { key?: string; name?: string; driver?: string; platform?: string | null }): string {
+  const name = application?.name || application?.key;
+  const key = application?.key && application.key !== name ? application.key : null;
+  return [name, key, application?.driver, application?.platform].filter(Boolean).join(" · ");
 }
 
 /** Turn a typed name into a candidate key, so nobody has to invent one twice. */
@@ -80,36 +81,104 @@ export function keyProblem(
   { kind = "application", scope = "this project" }: { kind?: string; scope?: string } = {},
 ): string | null {
   const key = String(value || "").trim();
-  if (!key) return `Give this ${kind} a key — it is what runner configuration and run evidence call it, for good.`;
+  if (!key) return `Give this ${kind} a name — runner configuration and every run record it, for good.`;
   if (!KEY_RE.test(key)) {
     return "A key is lowercase letters, digits and hyphens — no spaces or capitals, and it can't start with a hyphen.";
   }
-  if (taken.some((t) => t.key === key)) return `${scope} already has ${kind === "ring" ? "a ring" : "an application"} keyed “${key}”.`;
+  if (taken.some((t) => t.key === key)) return `${scope} already has ${kind === "environment" ? "an environment" : "an application"} keyed “${key}”.`;
   return null;
 }
 
+// ---------- naming an environment from where it points ----------
+
+/** Hosts that mean "whichever machine the claiming runner is on". */
+const LOOPBACK_HOST = /^(?:localhost|127(?:\.\d{1,3}){3}|\[?::1\]?|0\.0\.0\.0)$/i;
+
 /**
- * Is this a usable ring URL? Required for web/API, refused for mobile — the
- * server's rule, checked here so the form can say it beside the field.
+ * Words that name a deployment wherever they sit in a host, longest first so
+ * `production.acme.com` reads as production rather than prod. Matched on whole
+ * host labels, never as substrings — `latest.acme.com` is not a test
+ * environment.
+ */
+const DEPLOYMENT_WORDS = [
+  "production", "development", "integration", "staging", "sandbox", "preview",
+  "release", "canary", "review", "local", "stage", "prod", "demo", "beta",
+  "test", "dev", "uat", "qa",
+];
+
+/** Does this URL resolve on the claiming runner's own machine? */
+export function isLoopbackUrl(url: string | null | undefined): boolean {
+  const host = hostnameOf(url);
+  return !!host && (LOOPBACK_HOST.test(host) || host.endsWith(".local"));
+}
+
+function hostnameOf(url: string | null | undefined): string {
+  try { return new URL(String(url ?? "").trim()).hostname; } catch { return ""; }
+}
+
+/**
+ * What to call the environment at this URL.
+ *
+ * The whole point of asking for a URL first is that the URL already answers the
+ * question: nobody types `staging.acme.com` and then wants to be asked what to
+ * name it. The ladder is two rungs and no cleverness —
+ *
+ *   1. a loopback host is `local`;
+ *   2. a host naming a deployment (`staging.acme.com`, `acme-uat.example`) is
+ *      that word;
+ *   3. anything else is `production`.
+ *
+ * Rung 3 is a deliberate direction to be wrong in. Guessing "production" for a
+ * deployment that isn't one costs a rename and an extra confirmation at launch;
+ * guessing anything else for one that IS production hides the warning that
+ * matters. A taken key gets `-2`, so a second local service is never a refusal.
+ */
+export function environmentKeyFromUrl(url: string, taken: { key?: string }[] = []): string {
+  const host = hostnameOf(url);
+  if (!host) return "";
+  return unusedKey(deploymentWord(host), taken);
+}
+
+function deploymentWord(host: string): string {
+  if (LOOPBACK_HOST.test(host) || host.toLowerCase().endsWith(".local")) return "local";
+  const labels = host.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  return DEPLOYMENT_WORDS.find((word) => labels.includes(word)) ?? "production";
+}
+
+/** `staging`, or `staging-2` when this application already has a staging. */
+function unusedKey(base: string, taken: { key?: string }[]): string {
+  const used = new Set(taken.map((t) => t.key));
+  if (!used.has(base)) return base;
+  for (let n = 2; n < 100; n += 1) {
+    if (!used.has(`${base}-${n}`)) return `${base}-${n}`;
+  }
+  return "";
+}
+
+/**
+ * Is this a usable environment URL? Required for web/API, refused for mobile —
+ * the server's rule, checked here so the form can say it beside the field.
+ * Short on purpose: what a loopback URL MEANS is shown as a note under the URL
+ * that is actually loopback, not pre-emptively in the empty field's refusal.
  */
 export function ringUrlProblem(value: string, driver: string): string | null {
   const url = String(value || "").trim();
   if (driver === "mobile") {
     return url
-      ? "A mobile ring holds no URL — the claiming runner supplies the build, the device and the Appium endpoint from its own configuration file."
+      ? "A mobile environment holds no URL — the claiming runner supplies the build, the device and the Appium endpoint."
       : null;
   }
-  if (!url) return "Add the URL this ring's runs point at. It is read from the claiming runner's network position, so a loopback URL means that runner's own machine.";
+  if (!url) return "Add the URL that runs here point at.";
   let parsed;
-  try { parsed = new URL(url); } catch { return "That isn't a URL — it needs a scheme and a host, e.g. https://staging.example.com."; }
+  try { parsed = new URL(url); } catch { return "That isn't a URL — it needs a scheme and a host, as in https://staging.example.com."; }
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return "The URL must start with http:// or https://.";
   return null;
 }
 
-/** The five physical fields a runtime target owns; a ring may hold none of them. */
+/** The five physical fields a runtime target owns; an environment holds none. */
 export const PHYSICAL_APP_KEYS = ["base_url", "app", "platform", "device", "appium_url"];
 
-/** The logical `config.app` keys a ring may set — the server's allowlist. */
+/** The logical `config.app` keys an environment may set — the server's allowlist. */
 export const LOGICAL_APP_KEYS = [
   "init", "storage_state", "auth", "auth_states", "preserve_session", "openapi",
   "allowed_origins", "headers", "viewport", "device_scale_factor", "settle", "cookies",
@@ -118,10 +187,10 @@ export const LOGICAL_APP_KEYS = [
 const CONFIG_KEYS = ["app", "auth", "secret_env"];
 
 /**
- * Why this ring overlay is refused, in the server's own words — an ALLOWLIST at
- * the two positions core reads (`config.app`, `config.auth`), never a
- * property-name blacklist at every depth, which would reject the logical `app`
- * container itself and legitimate data merely named `device`.
+ * Why this overlay is refused, in the server's own words — an ALLOWLIST at the
+ * two positions core reads (`config.app`, `config.auth`), never a property-name
+ * blacklist at every depth, which would reject the logical `app` container
+ * itself and legitimate data merely named `device`.
  */
 export function ringConfigProblem(config: unknown): string | null {
   if (config == null) return null;
@@ -129,7 +198,7 @@ export function ringConfigProblem(config: unknown): string | null {
   const doc = config as Record<string, unknown>;
   for (const key of Object.keys(doc)) {
     if (!CONFIG_KEYS.includes(key)) {
-      return `“${key}” is not part of a ring's configuration — a ring holds ${CONFIG_KEYS.join(", ")}.`;
+      return `“${key}” is not part of an environment's configuration — an environment holds ${CONFIG_KEYS.join(", ")}.`;
     }
     if (doc[key] != null && (typeof doc[key] !== "object" || Array.isArray(doc[key]))) {
       return `“config.${key}” must be an object.`;
@@ -138,28 +207,28 @@ export function ringConfigProblem(config: unknown): string | null {
   const app = (doc.app ?? {}) as Record<string, unknown>;
   for (const key of Object.keys(app)) {
     if (LOGICAL_APP_KEYS.includes(key)) continue;
-    if (key === "base_url") return "A ring's URL is its own URL field, not an overlay key — set it above.";
+    if (key === "base_url") return "An environment's URL is its own URL field, not an overlay key — set it above.";
     if (PHYSICAL_APP_KEYS.includes(key)) {
-      return `“${key}” is a physical target the claiming runner resolves, not ring configuration. A mobile build's path, `
-        + "its device and its Appium endpoint live in the runner's own configuration file, keyed by application and ring key.";
+      return `“${key}” is a physical target the claiming runner resolves, not environment configuration. A mobile build's path, `
+        + "its device and its Appium endpoint live in the runner's own configuration file, keyed by application and environment key.";
     }
     if (key === "compose") {
-      return "“compose” would boot a different application under this ring's name, and hosted execution clears it — point the ring's URL at the deployment instead.";
+      return "“compose” would boot a different application under this environment's name, and hosted execution clears it — point the environment's URL at the deployment instead.";
     }
-    if (key === "driver") return "“driver” is the application's, not the ring's — create a separate application for another surface.";
-    if (key === "envs") return "“envs” is the suite's own overlay map; a ring IS one entry in it and cannot nest another.";
-    return `“${key}” is not a ring overlay key (allowed: ${LOGICAL_APP_KEYS.join(", ")}).`;
+    if (key === "driver") return "“driver” is the application's, not the environment's — create a separate application for another surface.";
+    if (key === "envs") return "“envs” is the suite's own overlay map; an environment IS one entry in it and cannot nest another.";
+    return `“${key}” is not an environment overlay key (allowed: ${LOGICAL_APP_KEYS.join(", ")}).`;
   }
   const auth = (doc.auth ?? {}) as Record<string, unknown>;
   for (const key of Object.keys(auth)) {
     if (key !== "identities" && key !== "default") {
-      return `“config.auth.${key}” is not part of a ring's authorization (expected "identities", "default").`;
+      return `“config.auth.${key}” is not part of an environment's authorization (expected "identities", "default").`;
     }
   }
   return null;
 }
 
-// ---------- a ring's sign-in identities ----------
+// ---------- an environment's sign-in identities ----------
 
 /**
  * One entry of `config.auth.identities` — the map a story selects from with
@@ -182,7 +251,7 @@ export interface IdentityRow {
   value: unknown;
 }
 
-/** The identities a ring declares, in the order they are stored. */
+/** The identities an environment declares, in the order they are stored. */
 export function identityRows(config: unknown): IdentityRow[] {
   const identities = (config as { auth?: { identities?: Record<string, unknown> } })?.auth?.identities;
   if (!identities || typeof identities !== "object" || Array.isArray(identities)) return [];
@@ -214,8 +283,8 @@ export function identityValue(row: IdentityRow): unknown {
 /**
  * The overlay document with `auth.identities` replaced by these rows — every
  * other key, including `auth.default`, left exactly where it was. The form and
- * the overlay view are two views of ONE document (the ring form's discipline),
- * so this never builds a fresh object.
+ * the overlay view are two views of ONE document (the environment form's
+ * discipline), so this never builds a fresh object.
  */
 export function withIdentities(config: unknown, rows: IdentityRow[]): Record<string, unknown> {
   const doc: Record<string, unknown> = { ...(config as Record<string, unknown> ?? {}) };
@@ -243,9 +312,10 @@ export function identityProblem(rows: IdentityRow[]): string | null {
 }
 
 /**
- * The `provider/identity` references this ring may name, from the project's auth
- * providers. A bound provider is reachable ONLY from its own ring, so offering
- * another ring's provider here would be offering a refusal.
+ * The `provider/identity` references this environment may name, from the
+ * project's auth providers. A bound provider is reachable ONLY from its own
+ * environment, so offering another one's provider here would be offering a
+ * refusal.
  */
 export function sessionRefOptions(
   providers: { name?: string; ring_id?: string | null; enabled?: boolean; identities?: Record<string, unknown> }[],
@@ -257,14 +327,13 @@ export function sessionRefOptions(
     .sort();
 }
 
-// ---------- the launch dialog's ring picker ----------
+// ---------- the launch dialog's environment picker ----------
 
 export interface RingLike {
   id?: string;
   key?: string;
   name?: string | null;
   base_url?: string | null;
-  discovery_allowed?: boolean;
   runner_labels?: string[];
 }
 
@@ -276,32 +345,32 @@ export function hostOf(url: string | null | undefined): string {
 }
 
 /**
- * One ring option: `staging · staging.acme.test · discovery`. The host is not
+ * One environment option: `staging · staging.acme.test`. The host is not
  * decoration — picking "production" when you meant localhost was the
  * silent-wrong-target trap, and a key alone never carried enough to notice it.
- * A mobile ring has no URL to name, so it says who supplies the build instead.
+ * A mobile environment has no URL to name, so it says who supplies the build.
  */
 export function ringOptionLabel(ring: RingLike, driver = "web"): string {
   const parts: string[] = [String(ring.key ?? "")];
   if (driver === "mobile") parts.push("build from the runner");
   else if (ring.base_url) parts.push(hostOf(ring.base_url));
-  if (ring.discovery_allowed) parts.push("discovery");
   return parts.filter(Boolean).join(" · ");
 }
 
-/** True for a ring keyed or named like production. Substring, deliberately
-    broad — "prod", "prod-eu", "Production" all mean the same thing to a person. */
+/** True for an environment keyed or named like production. Substring,
+    deliberately broad — "prod", "prod-eu", "Production" all mean the same
+    thing to a person. */
 export const isProdRing = (ring: RingLike): boolean =>
   /prod|live/i.test(`${ring?.key ?? ""} ${ring?.name ?? ""}`);
 
 /**
- * Which ring opens selected.
+ * Which environment opens selected.
  *
- * Opening on whichever ring came first meant a project with `prod` and
- * `staging` opened on production — the one place a discovery agent really
- * clicks buy, delete and submit. Order of preference: where this suite last ran
- * · one that allows discovery · one that isn't named like production · the
- * first there is. Never a production ring unless it is the only choice.
+ * Opening on whichever came first meant a project with `production` and
+ * `staging` opened on production — where a run really clicks buy, delete and
+ * submit. Order of preference: where this suite last ran · one that isn't named
+ * like production · the first there is. Never production unless it is the only
+ * choice.
  */
 export function defaultRingId(
   rings: RingLike[],
@@ -312,7 +381,7 @@ export function defaultRingId(
   const lastHere = groups.find((g) => String(g.suite_id) === String(suiteId) && ids.has(g.ring_id));
   if (lastHere?.ring_id) return lastHere.ring_id;
   const safe = rings.filter((r) => !isProdRing(r));
-  return (safe.find((r) => r.discovery_allowed) || safe[0] || rings[0])?.id ?? "";
+  return (safe[0] || rings[0])?.id ?? "";
 }
 
 /**
@@ -336,7 +405,7 @@ export function launchTargetWords(target: {
     };
   }
   return {
-    where: target?.resolved_base_url || "no URL on this ring",
+    where: target?.resolved_base_url || "no URL on this environment",
     source: pair,
   };
 }

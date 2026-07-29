@@ -31,7 +31,7 @@ export async function authProvidersPanel(projectKey: WebDynamic, applications: W
           h("div", { style: "display:flex;align-items:center;gap:10px;flex-wrap:wrap" },
             h("span.id", {}, provider.name),
             h("span.chip", {}, provider.kind.replace(/_/g, " ")),
-            h("span.chip", {}, provider.ring_id ? ringName.get(provider.ring_id) || "one ring" : "project-wide"),
+            h("span.chip", {}, provider.ring_id ? ringName.get(provider.ring_id) || "one environment" : "project-wide"),
             provider.enabled ? null : h("span.chip", {}, "disabled"),
             h("div", { style: "flex:1" }),
             h("button.btn.btn-sm", { "aria-label": `Mint a session for ${provider.name}`, onclick: () => mintProvider(provider, refresh) }, "Mint"),
@@ -46,7 +46,7 @@ export async function authProvidersPanel(projectKey: WebDynamic, applications: W
             h("pre.mono", { style: "margin-top:8px;background:var(--bg2);padding:10px;border-radius:6px;overflow:auto;font-size:12px" },
               JSON.stringify(provider.config, null, 2))),
         )))
-    : emptyState("No providers", "A provider mints short-lived sign-in states for the identities a ring names.");
+    : emptyState("No providers", "A provider mints short-lived sign-in states for the identities an environment names.");
   mount(slot, h("div", {}, h("div.section-actions", {}, add), body));
 }
 
@@ -57,7 +57,7 @@ function authProviderModal(projectKey: WebDynamic, applications: WebDynamic, exi
       ...["token_endpoint", "storage_state_secret", "script"].map((value) =>
         h("option", { value, selected: existing?.kind === value }, value.replace(/_/g, " "))));
     const ring = h("select", { "aria-label": "Ring" },
-      h("option", { value: "" }, "Project-wide — every ring may use it"),
+      h("option", { value: "" }, "Project-wide — every environment may use it"),
       ...applications.flatMap((application: WebDynamic) => (application.rings || []).map((item: WebDynamic) =>
         h("option", { value: item.id, selected: existing?.ring_id === item.id || undefined }, `${application.key}/${item.key}`))));
     const config = h("textarea.code", { style: "min-height:120px" },
@@ -67,9 +67,9 @@ function authProviderModal(projectKey: WebDynamic, applications: WebDynamic, exi
     const ttl = h("input", { type: "number", min: "1", max: "1440", value: existing?.ttl_minutes || 60 });
     const enabled = h("input", { type: "checkbox", checked: existing?.enabled !== false });
     return h("form", { onsubmit: submit },
-      formField("Name", name, "How a ring's identities refer to it: provider/identity."),
+      formField("Name", name, "How an environment's identities refer to it: provider/identity."),
       formField("Kind", kind),
-      formField("Ring", ring, "Bound: reachable only from that ring, and its mints carry the ring's routing labels. Project-wide: any ring may name it."),
+      formField("Environment", ring, "Bound: reachable only from that environment, and its mints carry its routing labels. Project-wide: any environment may name it."),
       formField("Config JSON", config),
       formField("Identities JSON", identities),
       formField("TTL minutes", ttl, "How long a minted session is reused before it is minted again."),

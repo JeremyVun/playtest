@@ -100,8 +100,8 @@ async function resolveLaunchTarget(ctx: HostedDynamic, project: HostedDynamic, b
   if (ring.application_id !== suite.application_id) {
     const own = await applicationById(ctx, suite.application_id);
     throw badRequest(
-      `ring "${application.key}/${ring.key}" belongs to another application — suite "${suite.slug}" runs ` +
-        `against "${own.key}", so pick one of its rings`,
+      `environment "${application.key}/${ring.key}" belongs to another application — suite "${suite.slug}" runs ` +
+        `against "${own.key}", so pick one of its environments`,
     );
   }
   return { suite, application, ring };
@@ -590,9 +590,16 @@ export async function dispatchAdmin(ctx: HostedDynamic) {
   const project = await getProjectByKey(ctx, ctx.params.p);
   guard(ctx, project.id, "developer");
   const { rows } = await ctx.db.query(
-    `SELECT d.*, e.versions, e.isolation, e.registered_at, e.last_report_at, e.concluded_at
+    // The group a dispatch was placing, by the name a person gave it: a ledger
+    // row identified only by `ref_id` is unreadable, because a ULID's leading
+    // characters are its timestamp and two launches a millisecond apart abbreviate
+    // to the same string (see runTitle in the console's run-stats.ts). The join
+    // misses for media and mint dispatches, whose `ref_id` names something else.
+    `SELECT d.*, e.versions, e.isolation, e.registered_at, e.last_report_at, e.concluded_at,
+            g.trigger AS group_trigger, g.created_at AS group_created_at
        FROM dispatches d
        LEFT JOIN executors e ON e.id = d.executor_id
+       LEFT JOIN run_groups g ON d.kind = 'group' AND g.id = d.ref_id
       WHERE d.project_id = $1
       ORDER BY d.requested_at DESC LIMIT 100`,
     [project.id],

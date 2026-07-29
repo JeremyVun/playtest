@@ -188,7 +188,7 @@ async function requireOwnRing(ctx: HostedDynamic, projectId: HostedDynamic, ring
       WHERE r.id = $1 AND a.project_id = $2`,
     [ringId, projectId],
   );
-  if (!rows[0]) throw notFound(`no ring "${ringId}" in this project`);
+  if (!rows[0]) throw notFound(`no environment "${ringId}" in this project`);
 }
 
 async function getProvider(ctx: HostedDynamic) {

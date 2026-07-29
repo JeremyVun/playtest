@@ -7,7 +7,7 @@
 // remains the ordinary human Save (POST /suites/:s/commit).
 import { readJsonBody } from "../http.ts";
 import { requireAuth, guard, getSuite, stringField } from "./util.ts";
-import { badRequest } from "../errors.ts";
+import { AppError, badRequest } from "../errors.ts";
 import { draftStory, requireAssistantConfigured } from "../authoring/assistant.ts";
 
 // A clarification exchange stays short (the interview lost the plot beyond this,
@@ -44,15 +44,54 @@ export async function storyDraft(ctx: HostedDynamic) {
     existing = { path: existingPath, yaml };
   }
 
-  const result = await draftStory(ctx, {
+  const args = {
     suite,
     project: { id: suite.project_id },
     goal,
     transcript,
     existing,
     hint,
+  };
+  if (!String(ctx.req.headers.accept || "").includes("text/event-stream")) {
+    return await draftStory(ctx, args);
+  }
+
+  // The default JSON response remains the API contract. The web console opts
+  // into this SSE variant so real gateway retries can update its wait state;
+  // final data is the same envelope in a terminal `result` event.
+  ctx.res.writeHead(200, {
+    "content-type": "text/event-stream; charset=utf-8",
+    "cache-control": "no-store",
+    "x-accel-buffering": "no",
   });
-  return result;
+  ctx.res.flushHeaders?.();
+  const send = (event: string, data: unknown) => {
+    if (!ctx.res.destroyed && !ctx.res.writableEnded) {
+      ctx.res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    }
+  };
+  try {
+    const result = await draftStory(ctx, {
+      ...args,
+      onProgress: (event: HostedDynamic) => send(event.type, event),
+    });
+    send("result", result);
+  } catch (error: HostedDynamic) {
+    const appError = error instanceof AppError
+      ? error
+      : new AppError("internal", "internal server error");
+    if (!(error instanceof AppError)) {
+      ctx.log.error({
+        msg: "story draft stream failed",
+        requestId: ctx.requestId,
+        err: error?.stack || String(error),
+      });
+    }
+    send("error", { status: appError.status, ...appError.toEnvelope() });
+  } finally {
+    ctx.res.end();
+  }
+  return null;
 }
 
 /** Validate and bound the browser-held clarification transcript. */

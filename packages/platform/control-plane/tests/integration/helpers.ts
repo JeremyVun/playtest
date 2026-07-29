@@ -86,8 +86,8 @@ export function makeClient(base: HostedDynamic, { token = null }: HostedDynamic 
  *
  * Defaults suit the common case (a web application with one `local` ring), and
  * every field is overridable for the tests that care: `driver`/`platform` for a
- * mobile surface, `runnerLabels` for placement, `discoveryAllowed` for discovery
- * stories, `config` for the logical auth/secret_env overlay.
+ * mobile surface, `runnerLabels` for placement, `config` for the logical
+ * auth/secret_env overlay.
  *
  * A suite created after this needs no `application_id`: with exactly one
  * application in the project, suite creation takes it.
@@ -102,7 +102,6 @@ export async function createTarget(api: HostedDynamic, project: HostedDynamic, o
     ringName = ringKey,
     baseUrl = driver === "mobile" ? null : "http://127.0.0.1:4173",
     runnerLabels = [],
-    discoveryAllowed = false,
     config = {},
   } = over;
   const created = await api.post(`/projects/${project.key}/applications`, {
@@ -120,7 +119,6 @@ export async function createTarget(api: HostedDynamic, project: HostedDynamic, o
     name: ringName,
     ...(baseUrl == null ? {} : { base_url: baseUrl }),
     runner_labels: runnerLabels,
-    discovery_allowed: discoveryAllowed,
     config,
   });
   if (ringRes.status !== 201) {

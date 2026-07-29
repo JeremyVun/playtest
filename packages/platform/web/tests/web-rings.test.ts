@@ -1,14 +1,18 @@
-// Applications and rings, as the console models them. Both are DOM-free
+// Applications and environments, as the console models them. Both are DOM-free
 // modules so the offline gate can hold them to the rules that actually matter:
-// a key is permanent and a collision is named before anything is created, a
-// ring's URL is required for web/API and refused for mobile, the five physical
-// fields are unrepresentable in a ring's overlay, and the picker never opens on
-// production.
+// a URL names the environment it points at, a key is permanent and a collision
+// is named before anything is created, an environment's URL is required for
+// web/API and refused for mobile, the five physical fields are unrepresentable
+// in its overlay, and the picker never opens on production.
+//
+// The console prints "environment" and the wire says `ring`; these modules are
+// the seam, so the assertions here are on the words a person reads.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   DRIVERS, PLATFORMS, driverLabel, driverGist, applicationLine, keyFromName, keyProblem,
   ringUrlProblem, ringConfigProblem, ringOptionLabel, isProdRing, defaultRingId,
+  environmentKeyFromUrl, isLoopbackUrl,
   launchTargetWords, hostOf, PHYSICAL_APP_KEYS, LOGICAL_APP_KEYS,
   identityRows, identityValue, withIdentities, identityProblem, sessionRefOptions,
 } from "../src/lib/rings.js";
@@ -23,6 +27,9 @@ test("application: the three surfaces each read as themselves", () => {
   }
   assert.equal(applicationLine({ key: "todo-ios", driver: "mobile", platform: "ios" }), "todo-ios · mobile · ios");
   assert.equal(applicationLine({ key: "todo-web", driver: "web", platform: null }), "todo-web · web");
+  // A name earns the key its own place in the line; a name that IS the key does not.
+  assert.equal(applicationLine({ key: "todo-web", name: "Todo Web", driver: "web" }), "Todo Web · todo-web · web");
+  assert.equal(applicationLine({ key: "gss", name: "gss", driver: "web" }), "gss · web");
 });
 
 test("application: a key is suggested from the name, and shaped like the server's", () => {
@@ -34,33 +41,84 @@ test("application: a key is suggested from the name, and shaped like the server'
 
 test("application: a key is permanent, so a bad one is refused before it exists", () => {
   // Shape first — the server's own KEY_RE, said in words a person can act on.
-  assert.match(String(keyProblem("", [])), /give this application a key/i);
+  assert.match(String(keyProblem("", [])), /give this application a name/i);
   assert.match(String(keyProblem("Todo Web", [])), /lowercase letters, digits and hyphens/);
   assert.match(String(keyProblem("-leading", [])), /lowercase letters, digits and hyphens/);
   // A collision NAMES what is in the way, in the scope that owns it.
   assert.match(String(keyProblem("todo-web", [{ key: "todo-web" }])), /already has an application keyed “todo-web”/);
   assert.match(
-    String(keyProblem("local", [{ key: "local" }], { kind: "ring", scope: "Application “todo-web”" })),
-    /Application “todo-web” already has a ring keyed “local”/,
+    String(keyProblem("local", [{ key: "local" }], { kind: "environment", scope: "Application “todo-web”" })),
+    /Application “todo-web” already has an environment keyed “local”/,
   );
   // A key that only permanence makes dangerous still says so.
-  assert.match(String(keyProblem("", [], { kind: "ring" })), /for good/);
+  assert.match(String(keyProblem("", [], { kind: "environment" })), /for good/);
+  // Nothing a person reads says "ring" — that word belongs to the schema.
+  for (const message of [
+    keyProblem("", [], { kind: "environment" }),
+    keyProblem("Local", [], { kind: "environment" }),
+    keyProblem("local", [{ key: "local" }], { kind: "environment", scope: "Application “x”" }),
+    ringUrlProblem("", "web"),
+    ringUrlProblem("https://x.test", "mobile"),
+    ringConfigProblem({ nope: {} }),
+    ringConfigProblem({ app: { device: "x" } }),
+  ]) {
+    assert.doesNotMatch(String(message), /\bring\b/i, String(message));
+  }
 });
 
-test("ring: a URL is required for web and API, and refused for mobile", () => {
+test("environment: the URL names the environment, so nobody is asked twice", () => {
+  // The two a person actually types, read straight off the host.
+  assert.equal(environmentKeyFromUrl("http://127.0.0.1:4173"), "local");
+  assert.equal(environmentKeyFromUrl("http://localhost:3000"), "local");
+  assert.equal(environmentKeyFromUrl("https://staging.example.com"), "staging");
+  // A deployment word anywhere in the host, on a label boundary.
+  assert.equal(environmentKeyFromUrl("https://gss-staging.acme.io"), "staging");
+  assert.equal(environmentKeyFromUrl("https://pr-42.preview.acme.dev"), "preview");
+  assert.equal(environmentKeyFromUrl("https://acme-uat.example"), "uat");
+  // Longest first: `production.acme.com` is production, not prod.
+  assert.equal(environmentKeyFromUrl("https://production.acme.com"), "production");
+  assert.equal(environmentKeyFromUrl("https://prod.acme.com"), "prod");
+  // …and never a substring: `latest` is not a test environment.
+  assert.equal(environmentKeyFromUrl("https://latest.acme.com"), "production");
+  // Anything unnamed is production — the safe direction to guess in, because a
+  // wrong "production" costs a rename while a wrong anything-else hides the
+  // warning that matters.
+  assert.equal(environmentKeyFromUrl("https://acme.com"), "production");
+  assert.equal(environmentKeyFromUrl("https://checkout.acme.com"), "production");
+  // A taken key is a suffix, never a refusal: two local services are ordinary.
+  assert.equal(environmentKeyFromUrl("http://127.0.0.1:5173", [{ key: "local" }]), "local-2");
+  assert.equal(environmentKeyFromUrl("http://127.0.0.1:6173", [{ key: "local" }, { key: "local-2" }]), "local-3");
+  // Nothing to derive from yet — the form shows no name rather than a guess.
+  assert.equal(environmentKeyFromUrl(""), "");
+  assert.equal(environmentKeyFromUrl("https:/"), "");
+  assert.equal(environmentKeyFromUrl("not a url"), "");
+});
+
+test("environment: a loopback URL is the one surprising rule, so it is detectable", () => {
+  // The note this drives ("resolved on the claiming runner's own machine") is
+  // shown under the URL it is true of, and nowhere else.
+  for (const url of ["http://127.0.0.1:4173", "http://localhost:3000", "http://[::1]:8080", "http://mac.local:4173"]) {
+    assert.equal(isLoopbackUrl(url), true, url);
+  }
+  for (const url of ["https://staging.acme.test", "https://127.0.0.1.example.com", "", null]) {
+    assert.equal(isLoopbackUrl(url), false, String(url));
+  }
+});
+
+test("environment: a URL is required for web and API, and refused for mobile", () => {
   assert.equal(ringUrlProblem("https://staging.example.com", "web"), null);
   assert.equal(ringUrlProblem("http://127.0.0.1:4173", "api"), null);
-  // The runner's network position is the stated semantic, so the empty-field
-  // message is where a person learns what a loopback URL means.
-  assert.match(String(ringUrlProblem("", "web")), /claiming runner's network position/);
+  // Short, because it is a refusal and not a lecture: what a loopback URL means
+  // is `isLoopbackUrl`'s note, shown under a URL that actually is one.
+  assert.match(String(ringUrlProblem("", "web")), /Add the URL that runs here point at/);
   assert.match(String(ringUrlProblem("staging.example.com", "web")), /isn't a URL/);
   assert.match(String(ringUrlProblem("ftp://example.com", "web")), /http:\/\/ or https:\/\//);
   // Mobile holds no URL at all, and the refusal says who does hold the facts.
   assert.equal(ringUrlProblem("", "mobile"), null);
-  assert.match(String(ringUrlProblem("https://example.com", "mobile")), /own configuration file/);
+  assert.match(String(ringUrlProblem("https://example.com", "mobile")), /supplies the build/);
 });
 
-test("ring: the overlay is an allowlist, so the physical five are unrepresentable", () => {
+test("environment: the overlay is an allowlist, so the physical five are unrepresentable", () => {
   assert.equal(ringConfigProblem({}), null);
   assert.equal(ringConfigProblem(null), null);
   assert.equal(ringConfigProblem({ auth: { identities: { member: { $session: "sso/member" } }, default: "member" } }), null);
@@ -77,8 +135,8 @@ test("ring: the overlay is an allowlist, so the physical five are unrepresentabl
   assert.match(String(ringConfigProblem({ app: { compose: {} } })), /boot a different application/);
   assert.match(String(ringConfigProblem({ app: { driver: "web" } })), /the application's/);
   assert.match(String(ringConfigProblem({ app: { envs: {} } })), /cannot nest another/);
-  assert.match(String(ringConfigProblem({ nope: {} })), /not part of a ring's configuration/);
-  assert.match(String(ringConfigProblem({ auth: { providers: {} } })), /not part of a ring's authorization/);
+  assert.match(String(ringConfigProblem({ nope: {} })), /not part of an environment's configuration/);
+  assert.match(String(ringConfigProblem({ auth: { providers: {} } })), /not part of an environment's authorization/);
   assert.match(String(ringConfigProblem({ app: [] })), /must be an object/);
   assert.match(String(ringConfigProblem([])), /must be a JSON object/);
   // The allowlist is applied at ONE depth. Data that merely happens to be named
@@ -184,7 +242,7 @@ test("identities: a row a story could not use is refused before the round trip",
   assert.equal(identityProblem([{ name: "weird", kind: "custom", ref: "", value: { cookies: [] } }]), null);
 });
 
-test("identities: the session picker offers only references this ring may actually use", () => {
+test("identities: the session picker offers only references this environment may actually use", () => {
   const providers = [
     { name: "sso", ring_id: null, enabled: true, identities: { member: {}, admin: {} } },
     { name: "staging-only", ring_id: "r1", enabled: true, identities: { member: {} } },
@@ -192,33 +250,33 @@ test("identities: the session picker offers only references this ring may actual
     { name: "retired", ring_id: null, enabled: false, identities: { member: {} } },
     { name: "no-identities", ring_id: null, enabled: true },
   ];
-  // A bound provider is reachable only from its own ring, so offering another
-  // ring's would be offering a refusal.
+  // A bound provider is reachable only from its own environment, so offering
+  // another one's would be offering a refusal.
   assert.deepEqual(sessionRefOptions(providers, "r1"), ["sso/admin", "sso/member", "staging-only/member"]);
   assert.deepEqual(sessionRefOptions(providers, "r2"), ["prod-only/member", "sso/admin", "sso/member"]);
-  // A ring that does not exist yet (the create form) sees the project-wide ones.
+  // An environment that does not exist yet sees the project-wide ones.
   assert.deepEqual(sessionRefOptions(providers, null), ["sso/admin", "sso/member"]);
   // Sorted, because the picker is read alphabetically, and never a disabled one.
   assert.ok(!sessionRefOptions(providers, "r1").some((r) => r.startsWith("retired/")));
   assert.deepEqual(sessionRefOptions([], "r1"), []);
 });
 
-test("launch: a ring option names the host it resolves to", () => {
+test("launch: an environment option names the host it resolves to", () => {
   assert.equal(hostOf("https://staging.acme.test/path"), "staging.acme.test");
   assert.equal(hostOf("http://127.0.0.1:4173"), "127.0.0.1:4173", "the port carries the meaning between two local services");
   assert.equal(hostOf(null), "");
   assert.equal(
-    ringOptionLabel({ key: "staging", base_url: "https://staging.acme.test", discovery_allowed: true }),
-    "staging · staging.acme.test · discovery",
+    ringOptionLabel({ key: "staging", base_url: "https://staging.acme.test" }),
+    "staging · staging.acme.test",
   );
   assert.equal(ringOptionLabel({ key: "prod", base_url: "https://acme.test" }), "prod · acme.test");
-  // A mobile ring has no URL to name, so it says who supplies the build.
+  // A mobile environment has no URL to name, so it says who supplies the build.
   assert.equal(ringOptionLabel({ key: "local" }, "mobile"), "local · build from the runner");
 });
 
 test("launch: the picker never opens on production unless production is all there is", () => {
   const local = { id: "r1", key: "local", base_url: "http://127.0.0.1:4173" };
-  const staging = { id: "r2", key: "staging", base_url: "https://staging.test", discovery_allowed: true };
+  const staging = { id: "r2", key: "staging", base_url: "https://staging.test" };
   const prod = { id: "r3", key: "prod", base_url: "https://acme.test" };
   assert.ok(isProdRing(prod));
   assert.ok(isProdRing({ key: "prod-eu" }));
@@ -234,14 +292,14 @@ test("launch: the picker never opens on production unless production is all ther
   assert.equal(defaultRingId([local, staging, prod], {
     suiteId: "s1",
     groups: [{ suite_id: "s2", ring_id: "r3" }],
-  }), "r2", "discovery-allowed, non-production, comes next");
+  }), "r1", "the first that isn't named like production comes next");
   assert.equal(defaultRingId([local, prod], { suiteId: "s1" }), "r1");
   // Production alone is still offered — refusing to choose would be worse.
   assert.equal(defaultRingId([prod], { suiteId: "s1" }), "r3");
   assert.equal(defaultRingId([], { suiteId: "s1" }), "");
 });
 
-test("launch: the target line is the ring's URL, or who supplies the build", () => {
+test("launch: the target line is the environment's URL, or who supplies the build", () => {
   const web = launchTargetWords({
     application: { key: "todo-web", driver: "web", platform: null },
     ring: { key: "staging" },
@@ -261,15 +319,15 @@ test("launch: the target line is the ring's URL, or who supplies the build", () 
   assert.equal(mobile.where, "the build the claiming runner supplies");
   assert.equal(mobile.source, "todo-ios / local · ios");
 
-  // A ring with no URL is a warning, not a lie.
-  assert.equal(launchTargetWords({ ring: { key: "local" }, application: { key: "a" } }).where, "no URL on this ring");
-  assert.equal(launchTargetWords(null).where, "no URL on this ring");
+  // An environment with no URL is a warning, not a lie.
+  assert.equal(launchTargetWords({ ring: { key: "local" }, application: { key: "a" } }).where, "no URL on this environment");
+  assert.equal(launchTargetWords(null).where, "no URL on this environment");
 });
 
 test("new suite: the dialog commits the transport only — never a target", () => {
-  // A suite runs against its application's ring, and hosted execution applies
-  // that ring's URL after the authored merge, so a URL written here would be
-  // the value that loses.
+  // A suite runs against its application's environment, and hosted execution
+  // applies that environment's URL after the authored merge, so a URL written
+  // here would be the value that loses.
   assert.equal(initialDefaultsYaml({ driver: "web" }), "");
   assert.equal(initialDefaultsYaml({ driver: "mobile" }), "app:\n  driver: mobile\n");
   assert.equal(initialDefaultsYaml({ driver: "api" }), "app:\n  driver: api\n");

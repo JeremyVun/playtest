@@ -38,10 +38,10 @@ test("hosted web loads a project and follows the suite hot path", async () => {
       await page.getByRole("heading", { name: "Smoke suite", exact: true }).waitFor();
       await page.getByText("No stories yet", { exact: true }).waitFor();
 
-      // Applications is a first-class section now, and it is where the ring a
+      // Applications is a first-class section now, and it is where the environment a
       // suite launches against is managed — so the rail item has to resolve and
       // the page has to render both halves of the pair. The index is a scan, so
-      // a ring reads as its host; the full URL is on the application's own page
+      // an environment reads as its host; the full URL is on the application's own page
       // (tests/browser/web-applications.test.ts).
       await page.getByRole("link", { name: "Applications", exact: true }).click();
       await page.waitForURL(`${base}/p/${project.key}/applications`);
@@ -61,13 +61,13 @@ test("hosted web loads a project and follows the suite hot path", async () => {
       await dialog.locator(".select-val").filter({ hasText: application.key }).first().waitFor();
       await dialog.getByRole("button", { name: "Cancel" }).click();
 
-      // The launch dialog selects (suite, ring) and states what the ring
+      // The launch dialog selects (suite, environment) and states what the environment
       // resolves to — the one place the silent-wrong-target trap used to live.
       await page.getByRole("link", { name: "Todo journeys", exact: true }).click();
       await page.waitForURL(`${base}/p/${project.key}/suites/todos`);
       await page.getByRole("button", { name: "▶ Run" }).click();
       const launch = page.locator("#modal-root .modal");
-      await launch.getByText("Ring", { exact: true }).waitFor();
+      await launch.getByText("Environment", { exact: true }).waitFor();
       await launch.locator(".select-val").filter({ hasText: ring.key }).first().waitFor();
       await launch.locator(".launch-target-url").getByText(ring.base_url, { exact: true }).waitFor();
       await launch.getByRole("button", { name: "Cancel" }).click();

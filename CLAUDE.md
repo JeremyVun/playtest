@@ -12,8 +12,8 @@ hosted product.
 - `docs/playtest-design.md` — product concepts and terminology.
 - `docs/CONTRACTS.md` — index of the thematic contracts under
   `docs/contracts/`.
-- `docs/contracts/hosted.md` — hosted system boundaries and cross-component
-  contracts.
+- `docs/contracts/hosted.md` — hosted platform state; `docs/CONTRACTS.md`
+  routes runner, findings, and web changes to their narrower hosted contracts.
 - `docs/ROADMAP.md` — index of future work. Put new plans under
   `docs/backlog/` and link them from the roadmap.
 

@@ -74,21 +74,18 @@ test("rings: CRUD with discovery flag + runner labels", async () => {
       name: "Staging",
       base_url: "https://staging.example.com",
       config: { auth: { default: "member" }, secret_env: {} },
-      discovery_allowed: true,
       runner_labels: ["self-hosted", "playtest", "pool-checkout"],
     });
     assert.equal(created.status, 201, JSON.stringify(created.body));
-    assert.equal(created.body.discovery_allowed, true);
     const id = created.body.id;
 
     // An explicit value REPLACES (merge only covers what the caller omits).
-    const updated = await api.put(`/rings/${id}`, { config: created.body.config, discovery_allowed: false, runner_labels: ["self-hosted"] });
-    assert.equal(updated.body.discovery_allowed, false);
+    const updated = await api.put(`/rings/${id}`, { config: created.body.config, runner_labels: ["self-hosted"] });
     assert.deepEqual(updated.body.runner_labels, ["self-hosted"]);
 
     assert.equal((await api.del(`/rings/${id}`)).status, 204);
     // Deletion never cascades and never invents a replacement: the application
-    // survives its last ring, holding none.
+    // survives its last environment, holding none.
     assert.deepEqual((await api.get(`/applications/${application.id}/rings`)).body.items, []);
     assert.deepEqual((await api.get("/projects/p/applications")).body.items.map((a: HostedDynamic) => a.key), ["todo-web"]);
   });
@@ -106,10 +103,10 @@ test("rings: a partial PUT merges — omitted fields keep their stored value", a
       config,
     });
 
-    // The data-loss case: flipping one flag must not wipe config, URL or labels.
-    const flipped = await api.put(`/rings/${ring.id}`, { discovery_allowed: true });
+    // The data-loss case: a one-field PUT must not wipe config, URL or labels.
+    const flipped = await api.put(`/rings/${ring.id}`, { name: "Staging EU" });
     assert.equal(flipped.status, 200);
-    assert.equal(flipped.body.discovery_allowed, true);
+    assert.equal(flipped.body.name, "Staging EU");
     assert.deepEqual(flipped.body.config, config);
     assert.equal(flipped.body.base_url, "https://staging.example.com");
     assert.deepEqual(flipped.body.runner_labels, ["self-hosted", "playtest"]);
@@ -121,16 +118,15 @@ test("rings: a partial PUT merges — omitted fields keep their stored value", a
     assert.deepEqual(listed.runner_labels, ["self-hosted", "playtest"]);
 
     // A re-key attempt is an explicit error, never silently ignored: runner
-    // configuration binds (application key, ring key).
+    // configuration binds (application key, environment key).
     const rekeyed = await api.put(`/rings/${ring.id}`, { key: "prod" });
     assert.equal(rekeyed.status, 400);
     assert.match(rekeyed.body.error.message, /key is part of its identity/);
 
-    // Re-sending the same key is fine (the web form always includes it), and a
-    // ring's NAME, unlike its key, is editable.
-    const same = await api.put(`/rings/${ring.id}`, { key: "staging", name: "Staging (EU)", discovery_allowed: false });
+    // Re-sending the same key is fine, and an environment's NAME, unlike its
+    // key, is editable.
+    const same = await api.put(`/rings/${ring.id}`, { key: "staging", name: "Staging (EU)" });
     assert.equal(same.status, 200);
-    assert.equal(same.body.discovery_allowed, false);
     assert.equal(same.body.name, "Staging (EU)");
   });
 });

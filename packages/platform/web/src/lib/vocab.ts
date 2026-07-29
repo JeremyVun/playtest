@@ -54,24 +54,81 @@ const SIGNAL: WebDynamic = {
 export const signalLabel = (s: WebDynamic) => SIGNAL[s] || humanize(s) || "an unrecognized signal";
 
 // Success-criterion kinds (lib/caseform.js SUCCESS_KINDS, mirroring core
-// config.ts). Each reads as the start of a sentence the value completes, so the
-// story form says "An element is present  [data-testid=…]" rather than
-// "element_exists  [data-testid=…]".
+// case.schema.json). Three things per kind, because the story form needs all
+// three: the NAME in the picker, one line saying what that kind actually
+// checks, and an EXAMPLE value that would satisfy it.
+//
+// The names are nouns. They used to be sentence-openers the value completed
+// ("Outcome, in words", "Console errors at most"), which reads well in one
+// finished row and badly in the list you choose from: a picker is a list of
+// things, and the most-used kind of all — a claim the grader checks — was the
+// hardest one in it to recognise. What the value has to be is now said by the
+// help line and the example, where a person looks once and then never again.
 const CRITERION: WebDynamic = {
-  assert: "Outcome, in words",
-  element_exists: "Element is present",
-  url_matches: "URL matches",
-  api_called: "API was called",
-  console_errors: "Console errors at most",
-  accessibility_violations: "Accessibility issues ≤",
-  screen_shows: "Screen shows",
-  response_status: "Response status",
-  response_matches: "Response body matches",
-  invariant: "API invariant holds",
+  assert: {
+    label: "Assertion",
+    help: "Judged by the grader model against the final state — one model call per run.",
+    example: "the confirmation names the delivery window",
+  },
+  element_exists: {
+    label: "Element exists",
+    help: "A CSS selector that must match on the final page.",
+    example: "[data-testid=order-confirmation]",
+  },
+  url_matches: {
+    label: "URL matches",
+    help: "A glob matched against the final URL — * and ? allowed.",
+    example: "/orders/*",
+  },
+  api_called: {
+    label: "API called",
+    help: "A request the run's network traffic must contain.",
+    example: "POST /api/orders",
+  },
+  console_errors: {
+    label: "Console errors",
+    help: "Console errors counted over the whole run.",
+    example: "0",
+  },
+  accessibility_violations: {
+    label: "Accessibility issues",
+    help: "axe-core violations (WCAG 2.0 A/AA, 2.1 AA) summed over every step.",
+    example: "0",
+  },
+  screen_shows: {
+    label: "Screen shows",
+    help: "An accessibility id or predicate that must resolve on the final screen.",
+    example: "~order-confirmation",
+  },
+  response_status: {
+    label: "Response status",
+    help: "The status a response must carry — exact, or a class like 2xx.",
+    example: "201",
+  },
+  response_matches: {
+    label: "Response body",
+    help: "A JSON-path claim about the last response body, checked exactly.",
+    example: '$.status == "confirmed"',
+  },
+  invariant: {
+    label: "API invariant",
+    help: "A named policy checked against the recorded trace.",
+    example: "{policy: no_server_error}",
+  },
 };
 
-/** A success criterion's kind, as the opening of a sentence. */
-export const criterionLabel = (k: WebDynamic) => CRITERION[k] || humanize(k);
+/** A success criterion's kind, as a name you can pick from a list. */
+export const criterionLabel = (k: WebDynamic) => CRITERION[k]?.label || humanize(k);
+
+/**
+ * One line saying what this kind checks. Null for a kind this console doesn't
+ * know — a suite's custom assertion, or one added by a newer engine — so the
+ * caller can say something true about it instead of inventing a definition.
+ */
+export const criterionHelp = (k: WebDynamic) => CRITERION[k]?.help || null;
+
+/** A value that would satisfy this kind, shown as the input's placeholder. */
+export const criterionExample = (k: WebDynamic) => CRITERION[k]?.example || "";
 
 // What the next run of a story will DO (core `list`: record/check/explore).
 // The words are the CLI's; the gloss is what the console adds.

@@ -1,29 +1,28 @@
 // Self-hosted runner helpers, kept DOM-free so the offline gate can assert the
-// two things that matter about this surface without a browser: the exact
-// command a person pastes, and that the credential is genuinely a one-time
-// reveal rather than something the page can show twice.
+// two things that matter about this surface without a browser: that the start
+// line the console shows carries no secret, and that the credential is
+// genuinely a one-time reveal rather than something the page can show twice.
 
 export interface RunnerStartCommand {
   server: string;
-  credential: string;
-  labels?: string[];
   isolation?: string | null;
 }
 
 /**
- * The one line a person pastes into a terminal on the machine that can reach
- * the target. Two rules it exists to keep:
+ * How the runner is started, as an EXAMPLE rather than a payload. The credential
+ * is the thing a person must carry away from registration — this line they can
+ * retype, and it holds no secret at all:
  *
- *   - the credential rides the ENVIRONMENT, never an argument, so it cannot be
- *     read out of `ps` by anyone else on that machine;
- *   - it runs from a Playtest checkout with no install step of its own —
- *     `node_modules/.bin/runner-agent` is there after `npm install`.
+ *   - the credential rides the ENVIRONMENT under a named variable, so it cannot
+ *     be read out of `ps`, and so this example never has to contain it;
+ *   - labels are not repeated here. The board uses the labels the runner was
+ *     registered with unless the agent overrides them, so putting them in the
+ *     start line only creates a second place for them to disagree.
  */
-export function startCommand({ server, credential, labels = [], isolation = null }: RunnerStartCommand): string {
-  const parts = ["./node_modules/.bin/runner-agent", "pool", "--server", trimSlash(server)];
-  if (labels.length) parts.push("--labels", labels.join(","));
+export function startCommand({ server, isolation = null }: RunnerStartCommand): string {
+  const parts = ["runner-agent", "pool", "--server", trimSlash(server)];
   if (isolation) parts.push("--isolation", isolation);
-  return `PLAYTEST_RUNNER_CREDENTIAL='${credential}' ${parts.join(" ")}`;
+  return parts.join(" ");
 }
 
 const trimSlash = (url: string) => String(url || "").replace(/\/+$/, "");
@@ -72,9 +71,13 @@ export function oneShot<T>(value: T): { take: () => T | null; spent: () => boole
   };
 }
 
-/** What a listed runner reads as. Never carries a credential: the list has none. */
+/**
+ * Labels as a phrase, for the places that read as "Runs on ___". The empty case
+ * has to name a MACHINE, not a job: "any job in this project" answered a
+ * different question than the label it sat under.
+ */
 export function runnerLabelsText(labels: string[] | null | undefined): string {
-  return labels && labels.length ? labels.join(", ") : "any job in this project";
+  return labels && labels.length ? labels.join(", ") : "any runner";
 }
 
 // ---------- presence ----------

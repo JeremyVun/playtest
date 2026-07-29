@@ -39,6 +39,25 @@ S4/S5 are dropped — shipped script-substrate behavior remains recorded in
       evidence: [`studies/api-probe/`](../studies/api-probe/),
       [`studies/api-suite/`](../studies/api-suite/).
 
+### Sign-in providers and secrets
+
+Plan: [`docs/backlog/authorization-scoping/PLAN.md`](backlog/authorization-scoping/PLAN.md).
+Both are project registries referenced only from an environment; the console
+draws them next to the reference instead of next to their peers, and the
+scoping and reference semantics have gaps.
+
+- [ ] **A0 — `secret_env` string semantics:** a bare string is a secret name to
+      the server and a pasted literal to the console, so the console's advice
+      produces an environment that saves and then fails at claim exchange.
+      Settle it as a name and validate at save.
+- [ ] **A1 — Registries move to Settings:** they sit under Applications today
+      with nothing declaring their scope, while runner labels — identical in
+      shape — live in Settings. Move both, keep the derived reference on the
+      environment card, and show which environments use a provider.
+- [ ] **A2 — Ring-scoped secrets:** a provider can be bound to one environment
+      and a secret cannot, so binding a `storage_state_secret` provider does
+      not contain the secret behind it. Add the same optional binding.
+
 ### Hosted UX evidence rerun
 
 - [ ] Re-run `studies/hosted-ux` with the calibrated instrument and compare it

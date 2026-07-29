@@ -130,4 +130,4 @@ Residual risk: unknowns, deferred cases, or emergent issues
 - Synthesized result:
   [archived hill-climb report](../../studies/archive/hillclimb-2026-07/report/REPORT.md)
 - Findings intake and consolidation:
-  [`contracts/hosted.md`](../contracts/hosted.md)
+  [`contracts/hosted-findings.md`](../contracts/hosted-findings.md)

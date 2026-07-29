@@ -350,7 +350,7 @@ async function runsIndex(main: WebDynamic, projectKey: WebDynamic, project: WebD
             emptyState("Nothing needs attention",
               "No run in this project is holding a failed check or a story that never produced a verdict.",
               h("div.empty-actions", {}, link(`/p/${projectKey}/runs`, h("span.btn.primary", {}, "See all runs")))))
-        : emptyState("No runs yet", "Launch a suite against one of its application's rings and its stories run here.",
+        : emptyState("No runs yet", "Launch a suite against one of its application's environments and its stories run here.",
             canLaunch ? h("button.btn.primary", { onclick: () => launchModal(projectKey, ctl.suites) }, "Launch") : null);
     } else if (liveOnly && !shownGroups.length) {
       body = h("div.stack", {}, filterBar,
@@ -1196,7 +1196,7 @@ export function launchModal(projectKey: WebDynamic, suites: WebDynamic = null, p
     loadRings();
     return h("form.launch-form", { onsubmit: submit },
       contextSlot,
-      suiteFixed ? fld("Ring", ring) : h("div.launch-where", {}, fld("Suite", suite), fld("Ring", ring)),
+      suiteFixed ? fld("Environment", ring) : h("div.launch-where", {}, fld("Suite", suite), fld("Environment", ring)),
       targetSlot,
       placementSlot,
       h("div.field", {},
@@ -1403,8 +1403,7 @@ export function launchModal(projectKey: WebDynamic, suites: WebDynamic = null, p
       // field (core defaults journeys to "tester"), so count by id shape.
       const personas = p.cases.filter((c: WebDynamic) => c.id.includes("@")).length;
       const est = p.estimate?.est_total_usd;
-      const blocked = p.discovery.runs > 0 && !p.discovery.allowed;
-      launchBtn.disabled = blocked || p.total_runs === 0;
+      launchBtn.disabled = p.total_runs === 0;
       const placeholders = launchLimitPlaceholders(p.cases);
       if (maxSteps.value === "") maxSteps.placeholder = placeholders.maxSteps;
       if (timeoutSeconds.value === "") timeoutSeconds.placeholder = placeholders.timeoutSeconds;
@@ -1459,23 +1458,19 @@ export function launchModal(projectKey: WebDynamic, suites: WebDynamic = null, p
       );
 
       mount(previewWarnSlot,
-        // Discovery is blocked on a non-discovery ring, but a plain journey run
-        // against production is allowed — and is worth saying out loud, because
-        // these runs really click the buttons they find.
-        chosenRing && isProdRing(chosenRing) && !blocked
-          ? h("div.preview-warn", {}, `${chosenRing.key} ring — this run uses a real browser and can make real changes.`)
-          : null,
-        blocked
+        // Said, not gated. Every run here drives a real browser against a real
+        // deployment; an exploring one merely picks its own way through, so a
+        // permission that let journeys through and stopped explorations was
+        // drawing a line where there wasn't one. What a person needs before
+        // spending money is what this launch will actually do — so the warning
+        // names the environment, and names the exploring runs when there are
+        // any, and then gets out of the way.
+        chosenRing && isProdRing(chosenRing)
           ? h("div.preview-warn", {},
-              `This selection includes ${p.discovery.runs} discovery ${p.discovery.runs === 1 ? "story" : "stories"}, and this ring doesn't allow discovery. ` +
-              `Discovery agents really click buy, delete and submit — pick a staging ring, or enable "Allow discovery studies" for it under Applications. `,
-              // one-click way out: both launch-and-follow personas read this
-              // warning and then hand-hunted the select for the allowed ring
-              ...visibleRings().filter((r: WebDynamic) => r.discovery_allowed && String(r.id) !== ring.value)
-                .slice(0, 2)
-                // dispatch change (not just set .value) so the enhanced
-                // dropdown's button relabels too
-                .map((r: WebDynamic) => h("button.btn.btn-sm", { type: "button", style: "margin-left:6px", onclick: () => { ring.value = r.id; ring.dispatchEvent(new Event("change")); preview(); } }, `Use ${r.key}`)))
+              `${chosenRing.key} — this run uses a real browser and can make real changes.`
+              + (p.discovery.runs
+                ? ` ${p.discovery.runs} of them ${p.discovery.runs === 1 ? "explores" : "explore"} on its own, clicking whatever it finds.`
+                : ""))
           : null,
         p.total_runs === 0 ? h("div.preview-warn", {}, "This selection matches no stories.") : null,
       );
@@ -1504,7 +1499,7 @@ export function launchModal(projectKey: WebDynamic, suites: WebDynamic = null, p
                   ? `a runner advertising ${lastPlacement.runner_labels.join(", ")}`
                   : "any runner in this project"),
               h("span.launch-source", {},
-                lastPlacement.labels_source === "launch" ? "pinned by this launch" : "the ring's labels")))
+                lastPlacement.labels_source === "launch" ? "pinned by this launch" : "the environment's labels")))
         : null);
       // A run nothing can claim is a ten-minute wait ending in a failure, and
       // everything needed to say so is already on this screen. It is a warning,

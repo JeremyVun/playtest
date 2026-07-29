@@ -284,7 +284,7 @@ test("autoResolveReason: a short human sentence per tier, scoped when multi-trip
   );
   assert.match(
     autoResolveReason(gate, [triple(), triple({ ringId: "e2" })]),
-    /everywhere it was seen \(2 suite\/ring combinations\)/,
+    /everywhere it was seen \(2 suite\/environment combinations\)/,
   );
   // A very long gate spec is clipped — the reason stays one readable sentence.
   const long = finding({ strict_key: "k", signal_type: "gate_assert", summary: { gate: { spec: "x".repeat(300) } } });

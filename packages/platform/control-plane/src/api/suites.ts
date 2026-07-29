@@ -224,7 +224,7 @@ async function suiteApplication(ctx: HostedDynamic, project: HostedDynamic, requ
   if (!rows.length) {
     throw badRequest(
       `project "${project.key}" has no application yet — a suite runs against one application target, ` +
-        `so a developer has to create one (its key, its driver, and a ring URL) before the first suite`,
+        `so a developer has to create one (its key, its driver, and an environment URL) before the first suite`,
     );
   }
   throw badRequest(

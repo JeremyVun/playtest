@@ -2,8 +2,9 @@
 
 Offline, model-free fixtures and evaluator that **freeze** the candidate intake
 and consolidation behavior contracted in
-[`docs/contracts/hosted.md`](../../../docs/contracts/hosted.md) ("Bug candidates
-and intake", "Candidate consolidation"). These files are fixtures and expected
+[`docs/contracts/hosted-findings.md`](../../../docs/contracts/hosted-findings.md)
+("Findings intake", "Semantic consolidation"). These files are fixtures and
+expected
 data only — nothing here is imported by `src/**`.
 
 ## Files
@@ -16,7 +17,7 @@ data only — nothing here is imported by `src/**`.
 | `README.md` | This file. |
 
 The hermetic tests that exercise all of the above live at
-[`tests/core/unit/findings-consolidation.test.ts`](../unit/findings-consolidation.test.ts)
+[`packages/core/tests/unit/findings-consolidation.test.ts`](../../../packages/core/tests/unit/findings-consolidation.test.ts)
 and run under `npm test` / `npm run test:core`.
 
 ## Vocabulary (frozen)
@@ -55,7 +56,8 @@ from any recorded expectation:
 ## Measured thresholds and baseline
 
 The consolidation defaults in
-[`docs/contracts/hosted.md`](../../../docs/contracts/hosted.md) were measured
+[`docs/contracts/hosted-findings.md`](../../../docs/contracts/hosted-findings.md)
+were measured
 here: 12 fixtures, 17 candidate/finding items, 120 pairs, scored with the shipped
 runtime retrieval (`packages/platform/control-plane/src/findings/shortlist.ts`).
 `packages/platform/control-plane/tests/unit/findings-shortlist.test.ts` asserts these

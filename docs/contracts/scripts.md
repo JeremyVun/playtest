@@ -638,7 +638,8 @@ answers a documented status with a schema-valid body is invisible to it.
 **Level 1** is rule cards. The platform proposes 5–8 plain-language candidate
 rules; a human approves, edits, denies, or writes their own; only approved
 sentences are enforced. The card lifecycle, its storage, and its surface belong
-to [Hosted: Rule cards](hosted.md#rule-cards); the engine owns three things:
+to [Hosted findings: Rule cards](hosted-findings.md#rule-cards); the engine owns
+three things:
 
 - the **card shape** — `{ id, title, statement, applicability, exceptions,
   provenance, note, state, origin }`, with `state` one of `candidate`,

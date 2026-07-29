@@ -3,23 +3,32 @@
 // It replaces the "Operations" fold that used to sit at the bottom of Runs.
 // System health is not something you go and open — it is either on screen or it
 // is not being watched, and the one place it must be visible is wherever you
-// happen to be when a run feels slow. Dispatch depth, queue wait, reconciler
-// liveness and model spend read at a glance; the dispatch ledger, which is a
-// table and can never fit in a bar, opens in a drawer above it.
+// happen to be when a run feels slow.
+//
+// A bar that is on screen all day earns its space by saying little: whether
+// this console is live, what is running right now, anything that is actually
+// wrong, and what the models have cost. Machinery that is behaving — the
+// watchdog's heartbeat, queue percentiles, the concurrency cap — says nothing
+// here and waits in the drawer, together with the dispatch ledger, which is a
+// table and could never fit in a bar.
 //
 // Live without polling the API: one event-feed subscription (the platform's
 // push channel — a held long-poll; hosted.md, "Events and long polling")
 // refetches /ops when anything moves. The
-// numbers that decay with the clock rather than with events — reconciler lag
+// numbers that decay with the clock rather than with events — watchdog lag
 // above all, whose whole point is that a dead loop emits nothing — also get a
 // slow safety refresh, paused while the tab is hidden and taken immediately
 // when it comes back.
 import { api } from "./api.js";
 import { h, mount } from "./dom.js";
 import { subscribeFeed } from "./feed.js";
+import { ago } from "./labels.js";
+import { preserveFocus } from "./live-page.js";
+import { link } from "./router.js";
+import { runName } from "./run-stats.js";
 import { hasRole } from "./state.js";
 import { statusChip } from "./ui.js";
-import { opsItems, feedIndicator } from "./ops-status.js";
+import { opsSummary, feedIndicator } from "./ops-status.js";
 
 // Anything that moves dispatch depth, spend, or reconciler state. Findings and
 // candidate traffic would only wake a refetch that reads the same numbers back.
@@ -37,7 +46,7 @@ const ctl: WebDynamic = {
   open: false,
   // Rebuilt with the frame on every navigation (see buildBar).
   el: null, bar: null, panel: null, live: null, liveText: null, dot: null,
-  items: null, toggle: null, chev: null,
+  activity: null, alerts: null, spend: null, spendLabel: null, spendValue: null, toggle: null, chev: null,
   barSig: null,
   panelSig: null,
   sub: null,
@@ -76,20 +85,30 @@ export function statusBar(projectKey: WebDynamic, projectId: WebDynamic) {
  * through a refresh, and the connection line — a live region — is never
  * replaced, so a screen reader announces it when it CHANGES and not every time
  * a number beside it moves.
+ *
+ * Activity is deliberately NOT a live region. It changes with every run that
+ * starts or finishes, and a screen reader reading the footer aloud each time
+ * would make the console unusable; the connection state, which changes rarely
+ * and matters when it does, is the only thing that speaks.
  */
 function buildBar() {
   ctl.dot = h("span.sb-dot", {});
   ctl.liveText = h("span.sb-v", {});
   ctl.live = h("span.sb-live", { role: "status" }, ctl.dot, ctl.liveText);
-  ctl.items = h("span.sb-items", {});
+  ctl.activity = h("span.sb-activity", { hidden: true });
+  ctl.alerts = h("span.sb-alerts", {});
+  ctl.spendLabel = h("span.sb-k", {});
+  ctl.spendValue = h("span.sb-v", {});
+  ctl.spend = h("span.sb-spend", { hidden: true }, ctl.spendLabel, ctl.spendValue);
   ctl.chev = h("span.sb-chev", { "aria-hidden": "true" });
   ctl.toggle = h("button.sb-toggle#sb-toggle", {
     type: "button",
     onclick: toggleDrawer,
     "aria-controls": "sb-panel",
-    title: "The dispatch ledger — every attempt to place a run on an executor",
-  }, "Dispatches", ctl.chev);
-  ctl.bar = h("div.sb-bar", {}, ctl.live, ctl.items, h("span.sb-spacer", {}), ctl.toggle);
+    title: "System detail and the dispatch ledger — every attempt to place a run on a runner",
+  }, "Details", ctl.chev);
+  ctl.bar = h("div.sb-bar", {},
+    ctl.live, ctl.activity, ctl.alerts, h("span.sb-spacer", {}), ctl.spend, ctl.toggle);
 }
 
 /** Leaving the project scope (the project index, sign-out) — nothing to watch. */
@@ -170,26 +189,32 @@ function paint() {
 function paintBar() {
   const feed = feedIndicator(ctl.feed);
   ctl.dot.className = `sb-dot ${feed.tone}`;
+  ctl.live.className = `sb-live ${feed.tone}`;
   // Only ever written when it differs: this is the live region.
   if (ctl.liveText.textContent !== feed.value) ctl.liveText.textContent = feed.value;
   ctl.live.title = feed.note;
 
-  const items = ctl.dev ? opsItems(ctl.ops) : [];
-  const sig = JSON.stringify(items.map((i: WebDynamic) => [i.label, i.value, i.tone]));
+  const sum = ctl.dev ? opsSummary(ctl.ops) : null;
+  const sig = JSON.stringify(sum && [sum.activity, sum.alerts, sum.spend]);
   if (sig !== ctl.barSig) {
     ctl.barSig = sig;
-    mount(ctl.items, ...items.map(barItem));
+    ctl.activity.hidden = ctl.spend.hidden = !sum;
+    if (sum) {
+      ctl.activity.className = `sb-activity ${sum.activity.tone}`;
+      ctl.activity.textContent = sum.activity.value;
+      ctl.activity.title = sum.activity.note;
+      ctl.spendLabel.textContent = sum.spend.label;
+      ctl.spendValue.textContent = sum.spend.value;
+      ctl.spend.title = sum.spend.note;
+    }
+    // A fault is a sentence, not a colour: the chip reads on its own, and the
+    // note behind it says what to do about it.
+    mount(ctl.alerts, ...(sum?.alerts ?? []).map((a: WebDynamic) =>
+      h("span.sb-alert", { title: a.note }, a.value)));
   }
   ctl.toggle.hidden = !ctl.dev;
   ctl.toggle.setAttribute("aria-expanded", ctl.open ? "true" : "false");
   ctl.chev.textContent = ctl.open ? "▾" : "▴";
-}
-
-function barItem(item: WebDynamic) {
-  return h("span.sb-item", { title: item.note },
-    h("span.sb-k", {}, item.label),
-    h(`span.sb-v.${item.tone}`, {}, item.value),
-  );
 }
 
 function toggleDrawer() {
@@ -213,43 +238,83 @@ function onKeydown(e: WebDynamic) {
 }
 
 /**
- * The drawer: the dispatch ledger, plus the sentence behind each number in the
- * bar (a tooltip is unreachable by keyboard, so the notes need a home on
- * screen). Repainted only when the ledger actually changes, so reading it is
- * never interrupted by the refresh timer.
+ * The drawer: the numbers the bar deliberately leaves out, each with the
+ * sentence behind it (a tooltip is unreachable by keyboard and invisible on
+ * touch, so the notes need a home on screen), then the dispatch ledger. It
+ * repaints only when something in it actually changes, so reading it is never
+ * interrupted by the refresh timer.
  */
 function paintPanel() {
   if (!ctl.el || !ctl.open) return;
   const rows = ctl.dispatches;
+  const details = opsSummary(ctl.ops)?.details ?? [];
   const sig = JSON.stringify([
     // `null` (still loading) and `[]` (a project that has never dispatched) say
-    // different things, so they must never share a signature.
-    rows == null ? "loading" : rows.map((d: WebDynamic) => `${d.id}:${d.status}`),
-    opsItems(ctl.ops).map((i: WebDynamic) => i.note),
+    // different things, so they must never share a signature. Ages are in the
+    // signature as the WORDS they render: a row whose "2 min ago" has become
+    // "3 min ago" has changed on screen, and one whose hasn't, has not.
+    rows == null ? "loading" : rows.map((d: WebDynamic) => `${d.id}:${d.status}:${ago(stampOf(d))}`),
+    details,
   ]);
   if (sig === ctl.panelSig) return;
   ctl.panelSig = sig;
-  mount(ctl.panel,
-    h("div.sb-notes", {}, ...opsItems(ctl.ops).map((i: WebDynamic) =>
-      h("div", {}, h("b", {}, i.label), " — ", i.note))),
-    h("h2.section-title", {}, "Dispatches"),
+  // A reader may be tabbed onto a row's link when a refresh lands.
+  preserveFocus(() => mount(ctl.panel, h("div.sb-inner", {},
+    h("div.sb-stats", {}, ...details.map(statCell)),
+    h("div.sb-head", {},
+      h("h2.section-title", {}, "Dispatches"),
+      h("span.sb-note", {}, "every attempt to place a run on a runner"),
+    ),
     rows == null
-      ? h("div.dim", {}, "Loading…")
+      ? h("div.sb-empty", {}, "Loading…")
       : rows.length
         ? h("div.card", {}, h("table.rows", {},
-            h("thead", {}, h("tr", {}, h("th", {}, "Attempt"), h("th", {}, "Status"), h("th", {}, "Isolation"), h("th", {}, "Updated"))),
+            h("thead", {}, h("tr", {}, h("th", {}, "Placed"), h("th", {}, "Status"), h("th", {}, "Isolation"), h("th", {}, "Updated"))),
             h("tbody", {}, ...rows.map(dispatchRow)),
           ))
-        : h("div.card.pad.dim", {}, "No dispatches yet."),
+        : h("div.sb-empty", {}, "Nothing has been dispatched in this project yet."),
+  )));
+}
+
+// What a dispatch was placing. `ref_id` points at a different thing per kind, so
+// only a group dispatch has a name and a page to follow it to; the other two
+// say what they are, which is all there is to say about them.
+const KINDS: WebDynamic = { media: "Clip", mint: "Runner mint" };
+
+/** The last thing that happened to a dispatch, whatever stage it reached. */
+const stampOf = (d: WebDynamic) => d.concluded_at || d.last_report_at || d.requested_at;
+
+/** One drawer number: what it is, what it reads, and what that means. */
+function statCell(item: WebDynamic) {
+  return h("div.sb-stat", {},
+    h("div.sb-k", {}, item.label),
+    h(`div.sb-statv.${item.tone}`, {}, item.value),
+    h("div.sb-note", {}, item.note),
   );
 }
 
 function dispatchRow(d: WebDynamic) {
-  const at = d.concluded_at || d.last_report_at || d.requested_at;
+  const at = stampOf(d);
+  // The ledger outlives what it placed: a group swept by retention leaves its
+  // row behind with nothing to join to, and a link there would lead to a 404.
+  const group = d.kind === "group" && d.group_created_at != null;
+  // Named the way the run itself is named everywhere else in the console — the
+  // note whoever launched it wrote, else its trigger and start time.
+  const what = group
+    ? runName({ trigger: d.group_trigger, created_at: d.group_created_at })
+    : d.kind === "group" ? "Run group, since deleted" : KINDS[d.kind] ?? d.kind;
+  const to = group ? link(`/p/${ctl.projectKey}/runs/${d.ref_id}`, what) : null;
+  to?.setAttribute("data-fk", `sb-dispatch-${d.id}`);
   return h("tr", {},
-    h("td.mono", {}, `${d.kind} ${d.attempt}`),
+    h("td", {},
+      to ?? what,
+      // A first attempt is the norm and says nothing; a second is the story.
+      d.attempt > 1 ? h("span.dim", {}, ` · attempt ${d.attempt}`) : null,
+    ),
     h("td", {}, statusChip(d.status === "reconciled_dead" ? "infra" : d.status === "concluded" ? "pass" : "running", d.status)),
     h("td", {}, d.isolation || "—"),
-    h("td.dim", {}, at ? new Date(at).toLocaleString() : "—"),
+    // How long ago, not which wall-clock instant: the ledger is read to see what
+    // has just moved. The exact stamp stays a hover away.
+    h("td.dim", { title: at ? new Date(at).toLocaleString() : "" }, at ? ago(at) : "—"),
   );
 }

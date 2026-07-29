@@ -991,7 +991,8 @@ size and SHA-256, and treat local copies as disposable.
 
 A hosted runner seals from a **sanitized staging copy**, never from the run
 directory itself
-([Hosted contracts](hosted.md#the-platform-evidence-boundary)): the local raw
+([Hosted runner contracts](hosted-runners.md#the-platform-evidence-boundary)):
+the local raw
 run directory is that machine's own diagnostic record and is not mutated, and
 the bundle's entry list, sizes, CRCs and SHA-256s therefore describe the bytes
 that were actually sent. Textual entries are rewritten; payload entries are

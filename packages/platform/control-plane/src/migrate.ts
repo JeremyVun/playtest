@@ -40,7 +40,8 @@ export function assertLedgerIsShippable(applied: readonly string[], shipped: rea
   throw new ServerConfigError(
     `the Playtest data root at ${file} was created by an older schema and cannot be upgraded: ` +
       `its migration ledger names ${named}, which this build no longer ships. Applications and ` +
-      `rings replaced environments with no migration path, so this database has to be recreated. ` +
+      `environments replaced the previous target model with no migration path, so this database has to ` +
+      `be recreated. ` +
       `Point PLAYTEST_DATA_DIR at a new directory (or delete the current one, losing its runs) ` +
       `and start the server again.`,
   );

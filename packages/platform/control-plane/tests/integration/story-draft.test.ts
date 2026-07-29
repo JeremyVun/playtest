@@ -24,6 +24,9 @@ function toolReply(name: HostedDynamic, args: HostedDynamic, content: HostedDyna
     usage: { prompt_tokens: 20, completion_tokens: 10 },
   };
 }
+function gatewayReply(status: number) {
+  return { gateway_status: status };
+}
 
 let server: HostedDynamic;
 let baseUrl: HostedDynamic;
@@ -39,6 +42,11 @@ before(async () => {
     req.on("data", (c: HostedDynamic) => (raw += c));
     req.on("end", () => {
       const next = queue.shift() || textReply("(no scripted reply)");
+      if (next.gateway_status) {
+        res.writeHead(next.gateway_status, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: { message: `scripted ${next.gateway_status}` } }));
+        return;
+      }
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify(next));
     });
@@ -84,6 +92,29 @@ test("story-draft: an editor gets a valid draft; a viewer is forbidden", async (
     const viewerToken = (await api.post("/projects/p/tokens", { role: "viewer", name: "v" })).body.token;
     const asViewer = await api.withToken(viewerToken).post(`/suites/${suite.id}/story-draft`, { goal: "x" });
     assert.equal(asViewer.status, 403, JSON.stringify(asViewer.body));
+  });
+});
+
+test("story-draft: event-stream clients receive a truthful retry before the final result", async () => {
+  process.env.PLAYTEST_LLM_BASE_URL = baseUrl;
+  await withApp(async ({ api, base }: HostedDynamic) => {
+    const suite = await seedSuite(api);
+    script(
+      gatewayReply(503),
+      toolReply("propose_draft", { path: "stories/signup.yaml", yaml: VALID_STORY }),
+    );
+
+    const res = await fetch(`${base}/api/v1/suites/${suite.id}/story-draft`, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "text/event-stream" },
+      body: JSON.stringify({ goal: "sign up" }),
+    });
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get("content-type") || "", /text\/event-stream/);
+    const body = await res.text();
+    assert.match(body, /event: retry\ndata: \{"type":"retry","attempt":2,"max_attempts":3,/);
+    assert.match(body, /event: result\ndata: .*"path":"stories\/signup\.yaml"/);
+    assert.ok(body.indexOf("event: retry") < body.indexOf("event: result"));
   });
 });
 

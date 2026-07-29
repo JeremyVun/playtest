@@ -533,7 +533,7 @@ export function startupLines(opts: PoolOptions, runner: RunnerIdentity | null): 
     // reading a YAML file and guessing. Keys and backends only — the build
     // paths and devices behind them stay in the file.
     ...configBannerLines(opts.config),
-    "waiting for work — launch a run against a ring whose runner labels this runner advertises",
+    "waiting for work — launch a run against an environment whose runner labels this runner advertises",
   ];
 }
 

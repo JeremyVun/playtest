@@ -133,7 +133,7 @@ export function composeSystemPrompt({ skill, suiteSlug, defaultsYaml, cases, per
     : "- (none beyond the built-ins tester / exploratory)";
   const ringLines = rings.length
     ? rings.map((r: HostedDynamic) =>
-        `- ${r.key}${r.base_url ? ` — ${r.base_url}` : " — the claiming runner supplies the build"}${r.discovery_allowed ? " (discovery allowed)" : ""}`,
+        `- ${r.key}${r.base_url ? ` — ${r.base_url}` : " — the claiming runner supplies the build"}`,
       ).join("\n")
     : "- (none configured yet)";
   return [
@@ -163,6 +163,18 @@ export function composeSystemPrompt({ skill, suiteSlug, defaultsYaml, cases, per
     "  and consistent with each other. If you still need a detail, ask ONE short clarifying question",
     "  in plain text and stop — do not propose an incomplete draft. Validate and lint each story",
     "  before proposing it.",
+    "- For a new story, explicitly settle the story type unless the person's request already makes it",
+    "  unambiguous. Use these exact names and explain the distinction in plain words:",
+    "    - Regression journey — a repeatable pass/fail check that goes red when the flow breaks.",
+    "    - Discovery story — an open-ended study of what the user does, notices, or struggles with.",
+    "  Do not call either option merely a \"user story\", and do not replace this choice with a list of",
+    "  the scenarios you think the person described.",
+    "- This hosted assistant works black-box from the person's description and the suite context below.",
+    "  It cannot browse, inspect, or read the target application. Never offer to examine the site first,",
+    "  claim that you did so, or ask the person to choose a research approach.",
+    "- Make clarification replies scannable. Put a short lead-in on its own line, then each decision or",
+    "  option on its own line. Use bullets when presenting choices and a blank line between distinct",
+    "  paragraphs. Never compress several options or questions into one paragraph.",
     "- Never paste full YAML into your chat replies; the form shows it. Talk about the story in plain",
     "  words and keep replies short.",
     "- Propose a story that FITS this suite: no duplicate coverage, consistent gates with the existing",
@@ -186,12 +198,12 @@ export function composeSystemPrompt({ skill, suiteSlug, defaultsYaml, cases, per
     // Keys + URLs only — credentials, auth sessions and secret_env live on the
     // ring and must never be echoed into suite files or chat.
     "Rings this suite's application can launch against (each is a key + base URL; credentials",
-    "and secrets belong to the ring and are never written into suite files):",
+    "and secrets belong to the environment and are never written into suite files):",
     ringLines,
     "",
-    "The ring supplies the physical target: under hosted execution its URL replaces any",
-    "`app.base_url` a suite authors, at every level. Draft `app.envs.<ring key>` entries only",
-    "for LOGICAL per-ring settings (an identity, a cookie, a settle time) — never a URL, and",
+    "The environment supplies the physical target: under hosted execution its URL replaces any",
+    "`app.base_url` a suite authors, at every level. Draft `app.envs.<environment key>` entries only",
+    "for LOGICAL per-environment settings (an identity, a cookie, a settle time) — never a URL, and",
     "never a mobile build path, device or Appium endpoint.",
   ].join("\n");
 }
@@ -288,22 +300,24 @@ function wireMessage({ role, content }: HostedDynamic) {
  * { reply, draft, drafts, usage } — `drafts` carries the whole proposed set
  * (usually one), `draft` the final entry for single-story consumers.
  */
-export async function draftStory(ctx: HostedDynamic, { suite, goal, transcript = [], existing = null, hint = null }: HostedDynamic) {
+export async function draftStory(
+  ctx: HostedDynamic,
+  { suite, goal, transcript = [], existing = null, hint = null, onProgress = null }: HostedDynamic,
+) {
   const model = ctx.config.llm.authoringModel;
   const files = await loadWorkingFiles(ctx.db, suite.id);
   const { cases } = await resolvedOrEmpty(files);
-  // Rings ride the prompt as key + base URL + discovery flag only — the config's
-  // auth/secret_env keys never leave the server. Only the suite's OWN
-  // application's rings: another surface's deployment is not something this
-  // suite can launch against, so naming it would only invite a wrong overlay.
+  // Rings ride the prompt as key + base URL only — the config's auth/secret_env
+  // keys never leave the server. Only the suite's OWN application's rings:
+  // another surface's deployment is not something this suite can launch
+  // against, so naming it would only invite a wrong overlay.
   const ringRows = await ctx.db.query(
-    `SELECT key, base_url, discovery_allowed FROM rings WHERE application_id = $1 ORDER BY key`,
+    `SELECT key, base_url FROM rings WHERE application_id = $1 ORDER BY key`,
     [suite.application_id],
   );
   const rings = ringRows.rows.map((r: HostedDynamic) => ({
     key: r.key,
     base_url: r.base_url ?? null,
-    discovery_allowed: r.discovery_allowed === true,
   }));
   const system = await buildSystemPrompt(suite, files, cases, rings);
 
@@ -342,11 +356,29 @@ export async function draftStory(ctx: HostedDynamic, { suite, goal, transcript =
   for (;;) {
     let res;
     try {
-      res = await chat({ model, messages, tools: STORY_DRAFT_TOOLS, toolChoice: "auto", maxTokens: MAX_TOKENS });
+      onProgress?.({ type: "working" });
+      res = await chat({
+        model,
+        messages,
+        tools: STORY_DRAFT_TOOLS,
+        toolChoice: "auto",
+        maxTokens: MAX_TOKENS,
+        onRetry: ({ attempt, maxAttempts, waitMs, status }: HostedDynamic) => onProgress?.({
+          type: "retry",
+          attempt: attempt + 1,
+          max_attempts: maxAttempts,
+          wait_ms: waitMs,
+          status,
+        }),
+      });
     } catch (e: HostedDynamic) {
       // A configured-but-unreachable gateway: surface one actionable line, never
       // a raw stack or MODULE_NOT_FOUND.
-      throw new AppError("internal", `the model gateway did not respond (${firstLine(e)}) — try again in a moment`, { status: 502 });
+      const reason = firstLine(e);
+      const message = /abort|timed? ?out|timeout/i.test(reason)
+        ? "drafting timed out after retrying — try again"
+        : `the model gateway did not respond (${reason}) — try again in a moment`;
+      throw new AppError("internal", message, { status: 502 });
     }
     meter(usage, model, res.usage);
     if (!res.toolCall) {

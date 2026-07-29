@@ -6,13 +6,32 @@ import os from "node:os";
 import path from "node:path";
 
 import {
+  artifactMediaType,
   BundleProvider,
   coreBundleKeepPath,
   fileReadRange,
+  isTextualMediaType,
   rebuildIndex,
   rewriteBundle,
   writeBundle,
 } from "../../src/bundle.ts";
+
+test("the run vocabulary says what an entry IS, so nobody has to guess from where it lives", () => {
+  // `steps/` holds both kinds side by side; only the entry itself decides.
+  assert.equal(isTextualMediaType(artifactMediaType("steps/001.a11y.txt")), true);
+  assert.equal(isTextualMediaType(artifactMediaType("steps/001.png")), false);
+
+  for (const rel of ["manifest.json", "trajectory.jsonl", "grade.json", "final.a11y.txt", "video.vtt", "final.mhtml"]) {
+    assert.equal(isTextualMediaType(artifactMediaType(rel)), true, `${rel} is text`);
+  }
+  for (const rel of ["video.mp4", "video.webm", "clip.mp4", "trace.zip", "steps/002.png"]) {
+    assert.equal(isTextualMediaType(artifactMediaType(rel)), false, `${rel} is a payload`);
+  }
+  // An entry the vocabulary does not name is not guessed at: the caller decides.
+  assert.equal(artifactMediaType("some.unknown"), null);
+  assert.equal(isTextualMediaType(null), false);
+  assert.equal(isTextualMediaType("application/vnd.acme+json"), true);
+});
 
 test("writeBundle is deterministic and BundleProvider reads files and STORE ranges", async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "playtest-bundle-"));

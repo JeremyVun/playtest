@@ -465,6 +465,39 @@ Every needle is matched in both its **raw and JSON-escaped** forms, so a value
 holding a quote or a backslash is caught inside a JSON document as well as in
 plain text, and the rewritten document is still parseable.
 
+### The platform evidence boundary
+
+**Every textual byte a runner sends to the platform is sanitized, by one
+sanitizer, on every route that carries run bytes.** The manifest is not a
+special case and never was the only leak: `events.jsonl`, a trajectory envelope,
+a grade summary, an accessibility dump and a HAR body all carry free text a
+driver, a model or a customer's own script wrote.
+
+- **Local raw stays local.** The run directory on the runner's disk is that
+  machine's diagnostic record and is never mutated. What crosses is a sanitized
+  copy: the bundle is sealed from a staging tree, and live uploads are sanitized
+  in flight.
+- **Metadata describes what was sent.** Because the seal is built from the
+  staging tree, the bundle's index, entry sizes and hashes are the sanitized
+  bytes' own — never a description of bytes that stayed on the runner.
+- **Classification is by artifact media type, not by path**
+  ([Artifact contracts](artifacts.md#entry-media-types)). `steps/` holds a
+  screenshot and its accessibility text side by side; the text is rewritten and
+  the screenshot crosses byte-for-byte. Binary payloads are never transformed.
+  An entry the run vocabulary does not name is decided by its own bytes:
+  anything holding a NUL or failing to decode as UTF-8 is treated as a payload,
+  and everything else is sanitized, because an unrecognized text artifact is
+  exactly where a value would hide.
+- **The live stream and the seal agree byte-for-byte.** The staging routes
+  verify resent trajectory lines against what they hold and the platform serves
+  the sealed bundle afterwards, so the same sanitizer, the same needles and
+  deterministic replacement markers are a correctness requirement, not a
+  preference. Two redactors would be two answers and the route would call the
+  second one `divergent`.
+- **Masking is deterministic and idempotent-in-effect**: identical input
+  produces identical output, and an entry with nothing to mask keeps its own
+  bytes.
+
 Case progress (`POST /runner/groups/:g/cases/:run_id/progress`) is telemetry,
 never load-bearing: while a case runs, the executor folds the engine's progress
 events into one small snapshot — step and step budget, the mode word from core
@@ -496,7 +529,7 @@ behavior.
 | Route | Meaning |
 |---|---|
 | `POST /runner/groups/:g/cases/:run_id/open` | `{ manifest }` — the placeholder manifest, and every later snapshot of it |
-| `PUT /runner/runs/:r/live/<entry-path>` | one staged step artifact, raw bytes |
+| `PUT /runner/runs/:r/live/<entry-path>` | one staged step artifact, as bytes |
 | `POST /runner/runs/:r/live/trajectory` | `{ from_line, lines }` — a batch of whole `trajectory.jsonl` lines |
 
 **Every answer is an explicit JSON ack, never a silent success**: either
@@ -536,7 +569,12 @@ from a constant it compiled in. A runner may keep the advertised route *path*
 while dialling its own origin: `publicUrl` is not necessarily the address the
 runner was pointed at.
 
-**The uploader's posture.** The runner-agent ships this stream from one
+**The uploader's posture.** Everything it sends crosses
+[the platform evidence boundary](#the-platform-evidence-boundary) first: the
+manifest snapshot, each trajectory line and each textual step artifact go
+through the same sanitizer the sealed bundle is built with, so a staged line and
+its sealed twin are the same bytes, and a screenshot is staged byte-for-byte.
+The runner-agent ships this stream from one
 serialized, single-flight queue per case, on the progress reporter's ~2 s
 coalescing floor — a floor, not a heartbeat: a tick where nothing completed
 sends nothing, and inactivity is read server-side from absence. It opens on

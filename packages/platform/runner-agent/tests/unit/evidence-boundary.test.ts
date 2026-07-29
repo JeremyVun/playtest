@@ -24,6 +24,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { ApiClient } from "../../src/api-client.ts";
+import { platformEvidence } from "../../src/evidence.ts";
 import { uploadBundle } from "../../src/exec-group.ts";
 import { liveUploader } from "../../src/live-uploader.ts";
 import { mobilePhysicalMasks } from "../../src/mobile.ts";
@@ -305,6 +306,27 @@ test("session storage state contributes its leaf VALUES, at any length or nestin
   assert.equal(parsed.session.cookies[0].domain, "app.example.com");
   assert.equal(parsed.session.origins[0].origin, "https://app.example.com");
   assert.equal(parsed.session.origins[0].localStorage[0].name, "access_token");
+});
+
+test("classification is what an entry IS, and an unnamed one is decided by its own bytes", () => {
+  const evidence = platformEvidence(executorRedactor());
+  const text = Buffer.from(`hint ${NESTED_SECRET}\n`);
+  const bytes = Buffer.concat([Buffer.from(NESTED_SECRET), Buffer.from([0x00, 0xff])]);
+
+  // `steps/` holds both kinds; only the entry itself decides which.
+  assert.equal(evidence.isTextual("steps/003.a11y.txt", text), true);
+  assert.equal(evidence.isTextual("steps/003.png", bytes), false);
+  assert.deepEqual(evidence.entry("steps/003.png", bytes), bytes, "a screenshot crosses byte-for-byte");
+
+  // An entry the run vocabulary does not name: text is still sanitized, because
+  // an unrecognized text artifact is exactly where a value would hide.
+  assertNoLeak("an unnamed textual entry", evidence.entry("driver.log", text).toString("utf8"));
+  assert.deepEqual(evidence.entry("driver.bin", bytes), bytes, "an unnamed payload is left alone");
+
+  // Nothing to mask means the caller's own bytes, so an unaffected entry is
+  // byte-identical and the seal is reproducible.
+  const clean = Buffer.from("nothing to see here\n");
+  assert.equal(evidence.entry("events.jsonl", clean), clean);
 });
 
 // ---------- the sealed bundle ----------

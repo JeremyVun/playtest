@@ -34,7 +34,7 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { translatePaths } from "./case-runner.ts";
-import { redactDeep } from "./redact.ts";
+import { platformEvidence } from "./evidence.ts";
 
 /** The coalescing floor, shared with the progress reporter (exec-group.ts). */
 const TICK_MS = 2000;
@@ -91,6 +91,12 @@ export function liveUploader(
   { intervalMs = TICK_MS }: RunnerDynamic = {},
 ): RunnerDynamic {
   const caps = { ...DEFAULT_CAPS, ...positiveNumbers(live) };
+  // Everything this uploader sends crosses the platform evidence boundary, so
+  // it goes through the SAME sanitizer the sealed bundle is built with
+  // (evidence.ts). That is what keeps a staged trajectory line byte-identical
+  // to its sealed twin; two redactors would be two answers, and the route's
+  // verification would call the second one `divergent`.
+  const evidence = redact ? platformEvidence(redact) : null;
   const routes = {
     open: apiPath(live?.open_url_template, { run_group_id: groupId, run_id: runId }, `/runner/groups/${groupId}/cases/${runId}/open`),
     trajectory: apiPath(live?.trajectory_url_template, { run_db_id: runDbId }, `/runner/runs/${runDbId}/live/trajectory`),
@@ -198,15 +204,17 @@ export function liveUploader(
     }
     if (stat.size > caps.max_manifest_bytes) return null;
     try {
-      const manifest = JSON.parse(fs.readFileSync(manifestFile(), "utf8"));
-      if (!manifest || typeof manifest !== "object") return null;
       // This route stores the run's manifest on the platform, so it is held to
       // the same rule as the sealed one the executor uploads: a manifest read
       // off this disk mid-case may carry the infra cause a driver worded, and
-      // the executor's redactor is what makes it sendable. The stamp stays the
-      // FILE's, so scrubbing never affects what counts as a rewrite.
-      const sendable = redact ? redactDeep(manifest, redact) : manifest;
-      return { manifest: sendable, stamp: `${stat.size}:${stat.mtimeMs}` };
+      // the sanitizer is what makes it sendable. Sanitizing the FILE's text
+      // rather than the parsed object is what makes this the same document the
+      // bundle's `manifest.json` entry will hold. The stamp stays the file's, so
+      // scrubbing never affects what counts as a rewrite.
+      const raw = fs.readFileSync(manifestFile(), "utf8");
+      const manifest = JSON.parse(evidence ? evidence.text(raw) : raw);
+      if (!manifest || typeof manifest !== "object") return null;
+      return { manifest, stamp: `${stat.size}:${stat.mtimeMs}` };
     } catch {
       return null; // a torn read of a whole-file rewrite: try again next tick
     }
@@ -265,6 +273,10 @@ export function liveUploader(
           // away). Leave the line queued; a later tick decides.
           return;
         }
+        // `steps/` holds a screenshot and its accessibility text side by side:
+        // the sanitizer classifies by what the entry IS, so the text is
+        // rewritten and the PNG crosses byte-for-byte.
+        if (evidence) bytes = evidence.entry(entry, bytes);
         const ack = await call((signal) => api.putBytes(routes.entry(entry), bytes, "application/octet-stream", { signal }));
         const reason = refusal(ack);
         if (reason) {
@@ -295,7 +307,11 @@ export function liveUploader(
     }
     const upto = lineOffsets[end] as number; // SAFETY: end <= ready <= known
     const buf = await readRange(trajectoryFile(), from, upto - from);
-    const lines = buf.toString("utf8").split("\n");
+    // Sanitized as one chunk of whole lines, exactly as the bundle sanitizes the
+    // whole file: a JSONL line can hold no literal newline, so a needle can
+    // never straddle a line boundary and the two paths cannot disagree.
+    const chunk = buf.toString("utf8");
+    const lines = (evidence ? evidence.text(chunk) : chunk).split("\n");
     if (lines[lines.length - 1] === "") lines.pop();
 
     const ack = await call((signal) =>

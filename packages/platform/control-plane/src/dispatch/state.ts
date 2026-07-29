@@ -1,5 +1,4 @@
-// The dispatch state machine (docs/contracts/hosted.md, "Dispatch state and
-// current-executor fencing").
+// The dispatch state machine (docs/contracts/hosted.md, "Dispatch state").
 //
 // ONE module owns dispatch creation, executor exchange, reconciliation,
 // cancellation, and every terminal transition. Nothing outside it may write
@@ -35,12 +34,21 @@ interface Queryable {
  * unique index in `0001_baseline.sql` restates; change one and change the other.
  */
 export const ACTIVE_DISPATCH_STATES = ["requested", "scheduled", "running"] as const;
-/** Ends. A dispatch in one of these never becomes active again. */
-export const TERMINAL_DISPATCH_STATES = ["concluded", "reconciled_dead"] as const;
-/** A run group that may still accept execution. */
+/**
+ * The same list as a SQL literal, for the READ queries that merely ask "is this
+ * attempt still live?" — a runner's held claim, a project's active-dispatch
+ * count, the console's current-claim join. They are not transitions, so they take
+ * no parameters and change no numbering; interpolating this constant is how they
+ * stay one definition rather than seven copies that can drift apart.
+ */
+export const ACTIVE_DISPATCH_STATES_SQL = `(${ACTIVE_DISPATCH_STATES.map((s) => `'${s}'`).join(",")})`;
+/**
+ * A run group that may still accept execution. Its complement is terminal:
+ * dispatch `concluded`/`reconciled_dead` and group `done`/`canceled` are ends,
+ * and every transition below names the states it may leave, so a terminal row is
+ * never a state any compare-and-set can move.
+ */
 export const ACTIVE_GROUP_STATES = ["queued", "running"] as const;
-/** Settled run groups. Only the in-place retry reopens `done`; `canceled` is final. */
-export const TERMINAL_GROUP_STATES = ["done", "canceled"] as const;
 
 /** The outcome of one compare-and-set: did it land, and what does the row say now? */
 export interface TransitionResult {
@@ -201,7 +209,7 @@ export async function claimDispatchForRunner(
                  AND (r.project_id IS NULL OR r.project_id = dispatches.project_id))
         AND NOT EXISTS (
               SELECT 1 FROM dispatches held
-               WHERE held.runner_id = $2 AND held.status IN ('requested','scheduled','running'))
+               WHERE held.runner_id = $2 AND held.status IN ${ACTIVE_DISPATCH_STATES_SQL})
         AND NOT EXISTS (
               SELECT 1 FROM json_each(COALESCE(dispatches.labels, '[]')) want
                WHERE want.value NOT IN (

@@ -14,6 +14,7 @@
 // KILLABLE by whoever granted it. Revocation follows project-runner semantics
 // exactly: future polls, claims and exchanges refused, work already exchanged
 // finishing under the bearer it was issued.
+import { ACTIVE_DISPATCH_STATES_SQL } from "../dispatch/state.ts";
 import { ulid } from "../ulid.ts";
 import { audit, actorOf } from "../audit.ts";
 import { created, noContent, readJsonBody } from "../http.ts";
@@ -38,7 +39,7 @@ export async function listSiteRunners(ctx: HostedDynamic) {
             p.key AS claim_project_key
        FROM runners r
        LEFT JOIN dispatches d
-         ON d.runner_id = r.id AND d.status IN ('requested','scheduled','running')
+         ON d.runner_id = r.id AND d.status IN ${ACTIVE_DISPATCH_STATES_SQL}
        LEFT JOIN projects p ON p.id = d.project_id
       WHERE r.project_id IS NULL
       ORDER BY r.name`,

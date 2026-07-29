@@ -37,7 +37,7 @@ import { randomBytes } from "node:crypto";
 import { holdUntil } from "../events/hold.ts";
 import { emitPlatformEvent } from "../events/outbox.ts";
 import { checkInWindowMs } from "../dispatch/pool.ts";
-import { claimDispatchForRunner, markGroupRunning } from "../dispatch/state.ts";
+import { ACTIVE_DISPATCH_STATES_SQL, claimDispatchForRunner, markGroupRunning } from "../dispatch/state.ts";
 
 /** Hold window cap, the same one the browser feed uses. */
 const MAX_WAIT_S = 25;
@@ -303,7 +303,7 @@ async function checkIn(ctx: HostedDynamic, runner: HostedDynamic, labels: string
 async function activeClaim(ctx: HostedDynamic, runnerId: string) {
   const { rows } = await ctx.db.query(
     `SELECT * FROM dispatches
-      WHERE runner_id = $1 AND status IN ('requested','scheduled','running')
+      WHERE runner_id = $1 AND status IN ${ACTIVE_DISPATCH_STATES_SQL}
       ORDER BY claimed_at LIMIT 1`,
     [runnerId],
   );

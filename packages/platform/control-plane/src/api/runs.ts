@@ -14,6 +14,7 @@ import {
 } from "../dispatch/dispatcher.ts";
 import {
   ACTIVE_DISPATCH_STATES,
+  ACTIVE_DISPATCH_STATES_SQL,
   cancelGroup as cancelGroupStatus,
   concludeGroupDispatches,
   createGroupDispatch,
@@ -396,7 +397,7 @@ export async function retryGroup(ctx: HostedDynamic) {
     }
     const active = await tx.query(
       `SELECT COUNT(*) AS n FROM dispatches
-        WHERE project_id = $1 AND status IN ('requested','scheduled','running')`,
+        WHERE project_id = $1 AND status IN ${ACTIVE_DISPATCH_STATES_SQL}`,
       [group.project_id],
     );
     if (active.rows[0].n >= ctx.config.dispatch.maxActivePerProject) {

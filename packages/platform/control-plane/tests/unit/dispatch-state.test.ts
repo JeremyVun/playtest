@@ -356,3 +356,20 @@ test("no dispatch or run-group status write lives outside the transition module"
   }
   assert.deepEqual(offenders, [], "dispatch and run-group status transitions belong to src/dispatch/state.ts");
 });
+
+test("the active-dispatch state list is written down exactly once", () => {
+  // Reads ask "is this attempt still live?" as often as transitions do — a held
+  // claim, a project's dispatch depth, the console's current-claim join — and a
+  // copy of the list in each of them is how a fourth active state would reach
+  // half the codebase. `ACTIVE_DISPATCH_STATES` (and `…_SQL` for the reads that
+  // take no parameters) is the one definition; the partial unique index in
+  // `0001_baseline.sql` is the deliberate second, and says so in its comment.
+  const owner = path.join(SRC, "dispatch/state.ts");
+  const offenders: string[] = [];
+  for (const file of sourceFiles(SRC)) {
+    if (file === owner) continue;
+    const text = fs.readFileSync(file, "utf8");
+    if (/'requested'\s*,\s*'scheduled'\s*,\s*'running'/.test(text)) offenders.push(path.relative(SRC, file));
+  }
+  assert.deepEqual(offenders, [], "import ACTIVE_DISPATCH_STATES(_SQL) instead of restating the list");
+});

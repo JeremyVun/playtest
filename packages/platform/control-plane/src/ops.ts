@@ -2,6 +2,7 @@
 // GET /projects/:p/ops — dispatch depth, board queue wait, reconciler liveness,
 // and LLM spend. Everything here is a projection over existing ledgers; the
 // liveness state is the service_heartbeats row each background loop stamps.
+import { ACTIVE_DISPATCH_STATES_SQL } from "./dispatch/state.ts";
 import type { AppContext, DynamicJson } from "./types.ts";
 
 /** Upsert a background loop's liveness stamp. */
@@ -36,7 +37,7 @@ async function dispatchDepth(ctx: AppContext, projectId: string) {
     `SELECT status, COUNT(*) AS n,
             CAST(ROUND((now() - MIN(requested_at)) / 1000.0) AS INTEGER) AS oldest_s
        FROM dispatches
-      WHERE project_id = $1 AND status IN ('requested','scheduled','running')
+      WHERE project_id = $1 AND status IN ${ACTIVE_DISPATCH_STATES_SQL}
       GROUP BY status`,
     [projectId],
   );

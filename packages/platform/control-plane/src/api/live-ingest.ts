@@ -1,6 +1,7 @@
 // The live ingest routes (docs/contracts/hosted.md "Live runs"). Three additions
-// to the runner protocol, all behind the existing group-scoped runner token with
-// the same run-group check the bundle PUT applies:
+// to the runner protocol, all behind the existing group-scoped runner token and
+// the same current-executor guard and run-ownership check the bundle PUT applies
+// (docs/contracts/hosted.md "Current executor fencing"):
 //
 //   POST /runner/groups/:g/cases/:run_id/open   placeholder / manifest snapshot
 //   PUT  /runner/runs/:r/live/<entry-path>      one staged step artifact
@@ -23,6 +24,7 @@ import {
   LIVE_MAX_BATCH_LINES,
   LIVE_TRAJECTORY_BODY_LIMIT,
   appendTrajectoryBatch,
+  OPEN_STATUSES,
   isStageableEntry,
   liveObjectKey,
   readTrajectoryLines,
@@ -87,7 +89,7 @@ export async function openCase(ctx: HostedDynamic) {
       [run.id],
     );
     const current = rows[0];
-    if (!current || !OPENABLE.has(String(current.status))) return;
+    if (!current || !OPEN_STATUSES.has(String(current.status))) return;
     const changed = canonicalJson(current.live_manifest) !== canonicalJson(manifest);
     generation = Number(current.live_manifest_generation || 0) + (changed ? 1 : 0);
     opened = true;
@@ -105,8 +107,6 @@ export async function openCase(ctx: HostedDynamic) {
   if (!opened) return refused("terminal", `run "${run.run_id}" has already finished; live staging is closed`);
   return { accepted: true, open: true, manifest_generation: generation };
 }
-
-const OPENABLE = new Set(["queued", "running", "uploading"]);
 
 /**
  * PUT /runner/runs/:r/live/<entry-path> — one staged step artifact, through the
@@ -313,7 +313,7 @@ async function runnerRun(ctx: HostedDynamic) {
 
 /** The refusal a closed run answers with, or null while staging is open. */
 function closedAck(run: HostedDynamic) {
-  if (!OPENABLE.has(String(run.status))) {
+  if (!OPEN_STATUSES.has(String(run.status))) {
     return refused("terminal", `run "${run.run_id}" has already finished; live staging is closed`);
   }
   if (run.live_opened_at == null) {

@@ -118,7 +118,7 @@ export function collectSecretValues(spec: RunnerDynamic, sessions: Record<string
  * token can sit two levels down inside `origins[].localStorage[]` as readily as
  * on a top-level cookie.
  */
-export function collectLeafValues(value: unknown, out: unknown[] = [], key: string | null = null): unknown[] {
+function collectLeafValues(value: unknown, out: unknown[] = [], key: string | null = null): unknown[] {
   if (typeof value === "string") {
     if (value && !(key !== null && STRUCTURAL_KEYS.has(key))) out.push(value);
     return out;

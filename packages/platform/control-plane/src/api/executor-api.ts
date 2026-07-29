@@ -11,6 +11,7 @@ import {
 import { requireRunnerCredential } from "../auth/runner-credentials.ts";
 import {
   ACTIVE_DISPATCH_STATES,
+  ACTIVE_DISPATCH_STATES_SQL,
   concludeDispatch,
   exchangeExecutor,
   settleGroupDone,
@@ -817,7 +818,7 @@ async function resolveExchangeDispatch(ctx: HostedDynamic, body: HostedDynamic) 
   const { rows } = await ctx.db.query(
     `SELECT * FROM dispatches
       WHERE id = $1 AND runner_id = $2 AND canceled_at IS NULL
-        AND status IN ('requested','scheduled','running')`,
+        AND status IN ${ACTIVE_DISPATCH_STATES_SQL}`,
     [String(body.dispatch_id), runner.id],
   );
   if (!rows[0]) {

@@ -9,6 +9,7 @@
 // operator deliberately trusted with every project's work. Its lifecycle lives
 // in `api/site-runners.ts`; this file owns how a project SEES one, which is the
 // tenant-shaped projection below.
+import { ACTIVE_DISPATCH_STATES_SQL } from "../dispatch/state.ts";
 import { ulid } from "../ulid.ts";
 import { audit, actorOf } from "../audit.ts";
 import { created, noContent, readJsonBody } from "../http.ts";
@@ -39,7 +40,7 @@ export async function listRunners(ctx: HostedDynamic) {
             d.claimed_at AS claim_claimed_at, d.heartbeat_at AS claim_heartbeat_at
        FROM runners r
        LEFT JOIN dispatches d
-         ON d.runner_id = r.id AND d.status IN ('requested','scheduled','running')
+         ON d.runner_id = r.id AND d.status IN ${ACTIVE_DISPATCH_STATES_SQL}
       WHERE (r.project_id = $1 OR r.project_id IS NULL)
         AND r.ephemeral = 0
         AND (r.project_id IS NOT NULL OR r.revoked_at IS NULL)

@@ -3,7 +3,7 @@ import { AppError, badRequest, conflict, forbidden, notFound } from "../errors.t
 import { encryptSecret, decryptSecret } from "../crypto/secrets.ts";
 import { audit } from "../audit.ts";
 import { targetSnapshot } from "./dispatcher.ts";
-import { concludeDispatch, concludeMintDispatchesFor, killDispatch } from "./state.ts";
+import { ACTIVE_DISPATCH_STATES_SQL, concludeDispatch, concludeMintDispatchesFor, killDispatch } from "./state.ts";
 
 // A script mint grant expires after this long; past it the claim is abandoned
 // and the next claimer takes over the mint (single-flight with takeover, §3a).
@@ -180,7 +180,7 @@ async function grantStandaloneMint(ctx: HostedDynamic, tx: HostedDynamic, { prov
   if (open.rows[0]) {
     const existing = await tx.query(
       `SELECT id FROM dispatches
-        WHERE kind = 'mint' AND ref_id = $1 AND status IN ('requested','scheduled','running')
+        WHERE kind = 'mint' AND ref_id = $1 AND status IN ${ACTIVE_DISPATCH_STATES_SQL}
         ORDER BY attempt DESC LIMIT 1`,
       [open.rows[0].id],
     );

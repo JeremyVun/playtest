@@ -3,6 +3,7 @@
 // and empty/deferred states. Status glyphs and words come from core report.ts and
 // are non-negotiable (word + color, never color alone — accessibility).
 import { h, mount, clear } from "./dom.js";
+import { onPageLeave } from "./router.js";
 import { nextRunLabel, nextRunGloss } from "./vocab.js";
 
 // UX status glyph legend: ✓ pass · ✗ fail · ▲ changed · ◇ explored · ⚠ infra · ● running
@@ -101,6 +102,12 @@ const FOCUSABLE =
  *   dialog exactly where it was. Every other modal passes neither and keeps the
  *   plain contract: Escape closes. `onClose` runs on EVERY exit — it is where a
  *   dialog that subscribed to something releases it.
+ *
+ *   Routing away is an exit too. A dialog can hold a router link (the launch
+ *   dialog's "Set up a runner"), and the router only repaints #main — without
+ *   the `onPageLeave` below, the new page would render UNDER a live scrim that
+ *   swallows every click until the person guesses Escape. A navigation
+ *   therefore takes the same exit Escape does, `confirmDismiss` and all.
  * @param {(close: () => void) => Node} build the dialog body
  */
 function openModal({ title, dismiss, confirmDismiss, onClose }: WebDynamic, build: WebDynamic) {
@@ -144,6 +151,17 @@ function openModal({ title, dismiss, confirmDismiss, onClose }: WebDynamic, buil
   dialog.append(build(close));
   mount(root, scrim);
   document.addEventListener("keydown", onKey, true);
+  // Leave by `bail`, not `close`, so a dialog holding something unrecoverable
+  // still gets its say: the credential reveal asks "copy it first?" instead of
+  // letting a stray link silently destroy a one-time secret. `bail` is async
+  // only when there is a `confirmDismiss`; without one it clears the root
+  // synchronously, before the router paints the next page. With one, the answer
+  // arrives a microtask late, so the dialog stays up over the page that has
+  // already been painted — deliberate: a dialog that cannot be reopened is
+  // worth more than a tidy transition, and the guard's own buttons ("Copy it
+  // first" / "Close anyway") are the way out. `close` is idempotent, so a
+  // dialog dismissed the ordinary way leaves a cleanup that no-ops.
+  onPageLeave(bail);
   // Autofocus the first real control (a field, if the dialog has one) rather
   // than leaving focus behind on the page under the scrim.
   const target = dialog.querySelector("input:not([type=hidden]):not([disabled]), textarea:not([disabled]), .select-btn:not([disabled])")

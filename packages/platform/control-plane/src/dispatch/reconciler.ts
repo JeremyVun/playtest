@@ -59,25 +59,43 @@ async function reconcileOne(ctx: HostedDynamic, dispatch: HostedDynamic) {
 async function markDead(ctx: HostedDynamic, dispatch: HostedDynamic, { reason, redispatch = true }: HostedDynamic) {
   if (dispatch.kind === "mint") return await markMintDead(ctx, dispatch, { reason });
   const group = await getGroup(ctx, dispatch.ref_id);
-  const completed = await ctx.db.query(
-    `SELECT 1 FROM run_groups WHERE id = $1 AND status IN ('done','canceled')`,
-    [group.id],
-  );
-  if (completed.rows.length) {
-    await ctx.db.query(`UPDATE dispatches SET status = 'concluded', concluded_at = now() WHERE id = $1`, [
-      dispatch.id,
-    ]);
-    return { dispatch_id: dispatch.id, action: "already_complete" };
-  }
 
+  let action = "dead";
   let shouldRedispatch = false;
   await ctx.db.withTx(async (tx: HostedDynamic) => {
-    await tx.query(
+    // Both preconditions are read AND acted on inside one transaction, and each
+    // is restated in the write that depends on it — the discipline the claim
+    // UPDATE, the mint bind and the fulfill all keep. The race this closes is a
+    // laptop waking up: an executor everything here believes is gone is in fact
+    // mid-`complete`, and a check that ran before the transaction would let this
+    // pass flip a concluded dispatch to dead and stamp an uploading run infra.
+    const completed = await tx.query(
+      `SELECT 1 FROM run_groups WHERE id = $1 AND status IN ('done','canceled')`,
+      [group.id],
+    );
+    if (completed.rows.length) {
+      await tx.query(
+        `UPDATE dispatches SET status = 'concluded', concluded_at = now()
+          WHERE id = $1 AND status IN ('requested','scheduled','running')`,
+        [dispatch.id],
+      );
+      action = "already_complete";
+      return;
+    }
+    const killed = await tx.query(
       `UPDATE dispatches
           SET status = 'reconciled_dead', concluded_at = now(), error = $2
-        WHERE id = $1`,
+        WHERE id = $1 AND status IN ('requested','scheduled','running')`,
       [dispatch.id, reason],
     );
+    // Losing this write means the executor concluded between the board read and
+    // this statement: it was alive after all. Nothing else in this pass may run —
+    // no run is failed as infra, and no continuation is posted, because the
+    // executor's own `complete` has already decided both.
+    if (killed.rowCount === 0) {
+      action = "already_concluded";
+      return;
+    }
     const running = await tx.query(
       `SELECT * FROM runs
         WHERE run_group_id = $1 AND status IN ('running','uploading')
@@ -153,8 +171,15 @@ async function markDead(ctx: HostedDynamic, dispatch: HostedDynamic, { reason, r
       );
     }
   });
-  if (shouldRedispatch) await dispatchContinuation(ctx, group.id);
-  return { dispatch_id: dispatch.id, action: shouldRedispatch ? "redispatched" : "dead" };
+  if (shouldRedispatch) {
+    // The continuation restates "this group has no live attempt". Losing it is
+    // not a failure: the executor's own `complete{partial}` posted one first, and
+    // that attempt carries the same queued remainder. Two `requested` rows for
+    // one group would be two runners executing the same cases.
+    const posted = await dispatchContinuation(ctx, group.id);
+    if (!posted) return { dispatch_id: dispatch.id, action: "already_dispatched" };
+  }
+  return { dispatch_id: dispatch.id, action: shouldRedispatch ? "redispatched" : action };
 }
 
 /**

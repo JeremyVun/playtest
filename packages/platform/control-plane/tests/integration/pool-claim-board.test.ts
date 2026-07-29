@@ -550,6 +550,98 @@ test("pool: a claim that stops heartbeating is a dead executor, with one bounded
   }, { PLAYTEST_POOL_HEARTBEAT_TIMEOUT_S: "0" });
 });
 
+test("pool: an executor that comes back after being reconciled dead leaves exactly one live attempt", async () => {
+  await withApp(async ({ api, base, app }: HostedDynamic) => {
+    const { project, suite, ring } = await setUp(api, { key: "pool6b", labels: ["macos"] });
+    const runner = claimer(base, (await register(api, project, { name: "adas-laptop", labels: ["macos"] })).credential);
+    const groupId = (await launch(api, { project, suite, ring })).body.run_group.id;
+    const first = (await runner.poll()).body.offers[0].dispatch_id;
+    assert.equal((await runner.claim(first)).status, 200);
+    const exchanged = await runner.exchange({ dispatch_id: first, isolation: "process" });
+    assert.equal(exchanged.status, 200, JSON.stringify(exchanged.body));
+
+    // The laptop slept: the heartbeat window lapses, the reconciler declares the
+    // executor gone and re-posts the queued remainder.
+    const results = await reconcileDispatches(app.ctx);
+    assert.equal(results.find((r: HostedDynamic) => r.dispatch_id === first).action, "redispatched");
+
+    // Then the lid opens and the executor everyone gave up on posts its own
+    // partial completion. It must not conclude a SECOND attempt into existence:
+    // two `requested` rows for one group are two runners running the same cases.
+    const completed = await fetch(`${base}/api/v1/runner/groups/${groupId}/complete`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${exchanged.body.token}`, "content-type": "application/json" },
+      body: JSON.stringify({ partial: true, summary: {} }),
+    });
+    assert.equal(completed.status, 200);
+    assert.equal((await completed.json()).redispatched, false, "the attempt the reconciler posted is already live");
+
+    const rows = (await app.db.query(`SELECT * FROM dispatches WHERE ref_id = $1 ORDER BY attempt`, [groupId])).rows;
+    assert.equal(rows.length, 2, `no third attempt: ${JSON.stringify(rows.map((r: HostedDynamic) => [r.attempt, r.status]))}`);
+    // The reconciled row keeps what the reconciler wrote — a late `complete`
+    // restates its own precondition, so it never re-flips a concluded ledger row.
+    assert.equal(rows[0].status, "reconciled_dead");
+    assert.match(rows[0].error, /adas-laptop/);
+    const live = rows.filter((r: HostedDynamic) => ["requested", "scheduled", "running"].includes(r.status));
+    assert.equal(live.length, 1, "exactly one live dispatch for the group");
+    assert.equal(live[0].id, rows[1].id);
+
+    // The group is still going, its case is still queued, and the board offers
+    // that one attempt to the fleet — once.
+    const group = await api.get(`/run-groups/${groupId}`);
+    assert.equal(group.body.status, "running");
+    assert.equal(group.body.runs[0].status, "queued");
+    const board = await runner.poll();
+    assert.equal(board.body.current, null);
+    assert.deepEqual(board.body.offers.map((o: HostedDynamic) => o.dispatch_id), [rows[1].id]);
+  }, { PLAYTEST_POOL_HEARTBEAT_TIMEOUT_S: "0" });
+});
+
+test("pool: a mint exchange that can never be won concludes the dispatch instead of being re-offered", async () => {
+  await withApp(async ({ api, base, app }: HostedDynamic) => {
+    const { project } = await setUp(api, { key: "pool8" });
+    const provider = (
+      await api.post(`/projects/${project.key}/auth-providers`, {
+        name: "portal",
+        kind: "script",
+        code: "console.log(JSON.stringify({cookies: [], origins: []}));",
+        identities: { admin: { username: "root" } },
+        ttl_minutes: 45,
+      })
+    ).body;
+    const runner = claimer(base, (await register(api, project, { name: "adas-laptop" })).credential);
+    const minted = await api.post(`/auth-providers/${provider.id}/mint`, { identity: "admin" });
+    assert.equal(minted.status, 202, JSON.stringify(minted.body));
+
+    const entry = (await runner.poll("?wait=true")).body.offers[0];
+    assert.equal(entry.kind, "mint");
+    assert.equal((await runner.claim(entry.dispatch_id)).status, 200);
+    assert.equal((await runner.exchange({ dispatch_id: entry.dispatch_id, isolation: "process" })).status, 200);
+
+    // The agent restarts mid-mint. The board hands back the claim it still
+    // holds — but first exchange wins, so this dispatch can never be exchanged
+    // again, and the refusal must be terminal rather than something to retry.
+    const held = await runner.poll();
+    assert.equal(held.body.current.dispatch_id, entry.dispatch_id, "the board hands back the claim it holds");
+    const refused = await runner.exchange({ dispatch_id: entry.dispatch_id, isolation: "process" });
+    assert.equal(refused.status, 403, JSON.stringify(refused.body));
+    assert.match(refused.body.error.message, /already belongs to another executor/);
+
+    const row = (await app.db.query(`SELECT * FROM dispatches WHERE id = $1`, [entry.dispatch_id])).rows[0];
+    assert.equal(row.status, "reconciled_dead", "the refusal concluded the ledger row in the same transaction");
+    assert.match(row.error, /already belongs to another executor/);
+
+    // The termination, stated as the runner experiences it: nothing is handed
+    // back, so the loop holds on the board instead of poll → 403 → poll.
+    const after = await runner.poll();
+    assert.equal(after.body.current, null);
+    assert.deepEqual(after.body.offers, []);
+    const again = await runner.exchange({ dispatch_id: entry.dispatch_id, isolation: "process" });
+    assert.equal(again.status, 403);
+    assert.match(again.body.error.message, /does not hold an active claim/);
+  });
+});
+
 test("pool: cancellation reaches the runner at its next heartbeat", async () => {
   await withApp(async ({ api, base, app }: HostedDynamic) => {
     const { project, suite, ring } = await setUp(api, { key: "pool7", labels: ["macos"] });

@@ -759,6 +759,23 @@ one. It has two loss shapes:
   with the remedy, and that message lands on the stories that never ran, not
   only in a log.
 
+Both loss shapes are decided the way every other contended write in this system
+is: the precondition is restated in the mutating statement. The reconciler's kill
+only lands on a dispatch that is still `requested`/`scheduled`/`running`, so an
+executor that was merely asleep and comes back to conclude its own dispatch wins
+the race and its runs are never re-stamped as infrastructure failure. And **a run
+group has at most one live attempt**: a continuation — from the reconciler or
+from the executor's own `complete{partial}` — inserts nothing when an attempt for
+that group is already active, so a returning executor and a reconciler pass can
+never leave two claimable board entries for the same queued cases.
+
+A `mint` exchange that is refused because the claim is gone, expired, or already
+bound to an executor **concludes its dispatch in the same transaction** as the
+refusal. First exchange wins, so that dispatch can never be exchanged again; if
+it stayed active the board would keep answering the runner's poll with `current`,
+and a resumed runner would poll, be refused, and poll again for the life of the
+claim. Its ledger row records the same outcome the reconciler would have written.
+
 Cancellation marks the claim canceled; the runner observes it at its next
 heartbeat and runs the same teardown a SIGTERM triggers, since nothing can call
 it. Case reports for already-finished cases remain accepted.
@@ -1171,6 +1188,18 @@ ends with the ordinary unclaimed-timeout diagnostic naming the labels it waited
 on. The launch preview for a mobile ring reports no URL and
 `build_supplied_by_runner: true`; nothing in the hosted path ever claims the
 platform inspected a binary or a device.
+
+Keeping those facts on the runner is the runner's own job at one boundary it
+does not write: an Appium **session** failure is the driver's text, and drivers
+quote the capabilities and the endpoint they were handed. The executor therefore
+masks its group's build path, device and Appium endpoint — with the
+placeholders `<path>`, `<device>` and `<endpoint>`, so the sentence stays a
+diagnosis — in every string of the case report it posts (including the
+manifest's `result.error`), in the manifest it stages live, and in the
+`manifest.json` of the bundle it seals.
+The same discipline covers a failed provider mint: its error is the customer
+script's own first line of stderr, so it is scrubbed of every value the grant
+handed that script before it is posted on the claim or as the dispatch's error.
 
 Secret values are encrypted at rest and write-only through the API. The root
 encryption key is external to the database. Losing it makes stored secrets and

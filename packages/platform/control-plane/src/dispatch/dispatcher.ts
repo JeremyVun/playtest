@@ -380,6 +380,17 @@ export async function dispatchAttempt(ctx: HostedDynamic, { dispatchId, kind, re
   await ctx.board.postDispatch({ dispatchId, kind, refId, labels });
 }
 
+/**
+ * Post the next attempt for a group that still has queued work — the executor's
+ * own `complete{partial}` and the reconciler both reach it.
+ *
+ * Both can reach it for the SAME group at the same time (a runner that went
+ * silent long enough to be reconciled and then came back to complete), so the
+ * precondition is restated in the INSERT rather than read first: no attempt for
+ * this group may already be live. Two `requested` rows for one group are two
+ * runners claiming the same queued cases. The loser inserts nothing, posts
+ * nothing to the board, and answers null — its caller decides what that means.
+ */
 export async function dispatchContinuation(ctx: HostedDynamic, groupId: HostedDynamic) {
   const group = await getRunGroup(ctx, groupId);
   const { application, ring } = await groupTarget(ctx, group);
@@ -393,11 +404,16 @@ export async function dispatchContinuation(ctx: HostedDynamic, groupId: HostedDy
   // A continuation snapshots CURRENT ring state, exactly as a retry does: the
   // next attempt runs against the ring as it is now, and its own snapshot is
   // what its offer and group spec will serve.
-  await ctx.db.query(
+  const posted = await ctx.db.query(
     `INSERT INTO dispatches (id, project_id, kind, ref_id, attempt, status, labels, target)
-       VALUES ($1, $2, 'group', $3, $4, 'requested', $5, $6)`,
-    [dispatchId, group.project_id, group.id, attempt, labels, targetSnapshot(application, ring, labels)],
+       SELECT $1, $2, 'group', $3, $4, 'requested', $5, $6
+        WHERE NOT EXISTS (
+              SELECT 1 FROM dispatches
+               WHERE kind = 'group' AND ref_id = $3
+                 AND status IN (${inClause(ACTIVE_DISPATCHES, 7)}))`,
+    [dispatchId, group.project_id, group.id, attempt, labels, targetSnapshot(application, ring, labels), ...ACTIVE_DISPATCHES],
   );
+  if (posted.rowCount === 0) return null;
   await dispatchAttempt(ctx, { dispatchId, kind: "group", refId: group.id, labels });
   return dispatchId;
 }

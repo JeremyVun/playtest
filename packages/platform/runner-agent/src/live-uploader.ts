@@ -34,6 +34,7 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { translatePaths } from "./case-runner.ts";
+import { redactDeep } from "./redact.ts";
 
 /** The coalescing floor, shared with the progress reporter (exec-group.ts). */
 const TICK_MS = 2000;
@@ -85,6 +86,7 @@ export function liveUploader(
     live = null,
     workspaceRoot = null,
     containerRoot = null,
+    redact = null,
   }: RunnerDynamic,
   { intervalMs = TICK_MS }: RunnerDynamic = {},
 ): RunnerDynamic {
@@ -198,7 +200,13 @@ export function liveUploader(
     try {
       const manifest = JSON.parse(fs.readFileSync(manifestFile(), "utf8"));
       if (!manifest || typeof manifest !== "object") return null;
-      return { manifest, stamp: `${stat.size}:${stat.mtimeMs}` };
+      // This route stores the run's manifest on the platform, so it is held to
+      // the same rule as the sealed one the executor uploads: a manifest read
+      // off this disk mid-case may carry the infra cause a driver worded, and
+      // the executor's redactor is what makes it sendable. The stamp stays the
+      // FILE's, so scrubbing never affects what counts as a rewrite.
+      const sendable = redact ? redactDeep(manifest, redact) : manifest;
+      return { manifest: sendable, stamp: `${stat.size}:${stat.mtimeMs}` };
     } catch {
       return null; // a torn read of a whole-file rewrite: try again next tick
     }

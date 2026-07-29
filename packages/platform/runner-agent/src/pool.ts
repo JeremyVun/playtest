@@ -170,6 +170,11 @@ export async function runPool(opts: PoolOptions, deps: PoolDeps = {}): Promise<{
   let skip: string[] = [];
   const reported = new Set<string>();
   let idleBackoff = 0;
+  // Consecutive resumed claims the control plane refused. Its own counter rather
+  // than `failures`: a poll that answers is a healthy control plane and clears
+  // `failures`, so counting refusals there would both flatten this backoff and
+  // announce a reconnection that never happened.
+  let refusedResumes = 0;
   try {
     while (!stopping && executed < maxIterations && polls < maxPolls) {
       let answer;
@@ -288,12 +293,30 @@ export async function runPool(opts: PoolOptions, deps: PoolDeps = {}): Promise<{
       }
 
       busy = true;
+      let refusal: RunnerApiError | null = null;
       try {
-        await executeClaim(api, opts, offer, intervalS, { execGroupImpl, execMintImpl, log, backends });
+        refusal = (await executeClaim(api, opts, offer, intervalS, { execGroupImpl, execMintImpl, log, backends })).refusal;
       } finally {
         busy = false;
         executed += 1;
       }
+      // Belt and braces for the one shape this loop can spin on: a RESUMED claim
+      // the control plane refuses. A poll answering `current` never holds and a
+      // refused exchange returns at once, so without a wait here the two race
+      // each other flat out. The server ends it properly — a refused mint
+      // exchange concludes its dispatch, so the next poll hands back nothing —
+      // but this loop must not depend on the deployment it happens to be
+      // pointed at for its own termination. Reported once per streak, and
+      // retried on the same envelope an unreachable control plane is.
+      if (resumed && refusal) {
+        const delay = backoffDelayMs(++refusedResumes, { random });
+        if (refusedResumes === 1) {
+          log(`the control plane will not hand back ${describe(offer)} (${firstLine(refusal)}) — backing off`);
+        }
+        await sleep(delay);
+        continue;
+      }
+      refusedResumes = 0;
       if (!stopping) log("waiting for work");
     }
   } finally {
@@ -372,6 +395,10 @@ export async function defaultCompatibility(
  * heartbeat running alongside it. A failure here is logged and swallowed: the
  * executor has already posted its own `complete` carrying the real error, and
  * one bad group must never take the fleet's runner down with it.
+ *
+ * It is still reported back, though: a refusal (4xx) is the control plane saying
+ * this claim cannot be executed at all — usually at the exchange — and the loop
+ * has to be able to tell that from a group that merely failed.
  */
 async function executeClaim(
   api: ApiClient,
@@ -379,7 +406,7 @@ async function executeClaim(
   offer: ClaimOffer,
   intervalS: number,
   { execGroupImpl, execMintImpl, log, backends }: { execGroupImpl: typeof execGroup; execMintImpl: typeof execMint; log: (line: string) => void; backends: AppiumBackends },
-): Promise<void> {
+): Promise<{ refusal: RunnerApiError | null }> {
   const canceler = new AbortController();
   const heartbeat = startHeartbeat(api, offer.dispatch_id, intervalS, {
     onCancel: (why: string) => {
@@ -418,9 +445,11 @@ async function executeClaim(
     log(`finished ${describe(offer)} in ${Math.round((Date.now() - started) / 1000)}s`);
   } catch (e) {
     log(`${describe(offer)} ended with an error: ${firstLine(e)}`);
+    if (e instanceof RunnerApiError && e.status >= 400 && e.status < 500) return { refusal: e };
   } finally {
     heartbeat.stop();
   }
+  return { refusal: null };
 }
 
 /**

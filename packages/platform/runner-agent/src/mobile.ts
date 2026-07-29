@@ -20,10 +20,12 @@
 // classified infra by the executor — and a one-case group creates exactly one
 // Appium session.
 import fs from "node:fs";
+import path from "node:path";
 import { probeMobileClient } from "@playtest/core/suite";
 import { PLATFORM_DRIVER, probeAppiumStatus } from "./appium.ts";
 import type { AppiumHandle, AppiumDeps } from "./appium.ts";
 import type { MobileBinding } from "./runner-config.ts";
+import type { Mask } from "./redact.ts";
 
 export interface MobilePreflightFailure {
   /** One line, safe to send: the remedy, with no path, device or endpoint. */
@@ -106,6 +108,38 @@ export function mobileRuntimeTarget(binding: MobileBinding, handle: AppiumHandle
     appium_url: handle.url,
     ...(binding.device ? { device: binding.device } : {}),
   };
+}
+
+/**
+ * The physical facts of one mobile group, as masks (redact.ts).
+ *
+ * Preflight and a managed Appium's death diagnostic are written to carry none
+ * of these, but the SESSION boundary is not ours to write: a real wdio/Appium
+ * failure quotes the capabilities and the endpoint it dialled ("Bad app:
+ * /Users/…/Todo.app", "connect ECONNREFUSED 127.0.0.1:4723"), core reports it
+ * verbatim as the run's infra error, and the executor uploads it. These are the
+ * needles that turn that text back into a diagnosis the platform may keep.
+ *
+ * The host:port form is listed beside the URL because that is how a socket
+ * error names an endpoint — no scheme.
+ */
+export function mobilePhysicalMasks(binding: MobileBinding, handle: AppiumHandle): Mask[] {
+  return [
+    { value: binding.app, with: "<path>" },
+    { value: path.dirname(binding.app), with: "<path>" },
+    { value: path.basename(binding.app), with: "<path>" },
+    { value: binding.device, with: "<device>" },
+    { value: handle.url, with: "<endpoint>" },
+    { value: hostPort(handle.url), with: "<endpoint>" },
+  ];
+}
+
+function hostPort(url: string): string | null {
+  try {
+    return new URL(url).host;
+  } catch {
+    return null;
+  }
 }
 
 function firstLine(e: RunnerDynamic): string {

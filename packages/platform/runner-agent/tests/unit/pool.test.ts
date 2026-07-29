@@ -14,6 +14,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { runPool, parsePoolArgs, backoffDelayMs, startupLines, resolveCredential, defaultCompatibility } from "../../src/pool.ts";
+import { RunnerApiError } from "../../src/api-client.ts";
 import { loadRunnerConfig } from "../../src/runner-config.ts";
 
 const CREDENTIAL = "ptr_test-credential";
@@ -137,6 +138,36 @@ test("pool: a runner restarted mid-group resumes the claim it still holds instea
   assert.equal(stub.requests.some((r: LegacyTestValue) => r.method === "POST" && r.path.startsWith("/api/v1/runner/pool/claims/")), false,
     "a claim it already holds is resumed, not re-claimed");
   assert.match(lines.join("\n"), /resuming run group g9/);
+});
+
+test("pool: a resumed claim the control plane refuses is backed off, not re-entered in a tight loop", async () => {
+  // The shape this guards: a runner resumes a mint claim whose grant expired
+  // (or was bound elsewhere) — the poll answers `current` with no hold and the
+  // exchange refuses at once, so without a wait here the two race each other for
+  // as long as the claim window lasts.
+  const stub = await board([{ current: offer({ dispatch_id: "d9", kind: "mint", ref_id: "m9", run_group_id: null, mint_claim_id: "m9", target: null }) }]);
+  const slept: number[] = [];
+  const lines: string[] = [];
+  try {
+    await runPool(options(stub.url), {
+      execMintImpl: async () => {
+        throw new RunnerApiError(403, { error: { code: "forbidden", message: 'mint claim "m9" already belongs to another executor' } });
+      },
+      log: (line) => lines.push(line),
+      sleep: async (ms) => { slept.push(ms); },
+      random: () => 0.5,
+      maxPolls: 3,
+    });
+  } finally {
+    await stub.close();
+  }
+  assert.equal(slept.length, 3, `every refused resume waits: ${JSON.stringify(slept)}`);
+  assert.deepEqual(slept, [1000, 2000, 4000], "the refusals are counted, so the wait grows instead of staying tight");
+  const complaints = lines.filter((l) => /backing off/.test(l));
+  assert.equal(complaints.length, 1, `said once per streak: ${JSON.stringify(complaints)}`);
+  assert.match(complaints[0]!, /will not hand back session mint m9 \(mint claim "m9" already belongs/);
+  // A refused claim is not an outage, so the loop must not announce one.
+  assert.equal(lines.some((l) => /not answering|reconnected/.test(l)), false, lines.join("|"));
 });
 
 test("pool: a mint claim runs the mint path on the same board", async () => {

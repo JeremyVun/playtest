@@ -7,6 +7,7 @@
 // Internal machinery, not an entry point: the pool loop is the one arrival.
 import { ApiClient } from "./api-client.ts";
 import { runMintScript } from "./mint.ts";
+import { makeRedactor } from "./redact.ts";
 
 export async function execMint(opts: RunnerDynamic): Promise<RunnerDynamic> {
   // As in exec-group: the runner exchanges its registration credential for the
@@ -25,7 +26,11 @@ export async function execMint(opts: RunnerDynamic): Promise<RunnerDynamic> {
     process.stdout.write(`minted ${grant.provider}/${grant.identity}\n`);
     return { exitCode: 0 };
   } catch (e: RunnerDynamic) {
-    const error = firstLine(e);
+    // The failure is the provider script's own first line of stderr (mint.ts),
+    // written by code that was handed this grant's resolved secrets. It becomes
+    // the dispatch's error — served to developers — so it is scrubbed of every
+    // value the grant carries, here and in this runner's log.
+    const error = makeRedactor(Object.values(grant.env || {}))(firstLine(e));
     await api.json("POST", `/runner/mints/${opts.claim}/complete`, { error }).catch(() => {});
     console.error(`mint failed: ${error}`);
     return { exitCode: 1, error };

@@ -92,6 +92,60 @@ test("the launch dialog says where a run is placed, and follows the fleet while 
   });
 });
 
+// The remedy the warning offers is a router link, and it lives inside a modal.
+// The router repaints #main and nothing else, so without the modal registering
+// its own dismissal as a page-leave cleanup the Runners page would arrive UNDER
+// a live scrim: every click swallowed until the person guesses Escape. Both
+// halves of the contract are here — the ordinary dialog gets out of the way,
+// and the one dialog that cannot be reopened still gets to ask first.
+test("a router link inside a modal takes the modal with it, except where dismissing destroys something", async () => {
+  await withApp(async ({ base, api }: HostedDynamic) => {
+    const { project, suite } = await seedLaunchable(api);
+
+    const browser = await chromium.launch({ headless: true });
+    try {
+      const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+      const errors: string[] = [];
+      page.on("pageerror", (error) => errors.push(error.message));
+      page.on("console", (message) => {
+        if (message.type() === "error") errors.push(message.text());
+      });
+
+      await page.goto(`${base}/p/${project.key}/suites/${suite.slug}`);
+      await page.getByRole("button", { name: "▶ Run" }).click();
+      const launch = page.locator("#modal-root .modal");
+      await launch.getByRole("link", { name: "Set up a runner" }).click();
+
+      // The dialog is gone, not merely painted over: nothing at all is left in
+      // the modal root, so no scrim survives to eat the next click.
+      await page.getByRole("heading", { name: "Runners", exact: true }).waitFor();
+      assert.equal(await page.locator("#modal-root > *").count(), 0, "the launch dialog must not outlive the page it linked away from");
+
+      // Proof by use. Playwright's hit-target check fails a click that lands on
+      // a scrim instead of the button, so this is the stuck-modal bug's assertion.
+      await page.getByRole("button", { name: "+ Register runner" }).click();
+      const register = page.locator("#modal-root .modal");
+      await register.getByLabel("Name").fill("adas-laptop");
+      await register.getByRole("button", { name: "Register" }).click();
+
+      // The credential reveal is the exception: navigating away would take the
+      // only copy of a secret the server cannot reissue, so it asks first. The
+      // link above pushed a history entry, so Back is a real router navigation.
+      const reveal = page.locator("#modal-root .modal");
+      await reveal.getByText("adas-laptop is registered").waitFor();
+      await page.goBack();
+      await reveal.getByText(/This credential cannot be shown again/).waitFor();
+      assert.equal(await reveal.count(), 1, "the one dialog that cannot be reopened stays up until it is answered");
+      await reveal.getByRole("button", { name: "Copy it first" }).click();
+      await reveal.getByText("adas-laptop is registered").waitFor();
+
+      assert.deepEqual(errors, []);
+    } finally {
+      await browser.close();
+    }
+  });
+});
+
 test("the Runners tab hands over a start command with --config, and holds no target inventory", async () => {
   await withApp(async ({ base, api }: HostedDynamic) => {
     const { project, ring } = await seedLaunchable(api);

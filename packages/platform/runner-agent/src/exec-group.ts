@@ -11,10 +11,10 @@ import { CONTAINER_WS, runCaseIsolated, stopActiveContainers } from "./case-runn
 import { liveUploader } from "./live-uploader.ts";
 import { cleanupWorkspace, sweepDocker } from "./janitor.ts";
 import { runMintScript } from "./mint.ts";
-import { makeRedactor, collectSecretValues } from "./redact.ts";
+import { makeMasker, makeRedactor, secretMasks, collectSecretValues, redactDeep } from "./redact.ts";
 import { AppiumBackends } from "./appium.ts";
 import { bindingFor } from "./runner-config.ts";
-import { mobileRuntimeTarget, preflightMobile } from "./mobile.ts";
+import { mobilePhysicalMasks, mobileRuntimeTarget, preflightMobile } from "./mobile.ts";
 import type { AppiumHandle } from "./appium.ts";
 import { discoverCases } from "@playtest/core/suite";
 import { resolveBudget, schedulePool, willRecord } from "@playtest/core/run";
@@ -97,10 +97,19 @@ export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
     // The external-Appium credential joins the redactor's needles: it is not a
     // ring secret, so nothing else would catch it if an Appium error ever echoed
     // it back. Only the VALUE form — a credential_file's path is not a secret.
-    redactor = makeRedactor([
-      ...collectSecretValues(spec, claimed),
-      ...mintSecrets,
-      backend?.credentialEnv?.PLAYTEST_APPIUM_CREDENTIAL,
+    //
+    // A mobile group adds its physical facts (mobile.ts): the driver's own
+    // words about a session that would not start are the one text crossing to
+    // the platform that this runner did not write, and they quote the build
+    // path, the device and the endpoint. Placeholders, not the secret mask —
+    // "<endpoint> refused the connection" is still a diagnosis.
+    redactor = makeMasker([
+      ...secretMasks([
+        ...collectSecretValues(spec, claimed),
+        ...mintSecrets,
+        backend?.credentialEnv?.PLAYTEST_APPIUM_CREDENTIAL,
+      ]),
+      ...(binding && backend ? mobilePhysicalMasks(binding, backend) : []),
     ]);
     const failedByLabel = failedSessionLabels(spec, failedSessions);
     workspace = await materializeWorkspace({ api, spec, sessions: claimed, failedSessions, workDir: opts.workDir });
@@ -193,6 +202,9 @@ export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
         live: spec.uploads?.live ?? null,
         workspaceRoot: workspace.root,
         containerRoot: opts.isolation === "container" ? CONTAINER_WS : null,
+        // The live manifest is a platform-stored copy of the same document the
+        // bundle seals, so it goes through the same needles.
+        redact: redactor,
       });
       let report;
       try {
@@ -215,7 +227,7 @@ export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
             live.onEvent(ev);
           },
         });
-        const bundle = await uploadBundle(api, item.db_id, res.runDir);
+        const bundle = await uploadBundle(api, item.db_id, res.runDir, redactor);
         const sideEffectsAfter = readSideEffects(rc.file);
         report = {
           status: normalizeStatus(res.status),
@@ -243,8 +255,15 @@ export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
         progress.stop();
         await live.stop();
       }
-      await api.json("POST", `/runner/groups/${spec.run_group_id}/cases/${item.run_id}/report`, report);
-      orderedResults[index] = report;
+      // The WHOLE report, not just the error line it was built with. Core
+      // records an infra cause in the manifest too (`result.error`), the report
+      // carries that manifest, and the platform stores and serves both — so the
+      // last thing that happens to a report is that every string in it is
+      // scrubbed. It is metadata only (the evidence bundle travels as bytes on
+      // its own route), so the walk is cheap.
+      const posted = redactDeep(report, redactor);
+      await api.json("POST", `/runner/groups/${spec.run_group_id}/cases/${item.run_id}/report`, posted);
+      orderedResults[index] = posted;
     });
     results.push(...orderedResults);
     // Janitor before complete so its findings ride the completion report (§3).
@@ -393,7 +412,7 @@ export function applyLimitOverrides(resolvedCase: RunnerDynamic, overrides: Runn
  * lands in `failed` — only the cases needing that identity go infra, not the
  * group. `secretValues` feeds the redactor with the grant's root secrets.
  */
-async function claimGroupSessions(api: RunnerDynamic, spec: RunnerDynamic, opts: RunnerDynamic): Promise<RunnerDynamic> {
+export async function claimGroupSessions(api: RunnerDynamic, spec: RunnerDynamic, opts: RunnerDynamic): Promise<RunnerDynamic> {
   const needed = spec.sessions?.needed || [];
   const sessions: Record<string, RunnerDynamic> = {};
   const failed: Record<string, string> = {};
@@ -416,7 +435,15 @@ async function claimGroupSessions(api: RunnerDynamic, spec: RunnerDynamic, opts:
           });
           sessions[ref] = fulfilled.session;
         } catch (e) {
-          const msg = firstLine(e);
+          // A failed mint's first line is the customer's OWN script talking
+          // (mint.ts takes stderr's first line), and the script was handed this
+          // grant's resolved secrets — so an `echo $TOKEN` or a library that
+          // prints the value it POSTed lands here. It is posted on the claim and
+          // served to developers as the dispatch error, so it is scrubbed of
+          // every value the grant carries before it goes. This runs before the
+          // group's redactor exists, hence its own.
+          const redact = makeRedactor([...secretValues, ...Object.values(r.mint.env || {})]);
+          const msg = redact(firstLine(e));
           await api
             .json("POST", `/runner/sessions/${r.mint.claim_id}/fulfill`, { error: msg })
             .catch(() => {});
@@ -450,15 +477,47 @@ function failedSessionLabels(spec: RunnerDynamic, failedSessions: Record<string,
   return out;
 }
 
-async function uploadBundle(api: RunnerDynamic, runDbId: string, runDir: string | null | undefined): Promise<RunnerDynamic> {
+export async function uploadBundle(
+  api: RunnerDynamic,
+  runDbId: string,
+  runDir: string | null | undefined,
+  redactor: (value: unknown) => string = String,
+): Promise<RunnerDynamic> {
   if (!runDir) return { artifact: null };
   const out = path.join(os.tmpdir(), `playtest-${process.pid}-${runDbId}.ptrun`);
   try {
+    // The bundle is sealed evidence the platform stores and serves, so its
+    // manifest may not carry what the report is scrubbed of. Rewritten HERE,
+    // on the runner's own copy, before the zip is written: the run directory is
+    // this machine's and its raw text stays in the runner's log.
+    scrubManifestError(runDir, redactor);
     writeBundle(runDir, out);
     return await api.putBytes(`/runner/runs/${runDbId}/bundle`, await fsp.readFile(out), "application/vnd.playtest.run-bundle");
   } finally {
     await fsp.rm(out, { force: true }).catch(() => {});
   }
+}
+
+/**
+ * Rewrite the infra cause in a run directory's `manifest.json` through the
+ * redactor. `result.error` is where core records why a run died
+ * (runner.ts finishInfra) and the one field in a manifest that carries a
+ * driver's own words; everything else in there is the engine's vocabulary, and
+ * a manifest is a comparability record, so nothing else is touched. A manifest
+ * with nothing to scrub is left byte-for-byte alone.
+ */
+export function scrubManifestError(runDir: string, redactor: (value: unknown) => string): void {
+  const file = path.join(runDir, "manifest.json");
+  const manifest = readJson(file);
+  const error = manifest?.result?.error;
+  if (typeof error !== "string" || !error) return;
+  const scrubbed = redactor(error);
+  if (scrubbed === error) return;
+  manifest.result.error = scrubbed;
+  try {
+    // Core's own manifest bytes (trajectory.ts writeManifest).
+    fs.writeFileSync(file, JSON.stringify(manifest, null, 2) + "\n");
+  } catch {}
 }
 
 function readSideEffects(caseFile: string): RunnerDynamic {

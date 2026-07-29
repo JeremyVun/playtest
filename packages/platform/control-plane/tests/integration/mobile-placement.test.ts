@@ -24,7 +24,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { withApp, createTarget } from "./helpers.ts";
-import { assertNoPhysicalFacts, claimAndExchange, registerRunner, startPoolAgent, untilAgent as until } from "./exec-helpers.ts";
+import { assertNoPhysicalFacts, bundleFor, claimAndExchange, registerRunner, startPoolAgent, untilAgent as until } from "./exec-helpers.ts";
 import { writeTar } from "../../src/suites/tar.ts";
 
 /**
@@ -123,7 +123,11 @@ const AUTHORED_SUITE = {
   "stories/open-app.yaml": MOBILE_SUITE["stories/open-app.yaml"],
 };
 
-async function setUpMobileProject(api: HostedDynamic, key: string, { labels, files = MOBILE_SUITE }: HostedDynamic) {
+async function setUpMobileProject(
+  api: HostedDynamic,
+  key: string,
+  { labels, files = MOBILE_SUITE, config = { app: { settle: 250 } } }: HostedDynamic,
+) {
   const project = (await api.post("/projects", { key, name: key })).body;
   const { application, ring } = await createTarget(api, project, {
     key: "todo-ios",
@@ -133,7 +137,7 @@ async function setUpMobileProject(api: HostedDynamic, key: string, { labels, fil
     ringKey: "local",
     ringName: "Local",
     runnerLabels: labels,
-    config: { app: { settle: 250 } },
+    config,
   });
   const suite = (await api.post(`/projects/${key}/suites`, { slug: "todos", name: "Todos" })).body;
   assert.equal((await api.postTar(`/suites/${suite.id}/import`, writeTar(files))).status, 200);
@@ -455,6 +459,105 @@ test("gate 9: no platform-managed record or response carries a mobile path, devi
       }
     });
   } finally {
+    await appium.close();
+    disk.remove();
+  }
+});
+
+/**
+ * The same sweep, driven by a REAL session failure instead of an already-clean
+ * sentence — the case gate 9 could not previously catch.
+ *
+ * Preflight and a managed Appium's death diagnostic are the runner's own words,
+ * written to carry no physical fact. The session boundary is not: wdio and
+ * Appium quote the capabilities and the endpoint they were handed, core records
+ * that verbatim as the run's infra cause (report error AND manifest
+ * result.error), and the executor uploads it into the run record, the feed and
+ * the sealed bundle. So here the real agent really tries to start a session
+ * against an Appium stub that answers `/status` and nothing else, and the sweep
+ * runs over what that produced.
+ */
+test("gate 9: a real session-boundary failure is scrubbed by the runner, not by the platform", async () => {
+  const disk = runnerDisk("gate9session");
+  const appium = await startAppiumStub();
+  let agent: HostedDynamic = null;
+  try {
+    await withApp(async ({ api, base, app, storeRoot }: HostedDynamic) => {
+      const labels = ["ios-session"];
+      // No ring overlay here: this is the one test in the file whose case is
+      // really EXECUTED, and `app.settle` is not a key core accepts under
+      // `app.envs.<ring key>` — the placement tests above never run far enough
+      // to find out.
+      const { project, suite, ring } = await setUpMobileProject(api, "gate9session", { labels, config: {} });
+      const configFile = writeRunnerConfig(disk.dir, { labels, app: disk.app, appiumUrl: appium.url });
+      const runner = await registerRunner(api, project, { name: "session-mac", labels });
+      agent = startPoolAgent(base, runner.credential, { config: configFile });
+      await until(
+        async () => (await app.db.query(`SELECT last_seen_at FROM runners WHERE id = $1`, [runner.id])).rows[0]?.last_seen_at,
+        "the runner to check in",
+        agent,
+      );
+
+      const launched = await api.post(`/projects/${project.key}/run-groups`, {
+        suite_id: suite.id,
+        ring_id: ring.id,
+        selection: { ids: ["open-app"] },
+      });
+      assert.equal(launched.status, 200, JSON.stringify(launched.body));
+      const groupId = launched.body.run_group.id;
+
+      const done = await until(
+        async () => {
+          const res = await api.get(`/run-groups/${groupId}`);
+          return res.body?.status === "done" ? res.body : null;
+        },
+        "the group to end on the session failure",
+        agent,
+      );
+      // Stop the agent BEFORE the assertions: everything below reads what is
+      // already stored, and an agent still long-polling the board would hold
+      // this control plane open past a failing assertion — turning a diagnosis
+      // into a hang.
+      await agent.stop();
+
+      assert.equal(done.runs.length, 1);
+      const run = done.runs[0];
+      assert.equal(run.status, "infra", `expected an infra failure, got ${run.status}: ${run.error}`);
+      // The driver really did fail at the session boundary, and this is ITS
+      // text — not a sentence the runner composed.
+      assert.ok(run.error, "the run says why it failed");
+
+      // ---- the sweep, over what a real failure wrote --------------------
+      const needles = [disk.app, disk.dir, path.basename(disk.app), DEVICE, appium.url, `127.0.0.1:${appium.port}`, configFile];
+      const runDbId = run.id;
+      await assertNoPhysicalFacts(app, needles, {
+        skipTables: ["suite_files"],
+        responses: [
+          ["runs index", await api.get(`/projects/${project.key}/run-groups?include=runs`)],
+          ["run group", await api.get(`/run-groups/${groupId}`)],
+          ["run", await api.get(`/runs/${runDbId}`)],
+          ["feed", await api.get(`/projects/${project.key}/events/feed`)],
+          ["audit", await api.get(`/projects/${project.key}/audit`)],
+          ["dispatches", await api.get(`/projects/${project.key}/dispatches`)],
+        ],
+      });
+      // The sealed evidence too: a bundle is stored beside the database and
+      // served to a reviewer, so its manifest is held to the same rule.
+      if (run.artifact?.key) {
+        const manifest = bundleFor(storeRoot, run).readText("manifest.json");
+        assert.ok(manifest, "the uploaded bundle carries a manifest");
+        for (const needle of needles) {
+          assert.equal(manifest.includes(needle), false, `the sealed bundle's manifest carries "${needle}"`);
+        }
+      }
+      // The masking is what the sweep just proved, so the diagnosis says so:
+      // a placeholder can only be there because a fact was.
+      assert.match(run.error, /<endpoint>|<path>|<device>/);
+      // The runner still knows what it dialled: the fact stayed on its machine.
+      assert.equal(agent.out.stdout.includes(disk.app) || agent.out.stdout.includes(appium.url), true);
+    });
+  } finally {
+    if (agent) await agent.stop();
     await appium.close();
     disk.remove();
   }

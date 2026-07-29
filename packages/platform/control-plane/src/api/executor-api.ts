@@ -68,16 +68,27 @@ export async function exchange(ctx: HostedDynamic) {
  * claim to it (first exchange wins — a second executor is refused), and issue
  * a bearer scoped to `mint:<claim_id>` so group routes reject it and the two
  * mint routes below accept nothing else.
+ *
+ * A refusal here is TERMINAL for the dispatch, not a retryable error, so it
+ * concludes the ledger row in the same transaction (see `refuseMintExchange`)
+ * before the 4xx is thrown.
  */
 async function mintExchange(ctx: HostedDynamic, { dispatch, executorId, versions, isolation }: HostedDynamic) {
   const claimId = dispatch.ref_id;
+  // The refusal is raised AFTER the transaction commits: thrown inside it, the
+  // very write that stops the runner coming back would roll back with it.
+  let refusal: HostedDynamic = null;
   await ctx.db.withTx(async (tx: HostedDynamic) => {
     const { rows } = await tx.query(`SELECT * FROM session_claims WHERE id = $1`, [claimId]);
     const claim = rows[0];
     if (!claim || claim.status !== "pending" || new Date(claim.expires_at) < new Date()) {
-      throw unauthenticated(`mint claim "${claimId}" is no longer pending`);
+      refusal = await refuseMintExchange(tx, { dispatch, claim, error: unauthenticated(`mint claim "${claimId}" is no longer pending`) });
+      return;
     }
-    if (claim.executor_id) throw forbidden(`mint claim "${claimId}" already belongs to another executor`);
+    if (claim.executor_id) {
+      refusal = await refuseMintExchange(tx, { dispatch, claim, error: forbidden(`mint claim "${claimId}" already belongs to another executor`) });
+      return;
+    }
     // First exchange wins. The binding update carries the whole precondition the
     // read just checked (this replaces the Postgres row lock), so a second
     // executor loses here and is refused with the same error it gets today.
@@ -88,8 +99,11 @@ async function mintExchange(ctx: HostedDynamic, { dispatch, executorId, versions
     );
     if (bound.rowCount === 0) {
       const { rows: after } = await tx.query(`SELECT * FROM session_claims WHERE id = $1`, [claimId]);
-      if (after[0]?.executor_id) throw forbidden(`mint claim "${claimId}" already belongs to another executor`);
-      throw unauthenticated(`mint claim "${claimId}" is no longer pending`);
+      const error = after[0]?.executor_id
+        ? forbidden(`mint claim "${claimId}" already belongs to another executor`)
+        : unauthenticated(`mint claim "${claimId}" is no longer pending`);
+      refusal = await refuseMintExchange(tx, { dispatch, claim: after[0], error });
+      return;
     }
     await tx.query(
       `INSERT INTO executors (id, run_group_id, kind, versions, isolation, last_report_at)
@@ -98,10 +112,52 @@ async function mintExchange(ctx: HostedDynamic, { dispatch, executorId, versions
     );
     await tx.query(`UPDATE dispatches SET status = 'running', executor_id = $2 WHERE id = $1`, [dispatch.id, executorId]);
   });
+  if (refusal) throw refusal;
   return {
     token: issueRunnerToken(ctx.runnerTokenKey, { executorId, runGroupId: `mint:${claimId}` }),
     executor_id: executorId,
   };
+}
+
+/**
+ * A mint exchange the presenting runner can never win — the claim is gone,
+ * expired, or already bound to an executor. First exchange wins, so this claim
+ * can never be exchanged again and the dispatch is finished whatever happens
+ * next; conclude it here.
+ *
+ * That write IS the termination. Without it the board keeps answering this
+ * runner's poll with `current` (it still holds an active claim), and a runner
+ * resuming after a crash polls, exchanges, is refused, and polls again — with no
+ * hold on the poll and no error the loop can act on, for as long as the claim
+ * window lasts.
+ *
+ * The status is the one `markMintDead` picks for the same facts: a claim that
+ * actually fulfilled concludes, and anything else is a death carrying its
+ * reason. The claim row is deliberately left alone — abandoning a grant another
+ * executor may still be minting under is the reconciler's decision to make, and
+ * an unfulfilled one is taken over at expiry exactly as it is today.
+ *
+ * `dispatch` is always the presenting runner's own active claim: nothing else
+ * resolves out of `resolveExchangeDispatch`, and the write restates that.
+ */
+async function refuseMintExchange(tx: HostedDynamic, { dispatch, claim, error }: HostedDynamic) {
+  const fulfilled = claim?.status === "fulfilled";
+  const concluded = await tx.query(
+    `UPDATE dispatches SET status = $3, concluded_at = now(), error = $2
+      WHERE id = $1 AND status IN ('requested','scheduled','running')`,
+    [dispatch.id, fulfilled ? null : error.message, fulfilled ? "concluded" : "reconciled_dead"],
+  );
+  if (concluded.rowCount) {
+    await audit(tx, {
+      actor: { system: "runner" },
+      action: "dispatch.dead",
+      entityType: "dispatch",
+      entityId: dispatch.id,
+      projectId: dispatch.project_id,
+      detail: { kind: "mint", claim_id: dispatch.ref_id, reason: error.message, refused_at: "exchange" },
+    });
+  }
+  return error;
 }
 
 /** GET /runner/mints/:claim — the standalone mint grant (root secrets resolved here). */
@@ -665,7 +721,10 @@ export async function complete(ctx: HostedDynamic) {
       });
     }
   });
-  if (dispatchMore) await dispatchContinuation(ctx, group.id);
+  // A continuation the reconciler already posted for this group wins, and this
+  // one inserts nothing: the queued remainder is live either way, and two
+  // `requested` rows would be two runners executing the same cases.
+  if (dispatchMore) dispatchMore = (await dispatchContinuation(ctx, group.id)) != null;
   return { ok: true, redispatched: dispatchMore };
 }
 

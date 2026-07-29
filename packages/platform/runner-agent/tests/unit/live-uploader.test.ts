@@ -483,6 +483,30 @@ test("opening waits for manifest readiness, and a rewritten manifest re-opens wi
   }
 });
 
+test("the live manifest goes through the executor's redactor, like the sealed one", async () => {
+  const cp = await startControlPlane();
+  const dir = makeRunDir("redacted");
+  // The executor's needles for a mobile group (exec-group.ts): a manifest read
+  // off this disk mid-case carries whatever the driver said about the session
+  // it could not start.
+  const live = uploaderFor(cp, { wiring: { redact: (s: LegacyTestValue) => String(s).replaceAll("http://127.0.0.1:4723", "<endpoint>") } });
+  try {
+    live.onEvent({ type: "case_start", runDir: dir.runDir });
+    dir.writeManifest({ result: { status: "infra", error: 'connect ECONNREFUSED http://127.0.0.1:4723/session' } });
+    await until(() => cp.routed("open").length === 1, "the opening manifest snapshot");
+    const posted = cp.routed("open")[0].body.manifest;
+    assert.equal(posted.result.error, "connect ECONNREFUSED <endpoint>/session");
+    assert.equal(JSON.stringify(posted).includes("127.0.0.1:4723"), false);
+    // The run directory itself is untouched: this is a send-time scrub, and the
+    // runner's own copy stays the answer to "what did it dial".
+    assert.match(fs.readFileSync(path.join(dir.runDir, "manifest.json"), "utf8"), /127\.0\.0\.1:4723/);
+  } finally {
+    await live.stop();
+    dir.cleanup();
+    await cp.close();
+  }
+});
+
 test("container mode reads the run dir through the same translation the final result gets", async () => {
   const cp = await startControlPlane();
   const dir = makeRunDir("container");

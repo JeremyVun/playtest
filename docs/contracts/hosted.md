@@ -445,9 +445,12 @@ the group's completion to resolve, not work a second process picks up mid-flight
 A story that never started may still be claimed by a terminal report, which is
 how an executor reports `infra` for a case it never got to run.
 
-Group completion is the one route that stays meaningful after its own dispatch
-concluded, so an owner's retry is idempotent. It is refused after the reconciler
-declared the attempt dead, and refused for a cancelled group.
+Completion is the one operation that stays meaningful after its own dispatch
+concluded, so an owner's retry is idempotent. Group completion is refused after
+the reconciler declared the attempt dead, and refused for a cancelled group;
+mint completion widens its states the same way and for the same reason
+(§ [Standalone mint resume and idempotent
+completion](#standalone-mint-resume-and-idempotent-completion)).
 
 `POST /api/v1/run-groups/:id/retry` is an editor-authorized, in-place retry for
 a finished group's stories that never started (`infra` or `lost` with no
@@ -600,29 +603,6 @@ three run the same teardown:
 Child listeners, the force-kill timer, and the runner's active-case registry are
 released on every exit path — success, product failure, crash, and cancellation.
 
-**What counts as a secret needle.** The executor masks two kinds of value, with
-deliberately different policies:
-
-- **Secrets** — a ring's resolved secrets, a mint grant's environment, an
-  external Appium credential, and every leaf value inside a minted session's
-  storage state — become `[redacted]`. A structured secret contributes its
-  **leaf values, one needle each**, recursively: a session cookie's value and a
-  token nested inside `origins[].localStorage[]` are what appear in a run's
-  evidence, and the serialized parent document is a byte sequence that appears
-  nowhere. Keys that name a *location* rather than a value — a cookie's `name`,
-  `domain` and `path`, an `origin`, a `url` — are not secrets and are not
-  masked; masking them would shred unrelated text. **No non-empty configured
-  secret value is ever dropped for being short.**
-- **Physical facts** — the build path, device and Appium endpoint this runner
-  resolved from its own config — become a placeholder naming the kind of fact
-  (`<path>`, `<device>`, `<endpoint>`), so the surrounding text stays a
-  diagnosis. These keep a minimum needle length, because a degenerate one is
-  worth nothing and would shred the diagnosis it appears in.
-
-Every needle is matched in both its **raw and JSON-escaped** forms, so a value
-holding a quote or a backslash is caught inside a JSON document as well as in
-plain text, and the rewritten document is still parseable.
-
 ### The platform evidence boundary
 
 **Every textual byte a runner sends to the platform is sanitized, by one
@@ -655,6 +635,29 @@ driver, a model or a customer's own script wrote.
 - **Masking is deterministic and idempotent-in-effect**: identical input
   produces identical output, and an entry with nothing to mask keeps its own
   bytes.
+
+**What counts as a secret needle.** The executor masks two kinds of value, with
+deliberately different policies:
+
+- **Secrets** — a ring's resolved secrets, a mint grant's environment, an
+  external Appium credential, and every leaf value inside a minted session's
+  storage state — become `[redacted]`. A structured secret contributes its
+  **leaf values, one needle each**, recursively: a session cookie's value and a
+  token nested inside `origins[].localStorage[]` are what appear in a run's
+  evidence, and the serialized parent document is a byte sequence that appears
+  nowhere. Keys that name a *location* rather than a value — a cookie's `name`,
+  `domain` and `path`, an `origin`, a `url` — are not secrets and are not
+  masked; masking them would shred unrelated text. **No non-empty configured
+  secret value is ever dropped for being short.**
+- **Physical facts** — the build path, device and Appium endpoint this runner
+  resolved from its own config — become a placeholder naming the kind of fact
+  (`<path>`, `<device>`, `<endpoint>`), so the surrounding text stays a
+  diagnosis. These keep a minimum needle length, because a degenerate one is
+  worth nothing and would shred the diagnosis it appears in.
+
+Every needle is matched in both its **raw and JSON-escaped** forms, so a value
+holding a quote or a backslash is caught inside a JSON document as well as in
+plain text, and the rewritten document is still parseable.
 
 Case progress (`POST /runner/groups/:g/cases/:run_id/progress`) is telemetry,
 never load-bearing: while a case runs, the executor folds the engine's progress
@@ -1433,8 +1436,10 @@ quote the capabilities and the endpoint they were handed. The executor therefore
 masks its group's build path, device and Appium endpoint — with the
 placeholders `<path>`, `<device>` and `<endpoint>`, so the sentence stays a
 diagnosis — in every string of the case report it posts (including the
-manifest's `result.error`), in the manifest it stages live, and in the
-`manifest.json` of the bundle it seals.
+manifest's `result.error`), and in every textual byte that crosses
+[the platform evidence boundary](#the-platform-evidence-boundary): the manifest
+it stages live, and every text entry of the bundle it seals, not `manifest.json`
+alone.
 The same discipline covers a failed provider mint: its error is the customer
 script's own first line of stderr, so it is scrubbed of every value the grant
 handed that script before it is posted on the claim or as the dispatch's error.

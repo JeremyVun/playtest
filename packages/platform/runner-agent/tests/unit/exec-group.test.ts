@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { applyLimitOverrides, resolveHostedBudget } from "../../src/exec-group.ts";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { applyLimitOverrides, claimGroupSessions, resolveHostedBudget } from "../../src/exec-group.ts";
+import { RunnerApiError } from "../../src/api-client.ts";
 
 test("run-group limits override one resolved case without mutating suite defaults", () => {
   const resolved = { id: "checkout", limits: { max_steps: 50, timeout_ms: 240_000 } };
@@ -87,4 +91,145 @@ test("progressReporter coalesces events inside the throttle window", async () =>
   p.stop();
   assert.ok(posts.length <= 3, `bursts coalesce (saw ${posts.length} posts)`);
   assert.equal(posts.at(-1).step, 5, "the last snapshot carries the latest state");
+});
+
+// ------------------------------------ in-group mints: script vs delivery (B4)
+//
+// The in-group half of the same boundary `exec-mint.ts` keeps for a standalone
+// mint: the customer's script runs exactly once, and only the FULFILLMENT
+// request is retried. A transport failure after a successful mint used to be
+// posted on the claim as if the script had failed.
+
+/** A grant whose script records every invocation and prints a session. */
+function countingGrant(workDir: string, claimId: string) {
+  const counter = path.join(workDir, `${claimId}.invocations`);
+  return {
+    counter,
+    mint: {
+      claim_id: claimId,
+      provider: "sso",
+      identity: "member",
+      code: `
+        import { appendFileSync } from "node:fs";
+        appendFileSync(process.env.COUNTER_FILE, "x");
+        process.stdout.write(JSON.stringify({ cookies: [{ name: "sid", value: "minted-once" }], origins: [] }));
+      `,
+      identity_config: {},
+      env: { COUNTER_FILE: counter },
+      timeout_s: 10,
+    },
+  };
+}
+
+const invocations = (counter: string) => (fs.existsSync(counter) ? fs.readFileSync(counter, "utf8").length : 0);
+const spec = { sessions: { needed: ["sso/member"] } };
+
+test("an in-group mint retries only its fulfillment, and runs the script exactly once", async () => {
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "pt-group-mint-"));
+  try {
+    const { mint, counter } = countingGrant(workDir, "claim-in-group");
+    const posts: LegacyTestValue[] = [];
+    let failures = 2;
+    const api = {
+      json: async (method: string, route: string, body: LegacyTestValue) => {
+        posts.push({ route, body });
+        if (route === "/runner/sessions/claim") return { sessions: { "sso/member": { pending: true, mint } } };
+        if (failures-- > 0) throw new RunnerApiError(500, { error: { code: "internal", message: "gateway blip" } });
+        return { session: { id: "sess-1", storage_state: { cookies: [], origins: [] } } };
+      },
+    };
+
+    const out = await claimGroupSessions(api, spec, { isolation: "process", workDir, sleep: async () => {} });
+
+    assert.equal(out.sessions["sso/member"].id, "sess-1");
+    assert.deepEqual(out.failed, {}, "a delivered mint fails nothing");
+    assert.equal(invocations(counter), 1, "the customer's script ran exactly once");
+    const fulfills = posts.filter((p) => p.route.endsWith("/fulfill"));
+    assert.equal(fulfills.length, 3, "only the fulfillment request was retried");
+    assert.equal(fulfills.every((p) => p.body.error === undefined), true, "no script error was ever posted");
+  } finally {
+    fs.rmSync(workDir, { recursive: true, force: true });
+  }
+});
+
+test("an in-group mint whose fulfillment cannot be delivered is not reported as a script failure", async () => {
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "pt-group-mint-"));
+  try {
+    const { mint, counter } = countingGrant(workDir, "claim-undeliverable");
+    const posts: LegacyTestValue[] = [];
+    const api = {
+      json: async (method: string, route: string, body: LegacyTestValue) => {
+        posts.push({ route, body });
+        if (route === "/runner/sessions/claim") return { sessions: { "sso/member": { pending: true, mint } } };
+        throw new RunnerApiError(500, { error: { code: "internal", message: "gateway blip" } });
+      },
+    };
+
+    const out = await claimGroupSessions(api, spec, { isolation: "process", workDir, sleep: async () => {} });
+
+    assert.match(out.failed["sso/member"], /could not be delivered/);
+    assert.equal(invocations(counter), 1);
+    assert.equal(
+      posts.filter((p) => p.route.endsWith("/fulfill")).every((p) => p.body.error === undefined),
+      true,
+      "the claim never carries a script error the script did not produce",
+    );
+  } finally {
+    fs.rmSync(workDir, { recursive: true, force: true });
+  }
+});
+
+test("an in-group mint script that really fails is posted on the claim, scrubbed", async () => {
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "pt-group-mint-"));
+  try {
+    const mint = {
+      claim_id: "claim-script-failed",
+      provider: "sso",
+      identity: "member",
+      code: `console.error("idp rejected ROOT_PW=" + process.env.ROOT_PW); process.exit(1);`,
+      identity_config: {},
+      env: { ROOT_PW: "hunter2-super-secret" },
+      timeout_s: 10,
+    };
+    const posts: LegacyTestValue[] = [];
+    const api = {
+      json: async (method: string, route: string, body: LegacyTestValue) => {
+        posts.push({ route, body });
+        if (route === "/runner/sessions/claim") return { sessions: { "sso/member": { pending: true, mint } } };
+        return {};
+      },
+    };
+
+    const out = await claimGroupSessions(api, spec, { isolation: "process", workDir, sleep: async () => {} });
+
+    assert.match(out.failed["sso/member"], /idp rejected/);
+    assert.equal(out.failed["sso/member"].includes("hunter2-super-secret"), false, "the grant's secret is scrubbed");
+    const fulfills = posts.filter((p) => p.route.endsWith("/fulfill"));
+    assert.equal(fulfills.length, 1, "a failed script is reported once, not retried");
+    assert.ok(fulfills[0].body.error, "the failure is posted on the claim so the next claimer takes over");
+  } finally {
+    fs.rmSync(workDir, { recursive: true, force: true });
+  }
+});
+
+test("a stale-owner refusal during fulfillment ends the attempt instead of failing one identity", async () => {
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "pt-group-mint-"));
+  try {
+    const { mint, counter } = countingGrant(workDir, "claim-fenced");
+    const api = {
+      json: async (method: string, route: string) => {
+        if (route === "/runner/sessions/claim") return { sessions: { "sso/member": { pending: true, mint } } };
+        throw new RunnerApiError(409, {
+          error: { code: "executor_conflict", message: "a newer executor owns this work", details: { reason: "executor_replaced" } },
+        });
+      },
+    };
+    await assert.rejects(
+      claimGroupSessions(api, spec, { isolation: "process", workDir, sleep: async () => {} }),
+      /newer executor/,
+    );
+    assert.equal(invocations(counter), 1);
+  } finally {
+    fs.rmSync(workDir, { recursive: true, force: true });
+  }
 });

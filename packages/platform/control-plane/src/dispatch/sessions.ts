@@ -3,7 +3,7 @@ import { AppError, badRequest, conflict, forbidden, notFound } from "../errors.t
 import { encryptSecret, decryptSecret } from "../crypto/secrets.ts";
 import { audit } from "../audit.ts";
 import { targetSnapshot } from "./dispatcher.ts";
-import { concludeMintDispatchesFor } from "./state.ts";
+import { concludeDispatch, concludeMintDispatchesFor, killDispatch } from "./state.ts";
 
 // A script mint grant expires after this long; past it the claim is abandoned
 // and the next claimer takes over the mint (single-flight with takeover, §3a).
@@ -184,7 +184,13 @@ async function grantStandaloneMint(ctx: HostedDynamic, tx: HostedDynamic, { prov
         ORDER BY attempt DESC LIMIT 1`,
       [open.rows[0].id],
     );
-    return { alreadyPending: true, claimId: open.rows[0].id, dispatchId: existing.rows[0]?.id ?? null };
+    // Mashing the button while a real attempt is live reuses that attempt.
+    if (existing.rows[0]) return { alreadyPending: true, claimId: open.rows[0].id, dispatchId: existing.rows[0].id };
+    // The claim is still live, but nothing on the board can execute it: its
+    // attempt ended without the claim being abandoned. Answering `pending` with
+    // a null dispatch is how a forced mint used to sit there until the generic
+    // 15-minute expiry, so post a NEW attempt for the same claim instead.
+    return await postMintDispatch(tx, { provider, identity, claimId: open.rows[0].id, actor });
   }
   // Takeover of abandoned grants, exactly as the in-group claim path does.
   await tx.query(
@@ -197,6 +203,16 @@ async function grantStandaloneMint(ctx: HostedDynamic, tx: HostedDynamic, { prov
        VALUES ($1, $2, $3, $4)`,
     [claimId, provider.id, identity, new Date(Date.now() + STANDALONE_CLAIM_TTL_MS)],
   );
+  return await postMintDispatch(tx, { provider, identity, claimId, actor });
+}
+
+/**
+ * Allocate the next `mint` attempt for one session claim and write its ledger
+ * row — which IS its claim-board entry. The attempt is allocated in the same
+ * statement sequence that inserts the row, with `(kind, ref_id, attempt)` unique
+ * behind it, exactly as a group's continuation is.
+ */
+async function postMintDispatch(tx: HostedDynamic, { provider, identity, claimId, actor }: HostedDynamic) {
   const dispatchId = ulid();
   const attempt = await tx.query(
     `SELECT COALESCE(MAX(attempt), 0) + 1 AS attempt FROM dispatches WHERE kind = 'mint' AND ref_id = $1`,
@@ -301,6 +317,45 @@ export async function concludeMintDispatch(ctx: HostedDynamic, claimId: HostedDy
   await concludeMintDispatchesFor(ctx.db, claimId, { error: error ? String(error).slice(0, 500) : null });
 }
 
+/**
+ * The ONE terminal cleanup for a mint attempt that can never complete: its claim
+ * expired, was abandoned, was taken over, or was never there. Both the exchange
+ * refusal and the reconciler go through it, so a genuinely dead mint always
+ * leaves the same two facts behind and a forced refresh never finds a pending
+ * claim with nothing to execute it.
+ *
+ * A claim that actually FULFILLED just concludes the ledger row — the mint
+ * succeeded, whatever became of its executor afterwards. Anything else abandons
+ * the pending grant (single-flight takeover: the next claim or forced refresh
+ * mints afresh) and records the death with its reason. The DELETE restates
+ * `pending`, so a mint that fulfils between the read and the write keeps its
+ * claim and concludes rather than dying.
+ *
+ * This is NOT the answer to "a previous executor exists". A dispatch whose
+ * runner crashed after exchanging is resumable, and resuming it is the
+ * exchange's job (`executor-api.ts`, mint exchange).
+ */
+export async function terminateMintDispatch(
+  tx: HostedDynamic,
+  { dispatchId, claimId, reason }: { dispatchId: string; claimId: string; reason: string },
+): Promise<{ outcome: "concluded" | "dead"; ok: boolean }> {
+  const { rows } = await tx.query(`SELECT * FROM session_claims WHERE id = $1`, [claimId]);
+  const claim = rows[0] ?? null;
+  if (claim?.status === "fulfilled") {
+    const concluded = await concludeDispatch(tx, dispatchId, { error: null });
+    return { outcome: "concluded", ok: concluded.ok };
+  }
+  if (claim) {
+    const abandoned = await tx.query(`DELETE FROM session_claims WHERE id = $1 AND status = 'pending'`, [claimId]);
+    if (abandoned.rowCount === 0) {
+      const concluded = await concludeDispatch(tx, dispatchId, { error: null });
+      return { outcome: "concluded", ok: concluded.ok };
+    }
+  }
+  const killed = await killDispatch(tx, dispatchId, { error: String(reason).slice(0, 500) });
+  return { outcome: "dead", ok: killed.ok };
+}
+
 export async function listProviderSessions(ctx: HostedDynamic, providerId: HostedDynamic) {
   const provider = await getProviderById(ctx.db, providerId);
   const { rows } = await ctx.db.query(
@@ -380,6 +435,15 @@ async function resolveScriptEnv(ctx: HostedDynamic, tx: HostedDynamic, provider:
  * Complete (or abandon) a script mint grant. Success encrypts the storage state
  * into session_artifacts and returns the session so the winner needs no
  * re-claim; failure deletes the claim so the next claimer takes over the mint.
+ *
+ * Completion is IDEMPOTENT for the executor that produced it. A delivery whose
+ * response was lost is retried by that executor, and the mint script has already
+ * run — rerunning a customer's login script to answer a retry is exactly what
+ * this must not cause. The stored result is the session artifact this claim's
+ * mint wrote (the `(provider, identity)` row the upsert below maintains), so the
+ * retry is answered from platform state and the script runs exactly once. A
+ * different executor is still refused, and a retry never overwrites the
+ * winner's artifact with a second set of bytes.
  */
 export async function fulfillSessionClaim(ctx: HostedDynamic, { claimId, executorId = null, storageState, error, actor }: HostedDynamic) {
   return await ctx.db.withTx(async (tx: HostedDynamic) => {
@@ -391,7 +455,16 @@ export async function fulfillSessionClaim(ctx: HostedDynamic, { claimId, executo
     );
     const claim = rows[0];
     if (!claim) throw notFound(`no session claim "${claimId}"`);
-    if (claim.status !== "pending") throw conflict(`session claim "${claimId}" was already fulfilled`);
+    if (claim.status !== "pending") {
+      if (claim.status === "fulfilled" && error == null && executorId && claim.executor_id === executorId) {
+        const stored = await tx.query(
+          `SELECT * FROM session_artifacts WHERE provider_id = $1 AND identity = $2`,
+          [claim.provider_id, claim.identity],
+        );
+        if (stored.rows[0]) return { session: sessionView(ctx, stored.rows[0]), redelivered: true };
+      }
+      throw conflict(`session claim "${claimId}" was already fulfilled`);
+    }
     // The claim must be bound to the calling executor (Phase 7 security review):
     // in-group claims bind at creation, standalone mint claims bind at exchange.
     // A runner token holder who merely learns a pending claim id must not be able

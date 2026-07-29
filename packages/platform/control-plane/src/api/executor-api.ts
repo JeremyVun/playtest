@@ -13,7 +13,6 @@ import {
   ACTIVE_DISPATCH_STATES,
   concludeDispatch,
   exchangeExecutor,
-  killDispatch,
   settleGroupDone,
 } from "../dispatch/state.ts";
 import { ulid } from "../ulid.ts";
@@ -22,7 +21,13 @@ import { decryptSecret } from "../crypto/secrets.ts";
 import { blobKey } from "../store/object-store.ts";
 import { appendRunEvent, emitRunStatus } from "../events/run-events.ts";
 import { emitPlatformEvent } from "../events/outbox.ts";
-import { claimSessions, fulfillSessionClaim, standaloneMintGrant, concludeMintDispatch } from "../dispatch/sessions.ts";
+import {
+  claimSessions,
+  concludeMintDispatch,
+  fulfillSessionClaim,
+  standaloneMintGrant,
+  terminateMintDispatch,
+} from "../dispatch/sessions.ts";
 import { dispatchContinuation } from "../dispatch/dispatcher.ts";
 import { diffSummaryForRun } from "./review.ts";
 import { extractFindingFromReport } from "../findings/extractor.ts";
@@ -104,14 +109,27 @@ export async function exchange(ctx: HostedDynamic) {
 }
 
 /**
- * Exchange for a `mint` dispatch: register the executor, bind the pending
- * claim to it (first exchange wins — a second executor is refused), and issue
- * a bearer scoped to `mint:<claim_id>` so group routes reject it and the two
- * mint routes below accept nothing else.
+ * Exchange for a `mint` dispatch: install this executor as the attempt's CURRENT
+ * executor, bind — or rebind — the pending claim to it, and issue a bearer
+ * scoped to `mint:<claim_id>` so group routes reject it and the two mint routes
+ * below accept nothing else.
  *
- * A refusal here is TERMINAL for the dispatch, not a retryable error, so it
- * concludes the ledger row in the same transaction (see `refuseMintExchange`)
- * before the 4xx is thrown.
+ * **A runner that crashed between exchange and completion resumes here.** The
+ * claim is already bound to that runner's previous executor, and rebinding it is
+ * the resume: a new current executor is installed atomically, the pre-crash
+ * bearer fails the identity check from that instant, and no revocation list is
+ * needed (§ "Current executor fencing"). The dispatch is NOT declared dead
+ * merely because a previous executor existed —
+ * `resolveExchangeDispatch` has already established that this runner holds the
+ * active claim on this very dispatch, which is the whole authority a resume
+ * needs. Only a claim bound to a DIFFERENT attempt's executor is refused.
+ *
+ * A refusal here is terminal for the dispatch: the claim is expired, gone, or
+ * another attempt's, so this attempt can never complete. It goes through the one
+ * mint cleanup path (`terminateMintDispatch`) in the same transaction, before
+ * the 4xx is thrown — without that write the board keeps answering this runner's
+ * poll with `current`, and the loop polls, exchanges, is refused, and polls
+ * again for as long as the claim window lasts.
  */
 async function mintExchange(ctx: HostedDynamic, { dispatch, executorId, versions, isolation }: HostedDynamic) {
   const claimId = dispatch.ref_id;
@@ -122,28 +140,39 @@ async function mintExchange(ctx: HostedDynamic, { dispatch, executorId, versions
     const { rows } = await tx.query(`SELECT * FROM session_claims WHERE id = $1`, [claimId]);
     const claim = rows[0];
     if (!claim || claim.status !== "pending" || new Date(claim.expires_at) < new Date()) {
-      refusal = await refuseMintExchange(tx, { dispatch, claim, error: unauthenticated(`mint claim "${claimId}" is no longer pending`) });
+      refusal = await endMintAttempt(tx, {
+        dispatch,
+        claimId,
+        error: unauthenticated(`mint claim "${claimId}" is no longer pending`),
+      });
       return;
     }
     if (claim.executor_id) {
-      refusal = await refuseMintExchange(tx, { dispatch, claim, error: forbidden(`mint claim "${claimId}" already belongs to another executor`) });
-      return;
+      // Whose executor is it? Only this dispatch's own previous attempt may be
+      // taken over; a claim bound to another dispatch's executor is work this
+      // runner never held.
+      const prior = await tx.query(`SELECT dispatch_id FROM executors WHERE id = $1`, [claim.executor_id]);
+      if (prior.rows[0]?.dispatch_id !== dispatch.id) {
+        refusal = await endMintAttempt(tx, {
+          dispatch,
+          claimId,
+          error: forbidden(`mint claim "${claimId}" already belongs to another executor`),
+        });
+        return;
+      }
     }
-    // First exchange wins. The binding update carries the whole precondition the
-    // read just checked (this replaces the Postgres row lock), so a second
-    // executor loses here and is refused with the same error it gets today.
+    // The bind restates the whole precondition the read just checked, INCLUDING
+    // which executor it is replacing (`IS` is null-safe), so two exchanges
+    // racing for one grant cannot both believe they own it.
     const bound = await tx.query(
       `UPDATE session_claims SET executor_id = $2
-        WHERE id = $1 AND status = 'pending' AND expires_at > $3 AND executor_id IS NULL`,
-      [claimId, executorId, new Date()],
+        WHERE id = $1 AND status = 'pending' AND expires_at > $3 AND executor_id IS $4`,
+      [claimId, executorId, new Date(), claim.executor_id ?? null],
     );
     if (bound.rowCount === 0) {
-      const { rows: after } = await tx.query(`SELECT * FROM session_claims WHERE id = $1`, [claimId]);
-      const error = after[0]?.executor_id
-        ? forbidden(`mint claim "${claimId}" already belongs to another executor`)
-        : unauthenticated(`mint claim "${claimId}" is no longer pending`);
-      refusal = await refuseMintExchange(tx, { dispatch, claim: after[0], error });
-      return;
+      // A lost race, not a terminal refusal: roll back and say what won.
+      refusal = conflict(`mint claim "${claimId}" changed hands while this exchange was deciding`);
+      throw new RollbackExchange();
     }
     const installed = await exchangeExecutor(tx, {
       dispatchId: dispatch.id,
@@ -153,9 +182,9 @@ async function mintExchange(ctx: HostedDynamic, { dispatch, executorId, versions
       isolation,
     });
     if (!installed.ok) {
-      // A lost race, not a terminal refusal: roll the whole exchange back
-      // (including the claim binding) rather than leaving the claim bound to an
-      // executor that never became current.
+      // Also a lost race: roll the whole exchange back (including the claim
+      // binding) rather than leaving the claim bound to an executor that never
+      // became current.
       refusal = conflict(`mint dispatch "${dispatch.id}" is "${installed.status}" and can no longer be exchanged for`, {
         state: installed.status,
       });
@@ -172,39 +201,21 @@ async function mintExchange(ctx: HostedDynamic, { dispatch, executorId, versions
 }
 
 /**
- * A mint exchange the presenting runner can never win — the claim is gone,
- * expired, or already bound to an executor. First exchange wins, so this claim
- * can never be exchanged again and the dispatch is finished whatever happens
- * next; conclude it here.
- *
- * That write IS the termination. Without it the board keeps answering this
- * runner's poll with `current` (it still holds an active claim), and a runner
- * resuming after a crash polls, exchanges, is refused, and polls again — with no
- * hold on the poll and no error the loop can act on, for as long as the claim
- * window lasts.
- *
- * The status is the one `markMintDead` picks for the same facts: a claim that
- * actually fulfilled concludes, and anything else is a death carrying its
- * reason. The claim row is deliberately left alone — abandoning a grant another
- * executor may still be minting under is the reconciler's decision to make, and
- * an unfulfilled one is taken over at expiry exactly as it is today.
- *
- * `dispatch` is always the presenting runner's own active claim: nothing else
- * resolves out of `resolveExchangeDispatch`, and the write restates that.
+ * End a mint attempt that can never complete, through the one cleanup path every
+ * caller uses (`terminateMintDispatch`), and return the error to raise outside
+ * the transaction. `dispatch` is always the presenting runner's own active
+ * claim: nothing else resolves out of `resolveExchangeDispatch`.
  */
-async function refuseMintExchange(tx: HostedDynamic, { dispatch, claim, error }: HostedDynamic) {
-  const fulfilled = claim?.status === "fulfilled";
-  const concluded = fulfilled
-    ? await concludeDispatch(tx, dispatch.id, { error: null })
-    : await killDispatch(tx, dispatch.id, { error: error.message });
-  if (concluded.ok) {
+async function endMintAttempt(tx: HostedDynamic, { dispatch, claimId, error }: HostedDynamic) {
+  const ended = await terminateMintDispatch(tx, { dispatchId: dispatch.id, claimId, reason: error.message });
+  if (ended.ok) {
     await audit(tx, {
       actor: { system: "runner" },
       action: "dispatch.dead",
       entityType: "dispatch",
       entityId: dispatch.id,
       projectId: dispatch.project_id,
-      detail: { kind: "mint", claim_id: dispatch.ref_id, reason: error.message, refused_at: "exchange" },
+      detail: { kind: "mint", claim_id: claimId, reason: error.message, refused_at: "exchange", outcome: ended.outcome },
     });
   }
   return error;
@@ -220,9 +231,17 @@ export async function mintSpec(ctx: HostedDynamic) {
  * POST /runner/mints/:claim/complete {storage_state} | {error} — fulfill (or
  * abandon) the claim exactly like the in-group fulfill, then conclude the mint
  * dispatch ledger row so the admin page and reconciler see it finished.
+ *
+ * Like a group's completion, this stays meaningful after its own dispatch
+ * concluded: a delivery whose RESPONSE was lost is retried by the current
+ * executor, and answering `dispatch_not_active` would push the runner into
+ * rerunning a mint script that already succeeded. `reconciled_dead` is still
+ * excluded — that attempt's outcome is already decided.
  */
 export async function mintComplete(ctx: HostedDynamic) {
-  const runner = await requireMintExecutor(ctx, ctx.params.claim);
+  const runner = await requireMintExecutor(ctx, ctx.params.claim, {
+    dispatchStates: [...ACTIVE_DISPATCH_STATES, "concluded"],
+  });
   const body = await readJsonBody(ctx.req, { limit: 8 * 1024 * 1024 });
   const result = await fulfillSessionClaim(ctx, {
     claimId: ctx.params.claim,

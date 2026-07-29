@@ -11,7 +11,7 @@ import { CONTAINER_WS, runCaseIsolated, stopActiveCases } from "./case-runner.ts
 import { liveUploader } from "./live-uploader.ts";
 import { platformEvidence } from "./evidence.ts";
 import { cleanupWorkspace, sweepDocker } from "./janitor.ts";
-import { runMintScript } from "./mint.ts";
+import { deliverMintResult, runMintScript } from "./mint.ts";
 import { makeMasker, makeRedactor, secretMasks, collectSecretValues, redactDeep } from "./redact.ts";
 import { AppiumBackends } from "./appium.ts";
 import { bindingFor } from "./runner-config.ts";
@@ -443,6 +443,11 @@ export function applyLimitOverrides(resolvedCase: RunnerDynamic, overrides: Runn
  * mint reports the error on the claim (so the next claimer takes over) and
  * lands in `failed` — only the cases needing that identity go infra, not the
  * group. `secretValues` feeds the redactor with the grant's root secrets.
+ *
+ * "The script failed" and "the fulfillment request failed" are kept apart here
+ * exactly as they are in `exec-mint.ts`: the script runs once, and only its
+ * delivery is retried. `opts.sleep` is that retry's wait, and exists so a test
+ * can drive the retry without waiting through it.
  */
 export async function claimGroupSessions(api: RunnerDynamic, spec: RunnerDynamic, opts: RunnerDynamic): Promise<RunnerDynamic> {
   const needed = spec.sessions?.needed || [];
@@ -460,26 +465,40 @@ export async function claimGroupSessions(api: RunnerDynamic, spec: RunnerDynamic
         sessions[ref] = r;
       } else if (r?.pending && r.mint) {
         for (const v of Object.values(r.mint.env || {})) secretValues.push(v);
+        // A failed mint's first line is the customer's OWN script talking
+        // (mint.ts takes stderr's first line), and the script was handed this
+        // grant's resolved secrets — so an `echo $TOKEN` or a library that
+        // prints the value it POSTed lands here. It is posted on the claim and
+        // served to developers as the dispatch error, so it is scrubbed of
+        // every value the grant carries before it goes. This runs before the
+        // group's redactor exists, hence its own.
+        const redact = makeRedactor([...secretValues, ...Object.values(r.mint.env || {})]);
+        const fulfillPath = `/runner/sessions/${r.mint.claim_id}/fulfill`;
+        let storageState;
         try {
-          const storageState = await runMintScript(r.mint, { isolation: opts.isolation, workDir: opts.workDir });
-          const fulfilled = await api.json("POST", `/runner/sessions/${r.mint.claim_id}/fulfill`, {
-            storage_state: storageState,
-          });
+          storageState = await runMintScript(r.mint, { isolation: opts.isolation, workDir: opts.workDir });
+        } catch (e) {
+          const msg = redact(firstLine(e));
+          await api.json("POST", fulfillPath, { error: msg }).catch(() => {});
+          failed[ref] = msg;
+          continue;
+        }
+        // The script ran, exactly once. Only DELIVERY is retried from here, and
+        // a transport failure is never posted on the claim as a script error:
+        // the mint SUCCEEDED, so blaming the customer's code would mislead a
+        // developer and abandon a grant that produced a session. An undelivered
+        // grant simply expires and the next claimer takes it over.
+        try {
+          const fulfilled = await deliverMintResult(api, fulfillPath, { storage_state: storageState }, { sleep: opts.sleep });
           sessions[ref] = fulfilled.session;
         } catch (e) {
-          // A failed mint's first line is the customer's OWN script talking
-          // (mint.ts takes stderr's first line), and the script was handed this
-          // grant's resolved secrets — so an `echo $TOKEN` or a library that
-          // prints the value it POSTed lands here. It is posted on the claim and
-          // served to developers as the dispatch error, so it is scrubbed of
-          // every value the grant carries before it goes. This runs before the
-          // group's redactor exists, hence its own.
-          const redact = makeRedactor([...secretValues, ...Object.values(r.mint.env || {})]);
-          const msg = redact(firstLine(e));
-          await api
-            .json("POST", `/runner/sessions/${r.mint.claim_id}/fulfill`, { error: msg })
-            .catch(() => {});
-          failed[ref] = msg;
+          // A stale-owner refusal is not this mint's failure at all: this
+          // executor no longer owns the group, so the fence ends the whole
+          // attempt rather than degrading one identity.
+          if (isStaleExecutorError(e)) throw e;
+          failed[ref] = redact(
+            `the session mint for ${ref} succeeded, but its result could not be delivered: ${firstLine(e)}`,
+          );
         }
       } else if (r?.pending) {
         next.push(ref);

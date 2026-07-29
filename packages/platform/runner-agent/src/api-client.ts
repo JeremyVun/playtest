@@ -12,6 +12,17 @@ export function isStaleExecutorError(e: unknown): boolean {
   return e instanceof RunnerApiError && e.status === 409 && e.code === EXECUTOR_CONFLICT_CODE;
 }
 
+/**
+ * A request the control plane refused ON ITS MERITS (4xx): the claim is gone,
+ * this bearer is no longer current, or the body is wrong. Sending it again
+ * produces the identical answer, so it is never retried. Everything else — a
+ * 5xx, a dropped socket, a control plane restarting under a deploy — is
+ * transient and worth another attempt.
+ */
+export function isRunnerRefusal(e: unknown): boolean {
+  return e instanceof RunnerApiError && e.status >= 400 && e.status < 500;
+}
+
 export class RunnerApiError extends Error {
   declare status: number;
   declare code: string;

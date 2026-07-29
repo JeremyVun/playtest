@@ -1467,6 +1467,50 @@ Setup scripts and hooks receive only explicitly delivered secret environment
 variables or secret files. Suite files cannot shadow the platform-managed
 secret directory.
 
+### Standalone mint resume and idempotent completion
+
+A forced refresh of a `script` provider is a `mint` dispatch on the claim board,
+and a runner can die anywhere in it. Recovery is the fencing model, not a special
+case:
+
+- **A crashed runner resumes its own attempt.** A second exchange for the same
+  mint dispatch by the runner that holds its claim installs a **new current
+  executor** and **rebinds the pending session claim** to it, atomically. The
+  previous executor is stale by identity from that instant — its bearer fails
+  `requireCurrentExecutor` with `executor_conflict` / `executor_replaced` and can
+  neither read the grant nor complete anything — so no revocation list exists or
+  is needed. A resume is the same attempt: no second dispatch row, no second
+  attempt number.
+- **A previous executor is not a reason to declare a dispatch dead.** Only a
+  claim that is gone, expired, or bound to a DIFFERENT attempt's executor refuses
+  the exchange.
+- **One terminal cleanup.** A mint attempt that can never complete goes through
+  a single path (`terminateMintDispatch`), used by both the refused exchange and
+  the reconciler: a claim that actually fulfilled just concludes the ledger row;
+  anything else abandons the pending grant (single-flight takeover) and records
+  the death with its reason. The abandoning DELETE restates `pending`, so a mint
+  that fulfils in the gap keeps its claim and concludes instead of dying.
+- **A forced mint always has something to execute it.** Mashing the button while
+  a real attempt is live reuses that attempt; a claim that is still live but
+  whose attempt ended gets a **new attempt posted for the same claim**. No
+  supported path answers `pending` with a null dispatch and waits out the
+  15-minute claim expiry.
+- **Completion is idempotent for the current executor.** Mint completion — and
+  the in-group fulfillment it shares its implementation with — stays meaningful
+  after its own dispatch concluded, exactly as a group's completion does. A
+  retry by the executor that fulfilled the claim **redelivers the stored
+  session** (`redelivered: true`) rather than fulfilling it a second time, so a
+  lost response never reruns a customer's login script and a second set of bytes
+  never overwrites the winner's artifact. Any other executor is still refused.
+
+The runner keeps the same distinction on its side, at both mint sites (the
+standalone executor and the in-group session claim): **the mint script runs
+exactly once, and only its delivery is retried.** A transport failure after a
+successful mint is never posted on the claim as a script error — that would tell
+a developer their login code is broken when it is not, and abandon a grant that
+produced a session; the grant simply expires and the next claimer takes it over.
+A 4xx is final and is never retried.
+
 ## Personas
 
 A project keeps a table of personas — `{ name, description }` prose a story

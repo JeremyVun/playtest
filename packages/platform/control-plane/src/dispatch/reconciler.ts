@@ -2,6 +2,7 @@ import { audit } from "../audit.ts";
 import { appendRunEvent, emitRunStatus } from "../events/run-events.ts";
 import { emitPlatformEvent } from "../events/outbox.ts";
 import { dispatchContinuation } from "./dispatcher.ts";
+import { terminateMintDispatch } from "./sessions.ts";
 import { exitSummary } from "../api/executor-api.ts";
 import { inClause } from "../db.ts";
 import {
@@ -190,25 +191,20 @@ async function markDead(ctx: HostedDynamic, dispatch: HostedDynamic, { reason, r
 async function markMintDead(ctx: HostedDynamic, dispatch: HostedDynamic, { reason }: HostedDynamic) {
   let action = "dead";
   await ctx.db.withTx(async (tx: HostedDynamic) => {
-    const { rows } = await tx.query(`SELECT * FROM session_claims WHERE id = $1`, [dispatch.ref_id]);
-    const claim = rows[0];
-    if (claim?.status === "fulfilled") {
-      await concludeDispatch(tx, dispatch.id);
+    // The ONE terminal cleanup for a mint attempt (`dispatch/sessions.ts`),
+    // shared with the exchange refusal: a fulfilled claim concludes, an
+    // abandoned grant is deleted so the next claimer takes over, and the DELETE
+    // restates `pending` so a mint that fulfils in the gap concludes instead of
+    // dying.
+    const ended = await terminateMintDispatch(tx, {
+      dispatchId: dispatch.id,
+      claimId: dispatch.ref_id,
+      reason,
+    });
+    if (ended.outcome === "concluded") {
       action = "already_complete";
       return;
     }
-    if (claim) {
-      // Abandoning the grant re-asserts `pending` in the DELETE (this is what the
-      // Postgres row lock bought): a mint that fulfils between the read and the
-      // write keeps its claim row, and the dispatch concludes rather than dying.
-      const abandoned = await tx.query(`DELETE FROM session_claims WHERE id = $1 AND status = 'pending'`, [claim.id]);
-      if (abandoned.rowCount === 0) {
-        await concludeDispatch(tx, dispatch.id);
-        action = "already_complete";
-        return;
-      }
-    }
-    await killDispatch(tx, dispatch.id, { error: reason });
     await audit(tx, {
       actor: { system: "reconciler" },
       action: "dispatch.dead",

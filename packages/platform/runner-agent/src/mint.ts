@@ -7,8 +7,54 @@
 import childProcess from "node:child_process";
 import fsp from "node:fs/promises";
 import path from "node:path";
+import { isRunnerRefusal } from "./api-client.ts";
 
 const STDOUT_LIMIT = 8 * 1024 * 1024;
+
+/** Attempts, and the waits between them, for delivering a mint result. */
+const DELIVERY_ATTEMPTS = 4;
+const DELIVERY_BACKOFF_MS = 250;
+const DELIVERY_BACKOFF_MAX_MS = 4_000;
+
+/**
+ * Deliver a mint result to the control plane, retrying the REQUEST and nothing
+ * else.
+ *
+ * "The mint script failed" and "the completion request failed" are different
+ * failures with different remedies, and conflating them is expensive in both
+ * directions: a transport hiccup reported as a script failure tells a developer
+ * their login code is broken when it is not, and it abandons a grant whose mint
+ * actually succeeded. So the script runs exactly once, outside this function,
+ * and only its delivery is attempted again.
+ *
+ * A 4xx is final — the claim is gone, or this executor is no longer the current
+ * one — and is raised immediately; a 5xx or a transport error is transient. The
+ * platform end is idempotent for the current executor, so a retry after a lost
+ * RESPONSE is answered from stored state rather than re-fulfilling anything
+ * (docs/contracts/hosted.md, "Standalone mint resume and idempotent
+ * completion").
+ */
+export async function deliverMintResult(
+  api: RunnerDynamic,
+  path: string,
+  body: RunnerDynamic,
+  { attempts = DELIVERY_ATTEMPTS, sleep = defaultSleep }: RunnerDynamic = {},
+): Promise<RunnerDynamic> {
+  let last: unknown;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await api.json("POST", path, body);
+    } catch (e) {
+      if (isRunnerRefusal(e)) throw e;
+      last = e;
+      if (attempt === attempts) break;
+      await sleep(Math.min(DELIVERY_BACKOFF_MAX_MS, DELIVERY_BACKOFF_MS * 2 ** (attempt - 1)));
+    }
+  }
+  throw last;
+}
+
+const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 export async function runMintScript(grant: RunnerDynamic, { isolation = "process", workDir, image = null }: RunnerDynamic = {}): Promise<RunnerDynamic> {
   const dir = path.join(workDir, "mints", safeName(grant.claim_id));

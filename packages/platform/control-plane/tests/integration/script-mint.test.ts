@@ -197,7 +197,7 @@ test("failed mint deletes the claim so the next claimer takes over", async () =>
   });
 });
 
-test("fulfill is executor-scoped and single-shot", async () => {
+test("fulfill is executor-scoped, and a retry redelivers rather than re-fulfilling", async () => {
   await withApp(async ({ api, base }: HostedDynamic) => {
     const { projectKey, suite, ring } = await setupFixture(api, { projectKey: "scriptmintscope" });
     const groupId = await launchGroup(api, projectKey, { suiteId: suite.id, ringId: ring.id });
@@ -218,11 +218,25 @@ test("fulfill is executor-scoped and single-shot", async () => {
     });
     assert.equal(ok.status, 200, JSON.stringify(ok.body));
 
+    // A fulfillment whose RESPONSE was lost is retried by the executor that
+    // produced it, and the mint script has already run: answering `conflict`
+    // would push a runner into reporting a failure it did not have, or into
+    // minting again. So the retry REDELIVERS the stored session — the grant is
+    // still fulfilled exactly once, and a second set of bytes never overwrites
+    // the winner's artifact (B4, docs/contracts/hosted.md).
     const again = await fulfill(base, exA.token, grantA.claim_id, {
+      storage_state: { cookies: [{ name: "sid", value: "a-second-mint-that-never-happened" }], origins: [] },
+    });
+    assert.equal(again.status, 200, JSON.stringify(again.body));
+    assert.equal(again.body.redelivered, true);
+    assert.equal(again.body.session.storage_state.cookies[0].value, "once", "the stored result, not the retry's bytes");
+
+    // Anyone else retrying it is still refused outright.
+    const notMine = await fulfill(base, exB.token, grantA.claim_id, {
       storage_state: { cookies: [], origins: [] },
     });
-    assert.equal(again.status, 409);
-    assert.equal(again.body.error.code, "conflict");
+    assert.equal(notMine.status, 409);
+    assert.equal(notMine.body.error.code, "conflict");
   });
 });
 

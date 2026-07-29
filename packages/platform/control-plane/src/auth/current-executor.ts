@@ -186,9 +186,17 @@ export async function requireGroupExecutor(
   return current as GroupExecutor; // SAFETY: a group-scoped guard always resolves its group or throws.
 }
 
-/** The guard both standalone-mint routes use. */
-export function requireMintExecutor(ctx: HostedDynamic, mintClaimId: string): Promise<CurrentExecutor> {
-  return requireCurrentExecutor(ctx, { mintClaimId });
+/**
+ * The guard both standalone-mint routes use. Mint completion widens
+ * `dispatchStates` the way a group's completion does, so the current executor's
+ * retried delivery is idempotent rather than a conflict.
+ */
+export function requireMintExecutor(
+  ctx: HostedDynamic,
+  mintClaimId: string,
+  options: Omit<ExecutorGuardOptions, "groupId" | "mintClaimId"> = {},
+): Promise<CurrentExecutor> {
+  return requireCurrentExecutor(ctx, { ...options, mintClaimId });
 }
 
 /**

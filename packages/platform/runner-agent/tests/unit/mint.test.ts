@@ -1,41 +1,21 @@
-// OWED BY B4 (standalone mint resume and idempotency), and deliberately not
-// written yet:
+// Two subjects, one boundary (B4):
 //
-// "Simulate a successful mint script followed by a transient completion request
-// failure. Prove the script is not rerun and the result is retried
-// idempotently."
+//   * `runMintScript` — clean-room execution of a `script` auth provider's mint
+//     grant with isolation "process". Only the grant's resolved env reaches the
+//     script, stdout must parse as a storage-state JSON object (tolerating noisy
+//     stdout via last-line fallback), nonzero exit surfaces stderr's first line,
+//     a runaway script is killed at timeout_s, and the per-claim temp dir is
+//     always cleaned up.
+//   * `executeMint` — the caller that decides what a failure MEANS. "The mint
+//     script failed" and "the completion request failed" used to share one
+//     catch, so a transport failure after a successful mint was posted on the
+//     claim as if the customer's login code were broken. They are now separate:
+//     the script runs exactly once and only its delivery is retried.
 //
-// `runMintScript` — this file's subject — already separates cleanly: it either
-// returns a storage state or throws. What conflates the two is its CALLERS, and
-// both of them: `exec-mint.ts` and the in-group path in `exec-group.ts`
-// (`claimGroupSessions`) each wrap the script AND the completion POST in one
-// catch, so a transport failure after a successful mint is reported on the
-// claim as if the customer's script had failed. There is no seam to test today
-// because there is no boundary between the two outcomes.
-//
-// B4 must split them and then satisfy:
-//
-//   1. a completion request that fails transiently is RETRIED, and the mint
-//      script runs exactly once (assert an invocation counter, not a timing);
-//   2. the claim never carries a script error that the script did not produce;
-//   3. mint completion is idempotent for the CURRENT executor, with enough
-//      result state stored to redeliver without re-minting;
-//   4. a runner that crashes between mint exchange and completion can resume:
-//      the same authorized runner re-exchanges, a new current executor is
-//      installed and the pending claim rebound, and the pre-crash bearer then
-//      fails the identity check with `executor_conflict` — the fence B2 already
-//      built, which is why B4 needs no revocation list. Today the opposite is
-//      true and is pinned as the current behavior in the control plane's
-//      pool-claim-board suite ("a mint exchange that can never be won concludes
-//      the dispatch instead of being re-offered"); that test encodes what B4
-//      replaces and should be rewritten with the change.
-//
-// Pins runMintScript: clean-room execution of a
-// `script` auth provider's mint grant with isolation "process" — only the
-// grant's resolved env reaches the script, stdout must parse as a
-// storage-state JSON object (tolerating noisy stdout via last-line fallback),
-// nonzero exit surfaces stderr's first line, a runaway script is killed at
-// timeout_s, and the per-claim temp dir is always cleaned up.
+// The control-plane half of the same contract — a crash between exchange and
+// completion resumed by the same runner, the pre-crash bearer fenced, and a
+// completion that is idempotent for the current executor — is proven through the
+// real routes in `tests/integration/pool-claim-board.test.ts`.
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -43,6 +23,8 @@ import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { runMintScript } from "../../src/mint.ts";
+import { executeMint } from "../../src/exec-mint.ts";
+import { RunnerApiError } from "../../src/api-client.ts";
 
 function freshWorkDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "pt-mint-test-"));
@@ -217,6 +199,160 @@ test("runMintScript kills a runaway script at timeout_s", async () => {
     const started = Date.now();
     await assert.rejects(runMintScript(grant, { isolation: "process", workDir }), /timed out/);
     assert.ok(Date.now() - started < 5000, "timeout fires promptly");
+  } finally {
+    await fsp.rm(workDir, { recursive: true, force: true });
+  }
+});
+
+// ------------------------------------------- script failure vs transport failure
+
+/** A grant whose script records every invocation and prints a session. */
+function countingGrant(workDir: string, claimId: string) {
+  const counter = path.join(workDir, `${claimId}.invocations`);
+  return {
+    counter,
+    grant: {
+      claim_id: claimId,
+      provider: "sso",
+      identity: "member",
+      code: `
+        import { appendFileSync } from "node:fs";
+        appendFileSync(process.env.COUNTER_FILE, "x");
+        process.stdout.write(JSON.stringify({ cookies: [{ name: "sid", value: "minted-once" }], origins: [] }));
+      `,
+      identity_config: {},
+      env: { COUNTER_FILE: counter },
+      timeout_s: 10,
+    },
+  };
+}
+
+function invocations(counter: string): number {
+  return fs.existsSync(counter) ? fs.readFileSync(counter, "utf8").length : 0;
+}
+
+const transient = () =>
+  new RunnerApiError(503, { error: { code: "storage_error", message: "the control plane is restarting" } });
+
+test("a mint completion that fails transiently is retried, and the script runs exactly once", async () => {
+  const workDir = freshWorkDir();
+  try {
+    const { grant, counter } = countingGrant(workDir, "claim-retry");
+    const posts: LegacyTestValue[] = [];
+    let failures = 2;
+    const api = {
+      json: async (method: string, route: string, body: LegacyTestValue) => {
+        posts.push({ method, route, body });
+        if (failures-- > 0) throw transient();
+        return { session: { id: "sess-1" } };
+      },
+    };
+
+    const out = await executeMint(api, { grant, claim: grant.claim_id, isolation: "process", workDir, sleep: async () => {} });
+
+    assert.equal(out.exitCode, 0);
+    assert.equal(out.minted, true);
+    // The invocation counter, not a timing: the customer's login script ran
+    // once, however many times its RESULT had to be delivered.
+    assert.equal(invocations(counter), 1, "the mint script ran exactly once");
+    assert.equal(posts.length, 3, "only the completion request was retried");
+    for (const p of posts) {
+      assert.equal(p.route, `/runner/mints/${grant.claim_id}/complete`);
+      assert.equal(p.body.storage_state.cookies[0].value, "minted-once");
+      assert.equal(p.body.error, undefined, "the claim never carries a script error the script did not produce");
+    }
+  } finally {
+    await fsp.rm(workDir, { recursive: true, force: true });
+  }
+});
+
+test("a completion that keeps failing never reports the customer's script as broken", async () => {
+  const workDir = freshWorkDir();
+  try {
+    const { grant, counter } = countingGrant(workDir, "claim-undeliverable");
+    const posts: LegacyTestValue[] = [];
+    const api = {
+      json: async (method: string, route: string, body: LegacyTestValue) => {
+        posts.push({ route, body });
+        throw transient();
+      },
+    };
+
+    const out = await executeMint(api, {
+      grant,
+      claim: grant.claim_id,
+      isolation: "process",
+      workDir,
+      sleep: async () => {},
+    });
+
+    assert.equal(out.exitCode, 1);
+    assert.equal(out.minted, true, "the mint itself succeeded and says so");
+    assert.match(out.error, /could not be delivered/);
+    assert.equal(invocations(counter), 1, "an undeliverable result never reruns the script");
+    // Nothing was posted as a failure: the grant simply expires and the next
+    // claimer takes it over, rather than being abandoned with a lie on it.
+    assert.equal(posts.every((p) => p.body.error === undefined), true, "no script error was posted");
+  } finally {
+    await fsp.rm(workDir, { recursive: true, force: true });
+  }
+});
+
+test("a mint script that really fails is posted on the claim, scrubbed of the grant's secrets", async () => {
+  const workDir = freshWorkDir();
+  try {
+    const grant = {
+      claim_id: "claim-script-failed",
+      provider: "sso",
+      identity: "member",
+      // The customer's script printing what it was handed: the exact shape the
+      // redaction exists for.
+      code: `console.error("login failed with ROOT_PW=" + process.env.ROOT_PW); process.exit(1);`,
+      identity_config: {},
+      env: { ROOT_PW: "hunter2-super-secret" },
+      timeout_s: 10,
+    };
+    const posts: LegacyTestValue[] = [];
+    const api = {
+      json: async (method: string, route: string, body: LegacyTestValue) => {
+        posts.push({ route, body });
+        return {};
+      },
+    };
+
+    const out = await executeMint(api, { grant, claim: grant.claim_id, isolation: "process", workDir, sleep: async () => {} });
+
+    assert.equal(out.exitCode, 1);
+    assert.equal(out.minted, undefined, "nothing was minted");
+    assert.equal(posts.length, 1);
+    assert.equal(posts[0].route, `/runner/mints/${grant.claim_id}/complete`);
+    assert.match(posts[0].body.error, /login failed/);
+    assert.equal(posts[0].body.error.includes("hunter2-super-secret"), false, "the grant's secret is scrubbed");
+    assert.equal(posts[0].body.storage_state, undefined);
+  } finally {
+    await fsp.rm(workDir, { recursive: true, force: true });
+  }
+});
+
+test("a refusal is final: a mint completion the platform refuses is never retried", async () => {
+  const workDir = freshWorkDir();
+  try {
+    const { grant, counter } = countingGrant(workDir, "claim-fenced");
+    let calls = 0;
+    const api = {
+      json: async () => {
+        calls += 1;
+        throw new RunnerApiError(409, {
+          error: { code: "executor_conflict", message: "a newer executor owns this work", details: { reason: "executor_replaced" } },
+        });
+      },
+    };
+    await assert.rejects(
+      executeMint(api, { grant, claim: grant.claim_id, isolation: "process", workDir, sleep: async () => {} }),
+      /newer executor/,
+    );
+    assert.equal(calls, 1, "a 4xx is the same answer every time; it is not retried");
+    assert.equal(invocations(counter), 1);
   } finally {
     await fsp.rm(workDir, { recursive: true, force: true });
   }

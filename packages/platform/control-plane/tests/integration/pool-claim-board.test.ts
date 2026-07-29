@@ -10,12 +10,20 @@
 // on the same board; the unclaimed timeout failing a group with an actionable
 // message; a heartbeat-stale claim reconciling to infra failure with bounded
 // re-dispatch; and cancellation observed at the heartbeat.
+//
+// Standalone mint recovery lives here too, because it is a claim-board story:
+// a runner that crashes between exchange and completion RESUMES its own
+// dispatch (the previous bearer becoming stale by identity), a claim nobody can
+// ever fulfill is terminated through the one cleanup path, and a live claim
+// whose attempt ended is re-posted rather than left pending with nothing to
+// execute it.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { withApp, createTarget, loadSuiteDir, REPO_ROOT } from "./helpers.ts";
 import { claimer } from "./exec-helpers.ts";
 import { writeTar } from "../../src/suites/tar.ts";
 import { reconcileDispatches } from "../../src/dispatch/reconciler.ts";
+import { killDispatch } from "../../src/dispatch/state.ts";
 
 /** A project with the todos suite committed and one labelled ring. */
 async function setUp(api: HostedDynamic, { key, labels = ["macos"] }: HostedDynamic) {
@@ -616,48 +624,185 @@ test("pool: an executor that comes back after being reconciled dead leaves exact
   }, { PLAYTEST_POOL_HEARTBEAT_TIMEOUT_S: "0" });
 });
 
-test("pool: a mint exchange that can never be won concludes the dispatch instead of being re-offered", async () => {
+/** A project-wide `script` provider with one identity, plus a registered runner. */
+async function mintFixture(api: HostedDynamic, base: HostedDynamic, key: string) {
+  const { project } = await setUp(api, { key });
+  const provider = (
+    await api.post(`/projects/${project.key}/auth-providers`, {
+      name: "portal",
+      kind: "script",
+      code: "console.log(JSON.stringify({cookies: [], origins: []}));",
+      identities: { admin: { username: "root" } },
+      ttl_minutes: 45,
+    })
+  ).body;
+  const registered = await register(api, project, { name: "adas-laptop" });
+  return { project, provider, runner: claimer(base, registered.credential) };
+}
+
+const mintCall = (base: string, token: string, path: string, body?: HostedDynamic) =>
+  fetch(`${base}/api/v1${path}`, {
+    method: body === undefined ? "GET" : "POST",
+    headers: {
+      authorization: `Bearer ${token}`,
+      ...(body === undefined ? {} : { "content-type": "application/json" }),
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  }).then(async (res) => ({ status: res.status, body: await res.json().catch(() => null) }));
+
+test("pool: a runner that crashes mid-mint resumes it, fencing the bearer it held before", async () => {
   await withApp(async ({ api, base, app }: HostedDynamic) => {
-    const { project } = await setUp(api, { key: "pool8" });
-    const provider = (
-      await api.post(`/projects/${project.key}/auth-providers`, {
-        name: "portal",
-        kind: "script",
-        code: "console.log(JSON.stringify({cookies: [], origins: []}));",
-        identities: { admin: { username: "root" } },
-        ttl_minutes: 45,
-      })
-    ).body;
-    const runner = claimer(base, (await register(api, project, { name: "adas-laptop" })).credential);
+    const { project, provider, runner } = await mintFixture(api, base, "pool8");
     const minted = await api.post(`/auth-providers/${provider.id}/mint`, { identity: "admin" });
     assert.equal(minted.status, 202, JSON.stringify(minted.body));
+    const claimId = minted.body.mint.claim_id;
 
     const entry = (await runner.poll("?wait=true")).body.offers[0];
     assert.equal(entry.kind, "mint");
     assert.equal((await runner.claim(entry.dispatch_id)).status, 200);
-    assert.equal((await runner.exchange({ dispatch_id: entry.dispatch_id, isolation: "process" })).status, 200);
+    const first = await runner.exchange({ dispatch_id: entry.dispatch_id, isolation: "process" });
+    assert.equal(first.status, 200, JSON.stringify(first.body));
 
-    // The agent restarts mid-mint. The board hands back the claim it still
-    // holds — but first exchange wins, so this dispatch can never be exchanged
-    // again, and the refusal must be terminal rather than something to retry.
+    // The agent is killed between the exchange and the completion. It comes
+    // back, and the board hands back the claim it still holds.
     const held = await runner.poll();
     assert.equal(held.body.current.dispatch_id, entry.dispatch_id, "the board hands back the claim it holds");
-    const refused = await runner.exchange({ dispatch_id: entry.dispatch_id, isolation: "process" });
-    assert.equal(refused.status, 403, JSON.stringify(refused.body));
-    assert.match(refused.body.error.message, /already belongs to another executor/);
+
+    // THE RESUME. A second exchange for the same dispatch by the same
+    // authorized runner installs a new current executor and rebinds the pending
+    // claim to it — the dispatch is not declared dead merely because a previous
+    // executor existed.
+    const second = await runner.exchange({ dispatch_id: entry.dispatch_id, isolation: "process" });
+    assert.equal(second.status, 200, JSON.stringify(second.body));
+    assert.notEqual(second.body.executor_id, first.body.executor_id, "a NEW current executor, not the old one");
 
     const row = (await app.db.query(`SELECT * FROM dispatches WHERE id = $1`, [entry.dispatch_id])).rows[0];
-    assert.equal(row.status, "reconciled_dead", "the refusal concluded the ledger row in the same transaction");
-    assert.match(row.error, /already belongs to another executor/);
+    assert.equal(row.status, "running", "an otherwise-live dispatch stays live");
+    assert.equal(row.executor_id, second.body.executor_id, "the current-executor pointer advanced");
+    const claimRow = (await app.db.query(`SELECT * FROM session_claims WHERE id = $1`, [claimId])).rows[0];
+    assert.equal(claimRow.status, "pending");
+    assert.equal(claimRow.executor_id, second.body.executor_id, "the pending claim was rebound");
+
+    // The pre-crash bearer is stale by identity, with no revocation list: it can
+    // neither read the grant nor complete anything.
+    const staleGrant = await mintCall(base, first.body.token, `/runner/mints/${claimId}`);
+    assert.equal(staleGrant.status, 409, JSON.stringify(staleGrant.body));
+    assert.equal(staleGrant.body.error.code, "executor_conflict");
+    assert.equal(staleGrant.body.error.details.reason, "executor_replaced");
+    const staleComplete = await mintCall(base, first.body.token, `/runner/mints/${claimId}/complete`, {
+      storage_state: { cookies: [{ name: "sid", value: "from-the-ghost" }], origins: [] },
+    });
+    assert.equal(staleComplete.status, 409, JSON.stringify(staleComplete.body));
+    assert.equal(staleComplete.body.error.details.reason, "executor_replaced");
+
+    // The resumed executor mints and completes, once.
+    assert.equal((await mintCall(base, second.body.token, `/runner/mints/${claimId}`)).status, 200);
+    const completed = await mintCall(base, second.body.token, `/runner/mints/${claimId}/complete`, {
+      storage_state: { cookies: [{ name: "sid", value: "minted-after-the-crash" }], origins: [] },
+    });
+    assert.equal(completed.status, 200, JSON.stringify(completed.body));
+    assert.equal(completed.body.session.storage_state.cookies[0].value, "minted-after-the-crash");
+
+    // And a delivery whose RESPONSE was lost is retried on the same bearer: the
+    // completion is idempotent for the current executor, answered from stored
+    // state, and never a second accepted fulfillment.
+    const retried = await mintCall(base, second.body.token, `/runner/mints/${claimId}/complete`, {
+      storage_state: { cookies: [{ name: "sid", value: "a-second-mint-that-never-happened" }], origins: [] },
+    });
+    assert.equal(retried.status, 200, JSON.stringify(retried.body));
+    assert.equal(retried.body.session.storage_state.cookies[0].value, "minted-after-the-crash", "redelivered, not re-fulfilled");
+    assert.equal(retried.body.redelivered, true);
+
+    const artifacts = await app.db.query(`SELECT * FROM session_artifacts WHERE provider_id = $1`, [provider.id]);
+    assert.equal(artifacts.rows.length, 1, "one session for one identity, however many completions arrived");
+    const finished = (await app.db.query(`SELECT * FROM dispatches WHERE ref_id = $1`, [claimId])).rows;
+    assert.equal(finished.length, 1, "a resume is the same attempt, not a second one");
+    assert.equal(finished[0].status, "concluded");
+    assert.equal(finished[0].error, null, "a resumed mint concludes clean");
+
+    // Nothing is left on the board for this runner.
+    const after = await runner.poll();
+    assert.equal(after.body.current, null);
+    assert.deepEqual(after.body.offers, []);
+    // The project's ledger says the mint succeeded, not that a runner died.
+    const audits = (await api.get(`/projects/${project.key}/audit?limit=50`)).body.items.map((a: HostedDynamic) => a.action);
+    assert.equal(audits.includes("dispatch.dead"), false, "no death was recorded for a mint that worked");
+  });
+});
+
+test("pool: a mint exchange nobody can win is terminal, and cleans the claim up", async () => {
+  await withApp(async ({ api, base, app }: HostedDynamic) => {
+    const { project, provider, runner } = await mintFixture(api, base, "pool8b");
+    const minted = await api.post(`/auth-providers/${provider.id}/mint`, { identity: "admin" });
+    assert.equal(minted.status, 202, JSON.stringify(minted.body));
+    const claimId = minted.body.mint.claim_id;
+
+    const entry = (await runner.poll("?wait=true")).body.offers[0];
+    assert.equal((await runner.claim(entry.dispatch_id)).status, 200);
+
+    // The grant expired while this runner was starting up: nothing it does can
+    // produce a session for this claim any more.
+    await app.db.query(`UPDATE session_claims SET expires_at = $2 WHERE id = $1`, [claimId, new Date(Date.now() - 1000)]);
+
+    const refused = await runner.exchange({ dispatch_id: entry.dispatch_id, isolation: "process" });
+    assert.equal(refused.status, 401, JSON.stringify(refused.body));
+    assert.match(refused.body.error.message, /no longer pending/);
+
+    // The ONE terminal cleanup: the dispatch dies with its reason and the
+    // abandoned grant is deleted, so the next forced refresh mints afresh
+    // instead of inheriting a claim nothing can fulfill.
+    const row = (await app.db.query(`SELECT * FROM dispatches WHERE id = $1`, [entry.dispatch_id])).rows[0];
+    assert.equal(row.status, "reconciled_dead", "the refusal ended the ledger row in the same transaction");
+    assert.match(row.error, /no longer pending/);
+    assert.equal((await app.db.query(`SELECT * FROM session_claims WHERE id = $1`, [claimId])).rows.length, 0);
 
     // The termination, stated as the runner experiences it: nothing is handed
-    // back, so the loop holds on the board instead of poll → 403 → poll.
+    // back, so the loop holds on the board instead of poll → 4xx → poll.
     const after = await runner.poll();
     assert.equal(after.body.current, null);
     assert.deepEqual(after.body.offers, []);
     const again = await runner.exchange({ dispatch_id: entry.dispatch_id, isolation: "process" });
     assert.equal(again.status, 403);
     assert.match(again.body.error.message, /does not hold an active claim/);
+
+    // And a fresh forced refresh gets a new claim AND a new board entry.
+    const refreshed = await api.post(`/auth-providers/${provider.id}/mint`, { identity: "admin" });
+    assert.equal(refreshed.status, 202, JSON.stringify(refreshed.body));
+    assert.notEqual(refreshed.body.mint.claim_id, claimId);
+    assert.ok(refreshed.body.mint.dispatch_id, "a forced mint always has something to execute it");
+    assert.equal((await runner.poll()).body.offers[0].dispatch_id, refreshed.body.mint.dispatch_id);
+  });
+});
+
+test("pool: a live mint claim whose attempt ended is re-posted, never left pending with no dispatch", async () => {
+  await withApp(async ({ api, base, app }: HostedDynamic) => {
+    const { project, provider, runner } = await mintFixture(api, base, "pool8c");
+    const minted = await api.post(`/auth-providers/${provider.id}/mint`, { identity: "admin" });
+    const claimId = minted.body.mint.claim_id;
+    const firstDispatch = minted.body.mint.dispatch_id;
+
+    // The attempt ends without the claim being abandoned — the shape a refused
+    // exchange used to leave behind. The claim is still pending and still
+    // fulfillable; there is simply nothing on the board to execute it.
+    await killDispatch(app.db, firstDispatch, { error: "the runner went away" });
+    assert.equal(
+      (await app.db.query(`SELECT status FROM session_claims WHERE id = $1`, [claimId])).rows[0].status,
+      "pending",
+    );
+
+    const again = await api.post(`/auth-providers/${provider.id}/mint`, { identity: "admin" });
+    assert.equal(again.status, 202, JSON.stringify(again.body));
+    assert.equal(again.body.mint.claim_id, claimId, "the live grant is reused, not duplicated");
+    assert.notEqual(again.body.mint.dispatch_id, firstDispatch);
+    assert.ok(again.body.mint.dispatch_id, "pending with a null dispatch is not an answer");
+
+    const rows = (await app.db.query(`SELECT * FROM dispatches WHERE ref_id = $1 ORDER BY attempt`, [claimId])).rows;
+    assert.deepEqual(rows.map((r: HostedDynamic) => r.attempt), [1, 2], "a new attempt, allocated with its row");
+    assert.equal(rows[1].status, "requested");
+    // And it is really on the board.
+    assert.equal((await runner.poll("?wait=true")).body.offers[0].dispatch_id, again.body.mint.dispatch_id);
+    assert.equal((await runner.claim(again.body.mint.dispatch_id)).status, 200);
+    assert.equal((await runner.exchange({ dispatch_id: again.body.mint.dispatch_id, isolation: "process" })).status, 200);
   });
 });
 

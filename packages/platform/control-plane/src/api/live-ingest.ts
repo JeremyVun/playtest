@@ -11,9 +11,9 @@
 // never an exception the queue has to guess about; and nothing here can change a
 // run's status, ordering or sealed artifacts. Once a run is terminal every route
 // is a no-op refusal.
-import { badRequest, forbidden, notFound } from "../errors.ts";
+import { badRequest, notFound } from "../errors.ts";
 import { readJsonBody, readRawBody } from "../http.ts";
-import { requireRunner } from "../auth/runner-tokens.ts";
+import { requireGroupExecutor, requireRunOwner } from "../auth/current-executor.ts";
 import { canonicalJson } from "../db.ts";
 import { ulid } from "../ulid.ts";
 import {
@@ -64,13 +64,16 @@ const refused = (reason: Refusal, message: string, extra: Record<string, unknown
  * not touched.
  */
 export async function openCase(ctx: HostedDynamic) {
-  requireRunner(ctx, ctx.params.g);
-  const group = await one(ctx, `SELECT * FROM run_groups WHERE id = $1`, [ctx.params.g], `no run group "${ctx.params.g}"`);
-  const run = await one(
-    ctx,
-    `SELECT * FROM runs WHERE run_group_id = $1 AND run_id = $2`,
-    [group.id, ctx.params.run_id],
-    `no run "${ctx.params.run_id}" in this group`,
+  const runner = await requireGroupExecutor(ctx, { groupId: ctx.params.g });
+  const group = runner.group;
+  const run = requireRunOwner(
+    runner,
+    await one(
+      ctx,
+      `SELECT * FROM runs WHERE run_group_id = $1 AND run_id = $2`,
+      [group.id, ctx.params.run_id],
+      `no run "${ctx.params.run_id}" in this group`,
+    ),
   );
   const body = await readJsonBody(ctx.req, { limit: LIVE_MANIFEST_LIMIT });
   const manifest = body.manifest && typeof body.manifest === "object" ? body.manifest : null;
@@ -303,9 +306,8 @@ export async function postLiveTrajectory(ctx: HostedDynamic) {
 
 /** The run this runner token may stage into — the bundle PUT's exact check. */
 async function runnerRun(ctx: HostedDynamic) {
-  const runner = requireRunner(ctx);
-  const run = await one(ctx, `SELECT * FROM runs WHERE id = $1`, [ctx.params.r], `no run "${ctx.params.r}"`);
-  if (run.run_group_id !== runner.run_group_id) throw forbidden("runner token is not scoped to this run");
+  const runner = await requireGroupExecutor(ctx);
+  const run = requireRunOwner(runner, await one(ctx, `SELECT * FROM runs WHERE id = $1`, [ctx.params.r], `no run "${ctx.params.r}"`));
   return { runner, run };
 }
 

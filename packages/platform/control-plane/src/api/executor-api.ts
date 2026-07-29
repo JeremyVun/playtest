@@ -1,8 +1,21 @@
 import { BundleProvider } from "@playtest/core/artifacts";
 import { HttpResult, readJsonBody, readRawBody } from "../http.ts";
-import { badRequest, forbidden, notFound, unauthenticated } from "../errors.ts";
-import { issueRunnerToken, requireRunner } from "../auth/runner-tokens.ts";
+import { badRequest, conflict, forbidden, notFound, unauthenticated } from "../errors.ts";
+import { issueRunnerToken } from "../auth/runner-tokens.ts";
+import {
+  claimCaseForExecutor,
+  requireGroupExecutor,
+  requireMintExecutor,
+  requireRunOwner,
+} from "../auth/current-executor.ts";
 import { requireRunnerCredential } from "../auth/runner-credentials.ts";
+import {
+  ACTIVE_DISPATCH_STATES,
+  concludeDispatch,
+  exchangeExecutor,
+  killDispatch,
+  settleGroupDone,
+} from "../dispatch/state.ts";
 import { ulid } from "../ulid.ts";
 import { audit } from "../audit.ts";
 import { decryptSecret } from "../crypto/secrets.ts";
@@ -29,6 +42,14 @@ import {
   wakeLive,
 } from "../live/staging.ts";
 
+/**
+ * A lost exchange rolls its whole transaction back — the executor row this
+ * attempt inserted must not survive an exchange that never installed it — and
+ * the refusal is raised outside, where it is an HTTP answer rather than a
+ * rollback cause.
+ */
+class RollbackExchange extends Error {}
+
 export async function exchange(ctx: HostedDynamic) {
   const body = await readJsonBody(ctx.req);
   const dispatch = await resolveExchangeDispatch(ctx, body);
@@ -39,24 +60,43 @@ export async function exchange(ctx: HostedDynamic) {
   // dispatch but is scoped to one session claim, not a run group.
   if (dispatch.kind === "mint") return await mintExchange(ctx, { dispatch, executorId, versions, isolation });
   const group = await getGroup(ctx, dispatch.ref_id);
+  // Eligibility is revalidated INSIDE this transaction, not in the read above:
+  // a cancel or a reconcile landing in the gap must win, and the group-status
+  // write carries the same precondition so a cancelled group is never flipped
+  // back to `running` (docs/contracts/hosted.md, "Dispatch state").
+  let lost: HostedDynamic = null;
   await ctx.db.withTx(async (tx: HostedDynamic) => {
-    await tx.query(
-      `INSERT INTO executors (id, run_group_id, kind, versions, isolation, last_report_at)
-         VALUES ($1, $2, 'group', $3, $4, now())`,
-      [executorId, group.id, versions, isolation],
-    );
-    await tx.query(
-      `UPDATE dispatches SET status = 'running', executor_id = $2 WHERE id = $1`,
-      [dispatch.id, executorId],
-    );
-    await tx.query(`UPDATE run_groups SET status = 'running', updated_at = now() WHERE id = $1`, [group.id]);
+    const installed = await exchangeExecutor(tx, {
+      dispatchId: dispatch.id,
+      executorId,
+      kind: "group",
+      groupId: group.id,
+      versions,
+      isolation,
+    });
+    if (!installed.ok) {
+      lost = installed;
+      throw new RollbackExchange();
+    }
     await emitPlatformEvent(tx, {
       projectId: group.project_id,
       type: "run.status",
       entity: { run_group_id: group.id },
       payload: { status: "running", executor_id: executorId },
     });
+  }).catch((e: HostedDynamic) => {
+    if (!(e instanceof RollbackExchange)) throw e;
   });
+  // The winner's state, said out loud. Nothing is "repaired" with a second
+  // unconditional write — the state that won is the answer.
+  if (lost) {
+    throw conflict(
+      lost.reason === "group"
+        ? `run group "${group.id}" is "${lost.status}" and can no longer be exchanged for`
+        : `dispatch "${dispatch.id}" is "${lost.status}" and can no longer be exchanged for`,
+      { state: lost.status },
+    );
+  }
   return {
     token: issueRunnerToken(ctx.runnerTokenKey, { executorId, runGroupId: group.id }),
     executor_id: executorId,
@@ -105,12 +145,24 @@ async function mintExchange(ctx: HostedDynamic, { dispatch, executorId, versions
       refusal = await refuseMintExchange(tx, { dispatch, claim: after[0], error });
       return;
     }
-    await tx.query(
-      `INSERT INTO executors (id, run_group_id, kind, versions, isolation, last_report_at)
-         VALUES ($1, NULL, 'mint', $2, $3, now())`,
-      [executorId, versions, isolation],
-    );
-    await tx.query(`UPDATE dispatches SET status = 'running', executor_id = $2 WHERE id = $1`, [dispatch.id, executorId]);
+    const installed = await exchangeExecutor(tx, {
+      dispatchId: dispatch.id,
+      executorId,
+      kind: "mint",
+      versions,
+      isolation,
+    });
+    if (!installed.ok) {
+      // A lost race, not a terminal refusal: roll the whole exchange back
+      // (including the claim binding) rather than leaving the claim bound to an
+      // executor that never became current.
+      refusal = conflict(`mint dispatch "${dispatch.id}" is "${installed.status}" and can no longer be exchanged for`, {
+        state: installed.status,
+      });
+      throw new RollbackExchange();
+    }
+  }).catch((e: HostedDynamic) => {
+    if (!(e instanceof RollbackExchange)) throw e;
   });
   if (refusal) throw refusal;
   return {
@@ -142,12 +194,10 @@ async function mintExchange(ctx: HostedDynamic, { dispatch, executorId, versions
  */
 async function refuseMintExchange(tx: HostedDynamic, { dispatch, claim, error }: HostedDynamic) {
   const fulfilled = claim?.status === "fulfilled";
-  const concluded = await tx.query(
-    `UPDATE dispatches SET status = $3, concluded_at = now(), error = $2
-      WHERE id = $1 AND status IN ('requested','scheduled','running')`,
-    [dispatch.id, fulfilled ? null : error.message, fulfilled ? "concluded" : "reconciled_dead"],
-  );
-  if (concluded.rowCount) {
+  const concluded = fulfilled
+    ? await concludeDispatch(tx, dispatch.id, { error: null })
+    : await killDispatch(tx, dispatch.id, { error: error.message });
+  if (concluded.ok) {
     await audit(tx, {
       actor: { system: "runner" },
       action: "dispatch.dead",
@@ -162,8 +212,8 @@ async function refuseMintExchange(tx: HostedDynamic, { dispatch, claim, error }:
 
 /** GET /runner/mints/:claim — the standalone mint grant (root secrets resolved here). */
 export async function mintSpec(ctx: HostedDynamic) {
-  const runner = requireRunner(ctx, `mint:${ctx.params.claim}`);
-  return await standaloneMintGrant(ctx, { claimId: ctx.params.claim, executorId: runner.executor_id });
+  const runner = await requireMintExecutor(ctx, ctx.params.claim);
+  return await standaloneMintGrant(ctx, { claimId: ctx.params.claim, executorId: runner.executorId });
 }
 
 /**
@@ -172,29 +222,29 @@ export async function mintSpec(ctx: HostedDynamic) {
  * dispatch ledger row so the admin page and reconciler see it finished.
  */
 export async function mintComplete(ctx: HostedDynamic) {
-  const runner = requireRunner(ctx, `mint:${ctx.params.claim}`);
+  const runner = await requireMintExecutor(ctx, ctx.params.claim);
   const body = await readJsonBody(ctx.req, { limit: 8 * 1024 * 1024 });
   const result = await fulfillSessionClaim(ctx, {
     claimId: ctx.params.claim,
-    executorId: runner.executor_id,
+    executorId: runner.executorId,
     storageState: body.storage_state ?? null,
     error: body.error ?? null,
     actor: { system: "runner" },
   });
   await concludeMintDispatch(ctx, ctx.params.claim, body.error ?? null);
-  await ctx.db.query(`UPDATE executors SET concluded_at = now() WHERE id = $1`, [runner.executor_id]);
+  await ctx.db.query(`UPDATE executors SET concluded_at = now() WHERE id = $1`, [runner.executorId]);
   return result;
 }
 
 export async function groupSpec(ctx: HostedDynamic) {
-  const runner = requireRunner(ctx, ctx.params.g);
-  const group = await getGroup(ctx, ctx.params.g);
+  const runner = await requireGroupExecutor(ctx, { groupId: ctx.params.g });
+  const group = runner.group;
   const [project, suite, snapshot] = await Promise.all([
     one(ctx, `SELECT * FROM projects WHERE id = $1`, [group.project_id], `no project "${group.project_id}"`),
     one(ctx, `SELECT * FROM suites WHERE id = $1`, [group.suite_id], `no suite "${group.suite_id}"`),
     one(ctx, `SELECT * FROM suite_snapshots WHERE id = $1`, [group.snapshot_id], `no snapshot "${group.snapshot_id}"`),
   ]);
-  const target = await attemptTarget(ctx, group, runner.executor_id);
+  const target = attemptTarget(runner);
   const { rows } = await ctx.db.query(
     `SELECT id, case_id, story_id, run_id, mode FROM runs
       WHERE run_group_id = $1 AND status = 'queued'
@@ -275,7 +325,7 @@ export async function groupSpec(ctx: HostedDynamic) {
       },
     },
     budget: { max_runtime_s: 50 * 60, retry_remaining: group.selection?.retry_remaining ?? 1 },
-    executor_id: runner.executor_id,
+    executor_id: runner.executorId,
   };
 }
 
@@ -305,7 +355,7 @@ async function currentBaselines(ctx: HostedDynamic, suiteId: HostedDynamic) {
  * agreement 3).
  */
 export async function baselineTrajectory(ctx: HostedDynamic) {
-  requireRunner(ctx);
+  await requireGroupExecutor(ctx);
   const row = await one(ctx, `SELECT * FROM baselines WHERE id = $1`, [ctx.params.id], `no baseline "${ctx.params.id}"`);
   const [key, entry = "trajectory.jsonl"] = String(row.trajectory_key).split("#");
   const buf = await ctx.store.get(key);
@@ -316,7 +366,7 @@ export async function baselineTrajectory(ctx: HostedDynamic) {
 }
 
 export async function snapshotTree(ctx: HostedDynamic) {
-  requireRunner(ctx);
+  await requireGroupExecutor(ctx);
   const snap = await one(ctx, `SELECT * FROM suite_snapshots WHERE id = $1`, [ctx.params.id], `no snapshot "${ctx.params.id}"`);
   // Project personas are merged into the tree HERE, at read time, rather than
   // baked into the snapshot at commit time: a snapshot is immutable, so baking
@@ -340,7 +390,7 @@ export async function snapshotTree(ctx: HostedDynamic) {
 }
 
 export async function blob(ctx: HostedDynamic) {
-  requireRunner(ctx);
+  await requireGroupExecutor(ctx);
   const sha = ctx.params.sha256;
   if (!/^[0-9a-f]{64}$/.test(sha)) throw badRequest(`invalid blob sha256 "${sha}"`);
   return new HttpResult({ buffer: await ctx.store.get(blobKey(sha)), contentType: "application/octet-stream" });
@@ -351,35 +401,26 @@ export async function blob(ctx: HostedDynamic) {
  * advertised, so a ring edit between poll, claim and exchange cannot make the
  * offer and the group spec disagree.
  *
- * Located by the executor this bearer belongs to, which is exactly the attempt
- * that exchanged. The newest attempt is the fallback for the paths that reach
- * here without an executor binding yet — and for a bearer whose row a later
- * exchange re-stamped (exchange overwrites the attempt's executor_id), where
- * the fallback row IS its own attempt and carries the identical snapshot. The
- * executor match must stay a preference, never a WHERE filter, or that bearer
- * gets a 404 mid-group.
+ * It is read off the bearer's OWN dispatch row, reached through the immutable
+ * `executors.dispatch_id` link. There is no fallback scan: an executor that is
+ * not the current owner of an active dispatch never gets this far
+ * (`requireCurrentExecutor`), so there is nothing left to guess about.
  */
-async function attemptTarget(ctx: HostedDynamic, group: HostedDynamic, executorId: HostedDynamic = null) {
-  const { rows } = await ctx.db.query(
-    `SELECT target FROM dispatches
-      WHERE kind = 'group' AND ref_id = $1
-      ORDER BY (executor_id = $2) DESC, attempt DESC, requested_at DESC LIMIT 1`,
-    [group.id, executorId],
-  );
-  const target = rows[0]?.target;
-  if (!target) throw notFound(`run group "${group.id}" has no dispatch target snapshot`);
+function attemptTarget(runner: HostedDynamic) {
+  const target = runner.target;
+  if (!target) throw notFound(`dispatch "${runner.dispatch.id}" has no target snapshot`);
   return target;
 }
 
 export async function claim(ctx: HostedDynamic) {
-  const runner = requireRunner(ctx);
-  const group = await getGroup(ctx, runner.run_group_id);
+  const runner = await requireGroupExecutor(ctx);
+  const group = runner.group;
   const body = await readJsonBody(ctx.req);
   const refs = Array.isArray(body.sessions) ? body.sessions : Array.isArray(body.refs) ? body.refs : [];
   // A runner token is scoped to one group: it may claim only the session refs
   // this attempt's ring declares. Without this, any executor in the project
   // could pull mint grants (root secrets) for unrelated providers.
-  const target = await attemptTarget(ctx, group, runner.executor_id);
+  const target = attemptTarget(runner);
   const allowed = new Set(sessionRefs(target.config || {}));
   for (const ref of refs) {
     if (!allowed.has(ref)) {
@@ -392,7 +433,7 @@ export async function claim(ctx: HostedDynamic) {
     // here, so a ring can never borrow another ring's credentials.
     ringId: group.ring_id,
     actor: { system: "runner" },
-    mintedByJob: runner.executor_id,
+    mintedByJob: runner.executorId,
   };
   let sessions = await claimSessions(ctx, { ...claimArgs, refs });
 
@@ -413,11 +454,11 @@ export async function claim(ctx: HostedDynamic) {
 }
 
 export async function fulfill(ctx: HostedDynamic) {
-  const runner = requireRunner(ctx);
+  const runner = await requireGroupExecutor(ctx);
   const body = await readJsonBody(ctx.req, { limit: 8 * 1024 * 1024 });
   return await fulfillSessionClaim(ctx, {
     claimId: ctx.params.claim,
-    executorId: runner.executor_id,
+    executorId: runner.executorId,
     storageState: body.storage_state ?? null,
     error: body.error ?? null,
     actor: { system: "runner" },
@@ -425,9 +466,8 @@ export async function fulfill(ctx: HostedDynamic) {
 }
 
 export async function uploadBundle(ctx: HostedDynamic) {
-  const runner = requireRunner(ctx);
-  const run = await runByDbId(ctx, ctx.params.r);
-  if (run.run_group_id !== runner.run_group_id) throw forbidden("runner token is not scoped to this run");
+  const runner = await requireGroupExecutor(ctx);
+  const run = requireRunOwner(runner, await runByDbId(ctx, ctx.params.r));
   const buf = await readRawBody(ctx.req, { limit: BUNDLE_LIMIT });
   const key = `runs/${run.run_group_id}/${run.id}.ptrun`;
   const stored = await ctx.store.put(key, buf);
@@ -448,21 +488,27 @@ export async function uploadBundle(ctx: HostedDynamic) {
      RETURNING *`,
     [artifact.id, artifact.run_id, artifact.kind, artifact.key, artifact.sha256, artifact.size, artifact.tier],
   );
-  await ctx.db.query(`UPDATE runs SET status = 'uploading', artifact_tier = 'full', updated_at = now() WHERE id = $1`, [run.id]);
+  // The status move is the owner's, and only while the run is still moving: a
+  // late bundle from a stale executor stores nothing and repaints nothing.
+  await ctx.db.query(
+    `UPDATE runs SET status = 'uploading', artifact_tier = 'full', updated_at = now()
+      WHERE id = $1 AND executor_id = $2 AND status IN ('running','uploading')`,
+    [run.id, runner.executorId],
+  );
   return { artifact };
 }
 
 export async function caseStart(ctx: HostedDynamic) {
-  const runner = requireRunner(ctx, ctx.params.g);
-  const group = await getGroup(ctx, ctx.params.g);
-  const run = await runByCoreId(ctx, group.id, ctx.params.run_id);
+  const runner = await requireGroupExecutor(ctx, { groupId: ctx.params.g });
+  const group = runner.group;
+  const run = requireRunOwner(runner, await runByCoreId(ctx, group.id, ctx.params.run_id));
+  let claimed = false;
   await ctx.db.withTx(async (tx: HostedDynamic) => {
-    await tx.query(
-      `UPDATE runs SET status = 'running', started_at = COALESCE(started_at, now()),
-              executor_id = $2, updated_at = now()
-        WHERE id = $1`,
-      [run.id, runner.executor_id],
-    );
+    // A compare-and-set, never an unconditional stamp: a queued case is claimed
+    // for THIS executor, the owner's own retry is idempotent, and nothing can
+    // flip a finished run back to `running`.
+    claimed = await claimCaseForExecutor(tx, { runDbId: run.id, executorId: runner.executorId });
+    if (!claimed) return;
     await appendRunEvent(tx, {
       runDbId: run.id,
       projectId: group.project_id,
@@ -491,9 +537,12 @@ const PROGRESS_LIMIT = 32 * 1024;
  * The runner redacts secret values before posting; this end only clamps shape.
  */
 export async function caseProgress(ctx: HostedDynamic) {
-  requireRunner(ctx, ctx.params.g);
-  const group = await getGroup(ctx, ctx.params.g);
-  const run = await runByCoreId(ctx, group.id, ctx.params.run_id);
+  const runner = await requireGroupExecutor(ctx, { groupId: ctx.params.g });
+  const group = runner.group;
+  // Telemetry is still fenced: a tick from an executor that no longer owns this
+  // story is a stale-ownership conflict, not a silently dropped write, so the
+  // runner learns to stop rather than posting into the void.
+  const run = requireRunOwner(runner, await runByCoreId(ctx, group.id, ctx.params.run_id));
   const body = await readJsonBody(ctx.req, { limit: PROGRESS_LIMIT });
   const progress = progressView(body);
   await ctx.db.withTx(async (tx: HostedDynamic) => {
@@ -501,8 +550,8 @@ export async function caseProgress(ctx: HostedDynamic) {
       // `live_activity_at` too: a progress tick is the run showing activity, and
       // the live endpoint's `inactive_ms` is a fact about exactly that.
       `UPDATE runs SET progress = $2, live_activity_at = now(), updated_at = now()
-        WHERE id = $1 AND status IN ('running','uploading')`,
-      [run.id, progress],
+        WHERE id = $1 AND executor_id = $3 AND status IN ('running','uploading')`,
+      [run.id, progress, runner.executorId],
     );
     if (updated.rowCount === 0) return;
     wakeLive(tx, run.id);
@@ -539,9 +588,9 @@ function progressView(body: HostedDynamic) {
 }
 
 export async function caseReport(ctx: HostedDynamic) {
-  const runner = requireRunner(ctx, ctx.params.g);
-  const group = await getGroup(ctx, ctx.params.g);
-  const run = await runByCoreId(ctx, group.id, ctx.params.run_id);
+  const runner = await requireGroupExecutor(ctx, { groupId: ctx.params.g });
+  const group = runner.group;
+  const run = requireRunOwner(runner, await runByCoreId(ctx, group.id, ctx.params.run_id));
   const body = await readJsonBody(ctx.req, { limit: 16 * 1024 * 1024 });
   const status = normalizeStatus(body.status);
   const manifest = body.manifest && typeof body.manifest === "object" ? body.manifest : null;
@@ -561,13 +610,18 @@ export async function caseReport(ctx: HostedDynamic) {
     : null;
   // Staged live objects to delete once the report commits (see below).
   let stagedKeys: string[] = [];
+  let accepted = false;
   await ctx.db.withTx(async (tx: HostedDynamic) => {
-    await tx.query(
+    // The report is a compare-and-set on the run's recorded owner. A story this
+    // executor started is finished by that executor and no other; a story it
+    // never started (a `case not resolved` or `session mint failed` infra
+    // report) is claimed here the way `caseStart` would have claimed it.
+    const written = await tx.query(
       `UPDATE runs
           SET status = $2, manifest = $3, totals = $4, score = $5, gate = $6, pins = $7,
               duration_ms = $8, finished_at = now(), executor_id = $9, error = $10,
               healed = $11, changed = $12, progress = NULL, updated_at = now()
-        WHERE id = $1`,
+        WHERE id = $1 AND (executor_id = $9 OR status = 'queued')`,
       [
         run.id,
         status,
@@ -577,12 +631,14 @@ export async function caseReport(ctx: HostedDynamic) {
         manifest?.result?.gate ? manifest.result.gate : manifest?.gate ? manifest.gate : null,
         manifest?.pins ? manifest.pins : null,
         manifest?.duration_ms ?? body.duration_ms ?? null,
-        runner.executor_id,
+        runner.executorId,
         body.error ?? manifest?.error ?? null,
         manifest?.healed === true || body.healed === true,
         manifest?.changed === true || body.changed === true,
       ],
     );
+    if (written.rowCount === 0) return;
+    accepted = true;
     await appendRunEvent(tx, {
       runDbId: run.id,
       projectId: group.project_id,
@@ -652,24 +708,28 @@ export async function caseReport(ctx: HostedDynamic) {
   // pass/fail report, not only passes. Own timer map and lease (a shared slot
   // would let one sweep silently drop the other).
   if (status === "pass" || status === "fail") scheduleAutoResolve(ctx, group.project_id);
-  return { ok: true };
+  return { ok: true, accepted };
 }
 
 export async function complete(ctx: HostedDynamic) {
-  const runner = requireRunner(ctx, ctx.params.g);
-  const group = await getGroup(ctx, ctx.params.g);
+  // Completion is the one executor route that stays meaningful after its own
+  // dispatch concluded, so the owner's retry is idempotent rather than a
+  // conflict. `reconciled_dead` is deliberately NOT in the list: the reconciler
+  // has already decided that attempt's outcome and re-dispatched its remainder.
+  const runner = await requireGroupExecutor(ctx, {
+    groupId: ctx.params.g,
+    dispatchStates: [...ACTIVE_DISPATCH_STATES, "concluded"],
+    groupStates: ["queued", "running", "done"],
+  });
+  const group = runner.group;
   const body = await readJsonBody(ctx.req);
   let dispatchMore = false;
   await ctx.db.withTx(async (tx: HostedDynamic) => {
     await tx.query(
       `UPDATE executors SET concluded_at = now(), last_report_at = now() WHERE id = $1`,
-      [runner.executor_id],
+      [runner.executorId],
     );
-    await tx.query(
-      `UPDATE dispatches SET status = 'concluded', concluded_at = now()
-        WHERE executor_id = $1 AND status IN ('requested','scheduled','running')`,
-      [runner.executor_id],
-    );
+    await concludeDispatch(tx, runner.dispatch.id);
     const remaining = await tx.query(
       `SELECT COUNT(*) AS n FROM runs
         WHERE run_group_id = $1 AND status IN ('queued','running','uploading')`,
@@ -700,11 +760,7 @@ export async function complete(ctx: HostedDynamic) {
       const summary = await exitSummary(tx, group.id);
       // A user cancel may land while the executor is still winding down; its
       // best-effort complete must not flip a canceled group back to done.
-      await tx.query(
-        `UPDATE run_groups SET status = $2, exit_summary = $3, updated_at = now()
-          WHERE id = $1 AND status <> 'canceled'`,
-        [group.id, summary.status, summary.exit_summary],
-      );
+      await settleGroupDone(tx, group.id, summary.exit_summary);
       await audit(tx, {
         actor: { system: "runner" },
         action: "run_group.completed",

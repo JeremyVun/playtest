@@ -193,8 +193,8 @@ test("pool: register, poll, race one winner, exchange, execute, report, complete
   });
 });
 
-test("pool: a re-exchange does not orphan the earlier bearer mid-group", async () => {
-  await withApp(async ({ api, base }: HostedDynamic) => {
+test("pool: a re-exchange fences the earlier bearer and serves only the new one", async () => {
+  await withApp(async ({ api, base, app }: HostedDynamic) => {
     const { project, suite, ring } = await setUp(api, { key: "pool6" });
     const runner = await register(api, project, { name: "adas-laptop", labels: ["macos"] });
     const one = claimer(base, runner.credential);
@@ -204,22 +204,36 @@ test("pool: a re-exchange does not orphan the earlier bearer mid-group", async (
     assert.equal((await one.claim(dispatchId)).status, 200);
 
     // A crash-resumed runner exchanges again for the claim it already holds.
-    // Exchange re-stamps the dispatch row's executor_id, so the first bearer's
-    // executor no longer matches the row — its target snapshot must be served
-    // by the newest-attempt fallback, never a 404 mid-group.
+    // The exchange installs a NEW current executor, so the first bearer is stale
+    // from that instant: two executors for one attempt would be two processes
+    // reading the same inputs and reporting the same cases.
     const first = await one.exchange({ dispatch_id: dispatchId, isolation: "process" });
     assert.equal(first.status, 200, JSON.stringify(first.body));
     const second = await one.exchange({ dispatch_id: dispatchId, isolation: "process" });
     assert.equal(second.status, 200, JSON.stringify(second.body));
+    assert.notEqual(second.body.executor_id, first.body.executor_id);
 
-    for (const token of [first.body.token, second.body.token]) {
-      const spec = await fetch(`${base}/api/v1/runner/groups/${groupId}`, {
-        headers: { authorization: `Bearer ${token}` },
-      });
-      assert.equal(spec.status, 200, `bearer still serves the group spec after re-exchange`);
-      const body = await spec.json();
-      assert.equal(body.ring.key, ring.key, "the spec carries the attempt's ring snapshot");
-    }
+    const stale = await fetch(`${base}/api/v1/runner/groups/${groupId}`, {
+      headers: { authorization: `Bearer ${first.body.token}` },
+    });
+    assert.equal(stale.status, 409, "the pre-exchange bearer is fenced");
+    const staleBody = await stale.json();
+    assert.equal(staleBody.error.code, "executor_conflict");
+    assert.equal(staleBody.error.details.reason, "executor_replaced");
+
+    const spec = await fetch(`${base}/api/v1/runner/groups/${groupId}`, {
+      headers: { authorization: `Bearer ${second.body.token}` },
+    });
+    assert.equal(spec.status, 200, "the current bearer serves the group spec");
+    assert.equal((await spec.json()).ring.key, ring.key, "the spec carries the attempt's ring snapshot");
+
+    // Both executors exist as history; only one is the dispatch's current one,
+    // and each one records the attempt it belongs to immutably.
+    const rows = (await app.db.query(`SELECT id, dispatch_id FROM executors ORDER BY id`)).rows;
+    assert.equal(rows.length, 2);
+    for (const row of rows) assert.equal(row.dispatch_id, dispatchId);
+    const ledger = (await app.db.query(`SELECT executor_id FROM dispatches WHERE id = $1`, [dispatchId])).rows[0];
+    assert.equal(ledger.executor_id, second.body.executor_id);
   });
 });
 
@@ -566,15 +580,20 @@ test("pool: an executor that comes back after being reconciled dead leaves exact
     assert.equal(results.find((r: HostedDynamic) => r.dispatch_id === first).action, "redispatched");
 
     // Then the lid opens and the executor everyone gave up on posts its own
-    // partial completion. It must not conclude a SECOND attempt into existence:
-    // two `requested` rows for one group are two runners running the same cases.
+    // partial completion. The reconciler already decided this attempt's outcome
+    // and re-posted its remainder, so the late completion is refused outright —
+    // it must not conclude a SECOND attempt into existence, and two `requested`
+    // rows for one group are two runners running the same cases.
     const completed = await fetch(`${base}/api/v1/runner/groups/${groupId}/complete`, {
       method: "POST",
       headers: { authorization: `Bearer ${exchanged.body.token}`, "content-type": "application/json" },
       body: JSON.stringify({ partial: true, summary: {} }),
     });
-    assert.equal(completed.status, 200);
-    assert.equal((await completed.json()).redispatched, false, "the attempt the reconciler posted is already live");
+    assert.equal(completed.status, 409);
+    const refusal = await completed.json();
+    assert.equal(refusal.error.code, "executor_conflict");
+    assert.equal(refusal.error.details.reason, "dispatch_not_active");
+    assert.equal(refusal.error.details.state, "reconciled_dead");
 
     const rows = (await app.db.query(`SELECT * FROM dispatches WHERE ref_id = $1 ORDER BY attempt`, [groupId])).rows;
     assert.equal(rows.length, 2, `no third attempt: ${JSON.stringify(rows.map((r: HostedDynamic) => [r.attempt, r.status]))}`);

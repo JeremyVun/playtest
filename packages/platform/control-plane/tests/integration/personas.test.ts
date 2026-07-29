@@ -4,15 +4,26 @@
 // (GET /runner/snapshots/:id/tree — see api/executor-api.js snapshotTree).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { withApp, createTarget } from "./helpers.ts";
-import { issueRunnerToken } from "../../src/auth/runner-tokens.ts";
+import { withApp, createTarget, loadSuiteDir, REPO_ROOT } from "./helpers.ts";
+import { claimAndExchange } from "./exec-helpers.ts";
+import { writeTar } from "../../src/suites/tar.ts";
 import { blobKey } from "../../src/store/object-store.ts";
 
-/** A runner bearer valid for any snapshot/blob read — those routes call
- * `requireRunner(ctx)` with no run-group scope, so a token for an unrelated
- * group is enough to exercise them without launching a real run group. */
-function runnerAuth(app: HostedDynamic) {
-  const token = issueRunnerToken(app.ctx.runnerTokenKey, { executorId: "test-exec", runGroupId: "rg-test" });
+/**
+ * A runner bearer for the snapshot/blob reads — a REAL one. Those routes are
+ * behind `requireCurrentExecutor` (docs/contracts/hosted.md, "Current executor
+ * fencing"), so the bearer has to belong to an executor that actually won a
+ * claim and exchanged for it; a hand-issued token for an executor that never
+ * existed is exactly what the fence is there to refuse.
+ */
+async function runnerAuth(api: HostedDynamic, base: HostedDynamic, project: HostedDynamic, suite: HostedDynamic, ring: HostedDynamic) {
+  const launched = await api.post(`/projects/${project.key}/run-groups`, {
+    suite_id: suite.id,
+    ring_id: ring.id,
+    selection: { ids: ["add-todo"] },
+  });
+  assert.equal(launched.status, 200, JSON.stringify(launched.body));
+  const { token } = await claimAndExchange(api, base, { project, groupId: launched.body.run_group.id });
   return { authorization: `Bearer ${token}` };
 }
 
@@ -132,8 +143,14 @@ test("personas: a project persona shows up in the runner snapshot tree; a suite-
     })).body;
 
     // A suite binds to an application at creation, so the target comes first.
-    await createTarget(api, project);
+    const { ring } = await createTarget(api, project);
     const suite = (await api.post("/projects/p/suites", { slug: "s", name: "S" })).body;
+    // Real stories, because the bearer that reads the tree has to belong to a
+    // real launched attempt now.
+    assert.equal(
+      (await api.postTar(`/suites/${suite.id}/import`, writeTar(loadSuiteDir(`${REPO_ROOT}/tests/fixtures/todos`)))).status,
+      200,
+    );
     const commit = await api.post(`/suites/${suite.id}/commit`, {
       changes: [{ path: "playtest.yaml", content: "app:\n  base_url: http://x\n" }],
       note: "v1",
@@ -143,7 +160,7 @@ test("personas: a project persona shows up in the runner snapshot tree; a suite-
 
     const { rows } = await app.db.query(`SELECT blob_sha256 FROM personas WHERE id = $1`, [persona.id]);
 
-    const headers = runnerAuth(app);
+    const headers = await runnerAuth(api, base, project, suite, ring);
     const treeRes = await fetch(`${base}/api/v1/runner/snapshots/${snapshotId}/tree`, { headers });
     const tree = await treeRes.json();
     assert.equal(treeRes.status, 200);

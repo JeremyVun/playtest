@@ -322,9 +322,24 @@ CREATE INDEX run_groups_suite_idx ON run_groups(suite_id);
 CREATE INDEX run_groups_ring_idx ON run_groups(ring_id);
 CREATE INDEX run_groups_application_idx ON run_groups(application_id);
 
+-- One executor row per exchange, and the row never changes hands.
+--
+-- `dispatch_id` is the IMMUTABLE link written once, at exchange, in the same
+-- transaction that installs this executor as its dispatch's current one. It is
+-- how every executor-facing route answers "which attempt is this bearer for?"
+-- without inferring it from mutable state (docs/contracts/hosted.md, "Current
+-- executor fencing"). The mutable half lives on `dispatches.executor_id`: the
+-- CURRENT executor pointer, advanced only inside the exchange compare-and-set.
+-- A bearer whose executor is no longer that pointer is stale, full stop.
+--
+-- The reference is DEFERRABLE because the two tables point at each other: the
+-- ledger row names its current executor and the executor names its dispatch, so
+-- neither table can be loaded first under an immediate check.
 CREATE TABLE executors (
   id                TEXT PRIMARY KEY,
   run_group_id      TEXT REFERENCES run_groups(id) ON DELETE SET NULL,
+  dispatch_id       TEXT REFERENCES dispatches(id) ON DELETE SET NULL
+                      DEFERRABLE INITIALLY DEFERRED,
   kind              TEXT NOT NULL CHECK (kind IN ('group','media','mint')),
   versions          TEXT_JSON NOT NULL DEFAULT '{}',
   isolation         TEXT CHECK (isolation IS NULL OR isolation IN ('container','process')),
@@ -335,6 +350,7 @@ CREATE TABLE executors (
 );
 
 CREATE INDEX executors_group_idx ON executors(run_group_id);
+CREATE INDEX executors_dispatch_idx ON executors(dispatch_id) WHERE dispatch_id IS NOT NULL;
 
 -- A self-hosted runner's identity. Labels ROUTE work; they never authorize it.
 -- `project_id` is NULL for a SITE-SCOPED runner: a machine a site operator has
@@ -395,7 +411,17 @@ CREATE TABLE dispatches (
   created_at       INT_TS NOT NULL DEFAULT (CAST(unixepoch('subsec') * 1000 AS INTEGER))
 );
 
-CREATE INDEX dispatches_ref_idx ON dispatches(kind, ref_id, attempt);
+-- `attempt` IS the generation of a (kind, ref_id), so it is unique by decree
+-- rather than by convention: the database is the arbiter two concurrent
+-- continuation allocations need, and the allocation happens in the same
+-- transaction that inserts the row (src/dispatch/state.ts).
+CREATE UNIQUE INDEX dispatches_ref_idx ON dispatches(kind, ref_id, attempt);
+-- At most ONE active dispatch per run group, enforced by SQLite and not only by
+-- application code — two active attempts are two runners executing the same
+-- queued cases. The active-state list here is the one `src/dispatch/state.ts`
+-- owns; changing one without the other is a bug.
+CREATE UNIQUE INDEX dispatches_active_group_idx ON dispatches(ref_id)
+  WHERE kind = 'group' AND status IN ('requested','scheduled','running');
 CREATE INDEX dispatches_project_active_idx ON dispatches(project_id, status);
 CREATE INDEX dispatches_runner_idx ON dispatches(runner_id) WHERE runner_id IS NOT NULL;
 CREATE INDEX dispatches_board_idx ON dispatches(project_id, status, requested_at)

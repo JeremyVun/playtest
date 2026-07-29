@@ -14,6 +14,7 @@ import { ulid } from "../ulid.ts";
 import { emitPlatformEvent } from "../events/outbox.ts";
 import { appendRunEvent } from "../events/run-events.ts";
 import { loadRunBundle } from "../run-storage.ts";
+import { concludeMediaDispatch } from "../dispatch/state.ts";
 
 const CAPTIONS = new Set(["action", "thought"]);
 
@@ -78,10 +79,7 @@ export async function generateClip(ctx: HostedDynamic, { run, project, actor, re
         });
       }
       if (dispatchId) {
-        await tx.query(
-          `UPDATE dispatches SET status = 'concluded', concluded_at = now(), error = NULL WHERE id = $1`,
-          [dispatchId],
-        );
+        await concludeMediaDispatch(tx, dispatchId);
       }
       await audit(tx, {
         actor,
@@ -110,10 +108,7 @@ export function startClip(ctx: HostedDynamic, { run, project, actor, request, di
     try {
       await ctx.db.withTx(async (tx: HostedDynamic) => {
         if (dispatchId) {
-          await tx.query(
-            `UPDATE dispatches SET status = 'concluded', concluded_at = now(), error = $2 WHERE id = $1`,
-            [dispatchId, firstLine(e)],
-          );
+          await concludeMediaDispatch(tx, dispatchId, { error: firstLine(e) });
         }
         await appendRunEvent(tx, {
           runDbId: run.id,

@@ -4,8 +4,15 @@ import { emitPlatformEvent } from "../events/outbox.ts";
 import { dispatchContinuation } from "./dispatcher.ts";
 import { exitSummary } from "../api/executor-api.ts";
 import { inClause } from "../db.ts";
+import {
+  ACTIVE_DISPATCH_STATES,
+  concludeDispatch,
+  killDispatch,
+  markDispatchRunning,
+  settleGroupDone,
+} from "./state.ts";
 
-const ACTIVE = ["requested", "scheduled", "running"];
+const ACTIVE = ACTIVE_DISPATCH_STATES;
 
 /**
  * Lease name for the reconciliation cycle (see `src/leases.ts`). The scheduled
@@ -34,8 +41,11 @@ async function reconcileOne(ctx: HostedDynamic, dispatch: HostedDynamic) {
   if (!status) return { dispatch_id: dispatch.id, action: "unknown_dispatch" };
   if (status.status === "queued") return { dispatch_id: dispatch.id, action: "queued" };
   if (status.status === "in_progress") {
-    await ctx.db.query(`UPDATE dispatches SET status = 'running' WHERE id = $1`, [dispatch.id]);
-    return { dispatch_id: dispatch.id, action: "running" };
+    // A compare-and-set, not a stamp. The board was read before this write, and
+    // a completion or a cancel landing in that gap is the winner: losing here is
+    // harmless and reported as what actually happened.
+    const moved = await markDispatchRunning(ctx.db, dispatch.id);
+    return { dispatch_id: dispatch.id, action: moved.ok ? "running" : "already_concluded" };
   }
   if (status.status !== "completed") return { dispatch_id: dispatch.id, action: status.status || "unknown" };
 
@@ -74,25 +84,16 @@ async function markDead(ctx: HostedDynamic, dispatch: HostedDynamic, { reason, r
       [group.id],
     );
     if (completed.rows.length) {
-      await tx.query(
-        `UPDATE dispatches SET status = 'concluded', concluded_at = now()
-          WHERE id = $1 AND status IN ('requested','scheduled','running')`,
-        [dispatch.id],
-      );
+      await concludeDispatch(tx, dispatch.id);
       action = "already_complete";
       return;
     }
-    const killed = await tx.query(
-      `UPDATE dispatches
-          SET status = 'reconciled_dead', concluded_at = now(), error = $2
-        WHERE id = $1 AND status IN ('requested','scheduled','running')`,
-      [dispatch.id, reason],
-    );
+    const killed = await killDispatch(tx, dispatch.id, { error: reason });
     // Losing this write means the executor concluded between the board read and
     // this statement: it was alive after all. Nothing else in this pass may run —
     // no run is failed as infra, and no continuation is posted, because the
     // executor's own `complete` has already decided both.
-    if (killed.rowCount === 0) {
+    if (!killed.ok) {
       action = "already_concluded";
       return;
     }
@@ -165,10 +166,7 @@ async function markDead(ctx: HostedDynamic, dispatch: HostedDynamic, { reason, r
       // runs index paints a dead group as a neutral "done" chip, hiding the
       // failure at the triage entry point.
       const summary = await exitSummary(tx, group.id);
-      await tx.query(
-        `UPDATE run_groups SET status = 'done', exit_summary = $2, updated_at = now() WHERE id = $1`,
-        [group.id, summary.exit_summary],
-      );
+      await settleGroupDone(tx, group.id, summary.exit_summary);
     }
   });
   if (shouldRedispatch) {
@@ -195,7 +193,7 @@ async function markMintDead(ctx: HostedDynamic, dispatch: HostedDynamic, { reaso
     const { rows } = await tx.query(`SELECT * FROM session_claims WHERE id = $1`, [dispatch.ref_id]);
     const claim = rows[0];
     if (claim?.status === "fulfilled") {
-      await tx.query(`UPDATE dispatches SET status = 'concluded', concluded_at = now() WHERE id = $1`, [dispatch.id]);
+      await concludeDispatch(tx, dispatch.id);
       action = "already_complete";
       return;
     }
@@ -205,15 +203,12 @@ async function markMintDead(ctx: HostedDynamic, dispatch: HostedDynamic, { reaso
       // write keeps its claim row, and the dispatch concludes rather than dying.
       const abandoned = await tx.query(`DELETE FROM session_claims WHERE id = $1 AND status = 'pending'`, [claim.id]);
       if (abandoned.rowCount === 0) {
-        await tx.query(`UPDATE dispatches SET status = 'concluded', concluded_at = now() WHERE id = $1`, [dispatch.id]);
+        await concludeDispatch(tx, dispatch.id);
         action = "already_complete";
         return;
       }
     }
-    await tx.query(
-      `UPDATE dispatches SET status = 'reconciled_dead', concluded_at = now(), error = $2 WHERE id = $1`,
-      [dispatch.id, reason],
-    );
+    await killDispatch(tx, dispatch.id, { error: reason });
     await audit(tx, {
       actor: { system: "reconciler" },
       action: "dispatch.dead",

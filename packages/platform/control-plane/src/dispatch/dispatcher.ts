@@ -10,8 +10,9 @@ import { emitPlatformEvent } from "../events/outbox.ts";
 import { inClause } from "../db.ts";
 import { checkInWindowMs } from "./pool.ts";
 import { labelsMatch } from "../auth/runner-credentials.ts";
+import { ACTIVE_DISPATCH_STATES, createGroupDispatch } from "./state.ts";
 
-const ACTIVE_DISPATCHES = ["requested", "scheduled", "running"];
+const ACTIVE_DISPATCHES = ACTIVE_DISPATCH_STATES;
 
 /**
  * Which labels place this group. A launch may pin them (`runner_labels` on the
@@ -141,11 +142,16 @@ export async function createRunGroup(ctx: HostedDynamic, { principal, project, s
     // The labels and target snapshots ride the ledger row, written in the same
     // transaction: under pull-based placement this row IS the claim-board entry,
     // so a runner must never be able to read it before what places it is durable.
-    await tx.query(
-      `INSERT INTO dispatches (id, project_id, kind, ref_id, attempt, status, labels, target)
-         VALUES ($1, $2, 'group', $3, 1, 'requested', $4, $5)`,
-      [dispatchId, project.id, groupId, labels, target],
-    );
+    await createGroupDispatch(tx, {
+      projectId: project.id,
+      groupId,
+      labels,
+      target,
+      dispatchId,
+      // A brand-new group has no attempts to be idle of; the state module still
+      // allocates the number, so no caller ever writes `attempt` by hand.
+      requireIdle: false,
+    });
     await audit(tx, {
       actor: actorOf(principal),
       action: "run_group.created",
@@ -394,28 +400,25 @@ export async function dispatchAttempt(ctx: HostedDynamic, { dispatchId, kind, re
 export async function dispatchContinuation(ctx: HostedDynamic, groupId: HostedDynamic) {
   const group = await getRunGroup(ctx, groupId);
   const { application, ring } = await groupTarget(ctx, group);
-  const attemptRow = await ctx.db.query(
-    `SELECT COALESCE(MAX(attempt), 0) + 1 AS attempt FROM dispatches WHERE kind = 'group' AND ref_id = $1`,
-    [group.id],
-  );
-  const attempt = attemptRow.rows[0].attempt;
-  const dispatchId = ulid();
   const labels = groupDispatchLabels(group, ring);
   // A continuation snapshots CURRENT ring state, exactly as a retry does: the
   // next attempt runs against the ring as it is now, and its own snapshot is
   // what its offer and group spec will serve.
-  const posted = await ctx.db.query(
-    `INSERT INTO dispatches (id, project_id, kind, ref_id, attempt, status, labels, target)
-       SELECT $1, $2, 'group', $3, $4, 'requested', $5, $6
-        WHERE NOT EXISTS (
-              SELECT 1 FROM dispatches
-               WHERE kind = 'group' AND ref_id = $3
-                 AND status IN (${inClause(ACTIVE_DISPATCHES, 7)}))`,
-    [dispatchId, group.project_id, group.id, attempt, labels, targetSnapshot(application, ring, labels), ...ACTIVE_DISPATCHES],
+  //
+  // Attempt allocation and the insert are ONE transaction (state.ts): reading
+  // `MAX(attempt) + 1` outside the write is how two continuations racing on the
+  // same group used to end up allocating the same generation.
+  const posted = await ctx.db.withTx((tx: HostedDynamic) =>
+    createGroupDispatch(tx, {
+      projectId: group.project_id,
+      groupId: group.id,
+      labels,
+      target: targetSnapshot(application, ring, labels),
+    }),
   );
-  if (posted.rowCount === 0) return null;
-  await dispatchAttempt(ctx, { dispatchId, kind: "group", refId: group.id, labels });
-  return dispatchId;
+  if (!posted) return null;
+  await dispatchAttempt(ctx, { dispatchId: posted.dispatchId, kind: "group", refId: group.id, labels });
+  return posted.dispatchId;
 }
 
 export async function getRunGroup(ctx: HostedDynamic, id: HostedDynamic) {

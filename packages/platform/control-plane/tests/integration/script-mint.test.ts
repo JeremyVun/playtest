@@ -59,16 +59,30 @@ async function launchGroup(api: HostedDynamic, projectKey: HostedDynamic, { suit
 }
 
 /**
- * Two executor bearers for one group, the way a real runner produces them: it
- * claims the dispatch on the board once, then exchanges twice (which is what a
- * crash-resumed executor does). Each exchange registers its own executor, which
- * is what these single-flight session tests race against each other.
+ * Two CONCURRENTLY LIVE executors in one project — two run groups, two runners,
+ * two dispatches — which is what the single-flight session broker actually
+ * arbitrates between.
+ *
+ * It used to be two exchanges against ONE dispatch, but an attempt has exactly
+ * one current executor now: a re-exchange fences the bearer before it, so the
+ * two halves of these races could never both act (docs/contracts/hosted.md,
+ * "Current executor fencing").
  */
-async function twoExecutors(api: HostedDynamic, base: HostedDynamic, projectKey: HostedDynamic, groupId: HostedDynamic) {
-  const first = await claimAndExchange(api, base, { project: { key: projectKey }, groupId, labels: RING_LABELS });
-  const second = await first.agent.exchange({ dispatch_id: first.dispatchId, isolation: "process" });
-  assert.equal(second.status, 200, JSON.stringify(second.body));
-  return [{ token: first.token, executor_id: first.executorId }, second.body];
+async function twoExecutors(
+  api: HostedDynamic,
+  base: HostedDynamic,
+  projectKey: HostedDynamic,
+  groupId: HostedDynamic,
+  { suiteId, ringId }: HostedDynamic,
+): Promise<[HostedDynamic, HostedDynamic]> {
+  const project = { key: projectKey };
+  const first = await claimAndExchange(api, base, { project, groupId, labels: RING_LABELS });
+  const secondGroup = await launchGroup(api, projectKey, { suiteId, ringId });
+  const second = await claimAndExchange(api, base, { project, groupId: secondGroup, labels: RING_LABELS });
+  return [
+    { token: first.token, executor_id: first.executorId },
+    { token: second.token, executor_id: second.executorId },
+  ];
 }
 
 function runnerHeaders(token: HostedDynamic) {
@@ -102,7 +116,7 @@ test("script claim hands one mint grant and fulfill caches the session", async (
 
     // Two executors on one group, each claiming through the bearer it just
     // exchanged for — the order a real pair of jobs takes.
-    const [exA, exB] = await twoExecutors(api, base, projectKey, groupId);
+    const [exA, exB] = await twoExecutors(api, base, projectKey, groupId, { suiteId: suite.id, ringId: ring.id });
     const claimedA = await claim(base, exA.token, ["sso/member"]);
 
     assert.equal(claimedA.status, 200, JSON.stringify(claimedA.body));
@@ -153,7 +167,7 @@ test("failed mint deletes the claim so the next claimer takes over", async () =>
     const { projectKey, suite, ring } = await setupFixture(api, { projectKey: "scriptmintfail" });
     const groupId = await launchGroup(api, projectKey, { suiteId: suite.id, ringId: ring.id });
 
-    const [exA, exB] = await twoExecutors(api, base, projectKey, groupId);
+    const [exA, exB] = await twoExecutors(api, base, projectKey, groupId, { suiteId: suite.id, ringId: ring.id });
     const claimedA = await claim(base, exA.token, ["sso/member"]);
     const grantA = claimedA.body.sessions["sso/member"].mint;
     assert.ok(grantA);
@@ -188,7 +202,7 @@ test("fulfill is executor-scoped and single-shot", async () => {
     const { projectKey, suite, ring } = await setupFixture(api, { projectKey: "scriptmintscope" });
     const groupId = await launchGroup(api, projectKey, { suiteId: suite.id, ringId: ring.id });
 
-    const [exA, exB] = await twoExecutors(api, base, projectKey, groupId);
+    const [exA, exB] = await twoExecutors(api, base, projectKey, groupId, { suiteId: suite.id, ringId: ring.id });
     const claimedA = await claim(base, exA.token, ["sso/member"]);
     const grantA = claimedA.body.sessions["sso/member"].mint;
     assert.ok(grantA);
@@ -217,7 +231,7 @@ test("claim wait-hold returns as soon as the winner fulfills", async () => {
     const { suite, ring, projectKey } = await setupFixture(api, { projectKey: "scriptmintwait" });
     const groupId = await launchGroup(api, projectKey, { suiteId: suite.id, ringId: ring.id });
 
-    const [exA, exB] = await twoExecutors(api, base, projectKey, groupId);
+    const [exA, exB] = await twoExecutors(api, base, projectKey, groupId, { suiteId: suite.id, ringId: ring.id });
     const claimedA = await claim(base, exA.token, ["sso/member"]);
     const grantA = claimedA.body.sessions["sso/member"].mint;
     assert.ok(grantA);
@@ -268,7 +282,7 @@ test("codeless script provider degrades to a per-ref claim error", async () => {
       ring_id: ring.id,
     });
     const groupId = await launchGroup(api, projectKey, { suiteId: suite.id, ringId: ring.id });
-    const [ex] = await twoExecutors(api, base, projectKey, groupId);
+    const [ex] = await twoExecutors(api, base, projectKey, groupId, { suiteId: suite.id, ringId: ring.id });
     const claimed = await claim(base, ex.token, ["sso/member"]);
     // Degrades per-ref (§3a): the claim answers 200 and the broken provider's
     // friendly message rides `{error}` on its ref — a 4xx/5xx here killed the

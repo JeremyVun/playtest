@@ -15,6 +15,13 @@ export const ERROR_CODES = {
   not_found: 404,
   method_not_allowed: 405,
   conflict: 409, // snapshot/version conflict, duplicate key
+  // The ONE stale-ownership answer across the whole executor protocol: the
+  // bearer's executor is not the current executor of the dispatch it addresses,
+  // or that dispatch/group/run is no longer in a state where the operation
+  // means anything. `details.reason` is the machine-readable half
+  // (docs/contracts/hosted.md, "Current executor fencing"). A runner treats it
+  // as final for that work: stop executing, stop uploading, go back to polling.
+  executor_conflict: 409,
   payload_too_large: 413,
   unsupported_media_type: 415,
   rate_limited: 429, // write-route token bucket (Phase 7); Retry-After names the wait

@@ -392,7 +392,11 @@ export const COLUMN_TYPES: HostedDynamic = {
     runner_labels: "text[]",
   },
   executors: {
-    id: "text", run_group_id: "text", kind: "text", versions: "json",
+    // `dispatch_id` is the immutable executor→dispatch link written once at
+    // exchange; `dispatches.executor_id` is the mutable current-executor pointer
+    // that answers back. The two tables reference each other, so the fixture is
+    // loaded in one transaction and the link is DEFERRABLE in the schema.
+    id: "text", run_group_id: "text", dispatch_id: "text", kind: "text", versions: "json",
     isolation: "text", registered_at: "ts", last_report_at: "ts", concluded_at: "ts", created_at: "ts",
   },
   runs: {
@@ -842,6 +846,7 @@ export const TABLES: HostedDynamic = {
     {
       id: IDS.executorGroup,
       run_group_id: IDS.group1,
+      dispatch_id: IDS.dispatchGroup1,
       kind: "group",
       versions: { playtest: "0.1.0", node: "20.11.1", playwright: "1.53.0" },
       isolation: "container",
@@ -853,6 +858,7 @@ export const TABLES: HostedDynamic = {
     {
       id: IDS.executorMedia,
       run_group_id: null, // ON DELETE SET NULL column, and media executors are group-free
+      dispatch_id: IDS.dispatchMedia,
       kind: "media",
       versions: {},
       isolation: "process",
@@ -864,6 +870,7 @@ export const TABLES: HostedDynamic = {
     {
       id: IDS.executorMint,
       run_group_id: null,
+      dispatch_id: IDS.dispatchMint,
       kind: "mint",
       versions: { playtest: "0.1.0" },
       isolation: null, // nullable CHECK column

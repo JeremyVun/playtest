@@ -1,3 +1,17 @@
+/**
+ * The control plane's one stale-ownership answer (409 `executor_conflict`,
+ * docs/contracts/hosted.md "Current executor fencing"). It means this bearer is
+ * no longer the current executor of the attempt it is addressing — or that
+ * attempt has ended — so the work is FINAL for this process: stop executing,
+ * stop uploading, and go back to the board. Retrying is the one thing that can
+ * never help.
+ */
+export const EXECUTOR_CONFLICT_CODE = "executor_conflict";
+
+export function isStaleExecutorError(e: unknown): boolean {
+  return e instanceof RunnerApiError && e.status === 409 && e.code === EXECUTOR_CONFLICT_CODE;
+}
+
 export class RunnerApiError extends Error {
   declare status: number;
   declare code: string;

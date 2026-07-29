@@ -14,7 +14,7 @@
 // is a no-op refusal.
 import { badRequest, notFound } from "../errors.ts";
 import { readJsonBody, readRawBody } from "../http.ts";
-import { requireGroupExecutor, requireRunOwner } from "../auth/current-executor.ts";
+import { reassertCurrentExecutor, requireGroupExecutor, requireRunOwner } from "../auth/current-executor.ts";
 import { canonicalJson } from "../db.ts";
 import { ulid } from "../ulid.ts";
 import {
@@ -84,6 +84,7 @@ export async function openCase(ctx: HostedDynamic) {
   let generation = 0;
   let opened = false;
   await ctx.db.withTx(async (tx: HostedDynamic) => {
+    await reassertCurrentExecutor(tx, runner);
     const { rows } = await tx.query(
       `SELECT status, live_manifest, live_manifest_generation FROM runs WHERE id = $1`,
       [run.id],
@@ -127,7 +128,7 @@ export async function openCase(ctx: HostedDynamic) {
  * already staged are refused.
  */
 export async function putLiveEntry(ctx: HostedDynamic) {
-  const { run } = await runnerRun(ctx);
+  const { runner, run } = await runnerRun(ctx);
   const entry = String(ctx.params.entry || "");
   const closed = closedAck(run);
   if (closed) return closed;
@@ -148,6 +149,7 @@ export async function putLiveEntry(ctx: HostedDynamic) {
 
   let outcome: HostedDynamic = null;
   await ctx.db.withTx(async (tx: HostedDynamic) => {
+    await reassertCurrentExecutor(tx, runner);
     const fresh = await currentRun(tx, run.id);
     const stillClosed = closedAck(fresh);
     if (stillClosed) return void (outcome = stillClosed);
@@ -191,6 +193,10 @@ export async function putLiveEntry(ctx: HostedDynamic) {
   // this size must never hold the single SQLite write connection.
   await ctx.store.put(outcome.reserve, buf);
   await ctx.db.withTx(async (tx: HostedDynamic) => {
+    // Re-fenced on the publish side too: a replacement landing during the
+    // object write leaves the row `pending` for GC rather than serving a stale
+    // executor's artifact as `ready`.
+    await reassertCurrentExecutor(tx, runner);
     await tx.query(
       `UPDATE live_artifacts SET state = 'ready', size = $3, sha256 = $4, updated_at = now()
         WHERE run_id = $1 AND entry = $2`,
@@ -216,7 +222,7 @@ export async function putLiveEntry(ctx: HostedDynamic) {
  *     the position to rewind to.
  */
 export async function postLiveTrajectory(ctx: HostedDynamic) {
-  const { run } = await runnerRun(ctx);
+  const { runner, run } = await runnerRun(ctx);
   const body = await readJsonBody(ctx.req, { limit: LIVE_TRAJECTORY_BODY_LIMIT });
   const fromLine = body.from_line;
   if (!Number.isSafeInteger(fromLine) || fromLine < 0) throw badRequest(`"from_line" must be a non-negative integer`);
@@ -246,6 +252,7 @@ export async function postLiveTrajectory(ctx: HostedDynamic) {
 
   let outcome: HostedDynamic = null;
   await ctx.db.withTx(async (tx: HostedDynamic) => {
+    await reassertCurrentExecutor(tx, runner);
     const fresh = await currentRun(tx, run.id);
     const count = await trajectoryLineCount(tx, run.id);
     const stillClosed = closedAck(fresh);

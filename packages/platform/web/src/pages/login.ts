@@ -1,10 +1,10 @@
 // Login screen — shown to an unauthenticated visitor (OIDC mode). "Sign in" starts
 // the code flow at /auth/login, which returns to the deep link the user came for.
-import { h, mount } from "../lib/dom.js";
+import { byId, h, mount } from "../lib/dom.js";
 
 export function loginScreen() {
   const returnTo = location.pathname === "/login" ? "/" : location.pathname + location.search;
-  const app = document.getElementById("app");
+  const app = byId("app");
   app.removeAttribute("aria-busy");
   mount(app,
     h("div.login-wrap", {},

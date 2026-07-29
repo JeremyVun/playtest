@@ -12,7 +12,7 @@ import type { DynamicValue } from "./types.ts";
 // instance of the same service and reproduces the verdict without the control
 // plane, the model, or the job that produced it — which is what makes the
 // approval fingerprint mean something.
-import crypto from "node:crypto";
+import { sha256Hex } from "../hash.ts";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -29,8 +29,6 @@ export const BUNDLE_MANIFEST = "bundle.json";
 export const BUNDLE_SCRIPT = "suite.mjs";
 /** The persisted authoring transcript. */
 export const BUNDLE_TRANSCRIPT = "authoring-transcript.json";
-
-const sha256 = (buffer: DynamicValue) => crypto.createHash("sha256").update(buffer).digest("hex");
 
 const copyInto = (from: DynamicValue, to: DynamicValue) => {
   fs.mkdirSync(path.dirname(to), { recursive: true });
@@ -65,7 +63,7 @@ export function writeAuthoringBundle(dir: DynamicValue, { script, transcript, ex
     for (const entry of fs.readdirSync(absolute).sort()) {
       const child = relative ? path.join(relative, entry) : entry;
       if (fs.statSync(path.join(root, child)).isDirectory()) walk(child);
-      else files.push({ path: child, sha256: sha256(fs.readFileSync(path.join(root, child))), bytes: fs.statSync(path.join(root, child)).size });
+      else files.push({ path: child, sha256: sha256Hex(fs.readFileSync(path.join(root, child))), bytes: fs.statSync(path.join(root, child)).size });
     }
   };
   walk("");
@@ -73,7 +71,7 @@ export function writeAuthoringBundle(dir: DynamicValue, { script, transcript, ex
   const manifest: DynamicValue = {
     authoring_bundle_version: AUTHORING_BUNDLE_VERSION,
     created_at: new Date().toISOString(),
-    script: { path: BUNDLE_SCRIPT, sha256: report?.script?.sha256 ?? sha256(script), bytes: Buffer.byteLength(script) },
+    script: { path: BUNDLE_SCRIPT, sha256: report?.script?.sha256 ?? sha256Hex(script), bytes: Buffer.byteLength(script) },
     authored: {
       model: transcript.model,
       iterations: transcript.iterations?.length ?? 0,
@@ -118,7 +116,7 @@ export function readAuthoringBundle(dir: DynamicValue) {
   const tampered: DynamicValue = [];
   for (const file of manifest.files ?? []) {
     const absolute = path.join(root, file.path);
-    if (!fs.existsSync(absolute) || sha256(fs.readFileSync(absolute)) !== file.sha256) tampered.push(file.path);
+    if (!fs.existsSync(absolute) || sha256Hex(fs.readFileSync(absolute)) !== file.sha256) tampered.push(file.path);
   }
   return { dir: root, manifest, scriptPath: path.join(root, BUNDLE_SCRIPT), tampered };
 }

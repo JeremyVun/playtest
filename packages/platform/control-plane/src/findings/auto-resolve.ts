@@ -52,7 +52,7 @@
 // has no later retrigger. Interleaving with a dedupe sweep is safe by
 // construction — every apply statement here re-asserts state and last_seen
 // and refuses to follow merge tombstones.
-import { withLease } from "../leases.ts";
+import { createProjectSweepScheduler } from "./sweep-scheduler.ts";
 import { audit } from "../audit.ts";
 import { emitPlatformEvent } from "../events/outbox.ts";
 import { extractAnomalies } from "@playtest/core/analysis";
@@ -64,20 +64,14 @@ import { verifyExcerpts, verifyFindingFixed, verifyModelFor } from "./verify-fix
 
 export const AUTO_RESOLVE_ACTOR: HostedDynamic = { system: "auto_resolve" };
 
-// Same rationale as auto-dedupe's map, and deliberately not the same map: a
-// pending resolve timer must never cancel a pending dedupe timer or vice
-// versa. Keyed by the shared Db instance so timers debounce across requests
-// and are visible to shutdown/tests.
-const TIMERS_BY_DB = new WeakMap();
+// Deliberately its own scheduler, not auto-dedupe's: a pending resolve timer
+// must never cancel a pending dedupe timer or vice versa. `app.close()` cancels
+// both through `cancelProjectSweeps`.
+const sweeps = createProjectSweepScheduler("auto-resolve");
 
 /** The pending sweep timers for this app — exported for shutdown and tests. */
 export function autoResolveTimers(ctx: HostedDynamic) {
-  let m = TIMERS_BY_DB.get(ctx.db);
-  if (!m) {
-    m = new Map();
-    TIMERS_BY_DB.set(ctx.db, m);
-  }
-  return m;
+  return sweeps.timers(ctx);
 }
 
 /**
@@ -110,20 +104,13 @@ export function autoResolveModeFor(ctx: HostedDynamic, project: HostedDynamic) {
  * everything from durable state.
  */
 export function scheduleAutoResolve(ctx: HostedDynamic, projectId: HostedDynamic) {
-  const timers = autoResolveTimers(ctx);
-  clearTimeout(timers.get(projectId));
-  const timer = setTimeout(() => {
-    timers.delete(projectId);
-    withLease(ctx.db, `auto-resolve:${projectId}`, { log: ctx.log }, async () => {
+  return sweeps.schedule(ctx, projectId, {
+    debounceMs: ctx.config.autoResolve.debounceMs,
+    sweep: async () => {
       const project = (await ctx.db.query(`SELECT * FROM projects WHERE id = $1`, [projectId])).rows[0];
       if (project && autoResolveEnabledFor(ctx, project)) await runAutoResolve(ctx, { project });
-    }).catch((err) => {
-      ctx.log?.warn?.({ msg: "auto-resolve sweep failed", projectId, err: String(err?.stack || err) });
-    });
-  }, ctx.config.autoResolve.debounceMs);
-  timer.unref?.();
-  timers.set(projectId, timer);
-  return true;
+    },
+  });
 }
 
 // ---------------------------------------------------------------------------

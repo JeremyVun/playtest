@@ -311,7 +311,7 @@ test("codeless script provider degrades to a per-ref claim error", async () => {
 
 // A forced mint on a script provider posts a standalone `mint` entry to the
 // claim board (202 + pending claim). The full runner round-trip is pinned by
-// phase7-mint-dispatch.test.ts; this pins the API shape, the ledger row, and
+// mint-dispatch.test.ts; this pins the API shape, the ledger row, and
 // the routing and target a mint inherits from the provider's binding.
 test("force-mint on a script provider posts a mint to the board, routed and targeted by its ring", async () => {
   await withApp(async ({ api, base, app }: HostedDynamic) => {

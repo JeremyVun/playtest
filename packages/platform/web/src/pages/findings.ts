@@ -1,18 +1,18 @@
 import { api } from "../lib/api.js";
 import { h, mount } from "../lib/dom.js";
-import { link, navigate, onPageLeave } from "../lib/router.js";
-import { renderFrame, page } from "../lib/shell.js";
-import { state, hasRole, autoDedupeOn } from "../lib/state.js";
+import { link, navigate } from "../lib/router.js";
+import { page } from "../lib/shell.js";
+import { hasRole, autoDedupeOn } from "../lib/state.js";
 import { statusChip, srOnly, toast, toastError, emptyState, errorState, formModal, copyText, formField } from "../lib/ui.js";
 import { ago, short, clamp } from "../lib/labels.js";
-import { subscribeFeed } from "../lib/feed.js";
+import { debouncedFeedRefresh } from "../lib/live-page.js";
+import { projectPage } from "../lib/project-page.js";
 import { FINDING_BUCKETS, bucketId, bucketCounts, findingStateLabel, findingStateTone, findingStateGloss } from "../lib/finding-buckets.js";
 import { categoryLabel } from "../lib/vocab.js";
 
 let live: WebDynamic = null;
 function stopLive() {
-  live?.sub?.stop();
-  clearTimeout(live?.timer);
+  live?.stop();
   live = null;
 }
 
@@ -25,30 +25,19 @@ const FILTERS = FINDING_BUCKETS;
 
 export async function findingsPage(projectKey: WebDynamic, query: WebDynamic = new URLSearchParams()) {
   stopLive();
-  const main = renderFrame({ projectKey, nav: "findings" });
-  const project = state.projectByKey.get(projectKey);
-  if (!project) return mount(main, page({ title: "Findings", body: emptyState("Not found", "No such project.") }));
+  const context = projectPage(projectKey, { nav: "findings", title: "Findings" });
+  if (!context) return;
+  const { main, project } = context;
   const filter = bucketId(query.get("filter"));
-  mount(main, page({ title: "Findings", body: h("div.dim", {}, "Loading…") }));
 
-  const token: WebDynamic = {};
-  live = {
-    token,
-    timer: null,
-    sub: subscribeFeed(projectKey, {
-      // consolidation.auto_applied: the auto-dedupe sweep merges rows without
-      // emitting per-finding events, so the list listens for the sweep itself.
-      // finding.fix_suggested: the auto-resolve sweep attached a "looks fixed"
-      // suggestion; finding.resolved covers its auto-resolutions unchanged.
-      types: ["finding.created", "finding.evidence_added", "finding.accepted", "finding.rejected", "finding.resolved", "finding.reopened", "finding.fix_suggested", "consolidation.auto_applied"],
-      onEvent: () => {
-        if (live?.token !== token) return;
-        clearTimeout(live.timer);
-        live.timer = setTimeout(load, 250);
-      },
-    }),
-  };
-  onPageLeave(stopLive);
+  live = debouncedFeedRefresh(projectKey, {
+    // consolidation.auto_applied: the auto-dedupe sweep merges rows without
+    // emitting per-finding events, so the list listens for the sweep itself.
+    // finding.fix_suggested: the auto-resolve sweep attached a "looks fixed"
+    // suggestion; finding.resolved covers its auto-resolutions unchanged.
+    types: ["finding.created", "finding.evidence_added", "finding.accepted", "finding.rejected", "finding.resolved", "finding.reopened", "finding.fix_suggested", "consolidation.auto_applied"],
+    refresh: load,
+  });
 
   await load();
 
@@ -67,7 +56,7 @@ export async function findingsPage(projectKey: WebDynamic, query: WebDynamic = n
           ? api.get(`/projects/${projectKey}/findings?state=reopened,accepted&fix_suggested=1&limit=100`).then((r: WebDynamic) => r.items).catch(() => [])
           : Promise.resolve([]),
       ]);
-      if (live?.token !== token) return;
+      if (!live?.current()) return;
       const counts = tallies ? bucketCounts(tallies.counts) : { [filter]: items.length };
       if (tallies?.fix_suggested) counts.review = (counts.review || 0) + tallies.fix_suggested;
       paint(items, counts, suggested);
@@ -239,25 +228,15 @@ export async function findingsPage(projectKey: WebDynamic, query: WebDynamic = n
 
 export async function findingDetailPage(projectKey: WebDynamic, findingId: WebDynamic) {
   stopLive();
-  const main = renderFrame({ projectKey, nav: "findings" });
-  const project = state.projectByKey.get(projectKey);
-  if (!project) return mount(main, page({ title: "Finding", body: emptyState("Not found", "No such project.") }));
-  mount(main, page({ title: "Finding", body: h("div.dim", {}, "Loading…") }));
+  const context = projectPage(projectKey, { nav: "findings", title: "Finding" });
+  if (!context) return;
+  const { main, project } = context;
 
-  const token: WebDynamic = {};
-  live = {
-    token,
-    timer: null,
-    sub: subscribeFeed(projectKey, {
-      types: ["finding.created", "finding.evidence_added", "finding.accepted", "finding.rejected", "finding.resolved", "finding.reopened", "finding.fix_suggested"],
-      onEvent: (e: WebDynamic) => {
-        if (live?.token !== token || e.entity?.finding_id !== findingId) return;
-        clearTimeout(live.timer);
-        live.timer = setTimeout(load, 250);
-      },
-    }),
-  };
-  onPageLeave(stopLive);
+  live = debouncedFeedRefresh(projectKey, {
+    types: ["finding.created", "finding.evidence_added", "finding.accepted", "finding.rejected", "finding.resolved", "finding.reopened", "finding.fix_suggested"],
+    refresh: load,
+    accepts: (event: WebDynamic) => event.entity?.finding_id === findingId,
+  });
 
   let copiedAt: WebDynamic = null; // survives repaints: the tracker-copy receipt must persist (round-3 triage major)
 
@@ -276,7 +255,7 @@ export async function findingDetailPage(projectKey: WebDynamic, findingId: WebDy
   async function load() {
     try {
       const finding = await api.get(`/findings/${findingId}`);
-      if (live?.token !== token) return;
+      if (!live?.current()) return;
       paint(finding);
     } catch (err: WebDynamic) {
       mount(main, page({ title: "Finding", body: errorState(err, load) }));

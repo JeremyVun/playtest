@@ -94,7 +94,7 @@ test("run_grade intake: grade issues from a sealed bundle become unreviewed find
         [ulid(), runDbId, `runs/rg/${runDbId}.ptrun`, stored.sha256, stored.size],
       );
 
-      const collected = await collectRunGradeIssues(app, runDbId, null);
+      const collected = await collectRunGradeIssues(app.ctx, runDbId, null);
       assert.ok(collected, "the sealed bundle's grade must be readable");
       assert.equal(collected.issues.length, 2);
 

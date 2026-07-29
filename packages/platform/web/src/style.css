@@ -1368,3 +1368,9 @@ a.quiet-link:hover .app-row { border-color: var(--accent); }
 .identity-ref { display: flex; gap: 8px; flex: 1; min-width: 0; }
 .identity-ref > select:first-child { width: 200px; flex: none; }
 .identity-ref > :last-child { flex: 1; width: auto; min-width: 0; }
+
+/* Repeated page grammar: section explanation, section-level action, and the
+   submit row at the end of a form card. */
+.section-caption { font-size: 12.5px; margin: -4px 0 12px; }
+.section-actions { display: flex; justify-content: flex-end; margin-bottom: 12px; }
+.form-actions { display: flex; justify-content: flex-end; margin-top: 14px; }

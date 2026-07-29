@@ -117,6 +117,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     live: {
       runBudgetBytes: num(env.PLAYTEST_LIVE_BUDGET_MB, 512) * 1024 * 1024,
     },
+    // The run-bundle LRU shared by grading, findings, review, media, and viewer
+    // delivery (`src/run-storage.ts`). One budget per app instance, owned by the
+    // app and cleared with it — never a process-global.
+    viewCache: {
+      maxBytes: num(env.PLAYTEST_VIEW_CACHE_MB, 256) * 1024 * 1024,
+    },
     dispatch: {
       maxActivePerProject: Number(env.PLAYTEST_DISPATCH_MAX_ACTIVE_PER_PROJECT || 4),
       // The claim board is the ONE placement model (docs/contracts/hosted.md,
@@ -264,6 +270,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     throw new ServerConfigError(
       `PLAYTEST_LIVE_BUDGET_MB must be a whole number of megabytes between 1 and 512 — the sealed bundle ` +
         `limit is its ceiling (got ${JSON.stringify(env.PLAYTEST_LIVE_BUDGET_MB)}); leave it unset for 512`,
+    );
+  }
+  const viewCacheMb = config.viewCache.maxBytes / (1024 * 1024);
+  if (!Number.isFinite(viewCacheMb) || viewCacheMb < 1) {
+    throw new ServerConfigError(
+      `PLAYTEST_VIEW_CACHE_MB must be a number of megabytes >= 1 ` +
+        `(got ${JSON.stringify(env.PLAYTEST_VIEW_CACHE_MB)}); leave it unset for 256`,
     );
   }
   if (!Number.isFinite(config.retention.intervalMs) || config.retention.intervalMs < 0) {

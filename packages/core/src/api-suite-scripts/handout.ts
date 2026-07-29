@@ -18,7 +18,7 @@ import type { DynamicValue } from "./types.ts";
 //
 // Nothing here consults a model, and nothing here is authored by a model: given
 // the same spec, rules, and budgets, this module writes the same bytes.
-import crypto from "node:crypto";
+import { sha256Hex } from "../hash.ts";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -38,8 +38,6 @@ export const HANDOUT_VERSION = 2;
 const ASSETS = fileURLToPath(new URL("./handout/", import.meta.url));
 export const BRIEF_ASSET = path.join(ASSETS, "BRIEF.md");
 export const CLIENT_ASSET = path.join(ASSETS, "CLIENT.md");
-
-const sha256 = (value: DynamicValue) => crypto.createHash("sha256").update(value).digest("hex");
 
 /** Lowercase, hyphenated, alphanumeric — the fallback rule-id derivation. */
 export const slugifyRuleId = (text: DynamicValue) =>
@@ -338,9 +336,9 @@ export function buildHandout({
       operation: manifestEntries.filter((entry: DynamicValue) => entry.source === "operation").length,
       rule: manifestEntries.filter((entry: DynamicValue) => entry.source === "rule").length,
     },
-    files: files.map((file) => ({ path: file.path, sha256: sha256(file.contents), bytes: Buffer.byteLength(file.contents) })),
+    files: files.map((file) => ({ path: file.path, sha256: sha256Hex(file.contents), bytes: Buffer.byteLength(file.contents) })),
   };
-  manifest.sha256 = sha256(JSON.stringify(manifest.files));
+  manifest.sha256 = sha256Hex(JSON.stringify(manifest.files));
 
   return { version: HANDOUT_VERSION, files, manifest, obligations: manifestEntries, rules: approvedRules };
 }

@@ -264,7 +264,7 @@ test("scope: a polling site runner counts as presence for the project it can ser
 // Gate 15
 // --------------------------------------------------------------------------
 
-test("gate 15: revoking a site runner blocks poll, claim and exchange while its group finishes", async () => {
+test("revoking a site runner blocks poll, claim and exchange while its group finishes", async () => {
   await withApp(async ({ api, base, app }: HostedDynamic) => {
     const a = await setUp(api, "revokea");
     const b = await setUp(api, "revokeb");
@@ -306,7 +306,7 @@ test("gate 15: revoking a site runner blocks poll, claim and exchange while its 
   });
 });
 
-test("gate 15: project B sees the machine and that it is busy — never project A's identifiers", async () => {
+test("project B sees the site runner and that it is busy — never project A's identifiers", async () => {
   await withApp(async ({ api, base, app }: HostedDynamic) => {
     const a = await setUp(api, "tenanta");
     const b = await setUp(api, "tenantb");
@@ -433,7 +433,7 @@ test("dev peer runner: ensured once, reused on every later boot, credential file
   }
 });
 
-test("gate 6 + gate 11: nothing runs until a runner polls, then the dev peer runner serves the board", async () => {
+test("nothing runs until a runner polls, then the dev peer runner serves the board", async () => {
   let agent: HostedDynamic = null;
   try {
     await withApp(async ({ api, base, app }: HostedDynamic) => {

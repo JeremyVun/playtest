@@ -21,7 +21,7 @@
 // credential for a short-lived bearer scoped to that one group or mint claim
 // before it can read a snapshot or post a report.
 import { audit } from "../audit.ts";
-import { created, readJsonBody } from "../http.ts";
+import { created, readJsonBody, waitSeconds } from "../http.ts";
 import { AppError, badRequest, conflict, forbidden, notFound } from "../errors.ts";
 import {
   newRunnerCredential,
@@ -40,7 +40,6 @@ import { checkInWindowMs } from "../dispatch/pool.ts";
 import { ACTIVE_DISPATCH_STATES_SQL, claimDispatchForRunner, markGroupRunning } from "../dispatch/state.ts";
 
 /** Hold window cap, the same one the browser feed uses. */
-const MAX_WAIT_S = 25;
 
 /**
  * How many offers one poll may carry. Small and fixed: the page exists to keep
@@ -201,7 +200,7 @@ export async function pollClaims(ctx: HostedDynamic) {
   // how an agent restarted mid-group finds what it was doing.
   const current = await activeClaim(ctx, runner.id);
   if (current) {
-    return { runner: runnerView(runner, labels), offers: [], current: await offerView(ctx, current) };
+    return { runner: runnerView(runner, labels), offers: [], current: await offerView(ctx, current), skip_cap: MAX_SKIP_IDS };
   }
 
   const load = async () => {
@@ -245,6 +244,10 @@ export async function pollClaims(ctx: HostedDynamic) {
     runner: runnerView(runner, labels),
     offers: await Promise.all(rows.map((d: HostedDynamic) => offerView(ctx, d))),
     current: null,
+    // The cap is this server's, so it travels with every answer: the agent
+    // sizes its skip list from the deployment it is talking to rather than
+    // from a constant compiled in beside a copy of this one.
+    skip_cap: MAX_SKIP_IDS,
   };
 }
 
@@ -354,7 +357,7 @@ export async function claimDispatch(ctx: HostedDynamic) {
     // (docs/contracts/hosted.md, "Dispatch state"); this route decides who is
     // asking and what a loss means.
     const row = await claimDispatchForRunner(tx, { dispatchId, runnerId: runner.id });
-    if (!row) throw claimLost(ctx, dispatch, runner);
+    if (!row) throw claimLost(dispatch, runner);
     await tx.query(`UPDATE runners SET last_seen_at = now() WHERE id = $1`, [runner.id]);
     if (row.kind === "group") {
       // Through the state module, so a group that settled between the board read
@@ -448,7 +451,7 @@ export async function heartbeatClaim(ctx: HostedDynamic) {
 }
 
 /** Why this runner lost, read after the failed UPDATE inside the same transaction. */
-function claimLost(ctx: HostedDynamic, before: HostedDynamic, runner: HostedDynamic) {
+function claimLost(before: HostedDynamic, runner: HostedDynamic) {
   if (before.claimed_at || before.status !== "requested") {
     return conflict(`dispatch "${before.id}" was already claimed by another runner`);
   }
@@ -529,12 +532,4 @@ function advertisedLabels(ctx: HostedDynamic, runner: HostedDynamic): string[] {
   // same validation registration used: a label the console cannot store is not a
   // label a check-in may smuggle in.
   return normalizeLabels(String(raw).split(",").map((l) => l.trim()).filter(Boolean));
-}
-
-function waitSeconds(raw: unknown): number {
-  if (raw == null || raw === "" || raw === "false" || raw === "0") return 0;
-  if (raw === "true") return MAX_WAIT_S;
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n <= 0) return 0;
-  return Math.min(n, MAX_WAIT_S);
 }

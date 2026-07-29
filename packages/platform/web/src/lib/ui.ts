@@ -2,7 +2,7 @@
 // modal, status chips using the exact core glyph legend + palette, a tiny sparkline,
 // and empty/deferred states. Status glyphs and words come from core report.ts and
 // are non-negotiable (word + color, never color alone — accessibility).
-import { h, mount, clear } from "./dom.js";
+import { byId, h, mount, clear } from "./dom.js";
 import { onPageLeave } from "./router.js";
 import { nextRunLabel, nextRunGloss } from "./vocab.js";
 
@@ -33,7 +33,7 @@ export function tag(text: WebDynamic) {
 }
 
 export function toast(title: WebDynamic, body?: WebDynamic, kind: WebDynamic = "") {
-  const root = document.getElementById("toasts");
+  const root = byId("toasts");
   const el = h(`div.toast${kind ? "." + kind : ""}`, {}, h("div.t-title", {}, title), body ? h("div.t-body", {}, body) : null);
   root.append(el);
   setTimeout(() => {
@@ -111,14 +111,16 @@ const FOCUSABLE =
  * @param {(close: () => void) => Node} build the dialog body
  */
 function openModal({ title, dismiss, confirmDismiss, onClose }: WebDynamic, build: WebDynamic) {
-  const root = document.getElementById("modal-root");
+  const root = byId("modal-root");
   // Whatever had focus opens the dialog and gets it back — losing your place in
   // a table because you opened and cancelled a dialog is a keyboard dead end.
   const opener: WebDynamic = document.activeElement;
   let closed = false;
+  let unregisterLeave = () => {};
   const close = () => {
     if (closed) return;
     closed = true;
+    unregisterLeave();
     onClose?.();
     clear(root);
     document.removeEventListener("keydown", onKey, true);
@@ -139,7 +141,11 @@ function openModal({ title, dismiss, confirmDismiss, onClose }: WebDynamic, buil
 
   function onKey(e: WebDynamic) {
     if (!scrim.isConnected) return;
-    if (e.key === "Escape") { e.preventDefault(); return bail(); }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      void bail();
+      return;
+    }
     if (e.key !== "Tab") return;
     const items: WebDynamic = [...dialog.querySelectorAll(FOCUSABLE)].filter((el) => el.offsetParent !== null || el === document.activeElement);
     if (!items.length) return;
@@ -161,7 +167,7 @@ function openModal({ title, dismiss, confirmDismiss, onClose }: WebDynamic, buil
   // worth more than a tidy transition, and the guard's own buttons ("Copy it
   // first" / "Close anyway") are the way out. `close` is idempotent, so a
   // dialog dismissed the ordinary way leaves a cleanup that no-ops.
-  onPageLeave(bail);
+  unregisterLeave = onPageLeave(bail);
   // Autofocus the first real control (a field, if the dialog has one) rather
   // than leaving focus behind on the page under the scrim.
   const target = dialog.querySelector("input:not([type=hidden]):not([disabled]), textarea:not([disabled]), .select-btn:not([disabled])")
@@ -198,6 +204,51 @@ export function formModal(title: WebDynamic, render: WebDynamic, opts: WebDynami
 }
 
 /**
+ * Shared open/close mechanics for a popup anchored to a button. The caller
+ * owns the popup's contents and arrow-key behavior; this controller owns the
+ * cross-widget contract: toggle, outside click, Escape, focus restoration,
+ * navigation teardown, and `aria-expanded`.
+ */
+function anchoredPopup({ wrap, button, build, focus, closeOnTab = false }: WebDynamic) {
+  let popup: WebDynamic = null;
+  let unregisterLeave = () => {};
+  const away = (e: WebDynamic) => {
+    if (!wrap.contains(e.target)) close();
+  };
+  function close(focusBack = false) {
+    if (!popup) return;
+    popup.remove();
+    popup = null;
+    unregisterLeave();
+    unregisterLeave = () => {};
+    button.setAttribute("aria-expanded", "false");
+    document.removeEventListener("pointerdown", away, true);
+    if (focusBack) button.focus();
+  }
+  function open() {
+    if (popup) {
+      close(true);
+      return;
+    }
+    popup = build(close);
+    popup.addEventListener("keydown", (e: WebDynamic) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        close(true);
+      } else if (closeOnTab && e.key === "Tab") {
+        close();
+      }
+    });
+    wrap.append(popup);
+    button.setAttribute("aria-expanded", "true");
+    document.addEventListener("pointerdown", away, true);
+    unregisterLeave = onPageLeave(close);
+    focus?.(popup);
+  }
+  return { close, open };
+}
+
+/**
  * Progressive enhancement over a native <select>. The native element stays the
  * single source of truth — call sites keep reading `sel.value` and their
  * onchange handlers keep firing — but the popup the person sees is ours:
@@ -222,34 +273,27 @@ export function enhanceSelect(sel: WebDynamic) {
   new MutationObserver(syncBtn).observe(sel, { childList: true, subtree: true, attributes: true });
   sel.addEventListener("change", syncBtn);
 
-  let menu: WebDynamic = null;
-  const away = (e: WebDynamic) => { if (!wrap.contains(e.target)) closeMenu(); };
-  function closeMenu(focusBack = false) {
-    if (!menu) return;
-    menu.remove();
-    menu = null;
-    btn.setAttribute("aria-expanded", "false");
-    document.removeEventListener("pointerdown", away, true);
-    if (focusBack) btn.focus();
-  }
-  function openMenu() {
-    if (menu) return closeMenu();
-    const opts: WebDynamic = Array.from(sel.options);
-    if (!opts.length) return;
-    const items = opts.map((o: WebDynamic, i: WebDynamic) =>
-      h(`button.select-opt${i === sel.selectedIndex ? ".on" : ""}`, {
-        type: "button",
-        role: "option",
-        "aria-selected": i === sel.selectedIndex ? "true" : "false",
-        disabled: o.disabled || undefined,
-        onclick: () => {
-          closeMenu(true);
-          if (i === sel.selectedIndex) return;
-          sel.selectedIndex = i;
-          sel.dispatchEvent(new Event("change", { bubbles: true }));
-        },
-      }, o.textContent));
-    menu = h("div.select-menu", {
+  let items: WebDynamic = [];
+  const popup = anchoredPopup({
+    wrap,
+    button: btn,
+    closeOnTab: true,
+    build: (close: WebDynamic) => {
+      const opts: WebDynamic = Array.from(sel.options);
+      items = opts.map((o: WebDynamic, i: WebDynamic) =>
+        h(`button.select-opt${i === sel.selectedIndex ? ".on" : ""}`, {
+          type: "button",
+          role: "option",
+          "aria-selected": i === sel.selectedIndex ? "true" : "false",
+          disabled: o.disabled || undefined,
+          onclick: () => {
+            close(true);
+            if (i === sel.selectedIndex) return;
+            sel.selectedIndex = i;
+            sel.dispatchEvent(new Event("change", { bubbles: true }));
+          },
+        }, o.textContent));
+      return h("div.select-menu", {
       role: "listbox",
       onkeydown: (e: WebDynamic) => {
         const live = items.filter((el: WebDynamic) => !el.disabled);
@@ -258,18 +302,14 @@ export function enhanceSelect(sel: WebDynamic) {
         else if (e.key === "ArrowUp") { e.preventDefault(); live[Math.max(at - 1, 0)]?.focus(); }
         else if (e.key === "Home") { e.preventDefault(); live[0]?.focus(); }
         else if (e.key === "End") { e.preventDefault(); live.at(-1)?.focus(); }
-        else if (e.key === "Escape") { e.preventDefault(); closeMenu(true); }
-        else if (e.key === "Tab") closeMenu();
       },
     }, ...items);
-    wrap.append(menu);
-    btn.setAttribute("aria-expanded", "true");
-    document.addEventListener("pointerdown", away, true);
-    (items[sel.selectedIndex] || items[0])?.focus();
-  }
-  btn.addEventListener("click", openMenu);
+    },
+    focus: () => (items[sel.selectedIndex] || items[0])?.focus(),
+  });
+  btn.addEventListener("click", popup.open);
   btn.addEventListener("keydown", (e: WebDynamic) => {
-    if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); openMenu(); }
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); popup.open(); }
   });
   return wrap;
 }
@@ -338,29 +378,19 @@ export function deferred(text: WebDynamic) {
 export function overflowMenu(items: WebDynamic, { label = "⋯", title = "More actions", className = "" }: WebDynamic = {}) {
   const wrap = h("span.selectw", { style: "width:auto" });
   const btn = h(`button.btn${className}`, { "aria-haspopup": "menu", "aria-expanded": "false", title }, label);
-  let menu: WebDynamic = null;
-  const away = (e: WebDynamic) => { if (!wrap.contains(e.target)) close(); };
-  function close() {
-    if (!menu) return;
-    menu.remove(); menu = null;
-    btn.setAttribute("aria-expanded", "false");
-    document.removeEventListener("pointerdown", away, true);
-  }
-  btn.addEventListener("click", () => {
-    if (menu) return close();
-    menu = h("div.select-menu.overflow-menu", {
+  const popup = anchoredPopup({
+    wrap,
+    button: btn,
+    build: (close: WebDynamic) => h("div.select-menu.overflow-menu", {
       role: "menu",
-      onkeydown: (e: WebDynamic) => { if (e.key === "Escape") { e.preventDefault(); close(); btn.focus(); } },
     }, ...items.filter(Boolean).map((it: WebDynamic) =>
       h(`button.select-opt${it.danger ? ".danger" : ""}`, {
         type: "button", role: "menuitem", disabled: it.disabled || undefined, title: it.title || undefined,
         onclick: () => { close(); it.onclick(); },
-      }, it.label)));
-    wrap.append(menu);
-    btn.setAttribute("aria-expanded", "true");
-    document.addEventListener("pointerdown", away, true);
-    menu.querySelector("button:not([disabled])")?.focus();
+      }, it.label))),
+    focus: (menu: WebDynamic) => menu.querySelector("button:not([disabled])")?.focus(),
   });
+  btn.addEventListener("click", popup.open);
   wrap.append(btn);
   return wrap;
 }

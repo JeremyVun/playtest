@@ -12,7 +12,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadConfig } from "../../src/config.ts";
 import { createApp } from "../../src/app.ts";
-import { ulid } from "../../src/ulid.ts";
 
 export const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../..");
 

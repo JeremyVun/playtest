@@ -7,12 +7,13 @@
 // the frozen spec over the P0 fixture corpus, so a change here that diverges
 // from the spec fails the gate.
 //
-// LAYERING: core must not import the control plane, and
-// the control plane must not import core internals, so the hosted port
-// (`packages/platform/control-plane/src/findings/keys.ts`) and this one are
-// deliberate duplicates of the same frozen spec. Both are pinned to
-// `tests/core/findings/spec.ts` by their own parity tests; the spec is the
-// single source of truth, not either copy.
+// LAYERING: this is the ONE implementation. It is exported through
+// `@playtest/core/findings`, and the hosted adapter
+// (`packages/platform/control-plane/src/findings/keys.ts`) delegates here,
+// mapping its `project_id` onto the opaque scope id — the control plane
+// consumes the public export, never a core internal. Both sides keep their own
+// parity tests against `tests/core/findings/spec.ts`; the spec stays the
+// single source of truth.
 //
 // SCOPE: the first key part is the *scope* id — the hosted
 // `project_id` there, the local ledger's opaque `workspace_id` here. Hosted and
@@ -28,7 +29,7 @@
 //
 // The contract also requires that a version bump can recompute stored keys, so every
 // algorithm carries an explicit version that is stored on each row.
-import crypto from "node:crypto";
+import { sha256Hex } from "../hash.ts";
 
 type DynamicValue = any; // SAFETY: local findings accept legacy candidate payloads before schema-normalized persistence
 
@@ -36,14 +37,12 @@ export interface FindingLocus {
   route?: string | null;
   step_locus?: string | null;
   status_class?: string | null;
-  [key: string]: unknown;
 }
 
 export interface FindingClaim {
   expected?: string | null;
   observed?: string | null;
   title?: string | null;
-  [key: string]: unknown;
 }
 
 export interface CandidateIdentity {
@@ -120,10 +119,6 @@ export function normalizeLocus(locus: DynamicValue = {}): string {
     .trim();
 }
 
-function sha256(s: string): string {
-  return crypto.createHash("sha256").update(s).digest("hex");
-}
-
 /** True when this identity is grounded in a deterministic anomaly signal. */
 export function hasExactKeys({ signalType, locus }: { signalType?: string | null; locus?: FindingLocus | null } = {}): boolean {
   return Boolean(signalType) && Boolean(normalizeLocus(locus));
@@ -144,8 +139,8 @@ export function exactKeys({ scopeId, storyId, signalType, locus }: CandidateIden
   }
   const normalized = normalizeLocus(locus);
   return {
-    strict: sha256([scopeId, storyId ?? "", signalType, normalized].join(SEP)),
-    loose: sha256([scopeId, signalType, normalized].join(SEP)),
+    strict: sha256Hex([scopeId, storyId ?? "", signalType, normalized].join(SEP)),
+    loose: sha256Hex([scopeId, signalType, normalized].join(SEP)),
     normalized_locus: normalized,
   };
 }

@@ -174,6 +174,61 @@ export async function requireCurrentExecutor(
 }
 
 /**
+ * Re-assert, INSIDE a write transaction, the ownership facts
+ * `requireCurrentExecutor` checked outside it: the dispatch still exists in a
+ * state this operation means something in, its current-executor pointer still
+ * names this executor, and the group (for group work) has not settled. The gap
+ * between the route guard and the write transaction is exactly where a
+ * replacement exchange, a cancel, or a reconcile can land; every exchange
+ * commits through `withTx` (`BEGIN IMMEDIATE`), so once this read holds the
+ * write lock nothing can change the pointer again before the commit.
+ *
+ * Routes that widen the guard's state lists (completion) pass the same lists
+ * here, so the owner's idempotent retry stays a retry and not a conflict.
+ */
+export async function reassertCurrentExecutor(
+  tx: HostedDynamic,
+  current: CurrentExecutor,
+  {
+    dispatchStates = ACTIVE_DISPATCH_STATES,
+    groupStates = ACTIVE_GROUP_STATES,
+  }: Pick<ExecutorGuardOptions, "dispatchStates" | "groupStates"> = {},
+): Promise<void> {
+  const { rows } = await tx.query(`SELECT * FROM dispatches WHERE id = $1`, [current.dispatch.id]);
+  const dispatch = rows[0];
+  if (!dispatch) {
+    throw executorConflict("executor_replaced", `the dispatch attempt this bearer belongs to no longer exists`, {
+      executor_id: current.executorId,
+      dispatch_id: current.dispatch.id,
+    });
+  }
+  if (!dispatchStates.includes(String(dispatch.status))) {
+    throw executorConflict(
+      "dispatch_not_active",
+      `attempt ${dispatch.attempt} of this work is "${dispatch.status}" and accepts no further executor calls`,
+      { dispatch_id: dispatch.id, attempt: dispatch.attempt, state: dispatch.status },
+    );
+  }
+  if (dispatch.executor_id !== current.executorId) {
+    throw executorConflict("executor_replaced", `a newer executor owns attempt ${dispatch.attempt} of this work`, {
+      executor_id: current.executorId,
+      dispatch_id: dispatch.id,
+      attempt: dispatch.attempt,
+    });
+  }
+  if (current.group) {
+    const group = (await tx.query(`SELECT status FROM run_groups WHERE id = $1`, [current.group.id])).rows[0];
+    if (!group || !groupStates.includes(String(group.status))) {
+      throw executorConflict(
+        "group_settled",
+        `this run group is "${group?.status ?? "gone"}" and accepts no further executor calls`,
+        { run_group_id: current.group.id, state: group?.status ?? null },
+      );
+    }
+  }
+}
+
+/**
  * The guard every group-scoped executor route uses. `groupId` is the group named
  * in the path; routes addressed by run id alone omit it and take the bearer's
  * own scope.

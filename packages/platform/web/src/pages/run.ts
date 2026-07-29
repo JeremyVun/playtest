@@ -15,8 +15,8 @@
 import { api } from "../lib/api.js";
 import { h, mount } from "../lib/dom.js";
 import { link, navigate, onPageLeave } from "../lib/router.js";
-import { renderFrame, page, refreshReviewBadge, currentTheme } from "../lib/shell.js";
-import { state, hasRole } from "../lib/state.js";
+import { page, currentTheme } from "../lib/shell.js";
+import { hasRole } from "../lib/state.js";
 import { statusChip, GLYPH, toast, toastError, emptyState, errorState, formModal, confirmModal, copyText, formField, overflowMenu } from "../lib/ui.js";
 import { modeLabel, chipStatus, fmtCost, fmtMs, ago, short, clamp } from "../lib/labels.js";
 import { didNotRunLabel } from "../lib/vocab.js";
@@ -26,6 +26,7 @@ import { isLiveRun, liveFeedIntent, progressSnapshot, liveDoing, liveAction } fr
 import { subscribeFeed } from "../lib/feed.js";
 import { poolPlacementCause } from "../lib/runners.js";
 import { launchModal } from "./runs.js";
+import { projectPage } from "../lib/project-page.js";
 
 let live: WebDynamic = null;
 function stopLive() {
@@ -37,16 +38,16 @@ function stopLive() {
 
 export async function runDetailPage(projectKey: WebDynamic, groupId: WebDynamic, runId: WebDynamic) {
   stopLive();
-  const main = renderFrame({ projectKey, nav: "runs" });
-  const project = state.projectByKey.get(projectKey);
-  if (!project) {
-    return mount(main, h("div.page", {}, page({
-      title: "Project not found",
-      body: emptyState("No project called that",
-        `Nothing here is named "${projectKey}" — either it doesn't exist, or you're not a member of it.`,
-        h("div.empty-actions", {}, link("/projects", h("span.btn.primary", {}, "See all projects")))),
-    })));
-  }
+  const context = projectPage(projectKey, {
+    nav: "runs",
+    title: "Project not found",
+    loading: false,
+    missingTitle: "No project called that",
+    missingBody: `Nothing here is named "${projectKey}" — either it doesn't exist, or you're not a member of it.`,
+    missingAction: h("div.empty-actions", {}, link("/projects", h("span.btn.primary", {}, "See all projects"))),
+  });
+  if (!context) return;
+  const { main, project } = context;
   mount(main, h("div.page", {}, h("div.dim", {}, "Loading…")));
 
   let run: WebDynamic, group: WebDynamic, mine = [];
@@ -66,16 +67,15 @@ export async function runDetailPage(projectKey: WebDynamic, groupId: WebDynamic,
     // "no run 01BBBB…" is an internal string quoting an id the person never
     // typed — say what happened, and give the one step that works.
     if (err.status === 404) {
-      return mount(main, h("div.page", {},
-        page({
-          crumbs: [link(`/p/${projectKey}/runs`, "Runs")],
-          title: "Run not found",
-          body: emptyState("That run doesn't exist",
-            "It may have been removed by the retention policy, or the link may be out of date.",
-            h("div.empty-actions", {},
-              link(`/p/${projectKey}/runs/${groupId}`, h("span.btn.primary", {}, "See the rest of this run")),
-              link(`/p/${projectKey}/runs`, h("span.btn", {}, "All runs")))),
-        })));
+      return mount(main, page({
+        crumbs: [link(`/p/${projectKey}/runs`, "Runs")],
+        title: "Run not found",
+        body: emptyState("That run doesn't exist",
+          "It may have been removed by the retention policy, or the link may be out of date.",
+          h("div.empty-actions", {},
+            link(`/p/${projectKey}/runs/${groupId}`, h("span.btn.primary", {}, "See the rest of this run")),
+            link(`/p/${projectKey}/runs`, h("span.btn", {}, "All runs")))),
+      }));
     }
     return mount(main, h("div.page", {}, errorState(err, () => runDetailPage(projectKey, groupId, runId))));
   }
@@ -628,7 +628,6 @@ export async function runDetailPage(projectKey: WebDynamic, groupId: WebDynamic,
       // would erase.
       ctl.candidate = null;
       await reloadCandidates().catch(() => { /* the feed event will repaint */ });
-      refreshReviewBadge();
       paintHeader();
     } catch (err: WebDynamic) {
       if (err.status === 409) {

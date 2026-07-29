@@ -14,12 +14,13 @@
 // repaint restores keyboard focus so an update cannot steal the reviewer's place.
 import { api } from "../lib/api.js";
 import { h, mount } from "../lib/dom.js";
-import { link, navigate, onPageLeave } from "../lib/router.js";
-import { renderFrame, page } from "../lib/shell.js";
-import { state, hasRole, autoDedupeOn } from "../lib/state.js";
+import { link, navigate } from "../lib/router.js";
+import { page } from "../lib/shell.js";
+import { hasRole, autoDedupeOn } from "../lib/state.js";
 import { statusChip, toast, toastError, emptyState, errorState, confirmModal } from "../lib/ui.js";
 import { ago, short, clamp } from "../lib/labels.js";
-import { subscribeFeed } from "../lib/feed.js";
+import { debouncedFeedRefresh, preserveFocus } from "../lib/live-page.js";
+import { projectPage } from "../lib/project-page.js";
 import {
   applySummary,
   decisionPayload,
@@ -37,46 +38,22 @@ const FEED_TYPES: WebDynamic = ["consolidation.planned", "consolidation.applied"
 
 let live: WebDynamic = null;
 function stopLive() {
-  live?.sub?.stop();
-  clearTimeout(live?.timer);
+  live?.stop();
   live = null;
-}
-
-function withFocus(paint: WebDynamic) {
-  const key = document.activeElement?.getAttribute?.("data-fk") || null;
-  const start = document.activeElement?.selectionStart ?? null;
-  paint();
-  if (!key) return;
-  const next = document.querySelector(`[data-fk="${CSS.escape(key)}"]`);
-  if (!next) return;
-  next.focus();
-  if (start != null && next.setSelectionRange) {
-    try { next.setSelectionRange(start, start); } catch { /* not a text control */ }
-  }
 }
 
 /** `/p/:key/consolidation` — scope, run, and recent plans. */
 export async function consolidationPage(projectKey: WebDynamic) {
   stopLive();
-  const main = renderFrame({ projectKey, nav: "findings" });
-  const project = state.projectByKey.get(projectKey);
-  if (!project) return mount(main, page({ title: "Consolidate", body: emptyState("Not found", "No such project.") }));
-  mount(main, page({ title: "Group duplicates", body: h("div.dim", {}, "Measuring scope…") }));
+  const context = projectPage(projectKey, {
+    nav: "findings",
+    title: "Group duplicates",
+    loading: "Measuring scope…",
+  });
+  if (!context) return;
+  const { main, project } = context;
 
-  const token: WebDynamic = {};
-  live = {
-    token,
-    timer: null,
-    sub: subscribeFeed(projectKey, {
-      types: FEED_TYPES,
-      onEvent: () => {
-        if (live?.token !== token) return;
-        clearTimeout(live.timer);
-        live.timer = setTimeout(load, 250);
-      },
-    }),
-  };
-  onPageLeave(stopLive);
+  live = debouncedFeedRefresh(projectKey, { types: FEED_TYPES, refresh: load });
   await load();
 
   async function load() {
@@ -85,8 +62,8 @@ export async function consolidationPage(projectKey: WebDynamic) {
         api.get(`/projects/${projectKey}/consolidation/preview`),
         api.get(`/projects/${projectKey}/consolidation-plans?limit=20`),
       ]);
-      if (live?.token !== token) return;
-      withFocus(() => paint(preview, plans.items));
+      if (!live?.current()) return;
+      preserveFocus(() => paint(preview, plans.items));
     } catch (err: WebDynamic) {
       mount(main, page({ title: "Group duplicates", body: errorState(err, load) }));
     }
@@ -195,38 +172,28 @@ export async function consolidationPage(projectKey: WebDynamic) {
 /** `/p/:key/consolidation/:id` — the review screen. */
 export async function consolidationPlanPage(projectKey: WebDynamic, planId: WebDynamic) {
   stopLive();
-  const main = renderFrame({ projectKey, nav: "findings" });
-  const project = state.projectByKey.get(projectKey);
-  if (!project) return mount(main, page({ title: "Plan", body: emptyState("Not found", "No such project.") }));
-  mount(main, page({ title: "Consolidation plan", body: h("div.dim", {}, "Loading…") }));
+  const context = projectPage(projectKey, { nav: "findings", title: "Consolidation plan" });
+  if (!context) return;
+  const { main, project } = context;
 
   let decisions: WebDynamic = null;
-  const token: WebDynamic = {};
-  live = {
-    token,
-    timer: null,
-    sub: subscribeFeed(projectKey, {
-      types: FEED_TYPES,
-      onEvent: (e: WebDynamic) => {
-        if (live?.token !== token || e.entity?.plan_id !== planId) return;
-        clearTimeout(live.timer);
-        live.timer = setTimeout(load, 250);
-      },
-    }),
-  };
-  onPageLeave(stopLive);
+  live = debouncedFeedRefresh(projectKey, {
+    types: FEED_TYPES,
+    refresh: load,
+    accepts: (event: WebDynamic) => event.entity?.plan_id === planId,
+  });
   await load();
 
   async function load() {
     try {
       const plan = await api.get(`/consolidation-plans/${planId}`);
-      if (live?.token !== token) return;
+      if (!live?.current()) return;
       // Keep the reviewer's in-progress edits across a live repaint; only seed
       // decisions the first time, or when the plan's items change underneath.
       if (!decisions || [...decisions.keys()].join() !== plan.items.map((i: WebDynamic) => i.id).join()) {
         decisions = initialDecisions(plan);
       }
-      withFocus(() => paint(plan));
+      preserveFocus(() => paint(plan));
     } catch (err: WebDynamic) {
       mount(main, page({ title: "Consolidation plan", body: errorState(err, load) }));
     }
@@ -305,7 +272,7 @@ export async function consolidationPlanPage(projectKey: WebDynamic, planId: WebD
                 placeholder: "title for the new finding",
                 style: "width:min(520px,100%)",
                 oninput: (e: WebDynamic) => { d.proposed_title = e.target.value; decisions.set(item.id, d); },
-                onchange: () => withFocus(() => paint(plan)),
+                onchange: () => preserveFocus(() => paint(plan)),
               })
             : h("span", {}, target.label));
 
@@ -335,7 +302,7 @@ export async function consolidationPlanPage(projectKey: WebDynamic, planId: WebD
               onclick: () => {
                 d.action = d.action === "accept" ? "skip" : "accept";
                 decisions.set(item.id, d);
-                withFocus(() => paint(plan));
+                preserveFocus(() => paint(plan));
               },
             }, d.action === "accept" ? "Leave unresolved" : "Accept this group"),
             target.kind === "existing"
@@ -345,7 +312,7 @@ export async function consolidationPlanPage(projectKey: WebDynamic, planId: WebD
                     d.finding_id = null;
                     d.proposed_title = item.candidates[0]?.claim?.title || "";
                     decisions.set(item.id, d);
-                    withFocus(() => paint(plan));
+                    preserveFocus(() => paint(plan));
                   },
                 }, "Make a new finding instead")
               : null,

@@ -19,7 +19,6 @@ const JAVASCRIPT_ALLOWLIST = [
   "tests/fixtures/script-suites/",
   // Hosted fixtures executed as external seed/build scripts.
   "packages/platform/control-plane/tests/fixtures/hosted-todos/seed/reset.mjs",
-  "packages/platform/control-plane/tests/fixtures/storage-baseline/build-expectations.mjs",
 ];
 
 test("browser emit directories contain no tracked generated JavaScript", () => {

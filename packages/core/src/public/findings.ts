@@ -40,6 +40,36 @@ export {
 
 export { EXPORT_FORMAT, EXPORT_FORMAT_VERSION, exportLedger } from "../findings/exports.ts";
 
-export { DEFAULT_RETRIEVAL } from "../findings/shortlist.ts";
-export { CATEGORIES, VERSIONS } from "../findings/keys.ts";
+// The pure, frozen identity and retrieval algorithms
+// (tests/core/findings/spec.ts), parameterized by an opaque scope id — the
+// local ledger's workspace id, or the hosted project id. The control plane
+// consumes THESE exports for its keys/shortlist so the two deployments share
+// one implementation; database adapters stay on each side of the boundary.
+export {
+  SHORTLIST_VERSION,
+  DEFAULT_RETRIEVAL,
+  tokenize,
+  findingMatchText,
+  retrievalItem,
+  idfTable,
+  similarity,
+  shortlist,
+  route,
+  clusters,
+  capClusters,
+  estimateTokens,
+} from "../findings/shortlist.ts";
+export type { RetrievalItem, Neighbor } from "../findings/shortlist.ts";
+export {
+  CATEGORIES,
+  VERSIONS,
+  coarseSignalType,
+  normalizeText,
+  normalizeLocus,
+  hasExactKeys,
+  exactKeys,
+  matchText,
+  deriveCandidateKeys,
+} from "../findings/keys.ts";
+export type { CandidateIdentity, FindingClaim, FindingLocus } from "../findings/keys.ts";
 export type { Ledger } from "../findings/ledger.ts";

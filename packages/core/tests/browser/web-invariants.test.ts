@@ -84,7 +84,7 @@ async function journey({ apiFault = null }: LegacyTestValue = {}) {
 }
 
 test("a healthy API under the UI: the committed web suite's Tier-1 policies hold over the page's own traffic", async () => {
-  const { gate, harEntries }: { gate: { pass: boolean; checks: LegacyTestValue[]; advisory: LegacyTestValue[] }; harEntries: LegacyTestValue[] } = await journey();
+  const { gate, harEntries } = await journey();
 
   // The spec-driven policies really did see the browser's requests.
   assert.ok(
@@ -98,20 +98,20 @@ test("a healthy API under the UI: the committed web suite's Tier-1 policies hold
     "all four Tier-1 policies were exercised by the page and held",
   );
   // Advisory, never gating: the story never deletes, so lifecycle reports.
-  assert.equal(gate.advisory.length, 1);
-  assert.equal(gate.advisory[0].applicable, false);
+  assert.equal(gate.advisory!.length, 1);
+  assert.equal(gate.advisory![0]!.applicable, false);
 });
 
 test("an API-layer violation invisible in the UI turns the same web journey red, cited against the step that caused it", async () => {
   const { gate } = await journey({ apiFault: "created-status" });
 
   // Same page, same clicks: every pre-P7 web check is still green.
-  assert.equal(gate.checks.find((c: LegacyTestValue) => c.kind === "element_exists").pass, true, "the todo really is rendered");
-  assert.equal(gate.checks.find((c: LegacyTestValue) => c.kind === "api_called").pass, true, "the request really was made");
+  assert.equal(gate.checks.find((c: LegacyTestValue) => c.kind === "element_exists")!.pass, true, "the todo really is rendered");
+  assert.equal(gate.checks.find((c: LegacyTestValue) => c.kind === "api_called")!.pass, true, "the request really was made");
 
   assert.equal(gate.pass, false, "and the run is red anyway — the API underneath broke its contract");
   const failed = gate.checks.filter((c: LegacyTestValue) => !c.pass);
   assert.deepEqual(failed.map((c: LegacyTestValue) => c.spec), ["invariant: documented_status"]);
-  assert.match(failed[0].detail, /POST \/api\/todos answered 200, which the spec does not declare/);
-  assert.deepEqual(failed[0].steps, [1], "the submit step is cited, not the initial page load");
+  assert.match(failed[0]!.detail, /POST \/api\/todos answered 200, which the spec does not declare/);
+  assert.deepEqual(failed[0]!.steps, [1], "the submit step is cited, not the initial page load");
 });

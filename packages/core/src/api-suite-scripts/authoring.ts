@@ -25,7 +25,7 @@ import type { DynamicValue } from "./types.ts";
 //
 // Budgets are three-dimensional (DESIGN §11) and their defaults are productized
 // from what the S0 trials actually used, not from the ceilings they were given.
-import crypto from "node:crypto";
+import { sha256Hex } from "../hash.ts";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -72,8 +72,6 @@ export const DEFAULT_AUTHORING_BUDGET: DynamicValue = Object.freeze({
 
 /** Why the loop stopped. Only `sound` is a success. */
 export const AUTHORING_OUTCOMES: DynamicValue = Object.freeze(["sound", "iterations", "requests", "wall_clock", "model_error"]);
-
-const sha256 = (value: DynamicValue) => crypto.createHash("sha256").update(value).digest("hex");
 
 const positiveInteger = (value: DynamicValue, fallback: DynamicValue, where: DynamicValue, key: DynamicValue) => {
   if (value === undefined || value === null) return fallback;
@@ -573,7 +571,7 @@ export async function runAuthoringJob(options: DynamicValue = {}) {
     }
 
     fs.writeFileSync(scriptPath, parsed.script.endsWith("\n") ? parsed.script : `${parsed.script}\n`);
-    record.script = { sha256: sha256(parsed.script), bytes: Buffer.byteLength(parsed.script) };
+    record.script = { sha256: sha256Hex(parsed.script), bytes: Buffer.byteLength(parsed.script) };
 
     const executionDir = path.join(job.outDir, "executions", String(iteration));
     let execution;

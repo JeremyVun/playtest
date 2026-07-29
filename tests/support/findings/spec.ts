@@ -244,7 +244,7 @@ export function shortlist(
  *   "cluster"    — ambiguous middle; goes into a cluster for one model call.
  */
 export function route(
-  candidate: FindingItem,
+  _candidate: FindingItem,
   { strictHit = false, looseHit = false, neighbors = [] }: {
     strictHit?: boolean;
     looseHit?: boolean;

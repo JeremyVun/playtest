@@ -171,7 +171,7 @@ export async function getFinding(ctx: HostedDynamic) {
 export async function acceptFinding(ctx: HostedDynamic) {
   const principal = requireAuth(ctx);
   const body = await readJsonBody(ctx.req);
-  return await transitionFinding(ctx, ctx.params.f, principal, async (tx: HostedDynamic, f: HostedDynamic) => {
+  return await transitionFinding(ctx, ctx.params.f, async (tx: HostedDynamic, f: HostedDynamic) => {
     const title = stringField(body, "title", { max: 180 });
     const severity = severityField(body, "severity", f.severity);
     // Accepting is confirmation: stamp the confirming actor and time into the
@@ -215,7 +215,7 @@ export async function rejectFinding(ctx: HostedDynamic) {
   const principal = requireAuth(ctx);
   const body = await readJsonBody(ctx.req);
   if (!REJECT_REASONS.has(body.reason)) throw badRequest(`"reason" must be not_a_bug, wont_fix, or duplicate`);
-  return await transitionFinding(ctx, ctx.params.f, principal, async (tx: HostedDynamic, f: HostedDynamic) => {
+  return await transitionFinding(ctx, ctx.params.f, async (tx: HostedDynamic, f: HostedDynamic) => {
     const { rows } = await tx.query(
       `UPDATE findings
           SET state = 'rejected',
@@ -241,7 +241,7 @@ export async function rejectFinding(ctx: HostedDynamic) {
 export async function resolveFinding(ctx: HostedDynamic) {
   const principal = requireAuth(ctx);
   const body = await readJsonBody(ctx.req);
-  return await transitionFinding(ctx, ctx.params.f, principal, async (tx: HostedDynamic, f: HostedDynamic) => {
+  return await transitionFinding(ctx, ctx.params.f, async (tx: HostedDynamic, f: HostedDynamic) => {
     // A person resolving is not an auto-resolution: clear any auto provenance
     // so the "auto" badge and run chip only ever describe the current close.
     const { rows } = await tx.query(
@@ -275,7 +275,7 @@ export async function resolveFinding(ctx: HostedDynamic) {
  */
 export async function acknowledgeFinding(ctx: HostedDynamic) {
   const principal = requireAuth(ctx);
-  return await transitionFinding(ctx, ctx.params.f, principal, async (tx: HostedDynamic, f: HostedDynamic) => {
+  return await transitionFinding(ctx, ctx.params.f, async (tx: HostedDynamic, f: HostedDynamic) => {
     if (f.state !== "resolved" || !f.auto_resolved_at) {
       throw conflict(`finding "${f.id}" is not auto-resolved — there is nothing to acknowledge`);
     }
@@ -313,7 +313,7 @@ export async function acknowledgeFinding(ctx: HostedDynamic) {
  */
 export async function suggestionNotFixed(ctx: HostedDynamic) {
   const principal = requireAuth(ctx);
-  return await transitionFinding(ctx, ctx.params.f, principal, async (tx: HostedDynamic, f: HostedDynamic) => {
+  return await transitionFinding(ctx, ctx.params.f, async (tx: HostedDynamic, f: HostedDynamic) => {
     const suggested = f.summary?.auto_resolve?.suggested;
     if (!suggested?.run_id) {
       throw conflict(`finding "${f.id}" carries no fix suggestion to dismiss`);
@@ -348,7 +348,7 @@ export async function suggestionNotFixed(ctx: HostedDynamic) {
 export async function reopenFinding(ctx: HostedDynamic) {
   const principal = requireAuth(ctx);
   const body = await readJsonBody(ctx.req);
-  return await transitionFinding(ctx, ctx.params.f, principal, async (tx: HostedDynamic, f: HostedDynamic) => {
+  return await transitionFinding(ctx, ctx.params.f, async (tx: HostedDynamic, f: HostedDynamic) => {
     const { rows } = await tx.query(
       `UPDATE findings
           SET state = 'reopened',
@@ -627,7 +627,7 @@ async function runSummaryFor(ctx: HostedDynamic, runId: HostedDynamic) {
   return rows[0] ?? null;
 }
 
-async function transitionFinding(ctx: HostedDynamic, id: HostedDynamic, principal: HostedDynamic, mutator: HostedDynamic) {
+async function transitionFinding(ctx: HostedDynamic, id: HostedDynamic, mutator: HostedDynamic) {
   const current = await findingRow(ctx, id);
   guard(ctx, current.project_id, "reviewer");
   let next: HostedDynamic = null;

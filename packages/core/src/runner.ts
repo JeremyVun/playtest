@@ -35,6 +35,74 @@ import { writeVideoSidecar, ffmpegPresent, buildSlideshow, FFMPEG_HINT } from ".
 
 type DynamicValue = any; // SAFETY: runner coordinates driver-specific envelopes, hooks, manifests, and model payloads
 
+interface RunTokens {
+  in: number;
+  out: number;
+  cache_read: number;
+}
+
+/** One heal segment's provenance (docs/contracts/engine.md#act-and-heal). */
+interface HealSegment {
+  from: number;
+  to: number | null;
+  nearest?: DynamicValue;
+}
+
+/** Options accepted by runCase (see the JSDoc on runCase for semantics). */
+interface RunCaseOptions {
+  runsRoot: string;
+  runId: string;
+  mode?: "auto" | "agent";
+  grade?: boolean;
+  headed?: boolean;
+  refresh?: boolean;
+  onEvent?: (event: DynamicValue) => void;
+  // Test seams (docs/contracts/engine.md#run-lifecycle); production never passes them.
+  driverFactory?: DynamicValue;
+  envFactory?: DynamicValue;
+  hardTimeoutGraceMs?: number;
+  permits?: {
+    release?: () => void;
+    grade?: <T>(fn: () => T | Promise<T>) => Promise<T>;
+    cpu?: <T>(fn: () => T | Promise<T>) => Promise<T>;
+  };
+}
+
+/** Mutable run state shared by the record/act/heal loops and every runCase phase. */
+interface RunState {
+  envelopes: DynamicValue[];
+  tokens: RunTokens;
+  graderTokens: RunTokens;
+  lastSnapshot: string | null;
+  wroteContext: boolean;
+  initialNav: DynamicValue;
+  endReason: string;
+  runError: string | null;
+  healReason: string | null;
+  healKind: string | null;
+  healedFromStep: number | null;
+  healKindFirst: string | null;
+  healReasonFirst: string | null;
+  healSegments: HealSegment[];
+  healEvidence: DynamicValue;
+  healTriage: DynamicValue;
+  healAccepted: { ok: boolean; reason: string | null } | null;
+  driftReport: DynamicValue;
+  aborted: boolean;
+  signal: AbortSignal;
+  setupContext: string | null;
+  setup: { ran: boolean; returned_context: boolean; duration_ms: number } | null;
+}
+
+/** What runCase resolves with, on every path (never throws). */
+interface RunResult {
+  status: "pass" | "fail" | "infra" | "explored" | "interrupted";
+  runDir: string;
+  manifest: DynamicValue;
+  score: number | null;
+  error?: string;
+}
+
 const HARD_TIMEOUT = Symbol("hard timeout");
 
 // SIGINT flush registry: a Ctrl-C'd run never reaches the final writeManifest,
@@ -242,7 +310,7 @@ function sanitizeContext(messages: DynamicValue[]) {
  * @returns {Promise<{ status: "pass"|"fail"|"infra"|"explored"|"interrupted", runDir: string, manifest: object,
  *   score: number|null, error?: string }>} score is the grade when this run graded
  */
-export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<DynamicValue> {
+export async function runCase(rc: DynamicValue, opts: RunCaseOptions): Promise<RunResult> {
   // driverFactory is a test seam (docs/contracts/engine.md#run-lifecycle): the
   // hermetic engine tests inject a scripted in-memory driver to exercise the
   // act/heal loop without a browser. Production callers never pass it.
@@ -339,7 +407,7 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
 
   // Mutable run state shared with the loops.
   const abort = new AbortController();
-  const r: DynamicValue = {
+  const r: RunState = {
     envelopes: [],
     tokens: { in: 0, out: 0, cache_read: 0 },
     graderTokens: { in: 0, out: 0, cache_read: 0 }, // assert checks + gradeRun, billed at grader_model
@@ -426,7 +494,7 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
   // the _sigintHandlerInstalled flag
   // keeps the process listener registered exactly once across concurrent cases.
   try {
-    const finishInfra = async (error: DynamicValue, { driver = null, env = null }: DynamicValue = {}) => {
+    const finishInfra = async (error: DynamicValue, { driver = null, env = null }: DynamicValue = {}): Promise<RunResult> => {
       if (driver) {
         const closeAt = perf.now();
         await driver.close().catch(() => {});
@@ -449,13 +517,90 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
         artifacts: driver?.artifactProfile,
       });
       writer.writeManifest(manifest);
-      const result = { status: "infra", runDir: writer.dir, manifest, score: null, error };
+      const result: RunResult = { status: "infra", runDir: writer.dir, manifest, score: null, error };
       emit("case_end", { status: "infra", result });
       return result;
     };
 
     if (baselineError) return finishInfra(baselineError);
 
+    const prepared = await prepareRun({
+      rc, runId, writer, r, emit, llm, startMode, startedAt, headed, perf,
+      driverFactory, envFactory, finishInfra,
+    });
+    if ("done" in prepared) return prepared.done;
+    const { persona, env, driver, axeCapture } = prepared;
+    // No live screencast is recorded any more — the shareable video.mp4 is a
+    // post-run slideshow of the per-step stills, paced at AUTOPLAY_MS/frame, so a
+    // wall-clock start offset is meaningless. Always null; the viewer + clip key
+    // off it to choose the slideshow timeline (a non-null value marks a legacy
+    // webm run that still scrubs by wall-clock).
+    const videoStartedAt = null;
+
+  const executed = await executeJourney({
+    rc, driver, env, persona, writer, r, emit, llm, baseline, startMode,
+    axeCapture, abort, hardTimeoutGraceMs,
+  });
+  if (executed.infra) return finishInfra(executed.infra.message, { driver, env });
+  const { actualMode, actFailedUnhealed } = executed;
+
+  const evaluated = await evaluateRun({
+    rc, runId, driver, env, writer, perf, r, emit, llm, discovery,
+    actualMode, actFailedUnhealed, baseline, startedAt, finishInfra,
+  });
+  if ("done" in evaluated) return evaluated.done;
+  const { gate, status, baselineEligible } = evaluated;
+
+  // Never grade an infra run: it produced no trustworthy trajectory, and the
+  // contract pins score to null on infra (a discovery actor-error lands here).
+  // Act replays are never graded either — a clean replay's trajectory is
+  // provably unchanged, so a fresh grade would only add cost + nondeterminism.
+  const willGrade = grade && llm.available && actualMode !== "act" && status !== "infra";
+
+  const { manifest, score } = await finishRun({
+    rc, runId, actualMode, startedAt, videoStartedAt, llm, env, r, status, gate,
+    driver, baseline, willGrade, headed, persona, writer, perf, permits, emit,
+    sealFinalManifest: () => { finalManifestWritten = true; },
+  });
+
+  acceptCandidate({ rc, writer, emit, manifest, baselineEligible, discovery, actualMode, refresh, storyChanged });
+
+    const result = { status, runDir: writer.dir, manifest, score, ...(r.runError ? { error: r.runError } : {}) };
+    emit("case_end", { status, result });
+    return result;
+  } finally {
+    _sigintFlushers.delete(sigintFlush);
+    perf.span("case_total", caseStartedAt, null, {
+      driver: rc.env?.driver ?? "web",
+      start_mode: startMode,
+      steps: r.envelopes.length,
+      end_reason: r.endReason,
+    });
+    perf.flush();
+  }
+}
+
+/**
+ * The preparation phase: resolve the persona, require a model for a
+ * record/explore run, prepare the environment, launch the driver, and run the
+ * suite's before_each setup hook. Returns { done } when an infra condition
+ * ended the case before the actor could start.
+ */
+async function prepareRun({ rc, runId, writer, r, emit, llm, startMode, startedAt, headed, perf, driverFactory, envFactory, finishInfra }: {
+  rc: DynamicValue;
+  runId: string;
+  writer: RunWriter;
+  r: RunState;
+  emit: (type: string, payload?: DynamicValue) => void;
+  llm: DynamicValue;
+  startMode: string;
+  startedAt: Date;
+  headed: boolean;
+  perf: PerfSidecar;
+  driverFactory: DynamicValue;
+  envFactory: DynamicValue;
+  finishInfra: (error: DynamicValue, extras?: DynamicValue) => Promise<RunResult>;
+}): Promise<{ done: RunResult } | { persona: DynamicValue; env: DynamicValue; driver: DynamicValue; axeCapture: DeferredAxeCapture }> {
     // Resolve the persona before any env/browser work: an unknown persona is a
     // config error (infra, exit 2), surfaced loudly even on act-mode runs that
     // would only need it to heal.
@@ -463,18 +608,18 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
     try {
       persona = loadPersona(rc.persona, rc.file);
     } catch (e) {
-      return finishInfra(firstLine(e));
+      return { done: await finishInfra(firstLine(e)) };
     }
 
     if (startMode !== "act" && !llm.available) {
-      return finishInfra(`${startMode} mode needs a model: set PLAYTEST_LLM_BASE_URL or an API key`);
+      return { done: await finishInfra(`${startMode} mode needs a model: set PLAYTEST_LLM_BASE_URL or an API key`) };
     }
 
     let env: DynamicValue;
     try {
       env = await envFactory(rc, runId);
     } catch (e: DynamicValue) {
-      return finishInfra(e.message);
+      return { done: await finishInfra(e.message) };
     }
     // Null for mobile, for the same reason the manifest records null: the
     // Appium endpoint this machine dialled is not a fact about the application,
@@ -485,15 +630,9 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
     try {
       driver = await driverFactory(rc, env, { runDir: writer.dir, headed, perf });
     } catch (e) {
-      return finishInfra(`driver launch failed: ${firstLine(e)}`, { env });
+      return { done: await finishInfra(`driver launch failed: ${firstLine(e)}`, { env }) };
     }
     const axeCapture = new DeferredAxeCapture(driver, writer);
-    // No live screencast is recorded any more — the shareable video.mp4 is a
-    // post-run slideshow of the per-step stills, paced at AUTOPLAY_MS/frame, so a
-    // wall-clock start offset is meaningless. Always null; the viewer + clip key
-    // off it to choose the slideshow timeline (a non-null value marks a legacy
-    // webm run that still scrubs by wall-clock).
-    const videoStartedAt = null;
     // Setup phase (docs/contracts/engine.md#environment-and-setup): the
     // pre-actor mirror of the
     // observing phase. After createDriver, before any record/act/heal loop, run
@@ -510,7 +649,7 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
     try {
       hooks = await loadHooks(suiteRoot);
     } catch (e) {
-      return finishInfra(firstLine(e), { driver, env });
+      return { done: await finishInfra(firstLine(e), { driver, env }) };
     }
     if (hooks.beforeEach) {
       emit("phase", { phase: "setup" });
@@ -533,13 +672,13 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
           caseId: rc.id,
         });
       } catch (e) {
-        return finishInfra(`before_each failed: ${firstLine(e)}`, { driver, env });
+        return { done: await finishInfra(`before_each failed: ${firstLine(e)}`, { driver, env }) };
       }
       let setupContext;
       try {
         setupContext = validateSetupContext(returned);
       } catch (e) {
-        return finishInfra(firstLine(e), { driver, env });
+        return { done: await finishInfra(firstLine(e), { driver, env }) };
       }
       r.setupContext = setupContext;
       r.setup = {
@@ -549,7 +688,30 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
     };
   }
 }
+  return { persona, env, driver, axeCapture };
+}
 
+/**
+ * The execution phase: drive the journey — a record/explore run, or an act
+ * replay alternating with heal segments — under the case's hard timeout, then
+ * settle the deferred axe scans. Loop state lands on `r`; an InfraError is
+ * returned (not thrown) for the coordinator to finish as infra.
+ */
+async function executeJourney({ rc, driver, env, persona, writer, r, emit, llm, baseline, startMode, axeCapture, abort, hardTimeoutGraceMs }: {
+  rc: DynamicValue;
+  driver: DynamicValue;
+  env: DynamicValue;
+  persona: DynamicValue;
+  writer: RunWriter;
+  r: RunState;
+  emit: (type: string, payload?: DynamicValue) => void;
+  llm: DynamicValue;
+  baseline: DynamicValue;
+  startMode: string;
+  axeCapture: DeferredAxeCapture;
+  abort: AbortController;
+  hardTimeoutGraceMs: number;
+}): Promise<{ actualMode: string; actFailedUnhealed: boolean; infra: DynamicValue }> {
   let actualMode = startMode;
   let actFailedUnhealed = false;
   let infra: DynamicValue = null;
@@ -700,8 +862,31 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
     r.runError = r.runError ?? firstLine(e);
   }
 
-  if (infra) return finishInfra(infra.message, { driver, env });
+  return { actualMode, actFailedUnhealed, infra };
+}
 
+/**
+ * The evaluation phase: stop the recording, run the observing phase and the
+ * gate (discovery skips it), decide heal acceptance, and write the API drift
+ * report. Returns { done } when an infra condition ended the case.
+ */
+async function evaluateRun({ rc, runId, driver, env, writer, perf, r, emit, llm, discovery, actualMode, actFailedUnhealed, baseline, startedAt, finishInfra }: {
+  rc: DynamicValue;
+  runId: string;
+  driver: DynamicValue;
+  env: DynamicValue;
+  writer: RunWriter;
+  perf: PerfSidecar;
+  r: RunState;
+  emit: (type: string, payload?: DynamicValue) => void;
+  llm: DynamicValue;
+  discovery: boolean;
+  actualMode: string;
+  actFailedUnhealed: boolean;
+  baseline: DynamicValue;
+  startedAt: Date;
+  finishInfra: (error: DynamicValue, extras?: DynamicValue) => Promise<RunResult>;
+}): Promise<{ done: RunResult } | { gate: DynamicValue; status: RunResult["status"]; baselineEligible: boolean }> {
   // End the screencast now, before the gate (an assert: criterion makes a
   // blocking grader LLM call), manifest write, and teardown — otherwise all of
   // that records as one frozen frame, leaving video.webm with a dead tail. The
@@ -756,7 +941,9 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
   // whose every used key is inherited can skip gather() entirely (no I/O).
   const inherited =
     !actFailedUnhealed && actualMode === "act" && Array.isArray(baseline?.meta?.verdicts)
-      ? new Map(baseline.meta.verdicts.map((v: DynamicValue) => [v.spec, { pass: v.pass, detail: v.detail }]))
+      ? new Map<string, { pass: boolean; detail: string }>(
+          baseline.meta.verdicts.map((v: DynamicValue) => [v.spec, { pass: v.pass, detail: v.detail }]),
+        )
       : null;
 
   // Observing phase (docs/contracts/engine.md#gates-and-custom-assertions):
@@ -817,14 +1004,14 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
       try {
         evidence[name] = await assertion.gather(ctx);
       } catch (e) {
-        return finishInfra(`assertion "${name}" gather failed: ${firstLine(e)}`, { driver, env });
+        return { done: await finishInfra(`assertion "${name}" gather failed: ${firstLine(e)}`, { driver, env }) };
       }
     }
     // An abort (hard timeout) mid-gather leaves evidence partial; feeding that to
     // the gate would fail assertion keys on absent evidence rather than reporting the
     // real cause. A half-observed run is infra (gate skipped), same as a gather
     // throw — the verdict is untrustworthy, not a red.
-    if (r.aborted) return finishInfra("observing phase aborted (timeout) before all assertions gathered", { driver, env });
+    if (r.aborted) return { done: await finishInfra("observing phase aborted (timeout) before all assertions gathered", { driver, env }) };
     // Embed once: annotate the real final envelope (never a synthetic step —
     // it would be miscounted as an actor step) and rewrite its trajectory line.
     const last = r.envelopes[r.envelopes.length - 1];
@@ -908,7 +1095,7 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
         : null,
     });
     if (observationError) {
-      return finishInfra(`invariant observation failed: ${observationError}`, { driver, env });
+      return { done: await finishInfra(`invariant observation failed: ${observationError}`, { driver, env }) };
     }
     if (!gate.pass) emit("gate_fail", { checks: gate.checks.filter((c: DynamicValue) => !c.pass) });
     // A run that ended in an actor error has an incomplete trajectory (it stopped
@@ -972,12 +1159,54 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
     }
   }
 
-  // Never grade an infra run: it produced no trustworthy trajectory, and the
-  // contract pins score to null on infra (a discovery actor-error lands here).
-  // Act replays are never graded either — a clean replay's trajectory is
-  // provably unchanged, so a fresh grade would only add cost + nondeterminism.
-  const willGrade = grade && llm.available && actualMode !== "act" && status !== "infra";
+  return { gate, status, baselineEligible };
+}
 
+/**
+ * The finishing phase: write the final manifest, then run the two independent
+ * finishing jobs CONCURRENTLY:
+ *
+ *   grade — the grader model call. Everything it reads exists already:
+ *     the trajectory and the manifest are handed to it in memory,
+ *     final.a11y.txt was written by stopRecording before the gate, and the
+ *     per-step artifacts it may fetch were persisted by captureSnapshot. It
+ *     reads no har.json, so the HAR-flush ordering below is not its business.
+ *   tail — driver close, env teardown, the VTT sidecar, the mp4 slideshow.
+ *     driver.close() forces the final HAR flush; nothing in the grade branch
+ *     reads har.json, and the gate (which does) already ran above.
+ *
+ * JOIN ORDER: settle BOTH, then let the tail's error win. Only env.teardown()
+ * can throw here — driver.close, the sidecar and the slideshow are all
+ * best-effort — and a teardown throw leaves runCase as it always has: it
+ * escapes to runAll, which reports the case infra (exit 2). Rethrowing only
+ * after grading has settled is deliberate: an eager throw would leave a
+ * grade call writing grade.json into a directory nobody is waiting on.
+ * The one visible difference from the serial order is that a run whose
+ * teardown fails may now also have graded; status and exit code are
+ * unchanged.
+ */
+async function finishRun({ rc, runId, actualMode, startedAt, videoStartedAt, llm, env, r, status, gate, driver, baseline, willGrade, headed, persona, writer, perf, permits, emit, sealFinalManifest }: {
+  rc: DynamicValue;
+  runId: string;
+  actualMode: string;
+  startedAt: Date;
+  videoStartedAt: number | null;
+  llm: DynamicValue;
+  env: DynamicValue;
+  r: RunState;
+  status: RunResult["status"];
+  gate: DynamicValue;
+  driver: DynamicValue;
+  baseline: DynamicValue;
+  willGrade: boolean;
+  headed: boolean;
+  persona: DynamicValue;
+  writer: RunWriter;
+  perf: PerfSidecar;
+  permits: DynamicValue;
+  emit: (type: string, payload?: DynamicValue) => void;
+  sealFinalManifest: () => void;
+}): Promise<{ manifest: DynamicValue; score: number | null }> {
   // Manifest write + browser/video flush + env teardown is another silent
   // window (seconds for a managed container); keep the live line moving.
   emit("phase", { phase: "finishing" });
@@ -988,30 +1217,9 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
     artifacts: driver.artifactProfile,
   });
   writer.writeManifest(manifest);
-  finalManifestWritten = true; // the SIGINT flusher must not clobber this now
+  sealFinalManifest(); // the SIGINT flusher must not clobber the final manifest now
 
-  // ------------------------------------------------------------- the tail
-  // Two independent finishing jobs, run CONCURRENTLY:
-  //
-  //   grade — the grader model call. Everything it reads exists already:
-  //     the trajectory and the manifest are handed to it in memory,
-  //     final.a11y.txt was written by stopRecording before the gate, and the
-  //     per-step artifacts it may fetch were persisted by captureSnapshot. It
-  //     reads no har.json, so the HAR-flush ordering below is not its business.
-  //   tail — driver close, env teardown, the VTT sidecar, the mp4 slideshow.
-  //     driver.close() forces the final HAR flush; nothing in the grade branch
-  //     reads har.json, and the gate (which does) already ran above.
-  //
-  // JOIN ORDER: settle BOTH, then let the tail's error win. Only env.teardown()
-  // can throw here — driver.close, the sidecar and the slideshow are all
-  // best-effort — and a teardown throw leaves runCase as it always has: it
-  // escapes to runAll, which reports the case infra (exit 2). Rethrowing only
-  // after grading has settled is deliberate: an eager throw would leave a
-  // grade call writing grade.json into a directory nobody is waiting on.
-  // The one visible difference from the serial order is that a run whose
-  // teardown fails may now also have graded; status and exit code are
-  // unchanged.
-  let score: DynamicValue = null;
+  let score: number | null = null;
   const gradeJob = async () => {
     if (!willGrade) return;
     emit("grading");
@@ -1095,66 +1303,67 @@ export async function runCase(rc: DynamicValue, opts: DynamicValue): Promise<Dyn
   // finishes last writes the union, so the final bytes match the serial order.
   const [, tailOutcome] = await Promise.allSettled([gradeJob(), tailJob()]);
   if (tailOutcome.status === "rejected") throw tailOutcome.reason;
+  return { manifest, score };
+}
 
-    // Discovery never writes baselines or healed candidates, refresh included
-    // (baselineEligible is false there — its status is never "pass"; the guard
-    // states the constraint). baselineEligible (not status) gates acceptance, so
-    // a soft-only gate failure still saves the path the agent succeeded along.
-    if (baselineEligible && !discovery) {
-      // existsSync, not readBaseline: a corrupt-but-present baseline must not
-      // throw here, and must not be silently overwritten by an accept.
-      const recordAccept =
-        actualMode === "record" && (refresh || storyChanged || !fs.existsSync(baselinePaths(rc.file).traj));
-      if (recordAccept || actualMode === "heal") {
-        // The acceptance leak scan
-        // (docs/contracts/interfaces.md#baseline-review-and-grading): a clean
-        // scan auto-accepts exactly as before, a passing first record included.
-        // Findings block AUTOMATIC acceptance and leave a pending candidate only
-        // an explicit `playtest baseline accept` can approve. A fingerprint a
-        // human already approved covers exactly those bytes, so re-recording
-        // approved content still auto-accepts — changing it does not.
-        let scan: DynamicValue = { findings: [], fingerprint: null };
-        try {
-          scan = scanRun(writer.dir, { redact: rc.redact ?? null, driver: rc.env?.driver ?? "web" });
-        } catch {} // an unreadable trajectory cannot be accepted anyway
-        const blocked = scan.findings.length > 0 && scan.fingerprint !== approvedFingerprint(rc.file);
-        if (blocked) {
-          manifest.baseline_scan = { blocked: true, findings: scan.findings };
-          writer.writeManifest(manifest);
-          emit("warn", {
-            message:
-              `playtest: ${rc.id}: not saved as the baseline — the leak scan found ` +
-              `${scan.findings.length} value(s) that must not be committed:\n${describeFindings(scan.findings).join("\n")}\n` +
-              `  declare them under redact: and re-record, or approve explicitly: playtest baseline accept ${writer.dir}`,
-          });
-        }
-        if (recordAccept && !blocked) {
-          acceptBaseline(rc.file, writer.dir);
-          if (refresh || storyChanged) {
-            // A refreshed/story-changed baseline invalidates any pending healed
-            // candidate: that candidate diffs against the baseline this accept just
-            // replaced (and a story change makes the old candidate stale too).
-            const p = baselinePaths(rc.file);
-            fs.rmSync(p.healedTraj, { force: true });
-            fs.rmSync(p.healedMeta, { force: true });
-          }
-        } else {
-          acceptBaseline(rc.file, writer.dir, { healed: true, scan: blocked ? scan : null });
-        }
-      }
-    }
-    const result = { status, runDir: writer.dir, manifest, score, ...(r.runError ? { error: r.runError } : {}) };
-    emit("case_end", { status, result });
-    return result;
-  } finally {
-    _sigintFlushers.delete(sigintFlush);
-    perf.span("case_total", caseStartedAt, null, {
-      driver: rc.env?.driver ?? "web",
-      start_mode: startMode,
-      steps: r.envelopes.length,
-      end_reason: r.endReason,
+/**
+ * Baseline acceptance (docs/contracts/engine.md#run-lifecycle). Discovery never
+ * writes baselines or healed candidates, refresh included (baselineEligible is
+ * false there — its status is never "pass"; the guard states the constraint).
+ * baselineEligible (not status) gates acceptance, so a soft-only gate failure
+ * still saves the path the agent succeeded along.
+ */
+function acceptCandidate({ rc, writer, emit, manifest, baselineEligible, discovery, actualMode, refresh, storyChanged }: {
+  rc: DynamicValue;
+  writer: RunWriter;
+  emit: (type: string, payload?: DynamicValue) => void;
+  manifest: DynamicValue;
+  baselineEligible: boolean;
+  discovery: boolean;
+  actualMode: string;
+  refresh: boolean;
+  storyChanged: boolean;
+}): void {
+  if (!baselineEligible || discovery) return;
+  // existsSync, not readBaseline: a corrupt-but-present baseline must not
+  // throw here, and must not be silently overwritten by an accept.
+  const recordAccept =
+    actualMode === "record" && (refresh || storyChanged || !fs.existsSync(baselinePaths(rc.file).traj));
+  if (!recordAccept && actualMode !== "heal") return;
+  // The acceptance leak scan
+  // (docs/contracts/interfaces.md#baseline-review-and-grading): a clean
+  // scan auto-accepts exactly as before, a passing first record included.
+  // Findings block AUTOMATIC acceptance and leave a pending candidate only
+  // an explicit `playtest baseline accept` can approve. A fingerprint a
+  // human already approved covers exactly those bytes, so re-recording
+  // approved content still auto-accepts — changing it does not.
+  let scan: DynamicValue = { findings: [], fingerprint: null };
+  try {
+    scan = scanRun(writer.dir, { redact: rc.redact ?? null, driver: rc.env?.driver ?? "web" });
+  } catch {} // an unreadable trajectory cannot be accepted anyway
+  const blocked = scan.findings.length > 0 && scan.fingerprint !== approvedFingerprint(rc.file);
+  if (blocked) {
+    manifest.baseline_scan = { blocked: true, findings: scan.findings };
+    writer.writeManifest(manifest);
+    emit("warn", {
+      message:
+        `playtest: ${rc.id}: not saved as the baseline — the leak scan found ` +
+        `${scan.findings.length} value(s) that must not be committed:\n${describeFindings(scan.findings).join("\n")}\n` +
+        `  declare them under redact: and re-record, or approve explicitly: playtest baseline accept ${writer.dir}`,
     });
-    perf.flush();
+  }
+  if (recordAccept && !blocked) {
+    acceptBaseline(rc.file, writer.dir);
+    if (refresh || storyChanged) {
+      // A refreshed/story-changed baseline invalidates any pending healed
+      // candidate: that candidate diffs against the baseline this accept just
+      // replaced (and a story change makes the old candidate stale too).
+      const p = baselinePaths(rc.file);
+      fs.rmSync(p.healedTraj, { force: true });
+      fs.rmSync(p.healedMeta, { force: true });
+    }
+  } else {
+    acceptBaseline(rc.file, writer.dir, { healed: true, scan: blocked ? scan : null });
   }
 }
 
@@ -2417,7 +2626,7 @@ export async function runAll(resolvedCases: DynamicValue[], opts: DynamicValue):
   // with the model (expensive, rate-limit sensitive); checks replay a baseline.
   const items = resolvedCases.map((rc, index) => ({ index, rc, record: willRecord(rc, opts) }));
 
-  const runItem = (rc: DynamicValue, index: number, permits: DynamicValue) =>
+  const runItem = (rc: DynamicValue, permits: DynamicValue) =>
     runCase(rc, { ...opts, onEvent, permits }).catch((e: DynamicValue) => {
       const result = {
         status: "infra",
@@ -2438,7 +2647,7 @@ export async function runAll(resolvedCases: DynamicValue[], opts: DynamicValue):
   // driver is closed and the environment is down, then finishes its grade and
   // its video detached from the pool (T4.2).
   await schedulePool(items, budget, async ({ rc, index }: DynamicValue, permits: DynamicValue) => {
-    results[index] = await runItem(rc, index, permits);
+    results[index] = await runItem(rc, permits);
   });
 
   try {

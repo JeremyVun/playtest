@@ -1,6 +1,6 @@
 // .ptrun bundle codec for serialized run directories.
 // Contract: docs/contracts/artifacts.md#ptrun-format.
-import crypto from "node:crypto";
+import { sha256Hex } from "./hash.ts";
 import fs from "node:fs";
 import path from "node:path";
 import { Readable } from "node:stream";
@@ -122,6 +122,21 @@ export function artifactMediaType(rel: string): string | null {
   return ARTIFACT_MEDIA_TYPES[ext] ?? null;
 }
 
+/**
+ * A stageable step-artifact path — one entry directly under `steps/`, the shape
+ * both live-staging peers accept (docs/contracts/hosted.md "Live staging
+ * routes"): the runner's uploader decides what to ship with it, and the control
+ * plane's ingest decides what to store with it, so the vocabulary lives here
+ * rather than drifting as two copies. Traversal, absolute paths, nested
+ * directories and dot-files all fail the shape rather than being sanitized.
+ */
+const STEP_ENTRY_SHAPE = /^steps\/[0-9A-Za-z][0-9A-Za-z._-]{0,119}$/;
+
+export function isStepEntryPath(entry: unknown): boolean {
+  if (typeof entry !== "string" || !STEP_ENTRY_SHAPE.test(entry)) return false;
+  return !entry.split("/").some((seg) => seg === "." || seg === "..");
+}
+
 /** Is this media type text a reader (or a redactor) may treat as characters? */
 export function isTextualMediaType(mediaType: string | null | undefined): boolean {
   if (!mediaType) return false;
@@ -216,7 +231,7 @@ export function rewriteBundle(
         crc: Number.parseInt(idx.crc32, 16) >>> 0,
         usize: idx.usize,
         body: raw,
-        sha256: oldEntries.get(name)?.sha256 ?? sha256(readEntryBuffer(source.readRange, idx)),
+        sha256: oldEntries.get(name)?.sha256 ?? sha256Hex(readEntryBuffer(source.readRange, idx)),
       };
     });
   const nextPtrun = {
@@ -295,7 +310,7 @@ export function rebuildIndex(readRange: ReadRange, size = readRange.size): Bundl
   }
   return {
     ptrun_version: 1,
-    bundle_sha256: sha256(readRange(0, size - 1)),
+    bundle_sha256: sha256Hex(readRange(0, size - 1)),
     bundle_size: size,
     entries,
   };
@@ -433,7 +448,7 @@ function loadUsableSidecar(sidecar: string, readRange: ReadRange): BundleIndex |
   try {
     const index = JSON.parse(fs.readFileSync(sidecar, "utf8"));
     if (index.ptrun_version !== 1 || index.bundle_size !== readRange.size) return null;
-    const current = sha256(readRange(0, readRange.size - 1));
+    const current = sha256Hex(readRange(0, readRange.size - 1));
     return index.bundle_sha256 === current ? index : null;
   } catch {
     return null;
@@ -449,7 +464,7 @@ function writeZipToFile(
   fs.writeFileSync(outPath, buffer);
   const index = {
     ptrun_version: 1,
-    bundle_sha256: sha256(buffer),
+    bundle_sha256: sha256Hex(buffer),
     bundle_size: buffer.length,
     entries: indexEntries,
   };
@@ -632,7 +647,7 @@ function makeFileEntry(root: string, rel: string): ArtifactEntry {
     method,
     crc: crc32(data),
     crc32: hex32(crc32(data)),
-    sha256: sha256(data),
+    sha256: sha256Hex(data),
     usize: data.length,
     body,
   };
@@ -751,10 +766,6 @@ function crc32(buf: Buffer): number {
 
 function hex32(n: number): string {
   return (n >>> 0).toString(16).padStart(8, "0");
-}
-
-function sha256(buf: string | NodeJS.ArrayBufferView): string {
-  return crypto.createHash("sha256").update(buf).digest("hex");
 }
 
 function writeUInt64(buf: Buffer, value: number, offset: number): void {

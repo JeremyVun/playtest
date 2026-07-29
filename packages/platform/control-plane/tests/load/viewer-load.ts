@@ -2,7 +2,7 @@
 // its own temporary SQLite data root (the same withApp harness the integration
 // tests use), seeds one project with M
 // finished runs each carrying a REAL sealed .ptrun bundle (direct SQL + object
-// store, the phase3-adapter-paths.test.js pattern — no executor, this measures
+// store, the viewer-adapter.test.ts pattern — no executor, this measures
 // the READ path only), then fires N concurrent simulated viewer sessions for T
 // seconds. Each session loops the realistic viewer read path:
 //
@@ -16,13 +16,10 @@
 // Run it:   node packages/platform/control-plane/tests/load/viewer-load.ts
 // Knobs:    LOAD_RUNS (M, default 12), LOAD_SESSIONS (N, default 25),
 //           LOAD_SECONDS (T, default 10), LOAD_BUNDLE_KB (pad per bundle, 512),
-//           PLAYTEST_VIEW_CACHE_MB (viewer-adapter.js bundle LRU cap, 256).
+//           PLAYTEST_VIEW_CACHE_MB (run-bundle LRU cap, 256).
 //
-// PLAYTEST_VIEW_CACHE_MB is a MODULE-LEVEL constant in viewer-adapter.js,
-// snapshotted from process.env at import time. As a CLI that is naturally set
-// before this file's imports run; a test that wants a tiny cap must set
-// process.env BEFORE dynamically importing this module (see
-// phase7-viewer-load.test.ts).
+// PLAYTEST_VIEW_CACHE_MB is validated config (`src/config.ts`), read when the
+// app boots: set it any time before `withApp` creates the control plane.
 import crypto from "node:crypto";
 import fsp from "node:fs/promises";
 import os from "node:os";
@@ -95,7 +92,7 @@ async function buildRunBundle(tmpDir: HostedDynamic, i: HostedDynamic, { runId, 
 }
 
 /** Seed M finished runs (run_groups + runs + bundle artifacts) directly, the
- * phase3-adapter-paths.test.js pattern: the read path never cares who wrote. */
+ * viewer-adapter.test.ts pattern: the read path never cares who wrote. */
 async function seedRuns(app: HostedDynamic, api: HostedDynamic, { runs, bundleKb }: HostedDynamic) {
   const { project, suite, application, ring } = await setUpProject(api, {
     key: "viewer-load",
@@ -219,7 +216,7 @@ function percentile(sorted: HostedDynamic, p: HostedDynamic) {
 }
 
 export function cacheMbInEffect() {
-  return Number(process.env.PLAYTEST_VIEW_CACHE_MB || 256); // mirror of viewer-adapter.js CACHE_MAX_BYTES
+  return Number(process.env.PLAYTEST_VIEW_CACHE_MB || 256); // mirror of config.viewCache.maxBytes's default
 }
 
 /**
@@ -232,6 +229,11 @@ export function cacheMbInEffect() {
  */
 export async function runViewerLoad({ runs = 12, sessions = 25, seconds = 10, bundleKb = 512, verifyBytes = false } = {}) {
   let report: HostedDynamic = null;
+  // withApp builds its config from an explicit env object, so the cache knob is
+  // forwarded rather than read ambiently by the app.
+  const envOverrides = process.env.PLAYTEST_VIEW_CACHE_MB
+    ? { PLAYTEST_VIEW_CACHE_MB: process.env.PLAYTEST_VIEW_CACHE_MB }
+    : {};
   await withApp(async ({ base, app, api }: HostedDynamic) => {
     const { project, seeded, bundleBytesTotal } = await seedRuns(app, api, { runs, bundleKb });
     const mount = `${base}/api/v1/projects/${project.key}/view`;
@@ -268,7 +270,7 @@ export async function runViewerLoad({ runs = 12, sessions = 25, seconds = 10, bu
       errors: stats.errors,
       classes,
     };
-  });
+  }, envOverrides);
   return report;
 }
 

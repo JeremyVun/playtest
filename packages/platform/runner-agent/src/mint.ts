@@ -8,6 +8,7 @@ import childProcess from "node:child_process";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { isRunnerRefusal } from "./api-client.ts";
+import type { MintGrant } from "./protocol.ts";
 
 const STDOUT_LIMIT = 8 * 1024 * 1024;
 
@@ -56,7 +57,35 @@ export async function deliverMintResult(
 
 const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-export async function runMintScript(grant: RunnerDynamic, { isolation = "process", workDir, image = null }: RunnerDynamic = {}): Promise<RunnerDynamic> {
+export type MintScriptOutcome =
+  | { minted: true; storageState: RunnerDynamic }
+  | { minted: false; error: string };
+
+/**
+ * Run one grant's provider script — exactly once — and say what happened, as a
+ * result rather than a throw: "the script failed" is a DIAGNOSIS the caller
+ * reports on its own endpoint, never a delivery failure to retry
+ * (`deliverMintResult` owns that other half). The failure line is the
+ * customer's own code talking — code that was handed this grant's resolved
+ * secrets, so an `echo $TOKEN` lands here — and it is served to developers, so
+ * it crosses to the caller already scrubbed by the redactor the caller
+ * composed for this grant.
+ */
+export async function attemptMintScript(
+  grant: MintGrant,
+  { isolation, workDir, redact }: { isolation?: string; workDir: string; redact: (input: string) => string },
+): Promise<MintScriptOutcome> {
+  try {
+    return { minted: true, storageState: await runMintScript(grant, { isolation, workDir }) };
+  } catch (e: RunnerDynamic) {
+    return { minted: false, error: redact(firstLine(e?.message || e)) };
+  }
+}
+
+export async function runMintScript(
+  grant: MintGrant,
+  { isolation = "process", workDir, image = null }: { isolation?: string; workDir: string; image?: string | null },
+): Promise<RunnerDynamic> {
   const dir = path.join(workDir, "mints", safeName(grant.claim_id));
   await fsp.rm(dir, { recursive: true, force: true });
   await fsp.mkdir(dir, { recursive: true, mode: 0o700 });
@@ -140,7 +169,7 @@ function collect(child: RunnerDynamic, timeoutMs: number, onTimeout: (child: Run
   });
 }
 
-function parseStorageState(stdout: string, grant: RunnerDynamic): RunnerDynamic {
+function parseStorageState(stdout: string, grant: MintGrant): RunnerDynamic {
   const text = String(stdout).trim();
   const candidates = [text, text.split("\n").filter(Boolean).at(-1) ?? ""];
   for (const c of candidates) {

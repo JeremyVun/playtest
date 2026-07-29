@@ -1,4 +1,4 @@
-// Design gate 6, pinned at the source: THE CONTROL PLANE STARTS NO PROCESS IN
+// Placement boundary, pinned at the source: THE CONTROL PLANE STARTS NO PROCESS IN
 // RESPONSE TO A LAUNCH.
 //
 // Every runner — a laptop, a CI job, a build box — arrives the same way: poll,

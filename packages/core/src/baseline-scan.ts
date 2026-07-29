@@ -23,7 +23,7 @@
 // projections. Web and mobile trajectories are full of hashes, locators, and
 // user-visible text; a general rule there would start blocking acceptance across
 // suites that have nothing to do with this feature.
-import crypto from "node:crypto";
+import { sha256Hex } from "./hash.ts";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -244,7 +244,7 @@ export function scanEnvelopes(envelopes: StepEnvelope[], { redact = null, driver
 
 /** sha256 of exactly the bytes that were scanned. */
 export function fingerprint(text: string): string {
-  return crypto.createHash("sha256").update(text).digest("hex");
+  return sha256Hex(text);
 }
 
 /**

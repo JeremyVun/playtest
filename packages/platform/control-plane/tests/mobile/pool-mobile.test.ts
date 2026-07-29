@@ -237,7 +237,7 @@ test("hosted mobile: a runner bound to (todo-ios, local) claims the launch, star
   let agent: HostedDynamic = null;
   try {
     await withApp(async ({ api, base, app, storeRoot }: HostedDynamic) => {
-      const { project, suite, application, ring, files } = await setUp(api, "poolmobile");
+      const { project, suite, ring, files } = await setUp(api, "poolmobile");
 
       // Nothing is hand-started: no Appium of ours, and the config asks for a
       // managed backend. If something were already listening on Appium's default

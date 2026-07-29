@@ -97,8 +97,8 @@ test("a failing check is a finding on a SOUND suite: exit 1, no defect", async (
   assert.equal(report.verdict.report_pass, false);
   assert.deepEqual(report.verdict.failing_checks, ["items-list-is-never-empty"]);
   const failing = report.checks.find((check: LegacyTestValue) => check.id === "items-list-is-never-empty");
-  assert.equal(failing.expected, "at least one item");
-  assert.equal(failing.observed, "0 items");
+  assert.equal(failing!.expected, "at least one item");
+  assert.equal(failing!.observed, "0 items");
 });
 
 test("a thrown script error cannot masquerade as a check, and lands in the defect channel", async () => {
@@ -107,8 +107,8 @@ test("a thrown script error cannot masquerade as a check, and lands in the defec
   assert.equal(result.exitCode, 2, "a defective execution is unsound, not merely failing");
   const report = result.report;
   assert.equal(report.checks.length, 1, "the check made before the throw survives");
-  assert.equal(report.checks[0].id, "health-ok");
-  assert.equal(report.checks[0].pass, true);
+  assert.equal(report.checks[0]!.id, "health-ok");
+  assert.equal(report.checks[0]!.pass, true);
   assert.ok(
     !report.checks.some((check: LegacyTestValue) => /threw on purpose/.test(check.title ?? "")),
     "the thrown error is not a check of any kind",
@@ -147,7 +147,7 @@ test("an undersized suite fails soundness however many checks it ran", async () 
   assert.equal(report.verdict.pass, false, "and the suite still fails: an obligation is unaccounted");
   assert.equal(result.exitCode, 2);
   const items = report.obligations.entries.find((entry: LegacyTestValue) => entry.id === "rule:items");
-  assert.equal(items.status, "unaccounted");
+  assert.equal(items!.status, "unaccounted");
   assert.match(report.soundness.reasons.join("\n"), /obligation rule:items is unaccounted/);
   // Every report entry traces to an obligation in the manifest.
   const ids = new Set(report.obligations.entries.map((entry: LegacyTestValue) => entry.id));
@@ -157,7 +157,7 @@ test("an undersized suite fails soundness however many checks it ran", async () 
 test("a skip counts only when its reason is one the obligation approves", async () => {
   const approved = await run("skips.mjs", { params: { reason: "the fixture has no listing to walk" } });
   assert.equal(approved.exitCode, 0, `an approved skip is sound: ${JSON.stringify(approved.report.soundness)}`);
-  assert.equal(approved.report.obligations.entries.find((entry: LegacyTestValue) => entry.id === "rule:items").status, "skipped");
+  assert.equal(approved.report.obligations.entries.find((entry: LegacyTestValue) => entry.id === "rule:items")!.status, "skipped");
   assert.equal(approved.report.obligations.summary.unaccounted, 0);
 
   const invented = await run("skips.mjs", { params: { reason: "did not feel like it" } });
@@ -176,7 +176,7 @@ test("a check citing traffic that never happened is a defect, not evidence", asy
   assert.match(defect.message, /41, 42/);
   assert.equal(defect.check, "items-audited");
   const fabricated = report.checks.find((check: LegacyTestValue) => check.id === "items-audited");
-  assert.deepEqual(fabricated.evidence.har_entries, [], "the unresolvable citation is dropped from the check");
+  assert.deepEqual(fabricated!.evidence.har_entries, [], "the unresolvable citation is dropped from the check");
   assert.equal(result.exitCode, 2);
 });
 
@@ -205,10 +205,10 @@ test("the HAR column can condemn traffic a clean report ignored", async () => {
   assert.equal(report.verdict.report_pass, true, "the script reported everything as fine");
   assert.equal(report.verdict.gate_pass, false, "the oracles over the HAR did not agree");
   const policy = report.gate.checks.find((check: LegacyTestValue) => check.policy === "no_server_error");
-  assert.equal(policy.applicable, true);
-  assert.equal(policy.pass, false);
-  assert.match(policy.detail, /server error/);
-  assert.ok(policy.har_entries.length, "the gate cites the offending HAR entry");
+  assert.equal(policy!.applicable, true);
+  assert.equal(policy!.pass, false);
+  assert.match(policy!.detail, /server error/);
+  assert.ok(policy!.har_entries.length, "the gate cites the offending HAR entry");
   assert.equal(report.verdict.pass, false);
   assert.equal(result.exitCode, 1, "a sound suite with a failing column exits 1");
 });
@@ -216,12 +216,12 @@ test("the HAR column can condemn traffic a clean report ignored", async () => {
 test("a declared policy that matched no traffic fails and leaves its obligation unaccounted", async () => {
   const result = await run("ok.mjs", { policies: [{ policy: "no_server_error", scope: "DELETE /items/{id}" }] });
 
-  const policy = result.report.gate.checks[0];
-  assert.equal(policy.applicable, false, "nothing matched the scope");
-  assert.equal(policy.pass, false, "a never-exercised policy has not held");
+  const policy = result.report.gate.checks[0]!;
+  assert.equal(policy!.applicable, false, "nothing matched the scope");
+  assert.equal(policy!.pass, false, "a never-exercised policy has not held");
   const obligation = result.report.obligations.entries.find((entry: LegacyTestValue) => entry.source === "policy");
-  assert.equal(obligation.status, "unaccounted");
-  assert.match(obligation.reason, /matched no recorded request/);
+  assert.equal(obligation!.status, "unaccounted");
+  assert.match(obligation!.reason ?? "", /matched no recorded request/);
   assert.equal(result.exitCode, 2);
 });
 

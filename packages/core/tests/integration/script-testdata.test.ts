@@ -113,7 +113,7 @@ test("a declared reset is run by the harness, over the same wire, after the scri
   const reset = api.requests.filter((request: LegacyTestValue) => request.path === "/admin/reset");
   assert.equal(reset.length, 1);
   assert.equal(api.requests.at(-1).path, "/admin/reset");
-  assert.equal(result.harEntries.at(-1).request.url, `${api.url}/admin/reset`);
+  assert.equal(result.harEntries.at(-1)!.request.url, `${api.url}/admin/reset`);
   // It is counted like any other request — the recorded trace is the budget —
   // but it is exempt from the ceiling: a suite that spent its whole allowance
   // must still be able to put the environment back.

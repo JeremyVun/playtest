@@ -1,4 +1,4 @@
-import type { DynamicValue } from "./types.ts";
+import type { DynamicValue, HarEntry, ParsedScriptPolicy, ScriptGateCheck, ScriptGateResult, TraceRequest } from "./types.ts";
 
 // The HAR column of a script verdict (docs/contracts/scripts.md#verdict).
 //
@@ -25,15 +25,15 @@ import { policyObligationId } from "./obligations.ts";
  * configuration error rather than a degraded mode, so in practice all four are
  * always on.
  */
-export const LEVEL_0_POLICIES: DynamicValue = Object.freeze(["no_server_error", "documented_status", "response_schema", "content_type"]);
+export const LEVEL_0_POLICIES: readonly string[] = Object.freeze(["no_server_error", "documented_status", "response_schema", "content_type"]);
 
 /** The Level 0 policies that need no OpenAPI document. */
-export const LEVEL_0_SPEC_FREE_POLICIES: DynamicValue = Object.freeze(["no_server_error"]);
+export const LEVEL_0_SPEC_FREE_POLICIES: readonly string[] = Object.freeze(["no_server_error"]);
 
 /** @see LEVEL_0_POLICIES */
-export function defaultScriptPolicies({ spec = null }: DynamicValue = {}) {
+export function defaultScriptPolicies({ spec = null }: DynamicValue = {}): Array<{ policy: string }> {
   const withSpec = spec?.operations?.length;
-  return LEVEL_0_POLICIES.filter((policy: DynamicValue) => withSpec || LEVEL_0_SPEC_FREE_POLICIES.includes(policy)).map((policy: DynamicValue) => ({ policy }));
+  return LEVEL_0_POLICIES.filter((policy) => withSpec || LEVEL_0_SPEC_FREE_POLICIES.includes(policy)).map((policy) => ({ policy }));
 }
 
 /**
@@ -41,8 +41,8 @@ export function defaultScriptPolicies({ spec = null }: DynamicValue = {}) {
  * policies consume. Accepting both shapes keeps one adapter for scripts and for
  * any HAR a user hands the CLI.
  */
-export function traceFromHar(entries: DynamicValue) {
-  const out: DynamicValue = [];
+export function traceFromHar(entries: DynamicValue): TraceRequest[] {
+  const out: TraceRequest[] = [];
   (entries ?? []).forEach((entry: DynamicValue, index: DynamicValue) => {
     const request = entry?.request ?? {};
     const response = entry?.response ?? {};
@@ -84,8 +84,8 @@ export function traceFromHar(entries: DynamicValue) {
  * Parse the declared policy list. A malformed declaration is user input, so it
  * is a DummyConfigError naming the policy — never a mid-run surprise.
  */
-export function parseScriptPolicies(declarations: DynamicValue, { where = "gate.policies", spec = null }: DynamicValue = {}) {
-  const out: DynamicValue = [];
+export function parseScriptPolicies(declarations: DynamicValue, { where = "gate.policies", spec = null }: DynamicValue = {}): ParsedScriptPolicy[] {
+  const out: ParsedScriptPolicy[] = [];
   for (const declaration of declarations ?? []) {
     let parsed;
     try {
@@ -111,9 +111,15 @@ export function parseScriptPolicies(declarations: DynamicValue, { where = "gate.
  *
  * @returns {Promise<{ pass: boolean, checks: object[] }>}
  */
-export async function evaluateScriptGate({ harEntries = [], policies = [], spec = null, match = null, trace = null }: DynamicValue) {
+export async function evaluateScriptGate({ harEntries = [], policies = [], spec = null, match = null, trace = null }: {
+  harEntries?: HarEntry[];
+  policies?: ParsedScriptPolicy[];
+  spec?: DynamicValue;
+  match?: DynamicValue;
+  trace?: TraceRequest[] | null;
+}): Promise<ScriptGateResult> {
   const requests = trace ?? traceFromHar(harEntries);
-  const checks: DynamicValue = [];
+  const checks: ScriptGateCheck[] = [];
   for (const entry of policies) {
     let result;
     try {
@@ -131,8 +137,8 @@ export async function evaluateScriptGate({ harEntries = [], policies = [], spec 
       pass: applicable && result.pass !== false,
       detail: result.detail ?? "",
       // Evidence keyed into the HAR, the same handle a script's own checks use.
-      har_entries: (result.requests ?? []).map((request) => request.index).filter((index) => Number.isInteger(index)),
+      har_entries: (result.requests ?? []).map((request: DynamicValue) => request.index).filter((index: DynamicValue) => Number.isInteger(index)),
     });
   }
-  return { pass: checks.every((check: DynamicValue) => check.pass), checks };
+  return { pass: checks.every((check) => check.pass), checks };
 }

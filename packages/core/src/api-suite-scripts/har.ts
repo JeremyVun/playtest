@@ -1,4 +1,4 @@
-import type { DynamicValue } from "./types.ts";
+import type { DynamicValue, HarEntry } from "./types.ts";
 
 // HAR 1.2 recording for script executions
 // (docs/contracts/scripts.md#har-lifecycle).
@@ -31,7 +31,7 @@ export const HAR_VERSION = "1.2";
 /** `log.creator.name` on every script HAR. */
 export const HAR_CREATOR = "playtest-script-runner";
 
-const headerPairs = (headers: DynamicValue) =>
+const headerPairs = (headers: DynamicValue): Array<{ name: string; value: string }> =>
   Object.entries(headers ?? {}).flatMap(([name, value]) =>
     (Array.isArray(value) ? value : [value]).map((one) => ({ name: String(name), value: String(one ?? "") })),
   );
@@ -42,8 +42,8 @@ const headerPairs = (headers: DynamicValue) =>
  * report cites `evidence.requests: [<index>]` and the runner verifies that every
  * cited index resolves (docs/contracts/scripts.md#report-schema).
  */
-export function createHarRecorder({ target = "", file = null, contractVersion = "" }: DynamicValue = {}) {
-  const entries: DynamicValue = [];
+export function createHarRecorder({ target = "", file = null, contractVersion = "" }: { target?: string; file?: string | null; contractVersion?: string | number } = {}) {
+  const entries: HarEntry[] = [];
   let dirty = false;
 
   const document = () => ({
@@ -58,7 +58,7 @@ export function createHarRecorder({ target = "", file = null, contractVersion = 
     },
   });
 
-  const flush = ({ force = false }: DynamicValue = {}) => {
+  const flush = ({ force = false }: { force?: boolean } = {}) => {
     if (!file || (!dirty && !force)) return false;
     const json = JSON.stringify(document(), null, 1);
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -77,10 +77,10 @@ export function createHarRecorder({ target = "", file = null, contractVersion = 
      * does for the api driver's har.json.
      * @returns {number} the entry index
      */
-    add({ method, url, requestHeaders, requestBody, mimeType, startedAt, timeMs, status, statusText, responseHeaders, responseBody, responseSize, failed = false }: DynamicValue) {
+    add({ method, url, requestHeaders, requestBody, mimeType, startedAt, timeMs, status, statusText, responseHeaders, responseBody, responseSize, failed = false }: DynamicValue): number {
       const reqText = requestBody == null ? null : String(requestBody);
       const resText = responseBody == null ? null : String(responseBody);
-      const entry: DynamicValue = {
+      const entry: HarEntry = {
         startedDateTime: new Date(startedAt).toISOString(),
         time: Number.isFinite(timeMs) ? timeMs : -1,
         request: {
@@ -130,7 +130,7 @@ export function createHarRecorder({ target = "", file = null, contractVersion = 
  * driver rule: text/JSON only, and never buffer a body whose declared length
  * exceeds the read cap.
  */
-export function captureDecision({ mime, contentLength }: DynamicValue) {
+export function captureDecision({ mime, contentLength }: { mime: string; contentLength: DynamicValue }): { capturable: boolean; declaredSize: number | null } {
   const capturable = mime === "" || isTextualMime(mime);
   const len = Number.parseInt(contentLength, 10);
   const tooBig = Number.isFinite(len) && len > MAX_BODY_READ;

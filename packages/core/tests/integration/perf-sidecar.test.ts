@@ -35,7 +35,7 @@ const servers: LegacyTestValue = [];
 
 before(async () => {
   tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "playtest-perf-"));
-  const probe = http.createServer((req, res) => res.end("ok")) as Omit<ReturnType<typeof http.createServer>, "address"> & { address(): { port: number } }; // SAFETY: a listening TCP server has an AddressInfo result
+  const probe = http.createServer((_req, res) => res.end("ok")) as Omit<ReturnType<typeof http.createServer>, "address"> & { address(): { port: number } }; // SAFETY: a listening TCP server has an AddressInfo result
   await new Promise<void>((resolve) => probe.listen(0, "127.0.0.1", resolve));
   servers.push({ close: () => new Promise<LegacyTestValue>((r) => probe.close(r)) });
   baseUrl = `http://127.0.0.1:${probe.address().port}`;

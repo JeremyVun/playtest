@@ -455,7 +455,7 @@ test("stale pending reservations are reaped and refunded; an owned reservation s
 test("live ingest refuses budget exhaustion and oversized lines, and every route is behind the runner token", async () => {
   await withApp(
     async ({ api, base, app, storeRoot }: HostedDynamic) => {
-      const { groupId, token, runner, spec } = await launch(api, base, "live-budget");
+      const { groupId, runner, spec } = await launch(api, base, "live-budget");
       const target = spec.cases[0];
       const stranger = spec.cases[1];
       await runner.start(target.run_id);

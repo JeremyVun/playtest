@@ -312,7 +312,7 @@ test("deleting one todo removes only that row, and identifiers stay id-based", a
   assert.equal(refFor("Walk the dog", after_.text), null, `the deleted row survived:\n${after_.text}`);
   assert.equal(refFor("Delete Walk the dog", after_.text), null, "its delete button went with it");
   assert.doesNotMatch(after_.text, /text: "Walk the dog"/);
-  for (const [id, title] of Object.entries(survivors)) {
+  for (const title of Object.values(survivors)) {
     assert.ok(refFor(title, after_.text), `the row for "${title}" should have survived:\n${after_.text}`);
     assert.ok(refFor(`Delete ${title}`, after_.text), `the delete button for "${title}" should have survived`);
   }

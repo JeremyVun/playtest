@@ -20,30 +20,24 @@ Plan: [`docs/backlog/storage/BUILD_PLAN.md`](backlog/storage/BUILD_PLAN.md).
       verified backup, and remove remaining PostgreSQL runtime, test,
       configuration, and deployment dependencies.
 
-### API testing
+### Comparative detection studies
 
-Plan: [`docs/backlog/api-testing/BUILD_PLAN.md`](backlog/api-testing/BUILD_PLAN.md).
+Two black-box studies measuring what Playtest adds over a frontier coding
+agent, designed 2026-07-29. They replace the hill-climb rerun plan and the
+script-authoring plan (old `docs/backlog/api-testing/`, deleted; its unbuilt
+S4/S5 are dropped — shipped script-substrate behavior remains recorded in
+[`docs/contracts/scripts.md`](contracts/scripts.md)).
 
-- [ ] **S4 — Hosted lifecycle and CLI parity:** finish hosted persistence,
-      fingerprinted approval, script review, replay dispatch, drift revisions,
-      test-data cleanup, and the `playtest script run` and `review` surfaces.
-- [ ] **S5 — Stakeholder pilot:** run the frozen instrument against an
-      authorized stakeholder API and publish the preregistered regression,
-      authored-suite, and total-cost-of-ownership verdicts.
-
-### Seeded-fault hill-climb rerun
-
-Plan: [`docs/backlog/hillclimb-rerun.md`](backlog/hillclimb-rerun.md).
-Prior evidence:
-[`studies/archive/hillclimb-2026-07/`](../studies/archive/hillclimb-2026-07/).
-
-- [ ] **P0 — Current-instrument audit and budget:** freeze the current prompts,
-      schemas, model routes, findings workflow, questions, matrix, cost cap, and
-      abort rules before building a new benchmark.
-- [ ] **P1–P6 — Fresh blind holdout and repair climb:** build a non-Fern & Fog
-      subject, freeze stories before a separately authored catalog, measure
-      trigger coverage and conditional recognition, then run one
-      evidence-gated repair arm and publish the result.
+- [ ] **Web:** [`docs/backlog/detection-study/web.md`](backlog/detection-study/web.md)
+      — Playtest vs a browser-driving coding agent on a fresh seeded
+      subject; up to three withdraw-on-detection rounds; arm-blind judged.
+      Prior evidence:
+      [`studies/archive/hillclimb-2026-07/`](../studies/archive/hillclimb-2026-07/).
+- [ ] **API:** [`docs/backlog/detection-study/api.md`](backlog/detection-study/api.md)
+      — coding agent vs the live probe vs Schemathesis on a fresh sealed
+      fault set; the probe's fair re-test after P1's oracle bias. Prior
+      evidence: [`studies/api-probe/`](../studies/api-probe/),
+      [`studies/api-suite/`](../studies/api-suite/).
 
 ### Hosted UX evidence rerun
 

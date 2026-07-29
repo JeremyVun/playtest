@@ -12,6 +12,7 @@ import { ago } from "../lib/labels.js";
 import { findingStateLabel } from "../lib/finding-buckets.js";
 import { initialDefaultsYaml } from "../lib/defaults-form.js";
 import { applicationLine, keyFromName, keyProblem, ringUrlProblem } from "../lib/rings.js";
+import { projectPage } from "../lib/project-page.js";
 
 export async function projectsList() {
   const main = renderFrame({});
@@ -104,21 +105,16 @@ function urlPreview(nameInput: WebDynamic, placeholderKey: WebDynamic, toPath: W
 }
 
 export async function projectHome(projectKey: WebDynamic) {
-  const main = renderFrame({ projectKey, nav: "overview" });
-  const project = state.projectByKey.get(projectKey);
-  // A dead end needs a way out: this used to render the raw slug as an <h1>
-  // with no rail and no link, leaving the browser's Back button as the only
-  // exit.
-  if (!project) {
-    return mount(main, page({
-      title: "Project not found",
-      body: emptyState(
-        "No project called that",
-        `Nothing here is named "${projectKey}" — either it doesn't exist, or you're not a member of it. A project admin can add you.`,
-        h("div.empty-actions", {}, link("/projects", h("span.btn.primary", {}, "See all projects"))),
-      ),
-    }));
-  }
+  const context = projectPage(projectKey, {
+    nav: "overview",
+    title: "Project not found",
+    loading: false,
+    missingTitle: "No project called that",
+    missingBody: `Nothing here is named "${projectKey}" — either it doesn't exist, or you're not a member of it. A project admin can add you.`,
+    missingAction: h("div.empty-actions", {}, link("/projects", h("span.btn.primary", {}, "See all projects"))),
+  });
+  if (!context) return;
+  const { main, project } = context;
 
   mount(main, page({ title: "Suites", body: h("div.dim", {}, "Loading…") }));
 

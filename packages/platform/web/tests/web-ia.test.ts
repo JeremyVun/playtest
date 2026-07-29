@@ -1,6 +1,6 @@
 // The hosted web information architecture frozen by the P1 simplification:
-// a four-item project rail, temporary redirects for removed SPA surfaces,
-// exactly three Settings sections with role disclosure, and secret masking.
+// a six-item project rail, temporary redirects for removed SPA surfaces,
+// exactly five Settings sections with role disclosure, and secret masking.
 // These modules under packages/platform/web/src are DOM-free on purpose so this offline
 // gate can assert the IA without a browser (siblings of web-caseform.test.ts).
 import { test } from "node:test";
@@ -17,10 +17,10 @@ import { CATEGORIES } from "@playtest/core/findings";
 import { SUCCESS_KINDS } from "../src/lib/caseform.js";
 
 test("nav: primary project navigation is exactly six items", () => {
-  // P1's four, plus Personas (project-wide, and the story editor's picker needs
-  // somewhere to send people to make one) and Applications (what this project
-  // tests and where each surface is deployed — the first step of a first run,
-  // not a settings tab).
+  // The original four, plus Personas (project-wide, and the story editor's
+  // picker needs somewhere to send people to make one) and Applications (what
+  // this project tests and where each surface is deployed — the first step of a
+  // first run, not a settings tab).
   assert.deepEqual(RAIL.map((i: WebDynamic) => i.nav), ["overview", "runs", "findings", "applications", "personas", "settings"]);
   assert.deepEqual(RAIL.map((i: WebDynamic) => i.label), ["Suites", "Runs", "Findings", "Applications", "Personas", "Settings"]);
   // No separate Review or Insights destination on the rail.

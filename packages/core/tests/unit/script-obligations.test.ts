@@ -75,7 +75,7 @@ test("an obligation with no check, no skip, and no traffic is unaccounted — ch
   assert.equal(accounting.summary.covered, 1);
   assert.equal(accounting.summary.unaccounted, 1);
   assert.match(accounting.reasons.join("\n"), /obligation rule:b is unaccounted/);
-  assert.equal(accounting.entries.find((entry) => entry.id === "rule:a").checks.length, 20);
+  assert.equal(accounting.entries.find((entry) => entry.id === "rule:a")!.checks.length, 20);
 });
 
 test("a skip or unsupported record counts only against an approved reason", () => {
@@ -92,7 +92,7 @@ test("a skip or unsupported record counts only against an approved reason", () =
     ],
   });
   assert.equal(approved.sound, true, "an approved reason (case-insensitive) accounts for the obligation");
-  assert.equal(approved.entries.find((entry) => entry.id === "rule:a").status, "skipped");
+  assert.equal(approved.entries.find((entry) => entry.id === "rule:a")!.status, "skipped");
 
   const invented = accountObligations({
     obligations,
@@ -103,7 +103,7 @@ test("a skip or unsupported record counts only against an approved reason", () =
   });
   assert.equal(invented.sound, false);
   assert.equal(invented.summary.unaccounted, 2);
-  assert.match(invented.entries.find((entry) => entry.id === "rule:b").reason, /approves no skip reason/);
+  assert.match(invented.entries.find((entry) => entry.id === "rule:b")!.reason ?? "", /approves no skip reason/);
 });
 
 test("a manifest entry declared unsupported is accounted without any record", () => {
@@ -112,8 +112,8 @@ test("a manifest entry declared unsupported is accounted without any record", ()
     records: [],
   });
   assert.equal(accounting.sound, true);
-  assert.equal(accounting.entries[0].status, "unsupported");
-  assert.match(accounting.entries[0].reason, /declared unsupported/);
+  assert.equal(accounting.entries[0]!.status, "unsupported");
+  assert.match(accounting.entries[0]!.reason ?? "", /declared unsupported/);
 });
 
 test("a record naming an obligation outside the manifest is reported, never silently accepted", () => {
@@ -134,7 +134,7 @@ test("an unexercised check does not cover its obligation", () => {
     obligations: normalizeObligations([{ id: "rule:a", source: "rule", statement: "a" }]),
     records: [{ kind: "check", id: "a", obligation: "rule:a", pass: true, exercised: false }],
   });
-  assert.equal(accounting.entries[0].status, "unaccounted");
+  assert.equal(accounting.entries[0]!.status, "unaccounted");
   assert.equal(accounting.sound, false);
 });
 
@@ -161,7 +161,7 @@ test("policy obligations are covered by gate applicability; operation obligation
     trace: [{ method: "GET", path: "/items" }],
   });
   assert.equal(inapplicable.sound, false);
-  assert.equal(inapplicable.entries.find((entry) => entry.source === "policy").status, "unaccounted");
+  assert.equal(inapplicable.entries.find((entry) => entry.source === "policy")!.status, "unaccounted");
   assert.deepEqual(
     inapplicable.entries.filter((entry) => entry.status === "unaccounted").map((entry) => entry.id),
     ["policy:no_server_error", "operation:POST /items", "operation:GET /items/{itemId}"],

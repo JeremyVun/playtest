@@ -113,7 +113,7 @@ test("a clean pass supersedes the story's pending candidates, and only that stor
 // read is STRUCTURAL on purpose. A resolver that insisted on a complete physical
 // target would turn every review of a hosted-native suite into a 409 "the suite
 // no longer validates" — the story is there, only the URL the ring owns is not.
-test("gate 14: a target-free suite's candidates read and accept — structural resolution, no physical target", async () => {
+test("a target-free suite's candidates read and accept — structural resolution, no physical target", async () => {
   await withApp(async ({ app, api }: HostedDynamic) => {
     const project = (await api.post("/projects", { key: "gate14", name: "Gate 14" })).body;
     // The ring holds the URL. A ring is not a suite file, so the suite below
@@ -229,4 +229,3 @@ async function attachRunBundle(app: HostedDynamic, runDbId: HostedDynamic, key: 
     await fsp.rm(tmp, { recursive: true, force: true });
   }
 }
-

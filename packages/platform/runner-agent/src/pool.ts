@@ -35,7 +35,7 @@ import { ApiClient, RunnerApiError } from "./api-client.ts";
 import { execGroup } from "./exec-group.ts";
 import { execMint } from "./exec-mint.ts";
 import { AppiumBackends } from "./appium.ts";
-import { assertConfigScope, bindingFor, configBannerLines, loadRunnerConfig } from "./runner-config.ts";
+import { assertConfigScope, configBannerLines, loadRunnerConfig, resolveMobilePlacement } from "./runner-config.ts";
 import type { AppiumBackend, RunnerConfig } from "./runner-config.ts";
 
 /** How long a single check-in may hold, matching the board's own cap. */
@@ -47,11 +47,13 @@ const BACKOFF_MAX_MS = 30_000;
 const HEARTBEAT_FALLBACK_S = 20;
 /**
  * How many incompatible dispatch ids one session may carry in its `skip` list.
- * The server refuses more than this on a poll, and it is the point at which
- * this loop backs off explicitly instead of asking again immediately: past that
- * many unclaimable offers the honest answer is "nothing here is for me".
+ * The server refuses more than its cap on a poll, and the cap is the point at
+ * which this loop backs off explicitly instead of asking again immediately:
+ * past that many unclaimable offers the honest answer is "nothing here is for
+ * me". The board advertises its own number as `skip_cap` on every poll answer;
+ * this value is only the fallback for a control plane that predates the field.
  */
-const SKIP_CAP = 64;
+const SKIP_CAP_FALLBACK = 64;
 
 export interface PoolOptions {
   server: string;
@@ -102,6 +104,27 @@ interface RunnerIdentity {
   /** `"site"` when this credential serves every project on the deployment. */
   scope?: string | null;
   project_key: string | null;
+}
+
+/** One check-in's answer (docs/contracts/hosted.md, "The claim board"). */
+interface PollAnswer {
+  runner?: RunnerIdentity | null;
+  offers?: ClaimOffer[];
+  /** The claim this runner already holds — a crash-resume, offered instead of a page. */
+  current?: ClaimOffer | null;
+  /** The board's own `skip` list cap; absent on a control plane that predates it. */
+  skip_cap?: number;
+}
+
+/** What winning `POST /runner/pool/claims/:dispatch` answers. */
+interface ClaimAnswer {
+  run_group_id?: string | null;
+  mint_claim_id?: string | null;
+  heartbeat_interval_s?: number;
+}
+
+interface HeartbeatAnswer {
+  canceled?: boolean;
 }
 
 export interface PoolDeps {
@@ -170,6 +193,7 @@ export async function runPool(opts: PoolOptions, deps: PoolDeps = {}): Promise<{
   let skip: string[] = [];
   const reported = new Set<string>();
   let idleBackoff = 0;
+  let skipCap = SKIP_CAP_FALLBACK;
   // Consecutive resumed claims the control plane refused. Its own counter rather
   // than `failures`: a poll that answers is a healthy control plane and clears
   // `failures`, so counting refusals there would both flatten this backoff and
@@ -177,7 +201,7 @@ export async function runPool(opts: PoolOptions, deps: PoolDeps = {}): Promise<{
   let refusedResumes = 0;
   try {
     while (!stopping && executed < maxIterations && polls < maxPolls) {
-      let answer;
+      let answer: PollAnswer;
       polls += 1;
       try {
         // The FIRST request does not hold: a person who just pasted the start
@@ -186,9 +210,13 @@ export async function runPool(opts: PoolOptions, deps: PoolDeps = {}): Promise<{
         const wait = announced ? opts.pollWaitS : 0;
         const query = new URLSearchParams({ wait: String(wait), labels: opts.labels.join(",") });
         if (skip.length) query.set("skip", skip.join(","));
-        answer = await api.json("GET", `/runner/pool/claims?${query}`);
+        answer = await api.json<PollAnswer>("GET", `/runner/pool/claims?${query}`);
         if (failures) log("reconnected to the control plane");
         failures = 0;
+        // The skip cap is the SERVER's limit, so the server's word wins over
+        // the compiled-in fallback: a deployment that lowered it must not see
+        // this runner poll itself into a fatal 400.
+        if (Number(answer?.skip_cap) > 0) skipCap = Number(answer.skip_cap);
       } catch (e) {
         if (isFatalRefusal(e)) throw new Error(firstLine(e));
         const delay = backoffDelayMs(++failures, { random });
@@ -252,7 +280,7 @@ export async function runPool(opts: PoolOptions, deps: PoolDeps = {}): Promise<{
           .filter(([, reason]) => reason)
           .map(([o]) => o.dispatch_id)
           .filter((id) => !skip.includes(id));
-        if (skip.length + fresh.length <= SKIP_CAP) {
+        if (skip.length + fresh.length <= skipCap) {
           skip = [...skip, ...fresh];
           idleBackoff = 0;
         } else if (!takeable) {
@@ -273,9 +301,9 @@ export async function runPool(opts: PoolOptions, deps: PoolDeps = {}): Promise<{
       if (resumed) {
         log(`resuming ${describe(offer)} — this runner still holds its claim`);
       } else {
-        let claim;
+        let claim: ClaimAnswer;
         try {
-          claim = await api.json("POST", `/runner/pool/claims/${offer.dispatch_id}`, {});
+          claim = await api.json<ClaimAnswer>("POST", `/runner/pool/claims/${offer.dispatch_id}`, {});
         } catch (e) {
           if (isFatalRefusal(e)) throw new Error(firstLine(e));
           // A lost race is the documented outcome for the runner that did not
@@ -334,16 +362,14 @@ export interface CompatibilityContext {
 /**
  * What this runner can execute without any local configuration: web and API
  * groups, and every mint (mint compatibility is labels only — no binding is
- * required to claim one). A mobile group needs three things this machine alone
- * can answer, and each of them says so in its own words:
- *
- *   1. process isolation, because a container reaches neither the simulator,
- *      nor a loopback Appium, nor a build outside the workspace;
- *   2. a binding in this runner's config file for the offered
- *      `(application key, ring key)`, on the offered platform;
- *   3. a STARTABLE backend behind that binding — the Appium binary and platform
- *      driver present (managed), or an endpoint that answers (external). Real
- *      health is only knowable after the claim; this is the cheap half.
+ * required to claim one). A mobile group's placement facts — isolation,
+ * binding, platform agreement — are decided by the shared resolver
+ * (`resolveMobilePlacement`, the same answer the group executor re-checks
+ * after a claim), and this pre-claim half adds the one probe only a would-be
+ * claimer pays for: a STARTABLE backend behind the binding — the Appium
+ * binary and platform driver present (managed), or an endpoint that answers
+ * (external). Real health is only knowable after the claim; this is the cheap
+ * half.
  *
  * Every refusal is local. It is logged once, it names the offer in the next
  * poll's `skip` list, and nothing about it is ever sent: the advertisement is
@@ -361,31 +387,16 @@ export async function defaultCompatibility(
 
   const applicationKey = offer.target?.application_key ?? null;
   const ringKey = offer.target?.ring_key ?? null;
-  const bound = `${applicationKey ?? "?"}/${ringKey ?? "?"}`;
-  if (opts.isolation !== "process") {
-    return (
-      `this runner runs cases in containers, and a mobile case cannot: the device, the Appium server on loopback and ` +
-      `the build outside the workspace are all unreachable from one. Start a runner with --isolation process to take "${bound}".`
-    );
-  }
-  const binding = bindingFor(opts.config, { projectKey: offer.project_key ?? null, applicationKey, ringKey });
-  if (!binding) {
-    return (
-      `this runner has no configuration binding for the mobile target "${bound}" — a mobile build, its ` +
-      `Appium backend and its device are machine-local facts, declared in the runner's own config file ` +
-      `(--config). Another runner that binds "${bound}" can take this.`
-    );
-  }
-  const platform = offer.target?.platform ?? null;
-  if (platform && binding.platform !== platform) {
-    return (
-      `this runner binds the mobile target "${bound}" to ${binding.platform}, but that application is ${platform} — ` +
-      `correct the platform in the runner's config file, or unbind the target`
-    );
-  }
-  const reason = await ctx.startable(binding.backend);
+  const placement = resolveMobilePlacement(
+    opts.config,
+    { projectKey: offer.project_key ?? null, applicationKey, ringKey, platform: offer.target?.platform ?? null },
+    { isolation: opts.isolation },
+  );
+  if (!placement.binding) return placement.reason;
+  const reason = await ctx.startable(placement.binding.backend);
   if (reason) {
-    return `this runner binds "${bound}" to the Appium backend "${binding.backend.name}", which cannot start here: ${reason}`;
+    const bound = `${applicationKey ?? "?"}/${ringKey ?? "?"}`;
+    return `this runner binds "${bound}" to the Appium backend "${placement.binding.backend.name}", which cannot start here: ${reason}`;
   }
   return null;
 }
@@ -469,7 +480,7 @@ function startHeartbeat(
     if (inFlight) return;
     inFlight = true;
     try {
-      const beat = await api.json("POST", `/runner/pool/claims/${dispatchId}/heartbeat`, {});
+      const beat = await api.json<HeartbeatAnswer>("POST", `/runner/pool/claims/${dispatchId}/heartbeat`, {});
       if (beat?.canceled) onCancel("the control plane canceled this run");
     } catch (e) {
       // A transport hiccup is nothing: the next tick carries the liveness, and

@@ -30,7 +30,7 @@
 //
 // Anything else keeps its literal value and, if that breaks against a fresh
 // target, fails loudly.
-import { DummyConfigError } from "./config.ts";
+import { DummyConfigError } from "./config/errors.ts";
 import { pathSegments, readAt } from "./match.ts";
 import { isSecretRef, secretNameForValue } from "./secrets.ts";
 

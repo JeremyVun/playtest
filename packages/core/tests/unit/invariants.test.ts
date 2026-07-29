@@ -11,6 +11,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { evaluateGate } from "../../src/gate.ts";
+import type { GateCheck } from "../../src/gate.ts";
 import { POLICY_NAMES, evaluateInvariant, parseInvariantPolicy, policySpec } from "../../src/invariants.ts";
 
 /** One recorded request, in the shape gate.js hands the policies. */
@@ -232,16 +233,16 @@ test("under success: a not-applicable policy FAILS with its actionable detail; u
 
   const gated = await evaluateGate({ success: [policy] }, ctx);
   assert.equal(gated.pass, false, "a declared invariant that was never exercised has not held");
-  assert.equal(gated.checks[0].applicable, false);
-  assert.equal(gated.checks[0].pass, false);
-  assert.match(gated.checks[0].detail, /a pagination policy needs at least two/);
-  assert.equal(gated.checks[0].spec, "invariant: pagination op=GET /entries identity=$.entries[*].id");
+  assert.equal(gated.checks[0]!.applicable, false);
+  assert.equal(gated.checks[0]!.pass, false);
+  assert.match(gated.checks[0]!.detail, /a pagination policy needs at least two/);
+  assert.equal(gated.checks[0]!.spec, "invariant: pagination op=GET /entries identity=$.entries[*].id");
 
   const advised = await evaluateGate({ success: [], observe: [policy] }, ctx);
   assert.equal(advised.pass, true, "an advisory policy never gates");
   assert.equal(advised.checks.length, 0);
-  assert.equal(advised.advisory.length, 1);
-  assert.deepEqual([advised.advisory[0].applicable, advised.advisory[0].severity], [false, "advisory"]);
+  assert.equal(advised.advisory!.length, 1);
+  assert.deepEqual([advised.advisory![0]!.applicable, advised.advisory![0]!.severity], [false, "advisory"]);
 });
 
 test("an advisory VIOLATION is reported and still does not gate", async () => {
@@ -254,8 +255,8 @@ test("an advisory VIOLATION is reported and still does not gate", async () => {
     { trajectory: [], harEntries: har },
   );
   assert.equal(gate.pass, true, "the run stays green");
-  assert.equal(gate.advisory[0].pass, false, "and the violation is still recorded");
-  assert.match(gate.advisory[0].detail, /appeared on page 1 and again on page 2/);
+  assert.equal(gate.advisory![0]!.pass, false, "and the violation is still recorded");
+  assert.match(gate.advisory![0]!.detail, /appeared on page 1 and again on page 2/);
 });
 
 test("an observation GET can never satisfy api_called or shift the response another kind inspects", async () => {
@@ -283,7 +284,7 @@ test("an observation GET can never satisfy api_called or shift the response anot
     },
     ctx,
   );
-  const [called, matched, selected, invariant] = gate.checks;
+  const [called, matched, selected, invariant] = gate.checks as [GateCheck, GateCheck, GateCheck, GateCheck];
   assert.equal(called.pass, false, "api_called must not be satisfied by the gate's own observation");
   assert.match(called.detail, /no matching request among 1 request/);
   assert.equal(matched.pass, false, "the observation must not become the last response body");

@@ -102,7 +102,7 @@ test("the real browser runner never overlaps axe with another page operation", a
     },
   });
 
-  assert.equal(result.status, "pass", result.error);
+  assert.equal(result.status, "pass", result.error ?? "(no error)");
   assert.deepEqual(overlaps, [], operations.join(", "));
   const envelopes = fs.readFileSync(path.join(result.runDir, "trajectory.jsonl"), "utf8")
     .trim().split("\n").map((line) => JSON.parse(line));

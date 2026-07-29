@@ -15,7 +15,7 @@ import type { DynamicValue } from "./types.ts";
 // arriving as a proposed revision — produces new bytes, and new bytes have no
 // approval. That is why `approve` refuses a fingerprint that is not the one on
 // screen: a reviewer approves what they read.
-import crypto from "node:crypto";
+import { sha256Hex } from "../hash.ts";
 
 import { DummyConfigError } from "../config.ts";
 
@@ -29,7 +29,7 @@ export const SCRIPT_VERSION_STATES: DynamicValue = Object.freeze(["pending", "ap
 export const SCRIPT_VERSION_ORIGINS: DynamicValue = Object.freeze(["authored", "edit", "revision"]);
 
 /** sha256 of exactly these bytes — the fingerprint an approval covers. */
-export const scriptFingerprint = (text: DynamicValue) => crypto.createHash("sha256").update(String(text ?? ""), "utf8").digest("hex");
+export const scriptFingerprint = (text: DynamicValue) => sha256Hex(String(text ?? ""));
 
 const shortFingerprint = (value: DynamicValue) => String(value ?? "").slice(0, 12);
 

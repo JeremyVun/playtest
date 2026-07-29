@@ -18,11 +18,12 @@
 // letter you were typing into a note.
 import { api } from "../lib/api.js";
 import { h, mount } from "../lib/dom.js";
-import { link, onPageLeave } from "../lib/router.js";
-import { renderFrame, page } from "../lib/shell.js";
-import { state, hasRole } from "../lib/state.js";
+import { link } from "../lib/router.js";
+import { page } from "../lib/shell.js";
+import { hasRole } from "../lib/state.js";
 import { toast, toastError, emptyState, errorState, confirmModal, formModal, formField, srOnly } from "../lib/ui.js";
-import { subscribeFeed } from "../lib/feed.js";
+import { debouncedFeedRefresh, preserveFocus } from "../lib/live-page.js";
+import { projectPage } from "../lib/project-page.js";
 import {
   COPY,
   bucketCards,
@@ -46,61 +47,35 @@ const FEED_TYPES: WebDynamic = [
 
 let live: WebDynamic = null;
 function stopLive() {
-  live?.sub?.stop();
-  clearTimeout(live?.timer);
+  live?.stop();
   live = null;
-}
-
-/** A repaint must not move the cursor out of a note someone is typing into. */
-function withFocus(paint: WebDynamic) {
-  const key = document.activeElement?.getAttribute?.("data-fk") || null;
-  const start = document.activeElement?.selectionStart ?? null;
-  paint();
-  if (!key) return;
-  const next = document.querySelector(`[data-fk="${CSS.escape(key)}"]`);
-  if (!next) return;
-  next.focus();
-  if (start != null && next.setSelectionRange) {
-    try { next.setSelectionRange(start, start); } catch { /* not a text control */ }
-  }
 }
 
 /** `/p/:key/suites/:slug/rules` */
 export async function ruleCardsPage(projectKey: WebDynamic, suiteSlug: WebDynamic) {
   stopLive();
-  const main = renderFrame({ projectKey, nav: "suites" });
-  const project = state.projectByKey.get(projectKey);
-  if (!project) return mount(main, page({ title: COPY.title, body: emptyState("Not found", "No such project.") }));
-  mount(main, page({ title: COPY.title, body: h("div.dim", {}, "Loading…") }));
+  const context = projectPage(projectKey, { nav: "suites", title: COPY.title });
+  if (!context) return;
+  const { main, project } = context;
 
   // Note edits live here so a feed repaint keeps what is being typed.
   const notes: WebDynamic = new Map();
   let suite: WebDynamic = null;
   let data: WebDynamic = null;
   let lastProposal: WebDynamic = null;
-  const token: WebDynamic = {};
-
-  live = {
-    token,
-    timer: null,
-    sub: subscribeFeed(projectKey, {
-      types: FEED_TYPES,
-      onEvent: (event: WebDynamic) => {
-        if (live?.token !== token || (suite && event.entity?.suite_id !== suite.id)) return;
-        clearTimeout(live.timer);
-        live.timer = setTimeout(load, 250);
-      },
-    }),
-  };
-  onPageLeave(stopLive);
+  live = debouncedFeedRefresh(projectKey, {
+    types: FEED_TYPES,
+    refresh: load,
+    accepts: (event: WebDynamic) => !suite || event.entity?.suite_id === suite.id,
+  });
   await load();
 
   async function load() {
     try {
       suite = suite ?? (await api.get(`/projects/${projectKey}/suites/${suiteSlug}`));
       data = await api.get(`/suites/${suite.id}/rule-cards`);
-      if (live?.token !== token) return;
-      withFocus(paint);
+      if (!live?.current()) return;
+      preserveFocus(paint);
     } catch (err: WebDynamic) {
       mount(main, page({ title: COPY.title, body: errorState(err, load) }));
     }

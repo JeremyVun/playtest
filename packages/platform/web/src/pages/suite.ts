@@ -5,15 +5,15 @@
 import { api } from "../lib/api.js";
 import { h, mount } from "../lib/dom.js";
 import { link, navigate } from "../lib/router.js";
-import { renderFrame, page } from "../lib/shell.js";
-import { state, hasRole, hasLlm, LLM_UNAVAILABLE } from "../lib/state.js";
+import { page } from "../lib/shell.js";
+import { hasRole, hasLlm, LLM_UNAVAILABLE } from "../lib/state.js";
 import { toast, toastError, emptyState, errorState, statusChip, nextRunChip, tag, confirmModal, overflowMenu, srOnly } from "../lib/ui.js";
 import { clamp, ago } from "../lib/labels.js";
 import { didNotRunLabel } from "../lib/vocab.js";
-import { parseYaml } from "../lib/caseform.js";
 import { storyFindingSummary, findingChipDescriptors } from "../lib/finding-chips.js";
 import { newSuiteModal } from "./projects.js";
 import { launchModal } from "./runs.js";
+import { projectPage } from "../lib/project-page.js";
 
 /**
  * "Help me draft" — opens the story editor with the drafting modal. On a
@@ -42,13 +42,14 @@ export async function getSuiteBySlug(projectKey: WebDynamic, slug: WebDynamic, i
 }
 
 export async function suiteStories(projectKey: WebDynamic, slug: WebDynamic) {
-  const main = renderFrame({ projectKey, nav: "suites" });
-  const project = state.projectByKey.get(projectKey);
+  const context = projectPage(projectKey, { nav: "suites", title: slug || "Suites", loading: false });
+  if (!context) return;
+  const { main, project } = context;
 
   if (!slug) return renderSuitesIndex(main, projectKey, project);
 
   mount(main, page({ title: slug, body: h("div.dim", {}, "Loading…") }));
-  let suite: WebDynamic, cases, findings = [], defaultsFile = null;
+  let suite: WebDynamic, cases, findings = [];
   try {
     // One stage: the suite lookup folds in its cases and defaults file
     // (?include=cases,defaults), and the findings queries are project-scoped,
@@ -79,17 +80,9 @@ export async function suiteStories(projectKey: WebDynamic, slug: WebDynamic) {
       }));
     }
     cases = suite.cases;
-    defaultsFile = suite.defaults;
   } catch (err: WebDynamic) {
     return mount(main, page({ title: slug, body: errorState(err, () => suiteStories(projectKey, slug)) }));
   }
-  // The transport these stories drive, for the subtitle. WHERE they run is the
-  // ring's question, answered at launch — the suite never says.
-  let driver = "web";
-  try {
-    const app: WebDynamic = parseYaml(defaultsFile?.content ?? "").app || {};
-    driver = typeof app.driver === "string" ? app.driver : "web";
-  } catch { /* no defaults file yet, or unparseable — Settings surfaces that */ }
   const findingsByStory: WebDynamic = new Map();
   for (const f of findings) {
     const sid = f.summary?.story_id;

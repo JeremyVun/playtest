@@ -32,7 +32,7 @@
 import { api } from "../lib/api.js";
 import { h, mount } from "../lib/dom.js";
 import { link, navigate, onPageLeave } from "../lib/router.js";
-import { renderFrame, page } from "../lib/shell.js";
+import { page } from "../lib/shell.js";
 import { state, hasRole } from "../lib/state.js";
 import { statusChip, srOnly, GLYPH, toast, toastError, emptyState, errorState, formModal, formField, confirmModal } from "../lib/ui.js";
 import { modeDoing, modeLabel, chipStatus, fmtMs, fmtCost, ago, stamp, short, clamp } from "../lib/labels.js";
@@ -46,11 +46,12 @@ import { launchLimitPlaceholders } from "../lib/launch-limits.js";
 import { canRetryRun, retryableStoryCount } from "../lib/run-retry.js";
 import { placementReadiness } from "../lib/runners.js";
 import { defaultRingId, isProdRing, launchTargetWords, ringOptionLabel } from "../lib/rings.js";
+import { projectPage } from "../lib/project-page.js";
 
 export async function runsPage(projectKey: WebDynamic, groupId: WebDynamic = null, query: WebDynamic = null) {
-  const main = renderFrame({ projectKey, nav: "runs" });
-  const project = state.projectByKey.get(projectKey);
-  if (!project) return mount(main, page({ title: "Runs", body: emptyState("Not found", "No such project.") }));
+  const context = projectPage(projectKey, { nav: "runs", title: "Runs", loading: false });
+  if (!context) return;
+  const { main, project } = context;
   // The run dashboard page is gone: a run's own URL (old links, the launch
   // toast, CLI output) opens the index with that run expanded and in view.
   if (groupId) { expanded.add(groupId); touched.add(groupId); }
@@ -393,7 +394,7 @@ async function runsIndex(main: WebDynamic, projectKey: WebDynamic, project: WebD
       );
     }
 
-    const focusKey = document.activeElement?.dataset?.fk || null;
+    const focusKey = document.activeElement instanceof HTMLElement ? document.activeElement.dataset.fk || null : null;
     const scroll = main.scrollTop;
     mount(main, page({
       title: "Runs",

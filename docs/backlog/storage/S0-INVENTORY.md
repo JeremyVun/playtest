@@ -5,6 +5,11 @@ Deliverable of [`BUILD_PLAN.md`](./BUILD_PLAN.md) phase S0, implementing
 This file records what the SQLite port must reproduce; `docs/contracts/hosted.md`
 remains authoritative until S1 ships.
 
+> Historical note: the exhaustive neutral fixture and frozen Postgres
+> projections described below were retired after SQLite became the sole
+> implementation. Current migration, representation, constraint, and
+> transaction coverage lives in `tests/unit/sqlite-storage.test.ts`.
+
 Source of truth for the inventory is the shipped code, not a live database:
 `src/platform/control-plane/migrations/*.sql`, `src/platform/control-plane/src/`,
 and the integration expectations under
@@ -23,9 +28,9 @@ in this inventory. The post-0009 schema is 26 tables plus `schema_migrations`.
 |---|---|
 | Construct inventory + replacements | this file, §2 |
 | Frozen representations | this file, §1 |
-| Database-neutral seed fixture | `tests/fixtures/storage-baseline/fixture.ts` |
-| Expected projections (frozen) | `tests/fixtures/storage-baseline/expected-projections.json` (built by `projections.ts` / `build-expectations.mjs`) |
-| Fixture guard (hermetic) | `tests/unit/storage-fixture.test.ts` |
+| Database-neutral seed fixture | Retired after the port |
+| Expected projections (frozen) | Retired after the port |
+| Current storage regression coverage | `tests/unit/sqlite-storage.test.ts` |
 | Write-contention benchmark | `tests/bench/sqlite-contention.ts` (never runs in a test gate) |
 | Benchmark results + driver decision | this file, §5 |
 

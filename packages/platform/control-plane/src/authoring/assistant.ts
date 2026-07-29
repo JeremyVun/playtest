@@ -288,7 +288,7 @@ function wireMessage({ role, content }: HostedDynamic) {
  * { reply, draft, drafts, usage } — `drafts` carries the whole proposed set
  * (usually one), `draft` the final entry for single-story consumers.
  */
-export async function draftStory(ctx: HostedDynamic, { suite, project, goal, transcript = [], existing = null, hint = null }: HostedDynamic) {
+export async function draftStory(ctx: HostedDynamic, { suite, goal, transcript = [], existing = null, hint = null }: HostedDynamic) {
   const model = ctx.config.llm.authoringModel;
   const files = await loadWorkingFiles(ctx.db, suite.id);
   const { cases } = await resolvedOrEmpty(files);

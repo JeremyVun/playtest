@@ -5,7 +5,6 @@
 import { ulid } from "../ulid.ts";
 import { audit, actorOf } from "../audit.ts";
 import { ROLES } from "../auth/roles.ts";
-import { loadMemberships } from "../auth/users.ts";
 import { created, noContent } from "../http.ts";
 import { readJsonBody } from "../http.ts";
 import { requireAuth, guard, getProjectByKey, slugField, stringField, canView, AppError } from "./util.ts";

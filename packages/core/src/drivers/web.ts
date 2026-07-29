@@ -11,7 +11,7 @@ import { runAxeInPage } from "../axe-source.ts";
 import { overlayFor } from "./overlay.ts";
 import { loadOpenApi } from "../openapi.ts";
 import { PerfSidecar } from "../perf.ts";
-import { MAX_BODY_CHARS, MAX_BODY_READ, capBody, isTextualMime, pathnameOf, createHarFlusher, relativizeUrls, stripRefLines } from "./har.ts";
+import { MAX_BODY_READ, capBody, isTextualMime, pathnameOf, createHarFlusher, relativizeUrls, stripRefLines } from "./har.ts";
 import type { AxeCapture } from "../axe-source.ts";
 import type { Driver, DriverResolution, DriverResult, DriverSnapshot } from "../driver.ts";
 import type { EnrichedOpenApi } from "../openapi.ts";

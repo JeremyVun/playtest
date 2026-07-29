@@ -130,6 +130,7 @@ npm run test:mobile                   # explicit Appium / iOS Simulator suite
 npm run test:all                      # hermetic and browser suites
 npm run hosted:test                   # control-plane unit tests
 npm run test:integration --workspace=@playtest/control-plane
+npm run test:load --workspace=@playtest/control-plane
 npm run runner:test
 ```
 

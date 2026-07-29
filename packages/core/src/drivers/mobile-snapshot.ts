@@ -127,7 +127,7 @@ function decodeEntities(s: string): string {
 
 // Element type (iOS XCUIElementTypeButton, Android android.widget.Button) → a
 // web-like role word the actor already understands.
-function roleOf(tag: string, attrs: MobileAttrs): string {
+function roleOf(tag: string): string {
   const t = tag.replace(/^XCUIElementType/, "").replace(/^android\.widget\./, "").toLowerCase();
   if (/button|imagebutton/.test(t)) return "button";
   if (/textfield|securetextfield|edittext/.test(t)) return "textfield";
@@ -302,7 +302,7 @@ export function walkPageSource(xml: string): MobilePageSourceWalk {
       }
       const idx = nodes.length;
       const parent = stack.length ? stack[stack.length - 1] as number : -1;
-      nodes.push({ tag, attrs, tagPos, scopedPos, parent, role: roleOf(tag, attrs) });
+      nodes.push({ tag, attrs, tagPos, scopedPos, parent, role: roleOf(tag) });
       if (!/\/>$/.test(full)) stack.push(idx); // a container tag opens a scope; a self-closed leaf does not
     }
   } catch {

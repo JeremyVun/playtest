@@ -1,4 +1,4 @@
-import type { DynamicValue } from "./types.ts";
+import type { DynamicValue, ScriptFinding, ScriptFindingExchange } from "./types.ts";
 
 // Candidate findings from a script execution
 // (docs/contracts/scripts.md#findings).
@@ -18,7 +18,7 @@ import { redactSecrets } from "../secrets.ts";
 /** Finding shape version, carried in the authoring bundle. */
 export const SCRIPT_FINDING_VERSION = 1;
 
-const exchangeOf = (entry: DynamicValue, index: DynamicValue) => {
+const exchangeOf = (entry: DynamicValue, index: number): ScriptFindingExchange | null => {
   if (!entry) return null;
   return {
     har_entry: index,
@@ -36,14 +36,14 @@ const exchangeOf = (entry: DynamicValue, index: DynamicValue) => {
  * @param {{ harEntries?: object[] }} [context] the recorded HAR entries, for evidence read-back
  * @returns {object[]} findings, report-column first, then the HAR column
  */
-export function scriptFindings(report: DynamicValue, { harEntries = [] }: DynamicValue = {}) {
-  const findings: DynamicValue = [];
-  const obligations: DynamicValue = new Map((report?.obligations?.entries ?? []).map((entry: DynamicValue) => [entry.id, entry]));
+export function scriptFindings(report: DynamicValue, { harEntries = [] }: { harEntries?: DynamicValue[] } = {}): ScriptFinding[] {
+  const findings: ScriptFinding[] = [];
+  const obligations = new Map<string, DynamicValue>((report?.obligations?.entries ?? []).map((entry: DynamicValue) => [entry.id, entry]));
 
   for (const check of report?.checks ?? []) {
     if (check.pass) continue;
     const cited = check.evidence?.har_entries ?? [];
-    const exchanges = cited.map((index: DynamicValue) => exchangeOf(harEntries[index], index)).filter(Boolean);
+    const exchanges = cited.map((index: number) => exchangeOf(harEntries[index], index)).filter((x: ScriptFindingExchange | null): x is ScriptFindingExchange => x !== null);
     findings.push({
       finding_version: SCRIPT_FINDING_VERSION,
       source: "check",
@@ -73,7 +73,7 @@ export function scriptFindings(report: DynamicValue, { harEntries = [] }: Dynami
       expected: gate.spec ?? gate.policy,
       observed: gate.detail ?? null,
       note: null,
-      evidence: { har_entries: cited, exchanges: cited.map((index: DynamicValue) => exchangeOf(harEntries[index], index)).filter(Boolean), subject: null },
+      evidence: { har_entries: cited, exchanges: cited.map((index: number) => exchangeOf(harEntries[index], index)).filter((x: ScriptFindingExchange | null): x is ScriptFindingExchange => x !== null), subject: null },
       evidence_verified: cited.length > 0,
     });
   }
@@ -82,7 +82,7 @@ export function scriptFindings(report: DynamicValue, { harEntries = [] }: Dynami
 }
 
 /** A short, stable one-line summary for a log or a feed event. */
-export const summarizeFindings = (findings: Array<{ id: DynamicValue }>) =>
+export const summarizeFindings = (findings: Array<{ id: string }>) =>
   findings.length === 0
     ? "no findings"
     : `${findings.length} finding${findings.length === 1 ? "" : "s"}: ${findings
@@ -97,10 +97,10 @@ export const summarizeFindings = (findings: Array<{ id: DynamicValue }>) =>
  * @param {{ maxExchanges?: number }} [options]
  * @returns {string}
  */
-export function formatScriptFindings(findings: DynamicValue, { maxExchanges = 4 }: DynamicValue = {}) {
+export function formatScriptFindings(findings: ScriptFinding[], { maxExchanges = 4 }: { maxExchanges?: number } = {}): string {
   if (!findings.length) return "No findings: every check passed and the HAR column held.";
   const lines = [`${findings.length} candidate finding${findings.length === 1 ? "" : "s"} — each is a claim about the API, for a human to judge:`, ""];
-  findings.forEach((finding: DynamicValue, index: DynamicValue) => {
+  findings.forEach((finding, index) => {
     lines.push(`${index + 1}. ${finding.title}`);
     lines.push(`   id         ${finding.id}${finding.source === "policy" ? "  (HAR column)" : ""}`);
     if (finding.obligation) lines.push(`   obligation ${finding.obligation}`);

@@ -186,7 +186,7 @@ test("a secret reference authenticates while the value stays out of everything",
 
   assert.equal(result.exitCode, 0, `the suite passes: ${JSON.stringify(result.report.soundness)}`);
   const authenticated = result.report.checks.find((check: LegacyTestValue) => check.id === "injected-credential-authenticates");
-  assert.equal(authenticated.pass, true, "the injected credential authenticated the request");
+  assert.equal(authenticated!.pass, true, "the injected credential authenticated the request");
   assert.ok(
     api.requests.some((request: LegacyTestValue) => request.headers.authorization === `Bearer ${api.token}`),
     "the real credential reached the target",

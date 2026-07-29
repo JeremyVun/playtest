@@ -110,6 +110,14 @@ function protocol(base: string, token: string, groupId: string) {
       });
       return { status: res.status, body: await res.json().catch(() => null) };
     },
+    entry: async (dbId: string, name: string) => {
+      const res = await fetch(`${base}/api/v1/runner/runs/${dbId}/live/${name}`, {
+        method: "PUT",
+        headers: { authorization: headers.authorization, "content-type": "application/octet-stream" },
+        body: Buffer.from("staged step artifact"),
+      });
+      return { status: res.status, body: await res.json().catch(() => null) };
+    },
   };
 }
 
@@ -305,5 +313,150 @@ test("fencing: a mint bearer and a group bearer cannot cross into each other's r
     });
     const crossed = await fetch(`${base}/api/v1/runner/groups/${groupId}`, { headers: bearer(minter.token) });
     assert.equal(crossed.status, 403, "a mint bearer never serves a group spec");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Guard-to-write interleavings: on every executor write route, the replacement
+// lands in the exact gap between the route guard's reads and the write
+// transaction (`reassertCurrentExecutor` is the fence under test). The write
+// must be refused with `executor_replaced` and must leave no trace.
+// ---------------------------------------------------------------------------
+
+async function arrange(api: HostedDynamic, base: HostedDynamic, key: string) {
+  const fixture = await setUp(api, key);
+  const groupId = await launch(api, fixture);
+  const runner = await registerRunner(api, fixture.project, { labels: LABELS });
+  const agent = claimer(base, runner.credential);
+  const dispatchId = (await agent.poll("?wait=5")).body.offers[0].dispatch_id;
+  assert.equal((await agent.claim(dispatchId)).status, 200);
+  const a = (await agent.exchange({ dispatch_id: dispatchId, isolation: "process" })).body;
+  const A = protocol(base, a.token, groupId);
+  const spec = (await A.spec()).body;
+  return { fixture, groupId, agent, dispatchId, a, A, first: spec.cases[0] };
+}
+
+/** The interleaving hook: exchange the same dispatch again, installing B. */
+function replacement(agent: HostedDynamic, dispatchId: string, a: HostedDynamic) {
+  const holder: HostedDynamic = { b: null };
+  holder.hook = async () => {
+    const exchanged = await agent.exchange({ dispatch_id: dispatchId, isolation: "process" });
+    assert.equal(exchanged.status, 200, JSON.stringify(exchanged.body));
+    assert.notEqual(exchanged.body.executor_id, a.executor_id, "the replacement exchange installed B");
+    holder.b = exchanged.body;
+  };
+  return holder;
+}
+
+test("fencing race: a replacement between caseStart's guard and its write leaves the case unclaimed", async () => {
+  await withApp(async ({ api, base, app }: HostedDynamic) => {
+    const { agent, dispatchId, a, A, first } = await arrange(api, base, "racestart");
+    const swap = replacement(agent, dispatchId, a);
+    const res = await interleave(app, swap.hook, () => A.start(first.run_id));
+    assertStale("raced case start", res, "executor_replaced");
+    const row = (await app.db.query(`SELECT executor_id, status FROM runs WHERE run_id = $1`, [first.run_id])).rows[0];
+    assert.equal(row.executor_id, null, "the stale claim stamped no owner");
+    assert.equal(row.status, "queued", "the case is still B's to start");
+  });
+});
+
+test("fencing race: a replacement between caseProgress's guard and its write drops the stale tick", async () => {
+  await withApp(async ({ api, base, app }: HostedDynamic) => {
+    const { agent, dispatchId, a, A, first } = await arrange(api, base, "raceprog");
+    assert.equal((await A.start(first.run_id)).status, 200);
+    const swap = replacement(agent, dispatchId, a);
+    const res = await interleave(app, swap.hook, () => A.progress(first.run_id));
+    assertStale("raced case progress", res, "executor_replaced");
+    const row = (await app.db.query(`SELECT progress FROM runs WHERE run_id = $1`, [first.run_id])).rows[0];
+    assert.equal(row.progress, null, "the stale tick stored nothing");
+  });
+});
+
+test("fencing race: a replacement between caseReport's guard and its write leaves the story unfinished", async () => {
+  await withApp(async ({ api, base, app }: HostedDynamic) => {
+    const { agent, dispatchId, a, A, first } = await arrange(api, base, "racereport");
+    assert.equal((await A.start(first.run_id)).status, 200);
+    const swap = replacement(agent, dispatchId, a);
+    const res = await interleave(app, swap.hook, () => A.report(first.run_id));
+    assertStale("raced case report", res, "executor_replaced");
+    const row = (await app.db.query(`SELECT status, manifest, finished_at FROM runs WHERE run_id = $1`, [first.run_id])).rows[0];
+    assert.equal(row.status, "running", "the stale report finished nothing");
+    assert.equal(row.manifest, null);
+    assert.equal(row.finished_at, null);
+  });
+});
+
+test("fencing race: a replacement between live open's guard and its write opens nothing", async () => {
+  await withApp(async ({ api, base, app }: HostedDynamic) => {
+    const { agent, dispatchId, a, A, first } = await arrange(api, base, "raceopen");
+    assert.equal((await A.start(first.run_id)).status, 200);
+    const swap = replacement(agent, dispatchId, a);
+    const res = await interleave(app, swap.hook, () => A.open(first.run_id, { run_id: first.run_id }));
+    assertStale("raced live open", res, "executor_replaced");
+    const row = (await app.db.query(`SELECT live_opened_at FROM runs WHERE run_id = $1`, [first.run_id])).rows[0];
+    assert.equal(row.live_opened_at, null, "the stale open landed nowhere");
+  });
+});
+
+test("fencing race: a replacement between live trajectory's guard and its write appends nothing", async () => {
+  await withApp(async ({ api, base, app }: HostedDynamic) => {
+    const { agent, dispatchId, a, A, first } = await arrange(api, base, "racetraj");
+    assert.equal((await A.start(first.run_id)).status, 200);
+    assert.equal((await A.open(first.run_id, { run_id: first.run_id })).status, 200);
+    const swap = replacement(agent, dispatchId, a);
+    const res = await interleave(app, swap.hook, () => A.trajectory(first.db_id));
+    assertStale("raced live trajectory", res, "executor_replaced");
+    const count = (
+      await app.db.query(`SELECT COALESCE(MAX(from_line + line_count), 0) AS n FROM live_trajectory WHERE run_id = $1`, [
+        first.db_id,
+      ])
+    ).rows[0];
+    assert.equal(Number(count.n), 0, "the stale batch appended nothing");
+  });
+});
+
+test("fencing race: a replacement between a live entry's reservation guard and its write stages nothing", async () => {
+  await withApp(async ({ api, base, app }: HostedDynamic) => {
+    const { agent, dispatchId, a, A, first } = await arrange(api, base, "raceentry");
+    assert.equal((await A.start(first.run_id)).status, 200);
+    assert.equal((await A.open(first.run_id, { run_id: first.run_id })).status, 200);
+    const swap = replacement(agent, dispatchId, a);
+    const res = await interleave(app, swap.hook, () => A.entry(first.db_id, "steps/001.json"));
+    assertStale("raced live entry", res, "executor_replaced");
+    const rows = (await app.db.query(`SELECT * FROM live_artifacts WHERE run_id = $1`, [first.db_id])).rows;
+    assert.equal(rows.length, 0, "the stale entry reserved nothing");
+  });
+});
+
+test("fencing race: a replacement during the bundle upload publishes neither bytes nor an artifact row", async () => {
+  await withApp(async ({ api, base, app }: HostedDynamic) => {
+    const { groupId, agent, dispatchId, a, A, first } = await arrange(api, base, "racebundle");
+    assert.equal((await A.start(first.run_id)).status, 200);
+    const swap = replacement(agent, dispatchId, a);
+    // The seam fires at the fenced publish transaction — after the object store
+    // already holds A's bytes, which is the widest window this route has.
+    const res = await interleave(app, swap.hook, () => A.bundle(first.db_id));
+    assertStale("raced bundle upload", res, "executor_replaced");
+    const artifacts = (await app.db.query(`SELECT * FROM artifacts WHERE run_id = $1`, [first.db_id])).rows;
+    assert.equal(artifacts.length, 0, "the stale upload published no artifact row");
+    const row = (await app.db.query(`SELECT status FROM runs WHERE run_id = $1`, [first.run_id])).rows[0];
+    assert.equal(row.status, "running", "the stale upload repainted nothing");
+    await assert.rejects(
+      app.store.get(`runs/${groupId}/${first.db_id}.${a.executor_id}.ptrun`),
+      "the refused upload's staged bytes were deleted",
+    );
+  });
+});
+
+test("fencing race: a replacement between complete's guard and its write concludes nothing", async () => {
+  await withApp(async ({ api, base, app }: HostedDynamic) => {
+    const { groupId, agent, dispatchId, a, A } = await arrange(api, base, "racedone");
+    const swap = replacement(agent, dispatchId, a);
+    const res = await interleave(app, swap.hook, () => A.complete());
+    assertStale("raced group complete", res, "executor_replaced");
+    const dispatch = (await app.db.query(`SELECT status, executor_id FROM dispatches WHERE id = $1`, [dispatchId])).rows[0];
+    assert.equal(dispatch.status, "running", "B's attempt was not concluded by the stale completion");
+    assert.equal(dispatch.executor_id, swap.b.executor_id, "B is still the current executor");
+    assert.equal((await api.get(`/run-groups/${groupId}`)).body.status, "running", "the group did not settle");
   });
 });

@@ -26,13 +26,8 @@ import fs from "node:fs";
 import path from "node:path";
 import YAML from "yaml";
 
-import { DummyConfigError } from "./config.ts";
-import type {
-  JsonObject,
-  Occurrence,
-  ResponseMatchSelector,
-  ResponseStatusSelector,
-} from "./types.ts";
+import { DummyConfigError } from "./config/errors.ts";
+import type { Occurrence } from "./types.ts";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);

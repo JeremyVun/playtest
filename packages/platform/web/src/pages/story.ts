@@ -8,13 +8,15 @@
 import { api, ApiError } from "../lib/api.js";
 import { h, mount, clear } from "../lib/dom.js";
 import { link, navigate } from "../lib/router.js";
-import { renderFrame, page } from "../lib/shell.js";
-import { state, hasRole, hasLlm, LLM_UNAVAILABLE } from "../lib/state.js";
-import { toast, toastError, confirmModal, errorState, formField, enhanceSelect, formModal, statusChip, saveBar } from "../lib/ui.js";
+import { page } from "../lib/shell.js";
+import { hasRole, hasLlm, LLM_UNAVAILABLE } from "../lib/state.js";
+import { toast, toastError, confirmModal, errorState, formField, enhanceSelect, formModal, statusChip } from "../lib/ui.js";
 import { parseYaml, applyModelToText, toModel, kindsForDriver } from "../lib/caseform.js";
 import { criterionLabel } from "../lib/vocab.js";
 import { getSuiteBySlug } from "./suite.js";
 import { launchModal } from "./runs.js";
+import { projectPage } from "../lib/project-page.js";
+import { sourceEditor } from "../lib/source-editor.js";
 
 // A new story starts EMPTY. The template used to ship its own instructions as
 // file content ("Describe what the user is trying to do…", "describe the
@@ -35,9 +37,9 @@ const BUILTIN_PERSONAS: WebDynamic = ["tester", "exploratory", "adversarial"]
   .map((slug) => ({ slug, name: slug, builtin: true }));
 
 export async function storyEditor(projectKey: WebDynamic, slug: WebDynamic, caseId: WebDynamic, query?: WebDynamic) {
-  const main = renderFrame({ projectKey, nav: "suites" });
-  const project = state.projectByKey.get(projectKey);
-  mount(main, page({ title: caseId || "New story", body: h("div.dim", {}, "Loading…") }));
+  const context = projectPage(projectKey, { nav: "suites", title: caseId || "New story" });
+  if (!context) return;
+  const { main, project } = context;
 
   let st: WebDynamic;
   try {
@@ -99,14 +101,8 @@ export async function storyEditor(projectKey: WebDynamic, slug: WebDynamic, case
 }
 
 function renderEditor(main: WebDynamic, st: WebDynamic) {
-  const editorSlot = h("div.editor-slot");
   const checksSlot = h("div", {}, h("div.dim", {}, "…"));
   const pathLine = h("div.dim", { style: "font-size:12px" });
-
-  const toggle = h("div.seg", {},
-    h("button", { class: st.view === "form" ? "on" : "", onclick: () => switchView("form") }, "Form"),
-    h("button", { class: st.view === "yaml" ? "on" : "", onclick: () => switchView("yaml") }, "YAML"),
-  );
 
   // Every save is one immutable version — that discipline is worth keeping, but
   // the words don't have to be git's ("Save commit" / "Commit note"), and it no
@@ -119,9 +115,21 @@ function renderEditor(main: WebDynamic, st: WebDynamic) {
   // Save/Discard live in a sticky bar at the bottom of the viewport, present
   // only while the draft differs from the saved bytes (for a new story, from
   // its starting template) — a clean page shows no pending decision.
-  const bar = saveBar({ onSave: save, onDiscard: discard });
-  let checksOk = true;
-  const paintBar = () => bar.set({ dirty: st.raw !== st.savedRaw, invalid: !checksOk });
+  const source = sourceEditor({
+    state: st,
+    parse: (raw: string) => toModel(parseYaml(raw)),
+    renderForm: (model: WebDynamic, changed: WebDynamic) =>
+      buildForm(st, model, () => { syncFromForm(st, model); changed(); }),
+    rerender: () => renderEditor(main, st),
+    save,
+    check: runChecks,
+    yamlLabel: st.path || "Story YAML",
+    discardBody: st.isNew
+      ? "This story goes back to the blank starting template. Nothing else is affected."
+      : "This story goes back to its last saved version. Nothing else is affected.",
+    onChange: paintPathLine,
+    onDiscard: () => { if (st.isNew) st.path = null; },
+  });
   const side = h("div.side", {},
     h("div.card.pad", {}, h("div.label", { style: "margin-bottom:8px" }, "Checks"), checksSlot),
     // Provenance, not a question: where this story will live on disk. The path
@@ -133,8 +141,6 @@ function renderEditor(main: WebDynamic, st: WebDynamic) {
       pathLine,
     ),
   );
-  paintPathLine();
-
   mount(main, page({
     crumbs: [
       link(`/p/${st.projectKey}`, "Suites"), " / ",
@@ -143,7 +149,7 @@ function renderEditor(main: WebDynamic, st: WebDynamic) {
     ],
     title: st.isNew ? "New story" : caseIdFromPath(st.path),
     actions: [
-      toggle,
+      source.toggle,
       // Disabled with the reason on a deployment that has no model gateway —
       // the modal would otherwise take a goal and fail on send (503).
       h("button.btn", {
@@ -167,11 +173,8 @@ function renderEditor(main: WebDynamic, st: WebDynamic) {
       // run just this story — the launch modal scoped to its id (decisions §5.3)
       st.isNew ? null : h("button.btn.primary", { onclick: () => launchModal(st.projectKey, null, st.suiteId, { ids: [st.caseId || caseIdFromPath(st.path)] }) }, "▶ Run"),
     ].filter(Boolean),
-    body: h("div", {}, h("div.editor", {}, editorSlot, side), bar.el),
+    body: h("div", {}, h("div.editor", {}, source.editorSlot, side), source.bar.el),
   }));
-
-  let debounce: WebDynamic;
-  const scheduleChecks = () => { paintPathLine(); paintBar(); clearTimeout(debounce); debounce = setTimeout(runChecks, 350); };
 
   /** The file line, live: a new story's path follows what the person writes. */
   function paintPathLine() {
@@ -181,51 +184,6 @@ function renderEditor(main: WebDynamic, st: WebDynamic) {
         ? h("span.mono", {}, derived)
         : h("span.warn", {}, "Give this story a description — it becomes the story's name and its file."),
     );
-  }
-
-  /** Put the draft back to the last saved bytes, in place — no navigation. */
-  async function discard() {
-    const ok = await confirmModal({
-      title: "Discard your changes?",
-      body: st.isNew
-        ? "This story goes back to the blank starting template. Nothing else is affected."
-        : "This story goes back to its last saved version. Nothing else is affected.",
-      confirmLabel: "Discard changes",
-      cancelLabel: "Keep editing",
-      danger: true,
-    });
-    if (!ok) return;
-    st.raw = st.savedRaw;
-    if (st.isNew) st.path = null;
-    paintEditor();
-    scheduleChecks();
-  }
-
-  function switchView(view: WebDynamic) {
-    if (view === st.view) return;
-    // Moving to YAML: nothing to do (raw is canonical). Moving to Form: re-parse raw.
-    st.view = view;
-    renderEditor(main, st); // full re-render keeps state simple
-  }
-
-  function paintEditor() {
-    clear(editorSlot);
-    if (st.view === "yaml") {
-      const ta = h("textarea.code", { spellcheck: "false", value: st.raw, oninput: (e: WebDynamic) => { st.raw = e.target.value; scheduleChecks(); } });
-      editorSlot.append(ta);
-    } else {
-      let model;
-      try { model = toModel(parseYaml(st.raw)); }
-      catch (e: WebDynamic) {
-        editorSlot.append(h("div.card.pad", {},
-          h("div.status.fail", {}, h("span.glyph", {}, "✗"), "This file isn't valid YAML"),
-          h("p.dim", { style: "margin-top:6px" }, String(e.message || e)),
-          h("button.btn", { style: "margin-top:10px", onclick: () => switchView("yaml") }, "Edit in YAML"),
-        ));
-        return;
-      }
-      editorSlot.append(buildForm(st, model, () => { syncFromForm(st, model); scheduleChecks(); }));
-    }
   }
 
   async function runChecks() {
@@ -238,11 +196,13 @@ function renderEditor(main: WebDynamic, st: WebDynamic) {
       api.post(`/suites/${st.suiteId}/validate`, { changes }),
       api.post(`/suites/${st.suiteId}/lint`, { changes }),
     ]);
-    if (v.status !== "fulfilled") return mount(checksSlot, h("div.dim", {}, "couldn't run checks"));
+    if (v.status !== "fulfilled") {
+      mount(checksSlot, h("div.dim", {}, "couldn't run checks"));
+      return undefined;
+    }
     const findings = l.status === "fulfilled" ? l.value.findings : [];
     mount(checksSlot, renderChecks(v.value, findings, st));
-    checksOk = v.value.ok;
-    paintBar();
+    return Boolean(v.value.ok);
   }
 
   // Apply an assistant draft to the UNSAVED editor state only — no network
@@ -271,7 +231,7 @@ function renderEditor(main: WebDynamic, st: WebDynamic) {
         return toast("This story needs a name", "add a one-line description — it becomes the story's name and its file", "err");
       }
     }
-    bar.set({ dirty: true, saving: true });
+    source.bar.set({ dirty: true, saving: true });
     try {
       // The note is derived, not asked for. Versions is a shared log, and a
       // permanently blank "What changed" column would be worse than a plain
@@ -286,7 +246,7 @@ function renderEditor(main: WebDynamic, st: WebDynamic) {
       toast("Saved", `version #${res.snapshot.seq}`, "ok");
       navigate(`/p/${st.projectKey}/suites/${st.slug}`);
     } catch (err: WebDynamic) {
-      paintBar();
+      source.paintBar();
       if (err.status === 409) return handleConflict(st, err);
       toastError(err);
     }
@@ -316,9 +276,7 @@ function renderEditor(main: WebDynamic, st: WebDynamic) {
     }
   }
 
-  paintEditor();
-  paintBar();
-  runChecks();
+  source.initialize();
 
   // Deep-linked from the old assistant route (/assistant → /new?assist=1): open
   // the drafting modal once, then clear the flag so a re-render doesn't reopen it.
@@ -586,7 +544,7 @@ function helpMeDraft(st: WebDynamic, onApply: WebDynamic) {
   }
 }
 
-async function handleConflict(st: WebDynamic, err: WebDynamic) {
+async function handleConflict(st: WebDynamic, _err: WebDynamic) {
   const ok = await confirmModal({
     title: "Someone else changed this story",
     body: "Someone else saved a new version since you started editing. Load theirs? Your unsaved edits will be lost.",

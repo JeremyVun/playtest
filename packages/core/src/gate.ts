@@ -1,4 +1,6 @@
 import { pathnameOf } from "./drivers/har.ts";
+import { parseLiteral } from "./json-literal.ts";
+import { parseThreshold, compareThreshold } from "./threshold.ts";
 import { parseOperationSelector, selectorSpec } from "./openapi.ts";
 import { statusMatchesPattern } from "./match.ts";
 import { evaluateInvariant, parseInvariantPolicy, policySpec } from "./invariants.ts";
@@ -16,7 +18,7 @@ type DynamicValue = any; // SAFETY: gate context combines driver-specific envelo
 // severityOf only ever sees SUCCESS kinds; perf is a separate top-level case key
 // whose own loop hardcodes soft, so it isn't listed here.
 const SOFT_KINDS: Set<string | undefined> = new Set(["console_errors"]);
-const severityOf = (kind: string | undefined) => (SOFT_KINDS.has(kind) ? "soft" : "hard");
+const severityOf = (kind: string | undefined): "soft" | "hard" => (SOFT_KINDS.has(kind) ? "soft" : "hard");
 
 // Inheritable kinds: a check whose verdict is fixed by the (unchanged) trajectory
 // but is expensive and/or non-deterministic to recompute, so a clean act replay
@@ -29,6 +31,52 @@ const severityOf = (kind: string | undefined) => (SOFT_KINDS.has(kind) ? "soft" 
 // adding a kind (or a custom-assertion opt-in below) is the only change needed.
 const INHERITABLE_BUILTIN_KINDS: Set<string | undefined> = new Set(["assert"]);
 const REQUEST_DEDUP_SEPARATOR = "\0";
+
+/** One evaluated check (docs/contracts/engine.md#gates-and-custom-assertions). */
+export interface GateCheck {
+  kind?: string;
+  severity: "hard" | "soft" | "advisory";
+  spec?: string;
+  /** The optional cosmetic label; presentation only, never touches the verdict. */
+  label?: string;
+  pass: boolean;
+  applicable: boolean;
+  detail: string;
+  /** Step numbers whose actions produced the requests an invariant violation is about. */
+  steps?: number[];
+  /** True when the verdict was reused from the baseline on a clean act replay. */
+  inherited?: boolean;
+}
+
+export interface GateResult {
+  /** All checks pass — drives status and the exit code. */
+  pass: boolean;
+  /** All HARD checks pass — drives baseline acceptance (a soft-only failure still saves). */
+  hardPass: boolean;
+  checks: GateCheck[];
+  /** The `observe:` policies' results, same check shape; never contribute to pass/hardPass. */
+  advisory?: GateCheck[];
+}
+
+/**
+ * What the runner hands the gate; see the evaluateGate JSDoc for semantics.
+ * Fields a check kind reads defensively are optional — the gate never throws
+ * on an absent one, it fails the check that needed it.
+ */
+export interface GateContext {
+  driver?: DynamicValue;
+  harEntries: DynamicValue[];
+  consoleErrorCount?: number;
+  consoleErrorLog?: DynamicValue[];
+  trajectory: DynamicValue[];
+  finalUrl?: string;
+  checkAssertion?: ((claim: string) => Promise<{ pass: boolean; detail: string }>) | null;
+  routing?: Map<string, DynamicValue>;
+  evidence?: Record<string, unknown>;
+  spec?: DynamicValue;
+  observe?: ((req: { method: string; path: string }) => Promise<DynamicValue>) | null;
+  inherited?: Map<string, { pass: boolean; detail: string }> | null;
+}
 
 /**
  * Is this check kind eligible to reuse a saved baseline verdict on a clean replay?
@@ -78,8 +126,8 @@ export function isInheritable(kind: string | undefined, routing: DynamicValue): 
  *   violation is about; absent when no step owns them or the check is not an
  *   invariant policy.
  */
-export async function evaluateGate(resolvedCase: DynamicValue, ctx: DynamicValue): Promise<DynamicValue> {
-  const checks: DynamicValue[] = [];
+export async function evaluateGate(resolvedCase: DynamicValue, ctx: GateContext): Promise<GateResult> {
+  const checks: GateCheck[] = [];
   // The recorded request trace, built once: every request the run made, paired
   // with its HAR twin for bodies. Observation traffic is already excluded (the
   // runner filters tagged entries out of harEntries), so no gate kind can see it.
@@ -127,11 +175,11 @@ export async function evaluateGate(resolvedCase: DynamicValue, ctx: DynamicValue
   // the manifest's gate block, renders in the viewer, and NEVER gates. A
   // not-applicable advisory reports as such instead of failing — it is a report,
   // not a declared invariant.
-  const advisory: DynamicValue[] = [];
+  const advisory: GateCheck[] = [];
   for (const criterion of resolvedCase.observe ?? []) {
     const [kind, value]: DynamicValue = Object.entries(criterion).find(([k]) => k !== "label") ?? [];
     const { label } = criterion;
-    const base = { kind, severity: "advisory", spec: specKeyFor(kind, value), ...(label ? { label } : {}) };
+    const base = { kind, severity: "advisory" as const, spec: specKeyFor(kind, value), ...(label ? { label } : {}) };
     try {
       const result = await checkSuccess(kind, value, gctx);
       advisory.push({
@@ -362,7 +410,9 @@ async function checkSuccess(kind: DynamicValue, value: DynamicValue, ctx: Dynami
 function checkPerf(key: string, threshold: DynamicValue, ctx: DynamicValue): DynamicValue {
   try {
     if (key === "lcp_ms" || key === "input_to_paint_ms") {
-      const { op, limit } = parseThreshold(threshold);
+      const parsed = parseThreshold(threshold);
+      if (!parsed) throw new Error(`invalid threshold ${JSON.stringify(threshold)} (expected e.g. "< 2500")`);
+      const { op, limit } = parsed;
       const spec = `perf.${key} ${op} ${limit}`;
       const values = (ctx.trajectory ?? [])
         .map((e: DynamicValue) => (key === "lcp_ms" ? e.perf?.nav?.lcp_ms : e.perf?.input_to_paint_ms))
@@ -371,30 +421,12 @@ function checkPerf(key: string, threshold: DynamicValue, ctx: DynamicValue): Dyn
         return { kind: "perf", spec, pass: false, detail: `no ${key} measurements in trajectory` };
       }
       const worst = Math.max(...values);
-      return { kind: "perf", spec, pass: compare(worst, op, limit), detail: `worst ${key} = ${worst}` };
+      return { kind: "perf", spec, pass: compareThreshold(worst, op, limit), detail: `worst ${key} = ${worst}` };
     }
 
     return { kind: "perf", spec: `perf.${key}`, pass: false, detail: `unknown perf key "${key}"` };
   } catch (e: DynamicValue) {
     return { kind: "perf", spec: `perf.${key} ${threshold}`, pass: false, detail: `check error: ${e.message}` };
-  }
-}
-
-/** "< 2500" / "<= 2500" / ">= 10" / "> 10"; a bare number means "<= n". */
-function parseThreshold(threshold: DynamicValue): { op: string; limit: number } {
-  if (typeof threshold === "number") return { op: "<=", limit: threshold };
-  const m: DynamicValue = String(threshold).trim().match(/^(<=|>=|<|>)\s*(\d+(?:\.\d+)?)$/);
-  if (!m) throw new Error(`invalid threshold ${JSON.stringify(threshold)} (expected e.g. "< 2500")`);
-  return { op: m[1], limit: Number(m[2]) };
-}
-
-function compare(value: number, op: string, limit: number): boolean {
-  switch (op) {
-    case "<": return value < limit;
-    case "<=": return value <= limit;
-    case ">": return value > limit;
-    case ">=": return value >= limit;
-    default: return false;
   }
 }
 
@@ -627,14 +659,4 @@ function resolveJsonPath(json: DynamicValue, path: string): DynamicValue {
     cur = cur[s];
   }
   return cur;
-}
-
-function parseLiteral(raw: DynamicValue): DynamicValue {
-  const t = String(raw).trim();
-  if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'"))) return t.slice(1, -1);
-  if (t === "true") return true;
-  if (t === "false") return false;
-  if (t === "null") return null;
-  if (/^-?\d+(?:\.\d+)?$/.test(t)) return Number(t);
-  return t;
 }

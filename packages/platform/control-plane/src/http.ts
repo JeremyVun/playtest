@@ -111,3 +111,19 @@ export async function readJsonBody(
 export async function readRawBody(req: IncomingMessage, { limit = TAR_LIMIT }: { limit?: number } = {}) {
   return await collect(req, limit);
 }
+
+/** The ceiling every long-poll hold shares (docs/contracts/hosted.md, §4a). */
+export const MAX_WAIT_S = 25;
+
+/**
+ * The hold window a long-polling caller asked for, capped at the feed's own
+ * maximum. `"true"` means the full window (the pool-board idiom); absent,
+ * `"false"`, non-numeric, and non-positive all mean "answer immediately".
+ */
+export function waitSeconds(raw: unknown): number {
+  if (raw == null || raw === "" || raw === "false" || raw === "0") return 0;
+  if (raw === "true") return MAX_WAIT_S;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.min(n, MAX_WAIT_S);
+}

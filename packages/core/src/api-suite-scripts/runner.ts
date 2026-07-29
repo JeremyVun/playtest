@@ -1,4 +1,4 @@
-import type { DynamicValue } from "./types.ts";
+import type { DynamicValue, FinalizedScriptReport, ReportCheck, ScriptReport } from "./types.ts";
 
 // The script runner (docs/contracts/scripts.md#runner-semantics).
 //
@@ -327,9 +327,9 @@ export async function runScript(options: DynamicValue = {}) {
     spec: config.spec,
     match: config.match,
   });
-  finalizeReport(report, { gate, config, recorder, records, cleanupReasons });
+  const finalReport = finalizeReport(report, { gate, config, recorder, records, cleanupReasons });
 
-  if (reportPath) fs.writeFileSync(reportPath, JSON.stringify(report, null, 2) + "\n");
+  if (reportPath) fs.writeFileSync(reportPath, JSON.stringify(finalReport, null, 2) + "\n");
 
   const profile = profileScript({
     source,
@@ -340,8 +340,8 @@ export async function runScript(options: DynamicValue = {}) {
   });
 
   return {
-    exitCode: report.verdict.exit_code,
-    report,
+    exitCode: finalReport.verdict.exit_code,
+    report: finalReport,
     profile,
     harPath,
     reportPath,
@@ -425,9 +425,9 @@ function assembleReport({ config, source, proxy, recorder, childExit, timedOut, 
   // 5. Evidence must resolve into the HAR the PARENT recorded, and a check id
   //    must be unique — two checks under one id make an obligation trace
   //    ambiguous and a review screen wrong.
-  const checks: DynamicValue = [];
-  const advisories: DynamicValue = [];
-  const seenIds: DynamicValue = new Set();
+  const checks: ReportCheck[] = [];
+  const advisories: ScriptReport["advisories"] = [];
+  const seenIds = new Set<string>();
   for (const record of records) {
     if (record?.kind === "advisory") {
       advisories.push({ title: record.title, detail: record.detail ?? null, evidence: record.evidence ?? { requests: [] } });
@@ -467,7 +467,7 @@ function assembleReport({ config, source, proxy, recorder, childExit, timedOut, 
   const testData = accountTestData({ harEntries: recorder.entries, namespace: config.namespace, policy: config.cleanup });
   const { cleanup, reasons: cleanupReasons } = accountCleanup({ policy: config.cleanup, attempt: cleanupAttempt, testData });
 
-  const report: DynamicValue = {
+  const report: ScriptReport = {
     script_report_version: SCRIPT_REPORT_VERSION,
     contract_version: SCRIPT_CONTRACT_VERSION,
     script: {
@@ -508,7 +508,8 @@ function assembleReport({ config, source, proxy, recorder, childExit, timedOut, 
 }
 
 /** Attach the gate column, the obligation accounting, and the verdict. */
-function finalizeReport(report: DynamicValue, { gate, config, recorder, records, cleanupReasons = [] }: DynamicValue) {
+function finalizeReport(draft: ScriptReport, { gate, config, recorder, records, cleanupReasons = [] }: DynamicValue): FinalizedScriptReport {
+  const report = draft as FinalizedScriptReport; // SAFETY: this function attaches every tail field before returning
   const accounting = accountObligations({
     obligations: config.obligations,
     records,
@@ -549,4 +550,5 @@ function finalizeReport(report: DynamicValue, { gate, config, recorder, records,
     failing_checks: failing.map((check: DynamicValue) => check.id),
     exit_code: pass ? EXIT.pass : report.soundness.ok ? EXIT.fail : EXIT.unsound,
   };
+  return report;
 }

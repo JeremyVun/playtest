@@ -43,6 +43,7 @@
 // read-only GET issuer the runner supplies for the api driver).
 import Ajv from "ajv";
 
+import { parseLiteral } from "./json-literal.ts";
 import { pathSegments, readAt, statusMatchesPattern, statusesEquivalent } from "./match.ts";
 import type { MatchNode, PathSegment } from "./match.ts";
 import { pathTemplateToRegExp } from "./openapi.ts";
@@ -562,8 +563,6 @@ const POLICIES: Record<InvariantPolicyName, PolicyDefinition> = {
 
 /** Every policy name, in registry order. */
 export const POLICY_NAMES = Object.keys(POLICIES);
-/** Which tier each policy belongs to (DESIGN §5.2). */
-export const POLICY_TIERS = Object.fromEntries(Object.entries(POLICIES).map(([name, p]) => [name, p.tier]));
 
 // ---- configuration ----
 
@@ -924,14 +923,4 @@ function matchExpression(
   const pass = op === "!=" ? !eq : eq;
   const shown = actual === undefined ? "(no value at path)" : JSON.stringify(actual);
   return { pass, detail: pass ? `${rawPath} = ${shown}` : `${rawPath} = ${shown}, expected ${op} ${JSON.stringify(expected)}` };
-}
-
-function parseLiteral(raw: unknown): MatchNode {
-  const t = String(raw).trim();
-  if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'"))) return t.slice(1, -1);
-  if (t === "true") return true;
-  if (t === "false") return false;
-  if (t === "null") return null;
-  if (/^-?\d+(?:\.\d+)?$/.test(t)) return Number(t);
-  return t;
 }

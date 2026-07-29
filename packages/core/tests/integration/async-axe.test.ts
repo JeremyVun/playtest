@@ -200,7 +200,7 @@ function trajectory(runDir: string) {
 test("axe overlaps only the model turn, the dispatch barrier holds, and appends stay ordered", async () => {
   const driver = new AxeDriver({ delayMs: 25 });
   const result = await run("ordered", [CLICK_1, CLICK_2, DONE], driver);
-  assert.equal(result.status, "pass", result.error);
+  assert.equal(result.status, "pass", result.error ?? "(no error)");
 
   const envelopes = trajectory(result.runDir);
   assert.deepEqual(envelopes.map((step) => step.step), [1, 2, 3]);
@@ -230,7 +230,7 @@ test("axe overlaps only the model turn, the dispatch barrier holds, and appends 
 test("a rejected deferred scan omits axe and does not affect the run", async () => {
   const driver = new AxeDriver({ rejectCalls: [1] });
   const result = await run("reject", [CLICK_1, DONE], driver);
-  assert.equal(result.status, "pass", result.error);
+  assert.equal(result.status, "pass", result.error ?? "(no error)");
   const envelopes = trajectory(result.runDir);
   assert.equal("axe" in envelopes[0], false);
   assert.equal(envelopes[0].result.ok, true);
@@ -333,7 +333,7 @@ test("hard abort joins an in-flight deferred scan before the gate", async () => 
   delete process.env.PLAYTEST_LLM_BASE_URL;
 
   assert.equal(result.manifest.result.end_reason, "timeout");
-  assert.match(result.error, /hard timeout/);
+  assert.match(result.error ?? "", /hard timeout/);
   const envelopes = trajectory(result.runDir);
   assert.equal(envelopes.length, 1);
   assert.ok(envelopes[0].axe, "the step queued before abort is settled and persisted");

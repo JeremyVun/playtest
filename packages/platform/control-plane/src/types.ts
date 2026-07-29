@@ -4,6 +4,7 @@ import type { ControlPlaneConfig } from "./config.ts";
 import type { FeedWaker } from "./events/feed.ts";
 import type { WriteRateLimiter } from "./rate-limit.ts";
 import type { ClaimBoard } from "./dispatch/pool.ts";
+import type { RunBundleCache } from "./run-storage.ts";
 
 export type DynamicJson = Record<string, any>; // SAFETY: Route-specific validation narrows untyped JSON request and model response objects.
 export type LogFields = Record<string, unknown>;
@@ -50,6 +51,8 @@ export interface AppContext {
   board: ClaimBoard;
   runnerTokenKey: Buffer;
   writeLimiter: WriteRateLimiter;
+  /** The app-owned run-bundle LRU (`run-storage.ts`); cleared on `app.close()`. */
+  runBundleCache: RunBundleCache;
 }
 
 export interface RequestContext extends AppContext {

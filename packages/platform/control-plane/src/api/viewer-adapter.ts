@@ -52,7 +52,7 @@ export async function viewIndex(ctx: HostedDynamic) {
   if (!u.pathname.endsWith("/")) {
     return new HttpResult({ status: 302, redirect: `${u.pathname}/${u.search}` });
   }
-  sendFile(ctx.req, ctx.res, VIEWER_DIR, "index.html");
+  return sendFile(ctx.req, ctx.res, VIEWER_DIR, "index.html");
 }
 
 /** GET /api/v1/projects/:p/view/*path — viewer static assets under the project mount. */
@@ -274,7 +274,7 @@ function singleEntry(name: HostedDynamic, buf: HostedDynamic, createdAt: HostedD
   const mtime = createdAt ? new Date(createdAt) : new Date(0);
   return {
     stat: (rel: HostedDynamic) => (rel === name ? { size: buf.length, mtime, isFile: true } : null),
-    createReadStream: (rel: HostedDynamic, opts: HostedDynamic = {}) => {
+    createReadStream: (_rel: HostedDynamic, opts: HostedDynamic = {}) => {
       const start = Math.max(0, opts.start ?? 0);
       const end = Math.min(opts.end ?? buf.length - 1, buf.length - 1);
       return Readable.from(start > end ? Buffer.alloc(0) : buf.subarray(start, end + 1));

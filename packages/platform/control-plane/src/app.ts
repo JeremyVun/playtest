@@ -18,6 +18,8 @@ import { beatHeartbeat } from "./ops.ts";
 import { withLease } from "./leases.ts";
 import { recomputeFindingKeys } from "./findings/intake.ts";
 import { ensureLocalPeerRunner } from "./dev-runner.ts";
+import { RunBundleCache } from "./run-storage.ts";
+import { cancelProjectSweeps } from "./findings/sweep-scheduler.ts";
 import type { AppContext } from "./types.ts";
 import type { ControlPlaneConfig } from "./config.ts";
 
@@ -60,6 +62,7 @@ export async function createApp(
       perMinute: config.rateLimit.writesPerMinute,
       burst: config.rateLimit.writeBurst,
     }),
+    runBundleCache: new RunBundleCache({ maxBytes: config.viewCache.maxBytes }),
   };
   // The dev peer runner: one site-scoped `local` runner and its credential file,
   // ensured before anything can launch, so `npm run hosted` needs no runner
@@ -126,6 +129,9 @@ export async function createApp(
     async close() {
       if (retentionTimer) clearInterval(retentionTimer);
       if (reconcileTimer) clearInterval(reconcileTimer);
+      // Pending debounced sweeps must not fire against a closed database.
+      cancelProjectSweeps(ctx);
+      ctx.runBundleCache.clear();
       await new Promise<void>((resolve) => server.close(resolve as HostedDynamic));
       await feedWaker.stop();
       await db.end();

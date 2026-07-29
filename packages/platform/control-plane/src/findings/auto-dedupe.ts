@@ -31,7 +31,7 @@
 // wait for the next report or a manual "Find duplicates".
 import { AppError } from "../errors.ts";
 import { audit } from "../audit.ts";
-import { withLease } from "../leases.ts";
+import { createProjectSweepScheduler } from "./sweep-scheduler.ts";
 import { emitPlatformEvent } from "../events/outbox.ts";
 import { assistantConfigured } from "../authoring/assistant.ts";
 import { applyConsolidationPlan, planConsolidation } from "./consolidation.ts";
@@ -39,20 +39,14 @@ import { liveFinding } from "./intake.ts";
 
 export const AUTO_DEDUPE_ACTOR: HostedDynamic = { system: "auto_dedupe" };
 
-// Debounce timers keyed by the shared Db instance, not by ctx: route handlers
-// receive per-request ctx objects, and a timer parked on one of those would
-// neither debounce across requests nor be visible to shutdown/tests. One Db,
-// one timer map (and one app in tests never sees another app's timers).
-const TIMERS_BY_DB = new WeakMap();
+// Deliberately its own scheduler, not auto-resolve's: a pending dedupe timer
+// must never cancel a pending resolve timer or vice versa. `app.close()`
+// cancels both through `cancelProjectSweeps`.
+const sweeps = createProjectSweepScheduler("auto-dedupe");
 
 /** The pending sweep timers for this app — exported for shutdown and tests. */
 export function autoDedupeTimers(ctx: HostedDynamic) {
-  let m = TIMERS_BY_DB.get(ctx.db);
-  if (!m) {
-    m = new Map();
-    TIMERS_BY_DB.set(ctx.db, m);
-  }
-  return m;
+  return sweeps.timers(ctx);
 }
 
 /**
@@ -161,20 +155,13 @@ export async function runAutoDedupe(ctx: HostedDynamic, { project, callModel = n
  */
 export function scheduleAutoDedupe(ctx: HostedDynamic, projectId: HostedDynamic) {
   if (!assistantConfigured()) return false;
-  const timers = autoDedupeTimers(ctx);
-  clearTimeout(timers.get(projectId));
-  const timer = setTimeout(() => {
-    timers.delete(projectId);
-    withLease(ctx.db, `auto-dedupe:${projectId}`, { log: ctx.log }, async () => {
+  return sweeps.schedule(ctx, projectId, {
+    debounceMs: ctx.config.autoDedupe.debounceMs,
+    sweep: async () => {
       const project = (await ctx.db.query(`SELECT * FROM projects WHERE id = $1`, [projectId])).rows[0];
       if (project && autoDedupeEnabledFor(ctx, project)) await runAutoDedupe(ctx, { project });
-    }).catch((err) => {
-      ctx.log?.warn?.({ msg: "auto-dedupe sweep failed", projectId, err: String(err?.stack || err) });
-    });
-  }, ctx.config.autoDedupe.debounceMs);
-  timer.unref?.();
-  timers.set(projectId, timer);
-  return true;
+    },
+  });
 }
 
 /**

@@ -171,6 +171,69 @@ export function bindingFor(
   return config.bindings.find((b) => b.projectKey !== null && match(b)) ?? config.bindings.find((b) => match(b)) ?? null;
 }
 
+/** The facts one mobile placement is decided from, however they arrived. */
+export interface MobileTargetFacts {
+  projectKey: string | null;
+  applicationKey: string | null;
+  ringKey: string | null;
+  platform: string | null;
+}
+
+export type MobilePlacement =
+  | { binding: MobileBinding; reason: null }
+  | { binding: null; reason: string };
+
+/**
+ * Can this machine serve a mobile target, and with which binding? The ONE
+ * answer to the question both askers share: pool compatibility asks it before
+ * a claim (and goes on to probe the Appium backend, the half only a claimer
+ * pays for), and the group executor asks it again after one (the config can
+ * change under a running agent, and a group can be placed on a runner that
+ * cannot serve it). A refusal is one actionable sentence with the remedy in
+ * it — the same sentence in both places, because the remedy is the same.
+ *
+ * Three checks, each speaking in its own words:
+ *
+ *   1. process isolation, because a container reaches neither the simulator,
+ *      nor a loopback Appium, nor a build outside the workspace;
+ *   2. a binding in this runner's config file for the
+ *      `(application key, ring key)`, and
+ *   3. agreement between the binding's platform and the application's.
+ */
+export function resolveMobilePlacement(
+  config: RunnerConfig | null,
+  target: MobileTargetFacts,
+  { isolation }: { isolation: string },
+): MobilePlacement {
+  const bound = `${target.applicationKey ?? "?"}/${target.ringKey ?? "?"}`;
+  if (isolation !== "process") {
+    return {
+      binding: null,
+      reason:
+        `this runner runs cases in containers, and a mobile case cannot: the device, the Appium server on loopback and ` +
+        `the build outside the workspace are all unreachable from one. Start a runner with --isolation process to take "${bound}".`,
+    };
+  }
+  const binding = bindingFor(config, target);
+  if (!binding) {
+    return {
+      binding: null,
+      reason:
+        `this runner has no configuration binding for the mobile target "${bound}" — a mobile build, its Appium ` +
+        `backend and its device are machine-local facts, declared in the claiming runner's own config file (--config)`,
+    };
+  }
+  if (target.platform && binding.platform !== target.platform) {
+    return {
+      binding: null,
+      reason:
+        `this runner binds the mobile target "${bound}" to ${binding.platform}, but that application is ` +
+        `${target.platform} — correct the platform in the runner's config file, or unbind the target`,
+    };
+  }
+  return { binding, reason: null };
+}
+
 /**
  * Refuse flat target keys on a site-scoped runner. This cannot be checked while
  * parsing, because scope is the CONTROL PLANE's answer and arrives with the

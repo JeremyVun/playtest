@@ -129,7 +129,7 @@ export async function forceMintSession(ctx: HostedDynamic, { providerId, identit
     // standalone `mint` workflow dispatch, not a control-plane mint. The
     // workflow_dispatch POST happens after this tx commits (below).
     if (provider.kind === "script") {
-      return { mintDispatch: await grantStandaloneMint(ctx, tx, { provider, identity: chosen, actor }) };
+      return { mintDispatch: await grantStandaloneMint(tx, { provider, identity: chosen, actor }) };
     }
     return { provider, chosen };
   });
@@ -167,7 +167,7 @@ export async function forceMintSession(ctx: HostedDynamic, { providerId, identit
  * if a mint for this identity is already in flight, returns that one instead
  * of double-dispatching (the button is safe to mash).
  */
-async function grantStandaloneMint(ctx: HostedDynamic, tx: HostedDynamic, { provider, identity, actor }: HostedDynamic) {
+async function grantStandaloneMint(tx: HostedDynamic, { provider, identity, actor }: HostedDynamic) {
   if (!provider.code || !String(provider.code).trim()) {
     throw badRequest(`script auth provider "${provider.name}" has no mint script code`);
   }

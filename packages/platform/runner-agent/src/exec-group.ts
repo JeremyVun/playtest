@@ -11,32 +11,34 @@ import { CONTAINER_WS, runCaseIsolated, stopActiveCases } from "./case-runner.ts
 import { liveUploader } from "./live-uploader.ts";
 import { platformEvidence } from "./evidence.ts";
 import { cleanupWorkspace, sweepDocker } from "./janitor.ts";
-import { deliverMintResult, runMintScript } from "./mint.ts";
+import { attemptMintScript, deliverMintResult } from "./mint.ts";
 import { makeMasker, makeRedactor, secretMasks, collectSecretValues, redactDeep } from "./redact.ts";
 import { AppiumBackends } from "./appium.ts";
-import { bindingFor } from "./runner-config.ts";
+import { resolveMobilePlacement } from "./runner-config.ts";
 import { mobilePhysicalMasks, mobileRuntimeTarget, preflightMobile } from "./mobile.ts";
 import type { AppiumHandle } from "./appium.ts";
+import type { MobileBinding } from "./runner-config.ts";
+import type { CaseReport, ExchangeAnswer, GroupCase, GroupExecutorOptions, GroupSpec } from "./protocol.ts";
 import { discoverCases } from "@playtest/core/suite";
 import { resolveBudget, schedulePool, willRecord } from "@playtest/core/run";
 import { writeBundle, baselinePaths } from "@playtest/core/artifacts";
 import { progressFold } from "@playtest/core/reporting";
 
-export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
+export async function execGroup(opts: GroupExecutorOptions): Promise<RunnerDynamic> {
   // Claiming assigned the work; exchanging authorizes it. The runner presents
   // its registration credential and names the dispatch it CLAIMED on the board,
   // and receives a short-lived bearer scoped to this one run group. The
   // isolation reported here is what the run records as producing its evidence.
   const bootstrap = new ApiClient(opts.server, opts.credential || null);
-  const exchange = await bootstrap.json("POST", "/runner/exchange", {
+  const exchange = await bootstrap.json<ExchangeAnswer>("POST", "/runner/exchange", {
     dispatch_id: opts.dispatchId,
     isolation: opts.isolation,
-    versions: await versions(opts),
+    versions: versions(opts),
   });
   const api = bootstrap.withToken(exchange.token);
-  const spec = await api.json("GET", `/runner/groups/${opts.group}`);
+  const spec = await api.json<GroupSpec>("GET", `/runner/groups/${opts.group}`);
   const warnings: string[] = [];
-  const results: RunnerDynamic[] = [];
+  const results: CaseReport[] = [];
   let workspace: RunnerDynamic = null;
   // A mobile group runs against this machine's own binding and its own Appium.
   // Both are opened after the claim and torn down with the group, whatever it
@@ -48,6 +50,35 @@ export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
   // The catch below posts errors through the redactor; it must exist before the
   // claim/materialize steps that could throw (secrets arrive with the claims).
   let redactor = (s: RunnerDynamic): string => String(s);
+  // Every case report leaves through this one door: the last thing that happens
+  // to any report — whatever branch built it — is that every string in it is
+  // scrubbed through the group's needles. Core records an infra cause in the
+  // manifest too (`result.error`), the report carries that manifest, and the
+  // platform stores and serves both, so the walk covers the whole document; it
+  // is metadata only (the evidence bundle travels as bytes on its own route),
+  // so the walk is cheap. Returns what was posted, which is what the group's
+  // summary counts.
+  const reportCase = async (item: GroupCase, report: CaseReport): Promise<CaseReport> => {
+    const posted = redactDeep(report, redactor);
+    await api.json("POST", `/runner/groups/${spec.run_group_id}/cases/${item.run_id}/report`, posted);
+    return posted;
+  };
+  const completeGroup = (body: RunnerDynamic): Promise<RunnerDynamic> =>
+    api.json("POST", `/runner/groups/${spec.run_group_id}/complete`, body);
+  // The janitor runs ONCE per group, wherever the group ends. The success path
+  // runs it before `complete` so its findings ride the completion report (§3);
+  // the `finally` covers every path that never reached that point. Idempotence
+  // is what keeps those two honest: after the first sweep the second call is a
+  // no-op, so a cleanup warning can never appear after the completion that
+  // should have carried it.
+  let swept = false;
+  const janitor = async (): Promise<string[]> => {
+    if (swept) return [];
+    swept = true;
+    const found = await cleanupWorkspace(workspace);
+    if (opts.isolation === "container") found.push(...sweepDocker());
+    return found;
+  };
   // SIGTERM/SIGINT: stop starting cases, STOP THE CASE IN FLIGHT — its container
   // or its process group, bounded by the documented grace period
   // (case-runner.ts) — report what we have, post a best-effort complete. A
@@ -78,7 +109,7 @@ export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
     // Mobile setup comes FIRST, before sessions and before a snapshot is
     // downloaded: everything it can fail on is this machine's own setup, and
     // diagnosing it is cheaper than materializing a workspace to throw away.
-    let binding = null;
+    let binding: MobileBinding | null = null;
     if (mobile) {
       binding = requireMobileBinding(spec, opts);
       backend = await backends.open(binding.backend);
@@ -93,11 +124,9 @@ export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
         // a driver. The path that produced it stays in this runner's own log.
         log(failure.detail);
         for (const item of spec.cases || []) {
-          const report = { status: "infra", error: failure.error };
-          await api.json("POST", `/runner/groups/${spec.run_group_id}/cases/${item.run_id}/report`, report);
-          results.push(report);
+          results.push(await reportCase(item, { status: "infra", error: failure.error }));
         }
-        await api.json("POST", `/runner/groups/${spec.run_group_id}/complete`, {
+        await completeGroup({
           summary: { cases: results.map((r) => ({ status: r.status })) },
           janitor: warnings,
         });
@@ -146,9 +175,9 @@ export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
         : null;
     const resolved = await discoverCases([workspace.suiteDir], { env: spec.ring.key, runtimeTarget });
     const byId = new Map(resolved.map((c) => [c.id, c]));
-    const selectedResolved = spec.cases.map((item: RunnerDynamic) => byId.get(item.case_id)).filter(Boolean);
+    const selectedResolved = spec.cases.map((item) => byId.get(item.case_id)).filter(Boolean);
     const budget = resolveHostedBudget(selectedResolved, spec.parallel, undefined, { serial: mobile });
-    const work = spec.cases.map((item: RunnerDynamic, index: number) => {
+    const work = spec.cases.map((item, index) => {
       const resolvedCase = byId.get(item.case_id);
       return {
         index,
@@ -162,11 +191,11 @@ export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
           : false,
       };
     });
-    const orderedResults: RunnerDynamic[] = new Array(work.length);
+    const orderedResults: CaseReport[] = new Array(work.length);
     // One wrapper around the whole case body: a stale-owner refusal from ANY of
     // its calls (start, report, bundle) ends this executor's participation
     // rather than being retried or reported as an infra failure it caused.
-    await schedulePool(work, budget, async (unit: RunnerDynamic) => {
+    await schedulePool(work, budget, async (unit: (typeof work)[number]) => {
       if (fenced) return;
       try {
         await runOneCase(unit);
@@ -174,20 +203,16 @@ export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
         if (!fence(e)) throw e;
       }
     });
-    async function runOneCase({ index, item, resolvedCase }: RunnerDynamic) {
+    async function runOneCase({ index, item, resolvedCase }: (typeof work)[number]) {
       if (canceled) {
-        const report = { status: "canceled", error: "canceled before the case started" };
-        await api.json("POST", `/runner/groups/${spec.run_group_id}/cases/${item.run_id}/report`, report);
-        orderedResults[index] = report;
+        orderedResults[index] = await reportCase(item, { status: "canceled", error: "canceled before the case started" });
         return;
       }
       if (!resolvedCase) {
-        const report = {
+        orderedResults[index] = await reportCase(item, {
           status: "infra",
           error: `case "${item.case_id}" was not resolved in materialized snapshot`,
-        };
-        await api.json("POST", `/runner/groups/${spec.run_group_id}/cases/${item.run_id}/report`, report);
-        orderedResults[index] = report;
+        });
         return;
       }
       // A managed Appium that died takes the rest of the group with it, but as
@@ -195,9 +220,7 @@ export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
       // diagnostic is already redacted of paths (appium.ts).
       const death = backend?.died() ?? null;
       if (death) {
-        const report = { status: "infra", error: redactor(death) };
-        await api.json("POST", `/runner/groups/${spec.run_group_id}/cases/${item.run_id}/report`, report);
-        orderedResults[index] = report;
+        orderedResults[index] = await reportCase(item, { status: "infra", error: death });
         return;
       }
       const rc = applyLimitOverrides(resolvedCase, item.options?.limits);
@@ -205,12 +228,10 @@ export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
       // infra with the provider named (§3a) — it never starts a browser.
       const authLabel = rc.env?.auth;
       if (authLabel && authLabel !== "none" && failedByLabel[authLabel]) {
-        const report = {
+        orderedResults[index] = await reportCase(item, {
           status: "infra",
-          error: redactor(`session mint failed for ${failedByLabel[authLabel]}`),
-        };
-        await api.json("POST", `/runner/groups/${spec.run_group_id}/cases/${item.run_id}/report`, report);
-        orderedResults[index] = report;
+          error: `session mint failed for ${failedByLabel[authLabel]}`,
+        });
         return;
       }
       const sideEffectsBefore = readSideEffects(rc.file);
@@ -232,7 +253,7 @@ export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
         // bundle seals, so it goes through the same needles.
         redact: redactor,
       });
-      let report;
+      let report: CaseReport | undefined;
       try {
         const res = await runCaseIsolated(rc, {
           isolation: opts.isolation,
@@ -271,8 +292,10 @@ export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
       } finally {
         // A backend that died DURING the case explains that case better than
         // whatever the driver managed to say about a socket that went away.
-        const diedDuring = report && report.status !== "pass" ? backend?.died() : null;
-        if (diedDuring) report = { ...report, status: "infra", error: redactor(diedDuring) };
+        if (report && report.status !== "pass") {
+          const diedDuring = backend?.died() ?? null;
+          if (diedDuring) report = { ...report, status: "infra", error: diedDuring };
+        }
         // Shutdown is the scheduler's, not the uploader's: stop both live
         // consumers here — before the final report and before the workspace is
         // cleaned up — so no background read races the teardown and no timer or
@@ -281,24 +304,15 @@ export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
         progress.stop();
         await live.stop();
       }
-      // The WHOLE report, not just the error line it was built with. Core
-      // records an infra cause in the manifest too (`result.error`), the report
-      // carries that manifest, and the platform stores and serves both — so the
-      // last thing that happens to a report is that every string in it is
-      // scrubbed. It is metadata only (the evidence bundle travels as bytes on
-      // its own route), so the walk is cheap.
-      const posted = redactDeep(report, redactor);
-      await api.json("POST", `/runner/groups/${spec.run_group_id}/cases/${item.run_id}/report`, posted);
-      orderedResults[index] = posted;
+      orderedResults[index] = await reportCase(item, report as CaseReport); // SAFETY: the try/catch above always assigns it.
     }
     results.push(...orderedResults.filter(Boolean));
     // Janitor before complete so its findings ride the completion report (§3).
-    warnings.push(...(await cleanupWorkspace(workspace)));
-    if (opts.isolation === "container") warnings.push(...sweepDocker());
+    warnings.push(...(await janitor()));
     // A fenced executor completes nothing: the attempt belongs to someone else
     // (or has ended), and its outcome is not this process's to declare.
     if (!fenced) {
-      await api.json("POST", `/runner/groups/${spec.run_group_id}/complete`, {
+      await completeGroup({
         ...(canceled ? { partial: true, error: "canceled" } : {}),
         summary: { cases: results.map((r) => ({ status: r.status })) },
         janitor: warnings,
@@ -306,7 +320,7 @@ export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
     }
   } catch (e: RunnerDynamic) {
     if (!fence(e) && !fenced) {
-      await api.json("POST", `/runner/groups/${spec.run_group_id}/complete`, {
+      await completeGroup({
         partial: true,
         error: redactor(e.message || String(e)),
       }).catch(() => {});
@@ -319,7 +333,9 @@ export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
     // The backend's lifetime is the group's: a managed Appium never outlives
     // the work it was started for, however that work ended.
     await backend?.close().catch(() => {});
-    warnings.push(...(await cleanupWorkspace(workspace)));
+    // A no-op on the success path (the sweep already rode the completion); the
+    // real cleanup for every path that ended before reaching it.
+    await janitor();
   }
   return { exitCode: results.some((r) => r.status === "fail") ? 1 : results.some((r) => r.status === "infra") ? 2 : 0, results };
 }
@@ -327,37 +343,25 @@ export async function execGroup(opts: RunnerDynamic): Promise<RunnerDynamic> {
 /**
  * The binding this runner holds for the group's `(application key, ring key)`.
  *
- * The claim already checked this, so reaching either throw means the config
- * changed under a running agent or a group was placed on a runner that cannot
- * serve it; both are infra failures with the remedy in them rather than a
- * driver error forty steps into a case.
+ * The claim already checked this — through the same resolver
+ * (`resolveMobilePlacement`) — so reaching the throw means the config changed
+ * under a running agent or a group was placed on a runner that cannot serve
+ * it; both are infra failures with the remedy in them rather than a driver
+ * error forty steps into a case.
  */
-export function requireMobileBinding(spec: RunnerDynamic, opts: RunnerDynamic): RunnerDynamic {
-  const bound = `${spec.application?.key ?? "?"}/${spec.ring?.key ?? "?"}`;
-  if (opts.isolation !== "process") {
-    throw new Error(
-      `this runner runs cases in containers, and a mobile case cannot: the device, the Appium server on loopback and ` +
-        `the build outside the workspace are all unreachable from one. Start a runner with --isolation process.`,
-    );
-  }
-  const binding = bindingFor(opts.config ?? null, {
-    projectKey: spec.project?.key ?? null,
-    applicationKey: spec.application?.key ?? null,
-    ringKey: spec.ring?.key ?? null,
-  });
-  if (!binding) {
-    throw new Error(
-      `this runner has no configuration binding for the mobile target "${bound}" — the claiming runner supplies the ` +
-        `build, its Appium backend and its device from its own config file (--config)`,
-    );
-  }
-  if (spec.application?.platform && binding.platform !== spec.application.platform) {
-    throw new Error(
-      `this runner binds the mobile target "${bound}" to ${binding.platform}, but that application is ` +
-        `${spec.application.platform} — correct the platform in the runner's config file`,
-    );
-  }
-  return binding;
+export function requireMobileBinding(spec: RunnerDynamic, opts: RunnerDynamic): MobileBinding {
+  const placement = resolveMobilePlacement(
+    opts.config ?? null,
+    {
+      projectKey: spec.project?.key ?? null,
+      applicationKey: spec.application?.key ?? null,
+      ringKey: spec.ring?.key ?? null,
+      platform: spec.application?.platform ?? null,
+    },
+    { isolation: opts.isolation },
+  );
+  if (!placement.binding) throw new Error(placement.reason);
+  return placement.binding;
 }
 
 /**
@@ -449,8 +453,12 @@ export function applyLimitOverrides(resolvedCase: RunnerDynamic, overrides: Runn
  * delivery is retried. `opts.sleep` is that retry's wait, and exists so a test
  * can drive the retry without waiting through it.
  */
-export async function claimGroupSessions(api: RunnerDynamic, spec: RunnerDynamic, opts: RunnerDynamic): Promise<RunnerDynamic> {
-  const needed = spec.sessions?.needed || [];
+export async function claimGroupSessions(
+  api: RunnerDynamic,
+  spec: RunnerDynamic,
+  opts: Pick<GroupExecutorOptions, "isolation" | "workDir" | "sleep">,
+): Promise<{ sessions: Record<string, RunnerDynamic>; failed: Record<string, string>; secretValues: RunnerDynamic[] }> {
+  const needed: string[] = spec.sessions?.needed || [];
   const sessions: Record<string, RunnerDynamic> = {};
   const failed: Record<string, string> = {};
   const secretValues: RunnerDynamic[] = [];
@@ -465,22 +473,18 @@ export async function claimGroupSessions(api: RunnerDynamic, spec: RunnerDynamic
         sessions[ref] = r;
       } else if (r?.pending && r.mint) {
         for (const v of Object.values(r.mint.env || {})) secretValues.push(v);
-        // A failed mint's first line is the customer's OWN script talking
-        // (mint.ts takes stderr's first line), and the script was handed this
-        // grant's resolved secrets — so an `echo $TOKEN` or a library that
-        // prints the value it POSTed lands here. It is posted on the claim and
-        // served to developers as the dispatch error, so it is scrubbed of
-        // every value the grant carries before it goes. This runs before the
-        // group's redactor exists, hence its own.
+        // Running the script once and scrubbing its failure of the grant's
+        // secrets is the shared mint policy (`attemptMintScript`); what is
+        // endpoint-specific here is where the diagnosis goes — posted on the
+        // claim (so the next claimer takes over) and carried to the case
+        // reports of only the cases needing this identity. This runs before
+        // the group's redactor exists, hence its own.
         const redact = makeRedactor([...secretValues, ...Object.values(r.mint.env || {})]);
         const fulfillPath = `/runner/sessions/${r.mint.claim_id}/fulfill`;
-        let storageState;
-        try {
-          storageState = await runMintScript(r.mint, { isolation: opts.isolation, workDir: opts.workDir });
-        } catch (e) {
-          const msg = redact(firstLine(e));
-          await api.json("POST", fulfillPath, { error: msg }).catch(() => {});
-          failed[ref] = msg;
+        const outcome = await attemptMintScript(r.mint, { isolation: opts.isolation, workDir: opts.workDir, redact });
+        if (!outcome.minted) {
+          await api.json("POST", fulfillPath, { error: outcome.error }).catch(() => {});
+          failed[ref] = outcome.error;
           continue;
         }
         // The script ran, exactly once. Only DELIVERY is retried from here, and
@@ -489,7 +493,7 @@ export async function claimGroupSessions(api: RunnerDynamic, spec: RunnerDynamic
         // developer and abandon a grant that produced a session. An undelivered
         // grant simply expires and the next claimer takes it over.
         try {
-          const fulfilled = await deliverMintResult(api, fulfillPath, { storage_state: storageState }, { sleep: opts.sleep });
+          const fulfilled = await deliverMintResult(api, fulfillPath, { storage_state: outcome.storageState }, { sleep: opts.sleep });
           sessions[ref] = fulfilled.session;
         } catch (e) {
           // A stale-owner refusal is not this mint's failure at all: this
@@ -588,7 +592,7 @@ function readJson(file: string): RunnerDynamic {
   }
 }
 
-async function versions(opts: RunnerDynamic): Promise<RunnerDynamic> {
+function versions(opts: GroupExecutorOptions): Record<string, string | null> {
   return {
     node: process.version,
     isolation: opts.isolation,

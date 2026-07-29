@@ -8,9 +8,9 @@
 import { api } from "../lib/api.js";
 import { h, mount } from "../lib/dom.js";
 import { link, navigate, onPageLeave } from "../lib/router.js";
-import { renderFrame, page } from "../lib/shell.js";
+import { page } from "../lib/shell.js";
 import { state, hasRole, loadMe, loadProjects } from "../lib/state.js";
-import { toast, toastError, confirmModal, formModal, emptyState, formField, enhanceSelect, copyText } from "../lib/ui.js";
+import { toast, toastError, confirmModal, formModal, emptyState, errorState, formField, enhanceSelect, copyText } from "../lib/ui.js";
 import { visibleSections } from "../lib/settings-sections.js";
 import { modelField } from "../lib/model-select.js";
 import { humanize as words, categoryLabel } from "../lib/vocab.js";
@@ -18,19 +18,21 @@ import { startCommand, oneShot, runnerLabelsText, runnerPresence, labelProblem, 
 import { RUNNER_GUIDE } from "../lib/rings.js";
 import { subscribeFeed } from "../lib/feed.js";
 import { ago } from "../lib/labels.js";
+import { projectPage } from "../lib/project-page.js";
+import { runsSettingsTab } from "./settings-runs.js";
 
 const RENDER: WebDynamic = {
   runners: runnersTab,
-  runs: runsTab,
+  runs: runsSettingsTab,
   models: modelsTab,
   team: membersTab,
   audit: auditTab,
 };
 
 export function settingsPage(projectKey: WebDynamic, tab?: WebDynamic) {
-  const main = renderFrame({ projectKey, nav: "settings" });
-  const project = state.projectByKey.get(projectKey);
-  if (!project) return mount(main, page({ title: "Settings", body: emptyState("Not found", "No such project.") }));
+  const context = projectPage(projectKey, { nav: "settings", title: "Settings", loading: false });
+  if (!context) return;
+  const { main, project } = context;
 
   const tabs = visibleSections((min: WebDynamic) => hasRole(project.id, min), state.me?.capabilities || {})
     .map((t: WebDynamic) => ({ ...t, render: RENDER[t.id] }));
@@ -57,51 +59,6 @@ const projectIdentity = (project: WebDynamic, projectKey: WebDynamic) =>
     h("span.faint", {}, " — the name this project goes by in its URLs and in the CLI and API. It can't be changed."),
   );
 
-// ---------- runs ----------
-// A predictable project-wide pool, inherited by every suite that does not pin
-// its own `parallel` value on Suite settings.
-async function runsTab(projectKey: WebDynamic, project: WebDynamic, slot: WebDynamic) {
-  const current = project.parallel || { total: 1, record: 1 };
-  const total = h("input", { type: "number", min: "1", step: "1", value: current.total });
-  const record = h("input", { type: "number", min: "1", step: "1", value: current.record });
-  const saveBtn = h("button.btn.primary", { onclick: save }, "Save");
-  mount(slot, h("section", {},
-    h("h3.section-title", { style: "margin-top:0" }, "Run concurrency"),
-    h("p.dim", { style: "font-size:12.5px;margin:-4px 0 12px" },
-      "The worker budget every suite inherits. A suite can replace it from Suite settings when its target or model limits need a different pool."),
-    h("div.card.pad", {},
-      h("div.run-limits-fields", {},
-        formField("Concurrent stories", total,
-          "Maximum stories in flight across model-driven recordings and baseline checks."),
-        formField("Concurrent recordings", record,
-          "Maximum model-driven stories in flight. Baseline checks can use the remaining workers."),
-      ),
-      h("div", { style: "display:flex;justify-content:flex-end;margin-top:14px" }, saveBtn),
-    ),
-  ));
-
-  async function save() {
-    const parallel: WebDynamic = { total: Number(total.value), record: Number(record.value) };
-    if (!Number.isSafeInteger(parallel.total) || parallel.total < 1 ||
-        !Number.isSafeInteger(parallel.record) || parallel.record < 1) {
-      return toast("Use positive whole numbers", "Both concurrency values must be at least 1.", "err");
-    }
-    if (parallel.record > parallel.total) {
-      return toast("Recording cap is too high", "Concurrent recordings cannot exceed concurrent stories.", "err");
-    }
-    saveBtn.disabled = true;
-    try {
-      const updated = await api.put(`/projects/${projectKey}/parallel`, parallel);
-      project.parallel = updated.parallel;
-      toast("Run concurrency saved", `${parallel.total} concurrent · ${parallel.record} recording`, "ok");
-    } catch (err: WebDynamic) {
-      toastError(err);
-    } finally {
-      saveBtn.disabled = false;
-    }
-  }
-}
-
 // ---------- runners ----------
 // A self-hosted runner is the machine a run actually happens on. Everything it
 // does is outbound (docs/contracts/hosted.md, "Runner pool"), so this surface
@@ -119,7 +76,11 @@ async function runnersTab(projectKey: WebDynamic, project: WebDynamic, slot: Web
   const ctl: WebDynamic = { items: [], sig: null };
   const windowS = state.me?.capabilities?.runner_check_in_window_s ?? 120;
   const load = async () => { ctl.items = (await api.get(`/projects/${projectKey}/runners`)).items || []; };
-  try { await load(); } catch (err: WebDynamic) { return toastError(err); }
+  try {
+    await load();
+  } catch (err: WebDynamic) {
+    return mount(slot, errorState(err, () => runnersTab(projectKey, project, slot)));
+  }
 
   // One subscription and one slow repaint clock, both torn down on navigation.
   let debounce: WebDynamic = null;
@@ -201,7 +162,7 @@ async function runnersTab(projectKey: WebDynamic, project: WebDynamic, slot: Web
           "A self-hosted runner runs your suites on a machine you control — your laptop, a build box, a CI job — so a run can reach an app on localhost, a device simulator, or anything behind your firewall. It dials out to Playtest; nothing ever connects to it.",
         );
 
-    const focusKey = document.activeElement?.dataset?.fk || null;
+    const focusKey = document.activeElement instanceof HTMLElement ? document.activeElement.dataset.fk || null : null;
     mount(slot, h("div.stack", {},
       h("section", {},
         h("h3.section-title", { style: "margin-top:0" }, "Runners"),
@@ -213,7 +174,7 @@ async function runnersTab(projectKey: WebDynamic, project: WebDynamic, slot: Web
           "A runner that tests mobile builds also starts with ", h("span.mono", {}, "--config <file>"),
           ", a file on its own disk naming the build, device and Appium server per application and ring — the format is in ",
           h("span.mono", {}, RUNNER_GUIDE), "."),
-        h("div", { style: "display:flex;justify-content:flex-end;margin-bottom:12px" }, add),
+        h("div.section-actions", {}, add),
         body,
         rows.length && !here
           ? h("p.faint", { style: "font-size:11.5px;margin-top:12px" },
@@ -298,7 +259,7 @@ function revealRunnerCredential(runner: WebDynamic, refresh: WebDynamic) {
       },
     }, "Copy command");
     return h("div", {},
-      h("p.dim", { style: "font-size:12.5px;margin:-4px 0 12px" },
+      h("p.dim.section-caption", {},
         "Run this on the machine you want your suites to execute on. It is the only time this credential is shown — Playtest stores a hash of it and cannot show it again."),
       h("pre.mono", {
         style: "background:var(--bg2);padding:12px;border-radius:6px;overflow:auto;font-size:12px;white-space:pre-wrap;word-break:break-all",
@@ -432,7 +393,7 @@ async function modelsTab(projectKey: WebDynamic, project: WebDynamic, slot: WebD
       : "Whether a verified fix of a judgment-call finding resolves it outright or waits for your confirmation. Gate and signal findings always resolve on deterministic evidence; findings linked to an external ticket always wait.");
   mount(slot, h("section", {},
     h("h3.section-title", { style: "margin-top:0" }, "Models"),
-    h("p.dim", { style: "font-size:12.5px;margin:-4px 0 12px" },
+    h("p.dim.section-caption", {},
       "The models every run in this project uses unless a suite — or a single story — chooses its own; the more specific choice always wins."),
     h("div.card.pad", {},
       field("actor_model", "Actor model", "Plays the user against the app. A capable actor recovers from friction far more reliably than a cheap one."),
@@ -488,7 +449,11 @@ const fieldLine = (k: WebDynamic, v: WebDynamic) => h("div.dim", { style: "margi
 // ---------- members ----------
 async function membersTab(projectKey: WebDynamic, project: WebDynamic, slot: WebDynamic) {
   let items: WebDynamic = [];
-  try { ({ items } = await api.cached(`/projects/${projectKey}/members`)); } catch (err: WebDynamic) { return toastError(err); }
+  try {
+    ({ items } = await api.cached(`/projects/${projectKey}/members`));
+  } catch (err: WebDynamic) {
+    return mount(slot, errorState(err, () => membersTab(projectKey, project, slot)));
+  }
   const ROLES: WebDynamic = ["viewer", "editor", "reviewer", "developer", "admin"];
   const add = h("button.btn.primary", { onclick: () => addMemberModal(projectKey, () => membersTab(projectKey, project, slot)) }, "+ Add member");
   const body = h("div.card", {}, h("table.rows", {},
@@ -517,7 +482,7 @@ async function membersTab(projectKey: WebDynamic, project: WebDynamic, slot: Web
       ),
     ),
   );
-  mount(slot, h("div", {}, h("div", { style: "display:flex;justify-content:flex-end;margin-bottom:12px" }, add), body, danger));
+  mount(slot, h("div", {}, h("div.section-actions", {}, add), body, danger));
 }
 
 // enhanceSelect hides the native <select> behind a <button>, and a button takes
@@ -606,7 +571,9 @@ async function auditTab(projectKey: WebDynamic, project: WebDynamic, slot: WebDy
     ]);
     items = log.items;
     for (const m of members.items || []) names.set(m.user_id, m.name || m.email);
-  } catch (err: WebDynamic) { return toastError(err); }
+  } catch (err: WebDynamic) {
+    return mount(slot, errorState(err, () => auditTab(projectKey, project, slot)));
+  }
   const who = (id: WebDynamic) => (id ? names.get(id) || `user ${shortId(id)}` : "someone");
   const body = items.length
     ? h("div.card", {}, h("table.rows", {},
@@ -773,7 +740,7 @@ const AUDIT_SENTENCES: WebDynamic = {
   "finding.merged": (d: WebDynamic) => `merged this finding into ${d.into ? shortId(d.into) : "another one"}`,
   "finding.split": (d: WebDynamic) => `split this finding out of ${d.from ? shortId(d.from) : "another one"}`,
   "bug_candidate.created": (d: WebDynamic) => `logged a suspected bug${d.category ? ` — ${categoryLabel(d.category).toLowerCase()}` : ""}${d.suggested_finding_id ? ", suggested against an existing finding" : ""}`,
-  "bug_candidate.evidence_added": (d: WebDynamic) => `added evidence to a suspected bug already on file`,
+  "bug_candidate.evidence_added": () => "added evidence to a suspected bug already on file",
   "bug_candidate.auto_dismissed": () => "auto-dismissed a suspected bug — it matches one already dismissed",
   "bug_candidate.dismissed": (d: WebDynamic) => `dismissed this suspected bug${d.reason ? ` — ${words(d.reason)}` : ""}`,
   "bug_candidate.promoted": (d: WebDynamic) => `promoted this suspected bug to ${d.created ? "a new finding" : "an existing finding"}`,

@@ -3,6 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { sha256Hex } from "./hash.ts";
 import { PerfSidecar } from "./perf.ts";
 import type { DriverId, JsonValue, PersonaReference } from "./types.ts";
 
@@ -184,7 +185,7 @@ export function storyHash(
   story: string | null | undefined,
   persona: PersonaReference | null | undefined
 ): string {
-  return crypto.createHash("sha256").update(JSON.stringify([story ?? null, persona ?? null])).digest("hex").slice(0, 16);
+  return sha256Hex(JSON.stringify([story ?? null, persona ?? null])).slice(0, 16);
 }
 
 /** UTC "2026-06-10T0300-ab12". */

@@ -458,10 +458,14 @@ test("reviewer filing lands confirmed, on deterministic identity rather than the
 
     const one = (await api.post(`/runs/${runA.id}/promote-finding`, { title: "Save button hidden", severity: "major", note: "saw it" })).body;
     assert.equal(one.state, "accepted", "a person filing a bug IS its confirmation");
+    assert.ok(one.summary.confirmed_at, "the confirmation is timestamped");
     assert.ok(one.summary.confirmed_by, "the reviewer is stamped as confirmer");
     assert.equal(one.evidence[0].step_from, 4, "evidence still pins the run's final observed state");
+    assert.match(one.evidence[0].viewer_url, /\?step=4$/);
+    assert.match(one.evidence[0].excerpt, /saw it — assert: save button visible — button 123 not visible/);
     assert.equal(one.summary.gate.spec, "assert: save button visible");
     assert.equal(one.summary.promoted_from_run_id, runA.id, "the run is provenance…");
+    assert.equal(one.story_health?.status, "fail");
 
     // A second reviewer filing the same defect surface from a DIFFERENT run
     // lands on the same finding — under a run-scoped fingerprint this produced

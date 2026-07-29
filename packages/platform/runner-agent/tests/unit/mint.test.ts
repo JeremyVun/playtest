@@ -272,7 +272,7 @@ test("a completion that keeps failing never reports the customer's script as bro
     const { grant, counter } = countingGrant(workDir, "claim-undeliverable");
     const posts: LegacyTestValue[] = [];
     const api = {
-      json: async (method: string, route: string, body: LegacyTestValue) => {
+      json: async (_method: string, route: string, body: LegacyTestValue) => {
         posts.push({ route, body });
         throw transient();
       },
@@ -314,7 +314,7 @@ test("a mint script that really fails is posted on the claim, scrubbed of the gr
     };
     const posts: LegacyTestValue[] = [];
     const api = {
-      json: async (method: string, route: string, body: LegacyTestValue) => {
+      json: async (_method: string, route: string, body: LegacyTestValue) => {
         posts.push({ route, body });
         return {};
       },

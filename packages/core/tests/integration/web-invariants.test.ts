@@ -103,7 +103,7 @@ const gateCtx = (run: LegacyTestValue) => ({
 
 const only = (checks: LegacyTestValue, kindOrLabel: LegacyTestValue) => checks.find((c: LegacyTestValue) => c.label === kindOrLabel || c.spec === kindOrLabel);
 
-type GateFixture = { pass: boolean; hardPass: boolean; checks: LegacyTestValue[]; advisory: LegacyTestValue[] };
+type GateFixture = { pass: boolean; hardPass: boolean; checks: LegacyTestValue[]; advisory?: LegacyTestValue[] };
 
 async function suiteCase() {
   const [rc] = await discoverCases([SUITE], { baseUrl: BASE });
@@ -146,9 +146,9 @@ test("a healthy API under a healthy UI: every policy holds and is exercised", as
     "the page's own traffic exercised all four — a web run is never vacuously applicable",
   );
   // The advisory policy the story never exercised reports; it does not gate.
-  assert.equal(gate.advisory.length, 1);
-  assert.equal(gate.advisory[0].applicable, false);
-  assert.match(gate.advisory[0].detail, /never completed a DELETE \/api\/todos/);
+  assert.equal(gate.advisory!.length, 1);
+  assert.equal(gate.advisory![0]!.applicable, false);
+  assert.match(gate.advisory![0]!.detail, /never completed a DELETE \/api\/todos/);
 });
 
 test("an API-layer violation visible only in the HAR fails the web gate, cited against the step that caused it", async () => {
@@ -185,9 +185,9 @@ test("step attribution comes from artifacts.har_entries, so a request no step ow
   ]);
   const gate = await evaluateGate(rc, gateCtx(run));
   const failed = gate.checks.find((c: LegacyTestValue) => c.spec === "invariant: no_server_error");
-  assert.equal(failed.pass, false);
-  assert.match(failed.detail, /1 server error/);
-  assert.equal("steps" in failed, false, "no step owns the initial page load, so none is cited");
+  assert.equal(failed!.pass, false);
+  assert.match(failed!.detail, /1 server error/);
+  assert.equal("steps" in failed!, false, "no step owns the initial page load, so none is cited");
 });
 
 test("a `success:` policy the page never exercised FAILS on web too — there is no web exemption", async () => {
@@ -202,10 +202,10 @@ test("a `success:` policy the page never exercised FAILS on web too — there is
   };
   const gate = await evaluateGate(withErrorShape, gateCtx(addTodoRun()));
   assert.equal(gate.pass, false);
-  assert.equal(gate.checks[0].applicable, false);
-  assert.equal(gate.checks[0].pass, false, "not exercised is a FAILURE under success:, on every driver");
-  assert.match(gate.checks[0].detail, /produced no 4xx response/);
-  assert.match(gate.checks[0].detail, /move this policy under observe:/);
+  assert.equal(gate.checks[0]!.applicable, false);
+  assert.equal(gate.checks[0]!.pass, false, "not exercised is a FAILURE under success:, on every driver");
+  assert.match(gate.checks[0]!.detail, /produced no 4xx response/);
+  assert.match(gate.checks[0]!.detail, /move this policy under observe:/);
 });
 
 test("a web case declaring no API invariant is untouched: same verdicts, no step citations", async () => {

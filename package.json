@@ -24,7 +24,11 @@
     "hosted": "bash scripts/hosted-server.sh",
     "hosted:migrate": "bash scripts/hosted-server.sh migrate",
     "hosted:test": "npm run build:web && npm test --workspace=@playtest/control-plane",
-    "runner:test": "npm test --workspace=@playtest/runner-agent"
+    "runner:test": "npm test --workspace=@playtest/runner-agent",
+    "codebase:stats": "node tools/codebase-map/index.mjs stats",
+    "codebase:graph": "node tools/codebase-map/index.mjs graph",
+    "codebase:report": "node tools/codebase-map/index.mjs report",
+    "codebase:report:html": "node tools/codebase-map/index.mjs report --output .codebase-map/report.html"
   },
   "engines": {
     "node": ">=24.18.0"

@@ -15,23 +15,24 @@
 //
 // Internal machinery, not an entry point: the pool loop is the one arrival.
 import { ApiClient, isRunnerRefusal } from "./api-client.ts";
-import { deliverMintResult, runMintScript } from "./mint.ts";
+import { attemptMintScript, deliverMintResult } from "./mint.ts";
 import { makeRedactor } from "./redact.ts";
+import type { ExchangeAnswer, MintExecutorOptions, MintGrant } from "./protocol.ts";
 
-export async function execMint(opts: RunnerDynamic): Promise<RunnerDynamic> {
+export async function execMint(opts: MintExecutorOptions): Promise<RunnerDynamic> {
   // As in exec-group: the runner exchanges its registration credential for the
   // dispatch it claimed, and receives a bearer scoped to this mint claim alone.
   // A runner resuming after a crash exchanges again for the SAME dispatch and
   // becomes its current executor; the bearer it held before is stale from that
   // instant (docs/contracts/hosted.md, "Current executor fencing").
   const bootstrap = new ApiClient(opts.server, opts.credential || null);
-  const exchange = await bootstrap.json("POST", "/runner/exchange", {
+  const exchange = await bootstrap.json<ExchangeAnswer>("POST", "/runner/exchange", {
     dispatch_id: opts.dispatchId,
     isolation: opts.isolation,
     versions: { node: process.version, isolation: opts.isolation, job_image: process.env.PLAYTEST_JOB_IMAGE || null },
   });
   const api = bootstrap.withToken(exchange.token);
-  const grant = await api.json("GET", `/runner/mints/${opts.claim}`);
+  const grant = await api.json<MintGrant>("GET", `/runner/mints/${opts.claim}`);
   return await executeMint(api, {
     grant,
     claim: opts.claim,
@@ -46,25 +47,28 @@ export async function execMint(opts: RunnerDynamic): Promise<RunnerDynamic> {
  */
 export async function executeMint(
   api: RunnerDynamic,
-  { grant, claim, isolation, workDir, sleep }: RunnerDynamic,
+  { grant, claim, isolation, workDir, sleep }: {
+    grant: MintGrant;
+    claim: string;
+    isolation: string;
+    workDir: string;
+    sleep?: (ms: number) => Promise<void>;
+  },
 ): Promise<RunnerDynamic> {
-  // The failure is the provider script's own first line of stderr (mint.ts),
-  // written by code that was handed this grant's resolved secrets. It becomes
-  // the dispatch's error — served to developers — so it is scrubbed of every
-  // value the grant carries, here and in this runner's log.
+  // The failure classification and its scrubbing are the shared mint policy
+  // (`attemptMintScript`): the script's error becomes the dispatch's error —
+  // served to developers — redacted of every value the grant carries, here and
+  // in this runner's log.
   const redact = makeRedactor(Object.values(grant.env || {}));
-  let storageState;
-  try {
-    storageState = await runMintScript(grant, { isolation, workDir });
-  } catch (e: RunnerDynamic) {
-    const error = redact(firstLine(e));
-    await deliverMintResult(api, `/runner/mints/${claim}/complete`, { error }, { sleep }).catch(() => {});
-    console.error(`mint failed: ${error}`);
-    return { exitCode: 1, error };
+  const outcome = await attemptMintScript(grant, { isolation, workDir, redact });
+  if (!outcome.minted) {
+    await deliverMintResult(api, `/runner/mints/${claim}/complete`, { error: outcome.error }, { sleep }).catch(() => {});
+    console.error(`mint failed: ${outcome.error}`);
+    return { exitCode: 1, error: outcome.error };
   }
   // The script ran, exactly once. From here only delivery can fail.
   try {
-    await deliverMintResult(api, `/runner/mints/${claim}/complete`, { storage_state: storageState }, { sleep });
+    await deliverMintResult(api, `/runner/mints/${claim}/complete`, { storage_state: outcome.storageState }, { sleep });
   } catch (e: RunnerDynamic) {
     const error =
       `the mint for ${grant.provider}/${grant.identity} succeeded, but its result could not be delivered: ` +

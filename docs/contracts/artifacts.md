@@ -946,6 +946,12 @@ its accessibility text side by side, so only the entry itself can answer.
 payloads. An entry the vocabulary does not name returns `null` — the function
 does not guess, and the caller states its own default.
 
+`isStepEntryPath(entry)` is the shared shape of a stageable step-artifact path
+(one entry directly under `steps/`, no traversal, no nesting). It is the one
+definition both live-staging peers consult — the runner's uploader to decide
+what to ship, the control plane's ingest to decide what to store — so the two
+sides cannot drift.
+
 ### Index sidecar
 
 Writers create `<bundle>.idx.json`:

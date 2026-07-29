@@ -35,17 +35,11 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import { translatePaths } from "./case-runner.ts";
 import { platformEvidence } from "./evidence.ts";
+import { isStepEntryPath } from "@playtest/core/artifacts";
+import type { LiveAck } from "./protocol.ts";
 
 /** The coalescing floor, shared with the progress reporter (exec-group.ts). */
 const TICK_MS = 2000;
-
-/**
- * A trajectory line's `artifacts` values are shipped only when they look like a
- * step-artifact path — the same shape the staging route accepts, applied here so
- * a `har_entries` index list or a future artifact kind is skipped silently
- * instead of earning a refusal.
- */
-const ENTRY_SHAPE = /^steps\/[0-9A-Za-z][0-9A-Za-z._-]{0,119}$/;
 
 /**
  * Route caps, defaulted to the control plane's own constants. A deployment
@@ -168,7 +162,7 @@ export function liveUploader(
    * `gap` and `divergent` are recoverable by resending, so every caller but
    * `shipTrajectory` treats a refusal as the end of this run's stream.
    */
-  function refusal(ack: RunnerDynamic): string | null {
+  function refusal(ack: LiveAck | null | undefined): string | null {
     if (ack && ack.accepted === false) return String(ack.reason || "refused");
     return null;
   }
@@ -183,7 +177,7 @@ export function liveUploader(
   async function openIfReady(): Promise<boolean> {
     const snapshot = readManifest();
     if (!snapshot) return false;
-    const ack = await call((signal) => api.json("POST", routes.open, { manifest: snapshot.manifest }, { signal }));
+    const ack: LiveAck = await call((signal) => api.json("POST", routes.open, { manifest: snapshot.manifest }, { signal }));
     const reason = refusal(ack);
     if (reason) {
       selfStop(reason);
@@ -277,7 +271,7 @@ export function liveUploader(
         // the sanitizer classifies by what the entry IS, so the text is
         // rewritten and the PNG crosses byte-for-byte.
         if (evidence) bytes = evidence.entry(entry, bytes);
-        const ack = await call((signal) => api.putBytes(routes.entry(entry), bytes, "application/octet-stream", { signal }));
+        const ack: LiveAck = await call((signal) => api.putBytes(routes.entry(entry), bytes, "application/octet-stream", { signal }));
         const reason = refusal(ack);
         if (reason) {
           selfStop(reason);
@@ -314,7 +308,7 @@ export function liveUploader(
     const lines = (evidence ? evidence.text(chunk) : chunk).split("\n");
     if (lines[lines.length - 1] === "") lines.pop();
 
-    const ack = await call((signal) =>
+    const ack: LiveAck = await call((signal) =>
       api.json("POST", routes.trajectory, { from_line: sentLines, lines }, { signal }),
     );
     const reason = refusal(ack);
@@ -349,7 +343,7 @@ export function liveUploader(
   async function shipManifest(): Promise<void> {
     const snapshot = readManifest();
     if (!snapshot || snapshot.stamp === manifestStamp) return;
-    const ack = await call((signal) => api.json("POST", routes.open, { manifest: snapshot.manifest }, { signal }));
+    const ack: LiveAck = await call((signal) => api.json("POST", routes.open, { manifest: snapshot.manifest }, { signal }));
     const reason = refusal(ack);
     if (reason) return selfStop(reason);
     manifestStamp = snapshot.stamp;
@@ -443,10 +437,14 @@ export function artifactRefs(line: string): string[] {
   }
   const artifacts = envelope?.artifacts;
   if (!artifacts || typeof artifacts !== "object") return [];
+  // Shipped only when it is a stageable step-artifact path — core's shared
+  // shape, the same one the staging route accepts — so a `har_entries` index
+  // list or a future artifact kind is skipped silently instead of earning a
+  // refusal.
   const out: string[] = [];
   for (const value of Object.values(artifacts)) {
     for (const candidate of Array.isArray(value) ? value : [value]) {
-      if (typeof candidate === "string" && ENTRY_SHAPE.test(candidate) && !out.includes(candidate)) out.push(candidate);
+      if (typeof candidate === "string" && isStepEntryPath(candidate) && !out.includes(candidate)) out.push(candidate);
     }
   }
   return out;

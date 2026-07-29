@@ -1527,9 +1527,12 @@ physical databases with the same semantics.
   model-chosen category never enter a key. A candidate with no deterministic
   signal has no exact keys.
 - Algorithms are versioned and frozen: `key-v1`, `locus-norm-v1`,
-  `match-text-v1`, retrieval `shortlist-v1`. Core and hosted use the same
-  functions, and every stored row carries its algorithm versions so a bump can
-  recompute.
+  `match-text-v1`, retrieval `shortlist-v1`. The pure key and shortlist
+  functions live in core and are exported through `@playtest/core/findings`,
+  parameterized by an opaque scope id; the control plane consumes those exports
+  (its `findings/keys.ts` maps `project_id` onto the scope id) rather than
+  keeping a parallel copy. Every stored row carries its algorithm versions so a
+  bump can recompute.
 - The scope id differs by deployment: the hosted `project_id`, the local
   ledger's `workspace_id`. Keys therefore never transfer between them.
 - The recurrence semantics are shared: a strict-key recurrence appends

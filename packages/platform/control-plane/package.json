@@ -13,6 +13,7 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "node --import ../../../tests/support/hermetic.ts --test tests/unit/*.test.ts",
     "test:integration": "node --import ../../../tests/support/hermetic.ts --test tests/integration/*.test.ts",
+    "test:load": "node --import ../../../tests/support/hermetic.ts tests/load/viewer-load.ts",
     "test:browser": "node --import ../../../tests/support/hermetic.ts --test tests/browser/*.test.ts",
     "test:mobile": "node --test --test-timeout=900000 tests/mobile/*.test.ts"
   },

@@ -20,15 +20,15 @@
 // destructive action lives behind the dialog you already had to open.
 import { api } from "../lib/api.js";
 import { h, mount } from "../lib/dom.js";
-import { renderFrame, page } from "../lib/shell.js";
-import { state, hasRole } from "../lib/state.js";
-import { toast, toastError, confirmModal, formModal, emptyState, errorState, formField } from "../lib/ui.js";
+import { page } from "../lib/shell.js";
+import { hasRole } from "../lib/state.js";
+import { toast, toastError, confirmModal, formModal, errorState, formField } from "../lib/ui.js";
+import { projectPage } from "../lib/project-page.js";
 
 export async function personasPage(projectKey: WebDynamic) {
-  const main = renderFrame({ projectKey, nav: "personas" });
-  const project = state.projectByKey.get(projectKey);
-  if (!project) return mount(main, page({ title: "Personas", body: emptyState("Not found", "No such project.") }));
-  mount(main, page({ title: "Personas", body: h("div.dim", {}, "Loading…") }));
+  const context = projectPage(projectKey, { nav: "personas", title: "Personas" });
+  if (!context) return;
+  const { main, project } = context;
 
   let items;
   try {

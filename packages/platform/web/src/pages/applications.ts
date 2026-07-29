@@ -23,8 +23,9 @@
 import { api } from "../lib/api.js";
 import { h, mount } from "../lib/dom.js";
 import { link, navigate } from "../lib/router.js";
-import { renderFrame, page } from "../lib/shell.js";
-import { state, hasRole } from "../lib/state.js";
+import { page } from "../lib/shell.js";
+import { hasRole } from "../lib/state.js";
+import { projectPage } from "../lib/project-page.js";
 import { toast, toastError, confirmModal, formModal, emptyState, errorState, formField } from "../lib/ui.js";
 import { MASK, maskSecretEnv, literalSecretKeys } from "../lib/secret-mask.js";
 import { parseCookieList, formatCookieList } from "../lib/defaults-form.js";
@@ -34,17 +35,17 @@ import {
   ringUrlProblem, ringConfigProblem, hostOf, KEY_IS_PERMANENT, BUILD_FROM_RUNNER, RUNNER_GUIDE,
   identityRows, withIdentities, identityProblem, sessionRefOptions,
 } from "../lib/rings.js";
+import { authProvidersPanel, secretsPanel } from "./application-authorization.js";
 
 // ---------- the index ----------
 
 export async function applicationsPage(projectKey: WebDynamic) {
-  const main = renderFrame({ projectKey, nav: "applications" });
-  const project = state.projectByKey.get(projectKey);
-  if (!project) return mount(main, page({ title: "Applications", body: emptyState("Not found", "No such project.") }));
+  const context = projectPage(projectKey, { nav: "applications", title: "Applications" });
+  if (!context) return;
+  const { main, project } = context;
 
   const canEdit = hasRole(project.id, "developer");
   const canAdmin = hasRole(project.id, "admin");
-  mount(main, page({ title: "Applications", body: h("div.dim", {}, "Loading…") }));
 
   let applications: WebDynamic = [], suites: WebDynamic = [];
   try {
@@ -146,9 +147,9 @@ function applicationRow(projectKey: WebDynamic, application: WebDynamic, bound: 
 // ---------- one application ----------
 
 export async function applicationPage(projectKey: WebDynamic, applicationKey: WebDynamic) {
-  const main = renderFrame({ projectKey, nav: "applications" });
-  const project = state.projectByKey.get(projectKey);
-  if (!project) return mount(main, page({ title: "Applications", body: emptyState("Not found", "No such project.") }));
+  const context = projectPage(projectKey, { nav: "applications", title: "Applications", loading: false });
+  if (!context) return;
+  const { main, project } = context;
 
   const canEdit = hasRole(project.id, "developer");
   const crumbs = [link(`/p/${projectKey}/applications`, "Applications"), " / ", applicationKey];
@@ -382,7 +383,7 @@ export function applicationModal(projectKey: WebDynamic, existing: WebDynamic[],
         : formField("Key", key,
             "How runner configuration and run evidence address it, for good. Lowercase letters, digits and hyphens."),
       editing
-        ? h("div.dim", { style: "font-size:12.5px;margin:-4px 0 12px" },
+        ? h("div.dim.section-caption", {},
             `${driverLabel(application.driver)}${application.platform ? ` · ${application.platform}` : ""} — the surface an application drives never changes; a web app and an iOS build are two applications.`)
         : h("div", {},
             h("div.field", {}, h("div.field-label", {}, "Surface"), driver, driverHint),
@@ -522,7 +523,7 @@ export function ringModal(application: WebDynamic, ring: WebDynamic, providers: 
             "Lowercase letters, digits and hyphens — “local”, “staging”, “prod”. Every application may have its own, and it can't be changed later."),
       formField("Name", name, "What it reads as in the launch dialog. Defaults to the key."),
       mobile
-        ? h("p.dim", { style: "font-size:12.5px;margin:-4px 0 12px" },
+        ? h("p.dim.section-caption", {},
             "A mobile ring holds no URL, build path, device or Appium endpoint. The runner that claims this ring's work reads all four from its own configuration file, keyed by application and ring key.")
         : formField("URL", url,
             "Where this ring's runs point, read from the claiming runner's network position — a loopback URL means that runner's own machine. Routing labels below are how such a ring reaches the right machine."),
@@ -713,160 +714,4 @@ async function deleteRing(application: WebDynamic, ring: WebDynamic, reload: Web
   catch (err: WebDynamic) { return toastError(err); }
   toast("Ring deleted", `${application.key}/${ring.key}`, "ok");
   reload();
-}
-
-// ---------- auth providers ----------
-
-async function authProvidersPanel(projectKey: WebDynamic, applications: WebDynamic, slot: WebDynamic) {
-  let items: WebDynamic = [];
-  try { ({ items } = await api.cached(`/projects/${projectKey}/auth-providers`)); } catch (err: WebDynamic) { return toastError(err); }
-  const refresh = () => authProvidersPanel(projectKey, applications, slot);
-  const ringName = new Map<string, string>();
-  for (const a of applications) for (const r of a.rings || []) ringName.set(r.id, `${a.key}/${r.key}`);
-  const add = h("button.btn.primary", { onclick: () => authProviderModal(projectKey, applications, null, refresh) }, "+ New provider");
-  const body = items.length
-    ? h("div", { style: "display:flex;flex-direction:column;gap:12px" }, ...items.map((p: WebDynamic) => h("div.card.pad", {},
-        h("div", { style: "display:flex;align-items:center;gap:10px;flex-wrap:wrap" },
-          h("span.id", {}, p.name),
-          h("span.chip", {}, p.kind.replace(/_/g, " ")),
-          h("span.chip", {}, p.ring_id ? ringName.get(p.ring_id) || "one ring" : "project-wide"),
-          p.enabled ? null : h("span.chip", {}, "disabled"),
-          h("div", { style: "flex:1" }),
-          h("button.btn.btn-sm", { "aria-label": `Mint a session for ${p.name}`, onclick: () => mintProvider(p, refresh) }, "Mint"),
-          h("button.btn.btn-sm", { "aria-label": `Sessions minted by ${p.name}`, onclick: () => sessionsModal(p) }, "Sessions"),
-          h("button.btn.btn-sm", { "aria-label": `Edit auth provider ${p.name}`, onclick: () => authProviderModal(projectKey, applications, p, refresh) }, "Edit"),
-          h("button.btn.btn-sm.danger", { "aria-label": `Delete auth provider ${p.name}`, onclick: () => delProvider(p, refresh) }, "Delete"),
-        ),
-        h("div.dim", { style: "margin-top:6px;font-size:12px" },
-          `identities: ${Object.keys(p.identities || {}).join(", ") || "—"} · sessions last ${p.ttl_minutes}m`),
-        h("details.advanced", { style: "margin-top:8px" },
-          h("summary", {}, "Configuration, as stored"),
-          h("pre.mono", { style: "margin-top:8px;background:var(--bg2);padding:10px;border-radius:6px;overflow:auto;font-size:12px" },
-            JSON.stringify(p.config, null, 2))),
-      )))
-    : emptyState("No providers", "A provider mints short-lived sign-in states for the identities a ring names.");
-  mount(slot, h("div", {}, h("div", { style: "display:flex;justify-content:flex-end;margin-bottom:12px" }, add), body));
-}
-
-function authProviderModal(projectKey: WebDynamic, applications: WebDynamic, existing: WebDynamic, refresh: WebDynamic) {
-  const close = formModal(existing ? `Edit ${existing.name}` : "New auth provider", () => {
-    const name = h("input", { type: "text", value: existing?.name || "", placeholder: "sso" });
-    const kind = h("select", {},
-      ...["token_endpoint", "storage_state_secret", "script"].map((k) => h("option", { value: k, selected: existing?.kind === k }, k.replace(/_/g, " "))));
-    // A provider binds at most one ring. Unbound stays project-wide: every ring
-    // may reference it, and its standalone mints ride the board with no labels.
-    const ring = h("select", { "aria-label": "Ring" },
-      h("option", { value: "" }, "Project-wide — every ring may use it"),
-      ...applications.flatMap((a: WebDynamic) => (a.rings || []).map((r: WebDynamic) =>
-        h("option", { value: r.id, selected: existing?.ring_id === r.id || undefined }, `${a.key}/${r.key}`))));
-    const config = h("textarea.code", { style: "min-height:120px" }, JSON.stringify(existing?.config || { url: "http://127.0.0.1:0/session" }, null, 2));
-    const identities = h("textarea.code", { style: "min-height:110px" }, JSON.stringify(existing?.identities || { member: {} }, null, 2));
-    const ttl = h("input", { type: "number", min: "1", max: "1440", value: existing?.ttl_minutes || 60 });
-    const enabled = h("input", { type: "checkbox", checked: existing?.enabled !== false });
-    return h("form", { onsubmit: submit },
-      formField("Name", name, "How a ring's identities refer to it: provider/identity."),
-      formField("Kind", kind),
-      formField("Ring", ring, "Bound: reachable only from that ring, and its mints carry the ring's routing labels. Project-wide: any ring may name it."),
-      formField("Config JSON", config),
-      formField("Identities JSON", identities),
-      formField("TTL minutes", ttl, "How long a minted session is reused before it is minted again."),
-      h("label.check", { style: "margin:6px 0 12px" }, enabled, "Enabled"),
-      h("div.modal-actions", {}, h("button.btn.ghost", { type: "button", onclick: () => close() }, "Cancel"), h("button.btn.primary", { type: "submit" }, "Save")),
-    );
-    async function submit(e: WebDynamic) {
-      e.preventDefault();
-      let cfg, ids;
-      try { cfg = JSON.parse(config.value || "{}"); ids = JSON.parse(identities.value || "{}"); }
-      catch { return toast("JSON isn't valid", "", "err"); }
-      const payload: WebDynamic = {
-        name: name.value.trim(), kind: kind.value, config: cfg, identities: ids,
-        ttl_minutes: Number(ttl.value), enabled: enabled.checked, ring_id: ring.value || null,
-      };
-      try {
-        if (existing) await api.put(`/auth-providers/${existing.id}`, payload);
-        else await api.post(`/projects/${projectKey}/auth-providers`, payload);
-        close(); toast("Auth provider saved", payload.name, "ok"); refresh();
-      } catch (err: WebDynamic) { toastError(err); }
-    }
-  });
-}
-
-async function mintProvider(provider: WebDynamic, refresh: WebDynamic) {
-  try {
-    const out = await api.post(`/auth-providers/${provider.id}/mint`, {});
-    // `script` providers mint on a runner: the 202 body carries the dispatched
-    // claim; the session shows up in the sessions list when the runner lands it.
-    if (out.mint) toast("Mint dispatched", "a runner is minting this session — check Sessions shortly", "ok");
-    else toast("Session minted", `${out.session.identity} until ${new Date(out.session.expires_at).toLocaleTimeString()}`, "ok");
-    refresh();
-  } catch (err: WebDynamic) { toastError(err); }
-}
-
-async function sessionsModal(provider: WebDynamic) {
-  const close = formModal(`${provider.name} sessions`, () => h("div.dim", {}, "Loading…"));
-  const root = document.querySelector("#modal-root .modal");
-  try {
-    const { items } = await api.get(`/auth-providers/${provider.id}/sessions`);
-    mount(root, h("h3", {}, `${provider.name} sessions`),
-      items.length ? h("table.rows", {},
-        h("thead", {}, h("tr", {}, h("th", {}, "Identity"), h("th", {}, "Expires"), h("th", {}, "Minted by"))),
-        h("tbody", {}, ...items.map((s: WebDynamic) => h("tr", {}, h("td", {}, s.identity), h("td.dim", {}, new Date(s.expires_at).toLocaleString()), h("td", {}, s.minted_by_job || "—")))),
-      ) : emptyState("No sessions", "No derived sessions have been minted yet."),
-      h("div.modal-actions", {}, h("button.btn.primary", { onclick: () => close() }, "Close")));
-  } catch (err: WebDynamic) { toastError(err); close(); }
-}
-
-async function delProvider(provider: WebDynamic, refresh: WebDynamic) {
-  if (!(await confirmModal({ title: `Delete ${provider.name}?`, body: "Cached sessions for this provider will be removed.", confirmLabel: "Delete", danger: true }))) return;
-  try { await api.del(`/auth-providers/${provider.id}`); toast("Deleted", provider.name, "ok"); refresh(); } catch (err: WebDynamic) { toastError(err); }
-}
-
-// ---------- secrets ----------
-
-async function secretsPanel(projectKey: WebDynamic, slot: WebDynamic) {
-  let items: WebDynamic = [];
-  try { ({ items } = await api.cached(`/projects/${projectKey}/secrets`)); } catch (err: WebDynamic) { return toastError(err); }
-  const refresh = () => secretsPanel(projectKey, slot);
-  const add = h("button.btn.primary", { onclick: () => secretModal(projectKey, refresh) }, "+ Add secret");
-  const body = h("div", {},
-    h("div.card.pad", { style: "margin-bottom:12px;color:var(--dim);font-size:12.5px" }, "⚠ Secrets are write-only. Values are encrypted at rest and never shown again after you save them."),
-    items.length
-      ? h("div.card", {}, h("table.rows", {},
-          h("thead", {}, h("tr", {}, h("th", {}, "Name"), h("th", {}, "Updated"), h("th", {}))),
-          h("tbody", {}, ...items.map((s: WebDynamic) => h("tr", {},
-            h("td.mono", {}, s.name),
-            h("td.dim", {}, new Date(s.updated_at).toLocaleDateString()),
-            h("td", { style: "text-align:right" },
-              h("button.btn.btn-sm", { style: "margin-right:6px", "aria-label": `Rotate secret ${s.name}`, onclick: () => secretModal(projectKey, refresh, s.name) }, "Rotate"),
-              h("button.btn.btn-sm.danger", { "aria-label": `Delete secret ${s.name}`, onclick: () => delSecret(projectKey, s, refresh) }, "Delete")),
-          ))),
-        ))
-      : emptyState("No secrets", "Add API tokens, storage-state blobs, or cookie values here."),
-  );
-  mount(slot, h("div", {}, h("div", { style: "display:flex;justify-content:flex-end;margin-bottom:12px" }, add), body));
-}
-
-// Saving under an existing name replaces the value (the API is an upsert) —
-// "Rotate" on a row opens this dialog with the name locked in.
-function secretModal(projectKey: WebDynamic, refresh: WebDynamic, rotateName: WebDynamic = null) {
-  const close = formModal(rotateName ? `Rotate ${rotateName}` : "Add secret", () => {
-    const name = h("input", { type: "text", value: rotateName || "", placeholder: "staging-seed-token" });
-    if (rotateName) name.disabled = true;
-    const value = h("textarea", { placeholder: rotateName ? "the new value (the old one is replaced on save)" : "the secret value", style: "min-height:80px" });
-    return h("form", { onsubmit: submit },
-      formField("Name", name, "letters, digits and _ . -"),
-      formField("Value", value),
-      h("div.modal-actions", {}, h("button.btn.ghost", { type: "button", onclick: () => close() }, "Cancel"), h("button.btn.primary", { type: "submit" }, rotateName ? "Rotate" : "Save")),
-    );
-    async function submit(e: WebDynamic) {
-      e.preventDefault();
-      try { await api.post(`/projects/${projectKey}/secrets`, { name: name.value.trim(), value: value.value }); close(); toast("Secret saved", name.value.trim(), "ok"); refresh(); }
-      catch (err: WebDynamic) { toastError(err); }
-    }
-  });
-}
-
-async function delSecret(projectKey: WebDynamic, s: WebDynamic, refresh: WebDynamic) {
-  if (!(await confirmModal({ title: `Delete secret ${s.name}?`, body: "Rings and providers referencing it will fail until it is replaced.", confirmLabel: "Delete", danger: true }))) return;
-  try { await api.del(`/projects/${projectKey}/secrets/${encodeURIComponent(s.name)}`); toast("Deleted", s.name, "ok"); refresh(); } catch (err: WebDynamic) { toastError(err); }
 }

@@ -4,6 +4,7 @@ import { badRequest, conflict, forbidden, notFound, unauthenticated } from "../e
 import { issueRunnerToken } from "../auth/runner-tokens.ts";
 import {
   claimCaseForExecutor,
+  reassertCurrentExecutor,
   requireGroupExecutor,
   requireMintExecutor,
   requireRunOwner,
@@ -489,7 +490,11 @@ export async function uploadBundle(ctx: HostedDynamic) {
   const runner = await requireGroupExecutor(ctx);
   const run = requireRunOwner(runner, await runByDbId(ctx, ctx.params.r));
   const buf = await readRawBody(ctx.req, { limit: BUNDLE_LIMIT });
-  const key = `runs/${run.run_group_id}/${run.id}.ptrun`;
+  // The bytes land under an ATTEMPT-specific key first, so two executors racing
+  // for one run can never overwrite each other's upload; the fenced transaction
+  // below decides which key the artifact row publishes. The same executor's
+  // retry reuses its own key and stays idempotent.
+  const key = `runs/${run.run_group_id}/${run.id}.${runner.executorId}.ptrun`;
   const stored = await ctx.store.put(key, buf);
   const artifact: HostedDynamic = {
     id: ulid(),
@@ -500,21 +505,41 @@ export async function uploadBundle(ctx: HostedDynamic) {
     size: stored.size,
     tier: "full",
   };
-  await ctx.db.query(
-    `INSERT INTO artifacts (id, run_id, kind, key, sha256, size, tier, verified_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, now())
-     ON CONFLICT (run_id, kind, tier)
-       DO UPDATE SET key = EXCLUDED.key, sha256 = EXCLUDED.sha256, size = EXCLUDED.size, verified_at = now()
-     RETURNING *`,
-    [artifact.id, artifact.run_id, artifact.kind, artifact.key, artifact.sha256, artifact.size, artifact.tier],
-  );
-  // The status move is the owner's, and only while the run is still moving: a
-  // late bundle from a stale executor stores nothing and repaints nothing.
-  await ctx.db.query(
-    `UPDATE runs SET status = 'uploading', artifact_tier = 'full', updated_at = now()
-      WHERE id = $1 AND executor_id = $2 AND status IN ('running','uploading')`,
-    [run.id, runner.executorId],
-  );
+  let replacedKey: string | null = null;
+  try {
+    await ctx.db.withTx(async (tx: HostedDynamic) => {
+      // The publish is fenced: a replacement, cancel, or reconcile landing
+      // after the route guard must refuse this artifact rather than let a
+      // stale executor publish over its successor's.
+      await reassertCurrentExecutor(tx, runner);
+      const prior = await tx.query(`SELECT key FROM artifacts WHERE run_id = $1 AND kind = 'bundle' AND tier = 'full'`, [
+        run.id,
+      ]);
+      replacedKey = prior.rows[0]?.key && prior.rows[0].key !== key ? prior.rows[0].key : null;
+      await tx.query(
+        `INSERT INTO artifacts (id, run_id, kind, key, sha256, size, tier, verified_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+         ON CONFLICT (run_id, kind, tier)
+           DO UPDATE SET key = EXCLUDED.key, sha256 = EXCLUDED.sha256, size = EXCLUDED.size, verified_at = now()
+         RETURNING *`,
+        [artifact.id, artifact.run_id, artifact.kind, artifact.key, artifact.sha256, artifact.size, artifact.tier],
+      );
+      // The status move is the owner's, and only while the run is still moving: a
+      // late bundle from a stale executor stores nothing and repaints nothing.
+      await tx.query(
+        `UPDATE runs SET status = 'uploading', artifact_tier = 'full', updated_at = now()
+          WHERE id = $1 AND executor_id = $2 AND status IN ('running','uploading')`,
+        [run.id, runner.executorId],
+      );
+    });
+  } catch (err) {
+    // A refused publish leaves no bytes behind. Best-effort — the retention
+    // orphan sweep is the backstop for a delete that fails here.
+    await ctx.store.delete(key).catch(() => {});
+    throw err;
+  }
+  // The row now points at this upload's key; the bytes it replaced are unowned.
+  if (replacedKey) await ctx.store.delete(replacedKey).catch(() => {});
   return { artifact };
 }
 
@@ -524,6 +549,9 @@ export async function caseStart(ctx: HostedDynamic) {
   const run = requireRunOwner(runner, await runByCoreId(ctx, group.id, ctx.params.run_id));
   let claimed = false;
   await ctx.db.withTx(async (tx: HostedDynamic) => {
+    // The guard's answer is re-asserted at the write: a replacement exchange
+    // landing between them must not let the replaced executor claim this case.
+    await reassertCurrentExecutor(tx, runner);
     // A compare-and-set, never an unconditional stamp: a queued case is claimed
     // for THIS executor, the owner's own retry is idempotent, and nothing can
     // flip a finished run back to `running`.
@@ -566,6 +594,7 @@ export async function caseProgress(ctx: HostedDynamic) {
   const body = await readJsonBody(ctx.req, { limit: PROGRESS_LIMIT });
   const progress = progressView(body);
   await ctx.db.withTx(async (tx: HostedDynamic) => {
+    await reassertCurrentExecutor(tx, runner);
     const updated = await tx.query(
       // `live_activity_at` too: a progress tick is the run showing activity, and
       // the live endpoint's `inactive_ms` is a fact about exactly that.
@@ -632,6 +661,7 @@ export async function caseReport(ctx: HostedDynamic) {
   let stagedKeys: string[] = [];
   let accepted = false;
   await ctx.db.withTx(async (tx: HostedDynamic) => {
+    await reassertCurrentExecutor(tx, runner);
     // The report is a compare-and-set on the run's recorded owner. A story this
     // executor started is finished by that executor and no other; a story it
     // never started (a `case not resolved` or `session mint failed` infra
@@ -745,6 +775,12 @@ export async function complete(ctx: HostedDynamic) {
   const body = await readJsonBody(ctx.req);
   let dispatchMore = false;
   await ctx.db.withTx(async (tx: HostedDynamic) => {
+    // Same widened states as the guard above, so the owner's retried completion
+    // stays idempotent while a replaced executor's cannot conclude B's attempt.
+    await reassertCurrentExecutor(tx, runner, {
+      dispatchStates: [...ACTIVE_DISPATCH_STATES, "concluded"],
+      groupStates: ["queued", "running", "done"],
+    });
     await tx.query(
       `UPDATE executors SET concluded_at = now(), last_report_at = now() WHERE id = $1`,
       [runner.executorId],

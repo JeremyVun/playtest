@@ -57,7 +57,6 @@ async function until(pred: () => Promise<HostedDynamic>, what: string, timeoutMs
     await sleep(100);
   }
   assert.fail(`timed out waiting for ${what}`);
-  return undefined;
 }
 
 /**

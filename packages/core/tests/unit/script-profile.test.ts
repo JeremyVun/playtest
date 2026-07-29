@@ -149,13 +149,13 @@ test("traceFromHar reads HAR 1.2 and the drivers' reduced shape alike", () => {
     },
   ]);
 
-  for (const [label, trace] of [["har 1.2", har12], ["reduced", reduced]]) {
-    assert.equal(trace[0].method, "POST", label);
-    assert.equal(trace[0].path, "/items", label);
-    assert.equal(trace[0].status, 201, label);
-    assert.equal(trace[0].mime, "application/json", label);
-    assert.equal(trace[0].body, '{"id":"it_1"}', label);
-    assert.equal(trace[0].index, 0, label);
+  for (const [label, trace] of [["har 1.2", har12], ["reduced", reduced]] as const) {
+    assert.equal(trace[0]!.method, "POST", label);
+    assert.equal(trace[0]!.path, "/items", label);
+    assert.equal(trace[0]!.status, 201, label);
+    assert.equal(trace[0]!.mime, "application/json", label);
+    assert.equal(trace[0]!.body, '{"id":"it_1"}', label);
+    assert.equal(trace[0]!.index, 0, label);
   }
-  assert.equal(reduced[0].requestBody, '{"name":"a"}');
+  assert.equal(reduced[0]!.requestBody, '{"name":"a"}');
 });

@@ -6,7 +6,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { DummyConfigError, BUILTIN_SUCCESS_KINDS } from "./config.ts";
+import { DummyConfigError } from "./config/errors.ts";
+import { BUILTIN_SUCCESS_KINDS } from "./config/schema.ts";
 import { firstLine } from "./trajectory.ts";
 import type {
   AssertionModule,

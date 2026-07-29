@@ -1,7 +1,11 @@
 # S0 — the agent-authored suite confirmation study (ledger domain)
 
 The study that decides whether Playtest builds the script-authoring product
-(`docs/backlog/api-testing/DESIGN.md` §7, `BUILD_PLAN.md` S0). P1 killed the
+(`docs/backlog/api-testing/DESIGN.md` §7, `BUILD_PLAN.md` S0 — that plan was
+retired on 2026-07-29 with its unbuilt S4/S5 dropped; read it via
+`git log --full-history -- docs/backlog/api-testing/`. Shipped substrate
+behavior lives in `docs/contracts/scripts.md`; current study work is
+`docs/backlog/detection-study/api.md`). P1 killed the
 live-probe thesis and, in passing, produced a surprising winner: an agent given
 only a served OpenAPI document and six plain-language rules wrote an executable
 suite that out-detected the probe at zero marginal cost

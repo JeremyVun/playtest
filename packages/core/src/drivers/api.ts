@@ -640,7 +640,7 @@ export function normalizeApiSnapshot(text: unknown, base: string | null | undefi
   if (nl === -1) return s.trimEnd();
   // A declared status equivalence collapses both sides to one token before the
   // comparison; with no rule the line is untouched (docs/contracts/engine.md#match-rules).
-  const statusLine = rest.slice(0, nl).replace(/^Last response: (\d{3})/, (line, status) => `Last response: ${canonicalStatus(status, match)}`);
+  const statusLine = rest.slice(0, nl).replace(/^Last response: (\d{3})/, (_line, status) => `Last response: ${canonicalStatus(status, match)}`);
   const body = rest.slice(nl + 1).trim();
   let normBody = body;
   try {

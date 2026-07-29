@@ -12,7 +12,7 @@ import http from "node:http";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { withApp, createTarget, loadSuiteDir, REPO_ROOT } from "./helpers.ts";
-import { sleep, startPoolAgent, untilAgent as until } from "./exec-helpers.ts";
+import { startPoolAgent, untilAgent as until } from "./exec-helpers.ts";
 import { writeTar } from "../../src/suites/tar.ts";
 import { reconcileDispatches } from "../../src/dispatch/reconciler.ts";
 import { startInvariantApi } from "../../../../../tests/fixtures/invariant-api/server.ts";

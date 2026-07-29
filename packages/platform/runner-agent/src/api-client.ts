@@ -51,9 +51,14 @@ export class ApiClient {
     return new ApiClient(this.baseUrl, token);
   }
 
-  /** `signal` is the live uploader's abort seam: a case ending must not wait on
-   * a held request (docs/contracts/hosted.md "Live staging routes"). Every other caller omits it. */
-  async json(method: string, path: string, body: RunnerDynamic = undefined, { signal }: RunnerDynamic = {}): Promise<RunnerDynamic> {
+  /**
+   * `Answer` is the caller's statement of what this route answers with — the
+   * owned protocol types in `protocol.ts` — defaulting to the explicit unsafe
+   * boundary for routes whose answers nothing reads. `signal` is the live
+   * uploader's abort seam: a case ending must not wait on a held request
+   * (docs/contracts/hosted.md "Live staging routes"). Every other caller omits it.
+   */
+  async json<Answer = RunnerDynamic, Body = RunnerDynamic>(method: string, path: string, body: Body | undefined = undefined, { signal }: { signal?: AbortSignal } = {}): Promise<Answer> {
     const headers: Record<string, string> = {};
     if (this.token) headers.authorization = `Bearer ${this.token}`;
     if (body !== undefined) headers["content-type"] = "application/json";
@@ -63,7 +68,7 @@ export class ApiClient {
       body: body === undefined ? undefined : JSON.stringify(body),
       signal,
     });
-    if (res.status === 204) return null;
+    if (res.status === 204) return null as Answer; // SAFETY: a 204 route's caller reads nothing from it.
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new RunnerApiError(res.status, data);
     return data;
@@ -77,10 +82,11 @@ export class ApiClient {
     return Buffer.from(await res.arrayBuffer());
   }
 
-  async putBytes(path: string, bytes: RunnerDynamic, contentType = "application/octet-stream", { signal }: RunnerDynamic = {}): Promise<RunnerDynamic> {
+  async putBytes<Answer = RunnerDynamic>(path: string, bytes: Buffer, contentType = "application/octet-stream", { signal }: { signal?: AbortSignal } = {}): Promise<Answer> {
     const headers: Record<string, string> = { "content-type": contentType };
     if (this.token) headers.authorization = `Bearer ${this.token}`;
-    const res = await fetch(`${this.baseUrl}/api/v1${path}`, { method: "PUT", headers, body: bytes, signal });
+    // SAFETY: a Buffer is a Uint8Array; only its ArrayBufferLike generic keeps it out of BodyInit.
+    const res = await fetch(`${this.baseUrl}/api/v1${path}`, { method: "PUT", headers, body: bytes as unknown as BodyInit, signal });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new RunnerApiError(res.status, data);
     return data;

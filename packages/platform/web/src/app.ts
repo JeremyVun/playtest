@@ -123,6 +123,6 @@ async function boot() {
 }
 
 boot().catch((e) => {
-  document.getElementById("app").innerHTML =
-    `<div class="boot">Failed to start: ${String(e.message || e)}</div>`;
+  const app = document.getElementById("app");
+  if (app) app.innerHTML = `<div class="boot">Failed to start: ${String(e.message || e)}</div>`;
 });

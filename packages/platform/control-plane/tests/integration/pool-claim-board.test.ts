@@ -732,7 +732,7 @@ test("pool: a runner that crashes mid-mint resumes it, fencing the bearer it hel
 
 test("pool: a mint exchange nobody can win is terminal, and cleans the claim up", async () => {
   await withApp(async ({ api, base, app }: HostedDynamic) => {
-    const { project, provider, runner } = await mintFixture(api, base, "pool8b");
+    const { provider, runner } = await mintFixture(api, base, "pool8b");
     const minted = await api.post(`/auth-providers/${provider.id}/mint`, { identity: "admin" });
     assert.equal(minted.status, 202, JSON.stringify(minted.body));
     const claimId = minted.body.mint.claim_id;
@@ -776,7 +776,7 @@ test("pool: a mint exchange nobody can win is terminal, and cleans the claim up"
 
 test("pool: a live mint claim whose attempt ended is re-posted, never left pending with no dispatch", async () => {
   await withApp(async ({ api, base, app }: HostedDynamic) => {
-    const { project, provider, runner } = await mintFixture(api, base, "pool8c");
+    const { provider, runner } = await mintFixture(api, base, "pool8c");
     const minted = await api.post(`/auth-providers/${provider.id}/mint`, { identity: "admin" });
     const claimId = minted.body.mint.claim_id;
     const firstDispatch = minted.body.mint.dispatch_id;

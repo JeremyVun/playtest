@@ -18,6 +18,7 @@ import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import http from "node:http";
 import { withApp, createTarget, loadSuiteDir, REPO_ROOT } from "./helpers.ts";
+import { claimer } from "./exec-helpers.ts";
 import { writeTar } from "../../src/suites/tar.ts";
 
 /** A loopback issuer that signs tokens the way GitHub's does. */
@@ -84,27 +85,6 @@ async function setUp(api: HostedDynamic, { key, labels = [] }: HostedDynamic) {
   return { project, suite, application, ring };
 }
 
-/** A scripted runner: nothing but its credential and fetch, dialling out. */
-function runner(base: HostedDynamic, credential: HostedDynamic) {
-  const call = async (method: HostedDynamic, path: HostedDynamic, body?: HostedDynamic) => {
-    const res = await fetch(`${base}/api/v1${path}`, {
-      method,
-      headers: {
-        authorization: `Bearer ${credential}`,
-        ...(body === undefined ? {} : { "content-type": "application/json" }),
-      },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
-    return { status: res.status, body: await res.json().catch(() => null) };
-  };
-  return {
-    poll: (query = "") => call("GET", `/runner/pool/claims${query}`),
-    claim: (dispatch: HostedDynamic) => call("POST", `/runner/pool/claims/${dispatch}`, {}),
-    heartbeat: (dispatch: HostedDynamic) => call("POST", `/runner/pool/claims/${dispatch}/heartbeat`, {}),
-    exchange: (body: HostedDynamic) => call("POST", `/runner/exchange`, body),
-  };
-}
-
 const registerOidc = async (base: HostedDynamic, body: HostedDynamic) => {
   const res = await fetch(`${base}/api/v1/runner/pool/register-oidc`, {
     method: "POST",
@@ -156,7 +136,7 @@ test("ci: an OIDC token registers an ephemeral runner that can take work at once
       assert.equal(entry.detail.source.run_id, "900100");
 
       // And it is a real runner: it claims and exchanges like any other.
-      const ci = runner(base, registered.body.credential);
+      const ci = claimer(base, registered.body.credential);
       const launched = await api.post(`/projects/${project.key}/run-groups`, {
         suite_id: suite.id,
         ring_id: ring.id,
@@ -249,7 +229,7 @@ test("ci: an expired ephemeral credential is refused at poll, claim and exchange
         labels: [label],
       });
       assert.equal(registered.status, 201);
-      const ci = runner(base, registered.body.credential);
+      const ci = claimer(base, registered.body.credential);
 
       const launched = await api.post(`/projects/${project.key}/run-groups`, {
         suite_id: suite.id,
@@ -295,7 +275,7 @@ test("ci: a registration that expires mid-group does not interrupt the group it 
         labels: [label],
       });
       assert.equal(registered.status, 201);
-      const ci = runner(base, registered.body.credential);
+      const ci = claimer(base, registered.body.credential);
 
       const launched = await api.post(`/projects/${project.key}/run-groups`, {
         suite_id: suite.id,
@@ -439,7 +419,7 @@ test("launch: pinned labels override the ring's, are recorded, and survive a ret
       name: "staging-box",
       labels: ["staging-box"],
     })).body;
-    const wrong = runner(base, standing.credential);
+    const wrong = claimer(base, standing.credential);
     assert.deepEqual((await wrong.poll()).body.offers, [], "a job pinned elsewhere is not even offered");
     const dispatchId = group.body.placement.dispatch_id;
     const refused = await wrong.claim(dispatchId);
@@ -451,7 +431,7 @@ test("launch: pinned labels override the ring's, are recorded, and survive a ret
       name: "ci-42",
       labels: ["ci-run-42"],
     })).body;
-    const mine = runner(base, ci.credential);
+    const mine = claimer(base, ci.credential);
     assert.equal((await mine.poll()).body.offers[0].dispatch_id, dispatchId);
 
     // A retry of a pinned group is placed the same way, even after the ring's

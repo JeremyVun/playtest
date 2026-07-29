@@ -7,21 +7,20 @@
 import { api } from "../lib/api.js";
 import { h, mount } from "../lib/dom.js";
 import { link } from "../lib/router.js";
-import { renderFrame, page } from "../lib/shell.js";
-import { state } from "../lib/state.js";
+import { page } from "../lib/shell.js";
 import { statusChip, emptyState, errorState, sparkline } from "../lib/ui.js";
 import { modeLabel, chipStatus, fmtMs, signedMs, fmtCost, ago } from "../lib/labels.js";
 import { didNotRunLabel } from "../lib/vocab.js";
 import { movement as computeMovement } from "@playtest/core/browser/movement";
+import { projectPage } from "../lib/project-page.js";
 
 /** Name a link for assistive tech; the visible text stays as it is. */
 const labelled = (el: WebDynamic, name: WebDynamic) => { el.setAttribute("aria-label", name); return el; };
 
 export async function storyHistoryPage(projectKey: WebDynamic, slug: WebDynamic, storyId: WebDynamic) {
-  const main = renderFrame({ projectKey, nav: "suites" });
-  const project = state.projectByKey.get(projectKey);
-  if (!project) return mount(main, page({ title: storyId, body: emptyState("Not found", "No such project.") }));
-  mount(main, page({ title: storyId, body: h("div.dim", {}, "Loading…") }));
+  const context = projectPage(projectKey, { nav: "suites", title: storyId });
+  if (!context) return;
+  const { main, project } = context;
 
   let history, runRows = [];
   try {

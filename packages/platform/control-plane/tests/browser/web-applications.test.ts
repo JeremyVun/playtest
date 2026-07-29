@@ -21,7 +21,7 @@ import { chromium } from "playwright";
 import { createTarget, withApp } from "../integration/helpers.ts";
 
 /** One browser, one watched page — every test here wants exactly this. */
-async function withPage(base: string, fn: HostedDynamic) {
+async function withPage(fn: HostedDynamic) {
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
@@ -48,7 +48,7 @@ test("an application's page reads its identity, its rings and what is bound to i
     });
     await api.post(`/projects/${project.key}/suites`, { slug: "smoke", name: "Smoke suite" });
 
-    await withPage(base, async (page: HostedDynamic) => {
+    await withPage(async (page: HostedDynamic) => {
       await page.goto(`${base}/p/${project.key}/applications`);
       await page.getByRole("heading", { name: "Applications", exact: true }).waitFor();
 
@@ -89,7 +89,7 @@ test("a ring's sign-in identities are edited as rows, and survive save and reope
     const project = (await api.post("/projects", { key: "checkout", name: "Checkout" })).body;
     const { application } = await createTarget(api, project, { key: "checkout-web", name: "Checkout Web" });
 
-    await withPage(base, async (page: HostedDynamic) => {
+    await withPage(async (page: HostedDynamic) => {
       await page.goto(`${base}/p/${project.key}/applications/${application.key}`);
       await page.getByRole("heading", { name: "Checkout Web", exact: true }).waitFor();
 
@@ -170,7 +170,7 @@ test("a mobile application says the runner supplies the build, and its ring hold
       platform: "ios",
     });
 
-    await withPage(base, async (page: HostedDynamic) => {
+    await withPage(async (page: HostedDynamic) => {
       await page.goto(`${base}/p/${project.key}/applications/${application.key}`);
       await page.getByRole("heading", { name: "Todo iOS", exact: true }).waitFor();
       await page.locator(".identity-card").getByText("iOS", { exact: true }).waitFor();

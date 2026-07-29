@@ -4,6 +4,10 @@ Implements [`DESIGN.md`](./DESIGN.md). This is a prerequisite for the findings
 intake work because hosted and local findings should not be built on different
 database assumptions.
 
+The migration-era neutral fixture and frozen Postgres projections referenced
+below were retired after SQLite became the sole implementation. Their durable
+coverage now lives in `tests/unit/sqlite-storage.test.ts`.
+
 Read first:
 
 - `CLAUDE.md`

@@ -3,6 +3,7 @@ export {
   BundleProvider,
   coreBundleKeepPath,
   isBundlePath,
+  isStepEntryPath,
   isTextualMediaType,
   rewriteBundle,
   writeBundle,

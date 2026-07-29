@@ -246,7 +246,6 @@ export async function waitForGroupDone(api: HostedDynamic, groupId: HostedDynami
   assert.fail(
     `run group ${groupId} did not reach "done" within ${timeoutMs}ms (last status: ${JSON.stringify(last?.body?.status)})\n${debug}`,
   );
-  return undefined;
 }
 
 export function bundleFor(storeRoot: HostedDynamic, run: HostedDynamic) {

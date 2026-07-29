@@ -146,7 +146,7 @@ async function setUpMobileProject(
 
 // ------------------------------------------------------------------- gate 4
 
-test("gate 4: an unbound runner skips a mobile offer locally, and a bound one claims the same offer", async () => {
+test("an unbound runner skips a mobile offer locally, and a bound one claims the same offer", async () => {
   const disk = runnerDisk("gate4");
   const appium = await startAppiumStub();
   let unbound: HostedDynamic = null;
@@ -237,7 +237,7 @@ test("gate 4: an unbound runner skips a mobile offer locally, and a bound one cl
 
 // ------------------------------------------------------------------ gate 10
 
-test("gate 10: a post-claim mobile preflight failure is one actionable infra error, not a driver stack", async () => {
+test("a post-claim mobile preflight failure is one actionable infra error, not a driver stack", async () => {
   const disk = runnerDisk("gate10");
   const appium = await startAppiumStub();
   let agent: HostedDynamic = null;
@@ -325,7 +325,7 @@ test("gate 10: a post-claim mobile preflight failure is one actionable infra err
  * through the public API, an offer it took off the board, a claim it won, and a
  * bearer it was issued for that dispatch.
  */
-test("gate 9: no platform-managed record or response carries a mobile path, device id, or Appium endpoint", async () => {
+test("no platform-managed record or response carries a mobile path, device id, or Appium endpoint", async () => {
   const disk = runnerDisk("gate9");
   const appium = await startAppiumStub();
   try {
@@ -477,7 +477,7 @@ test("gate 9: no platform-managed record or response carries a mobile path, devi
  * against an Appium stub that answers `/status` and nothing else, and the sweep
  * runs over what that produced.
  */
-test("gate 9: a real session-boundary failure is scrubbed by the runner, not by the platform", async () => {
+test("a real session-boundary failure is scrubbed by the runner, not by the platform", async () => {
   const disk = runnerDisk("gate9session");
   const appium = await startAppiumStub();
   let agent: HostedDynamic = null;

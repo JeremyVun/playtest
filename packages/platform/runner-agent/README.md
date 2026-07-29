@@ -28,12 +28,14 @@ and cleanup.
 
 ## Execution modes
 
-The agent supports two isolation modes:
+The agent supports two isolation modes. Both run each case in a supervised
+child process speaking the one-case protocol
+(`src/case-runner-child.ts`); they differ in where that child lives:
 
-- `process` runs cases inside the runner process. It is used by local
-  development and tests.
-- `container` runs each case in an ephemeral container from the configured job
-  image. Persistent hosted runners use this mode.
+- `process` spawns the child directly on the runner's machine. It is used by
+  local development, tests, and mobile groups.
+- `container` spawns the child in an ephemeral container from the configured
+  job image. Persistent hosted runners use this mode.
 
 The pool loop also serves authentication-mint claims. A mint provider receives
 only its approved inputs in a clean workspace and must return Playwright

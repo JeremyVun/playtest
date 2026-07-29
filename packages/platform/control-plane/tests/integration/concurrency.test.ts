@@ -22,7 +22,7 @@ async function race(a: HostedDynamic, b: HostedDynamic) {
 test("concurrent candidate resolutions produce exactly one winner", async () => {
   await withApp(async ({ app, api }: HostedDynamic) => {
     const project = (await api.post("/projects", { key: "conc1", name: "Conc" })).body;
-    const { suite, application, ring, snapshot } = await seedSuite(app, api, project);
+    const { suite, application, ring, snapshot } = await seedSuite(api, project);
     const { run } = await seedRun(app, { project, suite, application, ring, snapshot });
     const candidate = await seedCandidate(app, { project, suite, run });
 
@@ -51,7 +51,7 @@ test("concurrent candidate resolutions produce exactly one winner", async () => 
 test("concurrent finding transitions produce exactly one winner", async () => {
   await withApp(async ({ app, api }: HostedDynamic) => {
     const project = (await api.post("/projects", { key: "conc2", name: "Conc 2" })).body;
-    const { suite, application, ring, snapshot } = await seedSuite(app, api, project);
+    const { suite, application, ring, snapshot } = await seedSuite(api, project);
     const a = await seedFinding(app, project, { suite, application, ring, snapshot }, "widget 1 vanished");
     const b = await seedFinding(app, project, { suite, application, ring, snapshot }, "sidebar 1 collapsed", "sidebar");
 
@@ -86,7 +86,7 @@ test("concurrent finding transitions produce exactly one winner", async () => {
 test("concurrent evidence reports keep one finding and one evidence row per report", async () => {
   await withApp(async ({ app, api }: HostedDynamic) => {
     const project = (await api.post("/projects", { key: "conc3", name: "Conc 3" })).body;
-    const { suite, application, ring, snapshot } = await seedSuite(app, api, project);
+    const { suite, application, ring, snapshot } = await seedSuite(api, project);
     const runs: HostedDynamic[] = [];
     for (let i = 0; i < 4; i += 1) runs.push((await seedRun(app, { project, suite, application, ring, snapshot })).run);
 
@@ -148,7 +148,7 @@ test("concurrent suite commits serialize into distinct, monotonic snapshot seqs"
 
 // ------------------------------------------------------------------ seeding
 
-async function seedSuite(app: HostedDynamic, api: HostedDynamic, project: HostedDynamic) {
+async function seedSuite(api: HostedDynamic, project: HostedDynamic) {
   // The application and its ring come first: a suite binds to an application at
   // creation, and a run group records both.
   const { application, ring } = await createTarget(api, project, { ringKey: "staging", baseUrl: "http://127.0.0.1" });

@@ -10,6 +10,7 @@
 // report are untouched by it, and no live failure may change a run's status,
 // ordering, or sealed artifacts.
 import { createHash } from "node:crypto";
+import { isStepEntryPath } from "@playtest/core/artifacts";
 import { ulid } from "../ulid.ts";
 import type { Db, DbRow, Tx } from "../db.ts";
 
@@ -69,21 +70,20 @@ export const LIVE_MAX_WAIT_S = 25;
 
 // ---------- entry paths ----------
 
-// Step artifacts only (docs/contracts/artifacts.md): steps/NNN.png plus the
-// profile-dependent siblings steps/NNN.a11y.txt, steps/NNN.mhtml and
-// steps/NNN.pw-a11y.txt. manifest.json and trajectory.jsonl are virtual entries
-// served from rows, and end-of-run artifacts (video, HAR, grade) stay
-// end-of-run, so nothing else is stageable.
-const ENTRY_SHAPE = /^steps\/[0-9A-Za-z][0-9A-Za-z._-]{0,119}$/;
-
 /**
- * Is `entry` a stageable step-artifact path? Traversal, absolute paths, nested
- * directories and dot-files all fail the shape rather than being sanitized —
- * a refusal the uploader can act on beats a silently rewritten key.
+ * Is `entry` a stageable step-artifact path? Step artifacts only
+ * (docs/contracts/artifacts.md): steps/NNN.png plus the profile-dependent
+ * siblings steps/NNN.a11y.txt, steps/NNN.mhtml and steps/NNN.pw-a11y.txt.
+ * manifest.json and trajectory.jsonl are virtual entries served from rows, and
+ * end-of-run artifacts (video, HAR, grade) stay end-of-run, so nothing else is
+ * stageable. The shape itself is core's shared vocabulary
+ * (`isStepEntryPath`), so this ingest and the runner's uploader cannot drift:
+ * traversal, absolute paths, nested directories and dot-files all fail it
+ * rather than being sanitized — a refusal the uploader can act on beats a
+ * silently rewritten key.
  */
 export function isStageableEntry(entry: string): boolean {
-  if (typeof entry !== "string" || !ENTRY_SHAPE.test(entry)) return false;
-  return !entry.split("/").some((seg) => seg === "." || seg === "..");
+  return isStepEntryPath(entry);
 }
 
 /**

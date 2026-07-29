@@ -22,6 +22,8 @@ studies/archive/hillclimb-2026-07/report/rounds/
 tools/ux-lab/.data/
 tools/ux-lab/out/
 tools/ux-lab/out-*/
+# Codebase map: generated local reports
+.codebase-map/
 # SwiftUI simulator fixture: the assembled .app bundle, rebuilt by its build.sh
 tests/fixtures/todo-app-swiftui/build/
 

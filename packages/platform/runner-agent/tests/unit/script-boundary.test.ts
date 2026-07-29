@@ -92,7 +92,7 @@ test("ambient fetch, node:http, node:net, and every other socket route are block
     "data: module",
     "https: module",
   ]);
-  assert.equal(result.report.checks[0].pass, true, `the script found no way out: ${result.report.checks[0].observed}`);
+  assert.equal(result.report.checks[0]!.pass, true, `the script found no way out: ${result.report.checks[0]!.observed}`);
   assert.equal(result.exitCode, 0, `and the run is otherwise sound: ${JSON.stringify(result.report.soundness)}`);
   assert.deepEqual(
     fetchCalls.filter((url: string) => !url.startsWith(api.url)),
@@ -121,7 +121,7 @@ test("process.env is empty, and child_process, fs, module, vm, and dependencies 
     "import an absolute path",
     "import a dependency",
   ]);
-  assert.equal(result.report.checks[0].pass, true);
+  assert.equal(result.report.checks[0]!.pass, true);
 });
 
 test("an alternate origin, a DNS name, and even an allow-listed neighbour get no credential", async () => {
@@ -212,6 +212,6 @@ test("the credential cannot be exfiltrated through a URL, a body, a log, or a th
   }
   assert.match(result.stdout, /LEAK log .*\[secret:API_TOKEN\]/, "the log line carries the placeholder, not the value");
   const thrown = result.report.defects.find((defect: LegacyTestValue) => defect.kind === "threw");
-  assert.match(thrown.message, /LEAK throw \[secret:API_TOKEN\]/, "so does the thrown exception");
+  assert.match(thrown!.message, /LEAK throw \[secret:API_TOKEN\]/, "so does the thrown exception");
   assert.equal(result.exitCode, 2);
 });

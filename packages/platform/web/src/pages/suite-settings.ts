@@ -13,11 +13,11 @@
 // discipline): the form edits the parsed document IN PLACE, so comments, key
 // order and unknown keys survive untouched.
 import { api } from "../lib/api.js";
-import { h, mount, clear } from "../lib/dom.js";
+import { h, mount } from "../lib/dom.js";
 import { link, navigate } from "../lib/router.js";
-import { renderFrame, page } from "../lib/shell.js";
-import { state, hasRole } from "../lib/state.js";
-import { toast, toastError, confirmModal, emptyState, errorState, formField, enhanceSelect, saveBar } from "../lib/ui.js";
+import { page } from "../lib/shell.js";
+import { hasRole } from "../lib/state.js";
+import { toast, toastError, confirmModal, emptyState, errorState, formField, enhanceSelect } from "../lib/ui.js";
 import { parseYaml } from "../lib/caseform.js";
 import {
   setAppKey, setViewportDimension, setLimitKey, setParallelValue, setModelKey,
@@ -26,13 +26,15 @@ import {
 } from "../lib/defaults-form.js";
 import { modelField } from "../lib/model-select.js";
 import { getSuiteBySlug, exportSuite, importSuite } from "./suite.js";
+import { projectPage } from "../lib/project-page.js";
+import { sourceEditor } from "../lib/source-editor.js";
 
 const DEFAULTS_PATH = "playtest.yaml";
 
 export async function suiteSettingsPage(projectKey: WebDynamic, slug: WebDynamic) {
-  const main = renderFrame({ projectKey, nav: "suites" });
-  const project = state.projectByKey.get(projectKey);
-  mount(main, page({ title: "Suite settings", body: h("div.dim", {}, "Loading…") }));
+  const context = projectPage(projectKey, { nav: "suites", title: "Suite settings" });
+  if (!context) return;
+  const { main, project } = context;
 
   let suite: WebDynamic, st;
   try {
@@ -79,19 +81,21 @@ export async function suiteSettingsPage(projectKey: WebDynamic, slug: WebDynamic
 
 function render(main: WebDynamic, st: WebDynamic) {
   const { projectKey, slug, suite } = st;
-  const editorSlot = h("div.editor-slot");
   const checksSlot = h("div", {}, h("div.dim", {}, "…"));
   // The one pending decision lives in a sticky bar at the bottom of the
   // viewport, present only while the draft differs from the saved bytes — a
   // clean page shows no Save/Discard at all.
-  const bar = saveBar({ onSave: save, onDiscard: discard });
-  let checksOk = true;
-  const paintBar = () => bar.set({ dirty: st.raw !== st.savedRaw, invalid: !checksOk });
-
-  const toggle = h("div.seg", {},
-    h("button", { class: st.view === "form" ? "on" : "", onclick: () => switchView("form") }, "Form"),
-    h("button", { class: st.view === "yaml" ? "on" : "", onclick: () => switchView("yaml") }, "YAML"),
-  );
+  const source = sourceEditor({
+    state: st,
+    parse: parseYaml,
+    renderForm: (defaults: WebDynamic) => buildForm(defaults),
+    rerender: () => render(main, st),
+    save,
+    check: runChecks,
+    yamlLabel: DEFAULTS_PATH,
+    discardBody: "These settings go back to their last saved version. Nothing else is affected.",
+  });
+  const { bar, editorSlot, toggle, paintEditor, scheduleChecks } = source;
 
   const side = h("div.side", {},
     h("div.card.pad", {}, h("div.label", { style: "margin-bottom:8px" }, "Checks"), checksSlot),
@@ -122,38 +126,6 @@ function render(main: WebDynamic, st: WebDynamic) {
     ],
     body: h("div", {}, h("div.editor", {}, editorSlot, side), bar.el),
   }));
-
-  let debounce: WebDynamic;
-  const scheduleChecks = () => { paintBar(); clearTimeout(debounce); debounce = setTimeout(runChecks, 350); };
-
-  function switchView(view: WebDynamic) {
-    if (view === st.view) return;
-    st.view = view;
-    render(main, st);
-  }
-
-  function paintEditor() {
-    clear(editorSlot);
-    if (st.view === "yaml") {
-      editorSlot.append(h("textarea.code", {
-        spellcheck: "false", value: st.raw,
-        "aria-label": "playtest.yaml",
-        oninput: (e: WebDynamic) => { st.raw = e.target.value; scheduleChecks(); },
-      }));
-      return;
-    }
-    let defaults;
-    try { defaults = parseYaml(st.raw); }
-    catch (e: WebDynamic) {
-      editorSlot.append(h("div.card.pad", {},
-        h("div.status.fail", {}, h("span.glyph", {}, "✗"), "This file isn't valid YAML"),
-        h("p.dim", { style: "margin-top:6px" }, String(e.message || e)),
-        h("button.btn", { style: "margin-top:10px", onclick: () => switchView("yaml") }, "Edit in YAML"),
-      ));
-      return;
-    }
-    editorSlot.append(buildForm(defaults));
-  }
 
   /** Write one app.* key into the source document and repaint. */
   function setKey(key: WebDynamic, value: WebDynamic) {
@@ -398,7 +370,7 @@ function render(main: WebDynamic, st: WebDynamic) {
       h("div.label", { style: "margin-bottom:6px" }, "Everything else"),
       h("p.dim", { style: "margin-bottom:10px" },
         "Sign-in states, settle windows and report settings live in the same file. The form covers common settings; the YAML view edits all of it."),
-      h("button.btn", { onclick: () => switchView("yaml") }, "Edit YAML"),
+      h("button.btn", { onclick: () => source.switchView("yaml") }, "Edit YAML"),
     );
 
     return h("div", {}, appCard, browserDisplayCard, limitsCard, concurrencyCard, modelsCard, ringsCard(app, driver), restCard);
@@ -498,33 +470,21 @@ function render(main: WebDynamic, st: WebDynamic) {
     const changes: WebDynamic = [{ path: DEFAULTS_PATH, content: st.raw }];
     let res;
     try { res = await api.post(`/suites/${st.suite.id}/validate`, { changes }); }
-    catch { return mount(checksSlot, h("div.dim", {}, "couldn't run checks")); }
-    checksOk = res.ok;
-    paintBar();
+    catch {
+      mount(checksSlot, h("div.dim", {}, "couldn't run checks"));
+      return undefined;
+    }
     if (res.ok) {
       const n = res.cases?.length ?? 0;
-      return mount(checksSlot, h("ul.check-list", {},
+      mount(checksSlot, h("ul.check-list", {},
         h("li.check-item.ok", {}, h("span.g", {}, "✓"), h("span.msg", {},
           n ? `valid — ${n} ${n === 1 ? "story" : "stories"} resolve` : "valid")),
       ));
+      return true;
     }
     mount(checksSlot, h("ul.check-list", {}, ...(res.errors || []).map((e: WebDynamic) =>
       h("li.check-item.err", {}, h("span.g", {}, "✗"), h("span.msg", {}, e.path ? `${e.path}: ${e.message}` : e.message)))));
-  }
-
-  /** Put the draft back to the last saved bytes, in place — no navigation. */
-  async function discard() {
-    const ok = await confirmModal({
-      title: "Discard your changes?",
-      body: "These settings go back to their last saved version. Nothing else is affected.",
-      confirmLabel: "Discard changes",
-      cancelLabel: "Keep editing",
-      danger: true,
-    });
-    if (!ok) return;
-    st.raw = st.savedRaw;
-    paintEditor();
-    scheduleChecks();
+    return false;
   }
 
   async function save() {
@@ -540,7 +500,7 @@ function render(main: WebDynamic, st: WebDynamic) {
       toast("Settings saved", `version #${res.snapshot.seq}`, "ok");
       navigate(`/p/${projectKey}/suites/${slug}`);
     } catch (err: WebDynamic) {
-      paintBar();
+      source.paintBar();
       if (err.status === 409) {
         const reload = await confirmModal({
           title: "Someone else changed this suite",
@@ -555,9 +515,7 @@ function render(main: WebDynamic, st: WebDynamic) {
     }
   }
 
-  paintEditor();
-  paintBar();
-  runChecks();
+  source.initialize();
 }
 
 /**

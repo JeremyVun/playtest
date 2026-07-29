@@ -4,15 +4,16 @@
 import { api } from "../lib/api.js";
 import { h, mount } from "../lib/dom.js";
 import { link } from "../lib/router.js";
-import { renderFrame, page } from "../lib/shell.js";
-import { state, hasRole } from "../lib/state.js";
+import { page } from "../lib/shell.js";
+import { hasRole } from "../lib/state.js";
 import { toast, toastError, emptyState, errorState, confirmModal } from "../lib/ui.js";
 import { getSuiteBySlug } from "./suite.js";
+import { projectPage } from "../lib/project-page.js";
 
 export async function historyPage(projectKey: WebDynamic, slug: WebDynamic) {
-  const main = renderFrame({ projectKey, nav: "suites" });
-  const project = state.projectByKey.get(projectKey);
-  mount(main, page({ title: "Versions", body: h("div.dim", {}, "Loading…") }));
+  const context = projectPage(projectKey, { nav: "suites", title: "Versions" });
+  if (!context) return;
+  const { main, project } = context;
 
   let suite, snaps;
   try {

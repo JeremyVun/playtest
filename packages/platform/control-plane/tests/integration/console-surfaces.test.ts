@@ -14,26 +14,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { withApp, createTarget, loadSuiteDir, REPO_ROOT } from "./helpers.ts";
+import { claimer } from "./exec-helpers.ts";
 import { writeTar } from "../../src/suites/tar.ts";
-
-/** A scripted self-hosted runner: nothing but its credential and fetch. */
-function claimer(base: HostedDynamic, credential: HostedDynamic) {
-  const call = async (method: HostedDynamic, path: HostedDynamic, body?: HostedDynamic) => {
-    const res = await fetch(`${base}/api/v1${path}`, {
-      method,
-      headers: {
-        authorization: `Bearer ${credential}`,
-        ...(body === undefined ? {} : { "content-type": "application/json" }),
-      },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
-    return { status: res.status, body: await res.json().catch(() => null) };
-  };
-  return {
-    poll: (query = "") => call("GET", `/runner/pool/claims${query}`),
-    claim: (dispatchId: HostedDynamic) => call("POST", `/runner/pool/claims/${dispatchId}`, {}),
-  };
-}
 
 const feedSince = async (api: HostedDynamic, key: HostedDynamic, cursor: HostedDynamic, types = "runner.status") =>
   (await api.get(`/projects/${key}/events/feed?after=${cursor}&types=${types}`)).body;

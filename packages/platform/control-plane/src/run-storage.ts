@@ -1,32 +1,50 @@
 import { BundleProvider } from "@playtest/core/artifacts";
 
-const CACHE_MAX_BYTES = Number(process.env.PLAYTEST_VIEW_CACHE_MB || 256) * 1024 * 1024;
-const bundleCache = new Map<string, { provider: BundleProvider; size: number }>();
-let bundleCacheBytes = 0;
+/**
+ * App-owned LRU over decoded run bundles. One instance per app (`createApp`),
+ * budgeted by the validated config (PLAYTEST_VIEW_CACHE_MB) and cleared on
+ * `app.close()` — never a module-level cache, so two apps in one process (tests,
+ * embedders) each keep their own budget and release it with the app.
+ */
+export class RunBundleCache {
+  #maxBytes: number;
+  #entries = new Map<string, { provider: BundleProvider; size: number }>();
+  #bytes = 0;
 
-async function cachedProvider(sha256: string, load: () => Promise<Buffer>) {
-  const hit = bundleCache.get(sha256);
-  if (hit) {
-    bundleCache.delete(sha256);
-    bundleCache.set(sha256, hit);
-    return hit.provider;
+  constructor({ maxBytes }: { maxBytes: number }) {
+    this.#maxBytes = maxBytes;
   }
 
-  const buffer = await load();
-  const raced = bundleCache.get(sha256);
-  if (raced) return raced.provider;
+  async provider(sha256: string, load: () => Promise<Buffer>): Promise<BundleProvider> {
+    const hit = this.#entries.get(sha256);
+    if (hit) {
+      this.#entries.delete(sha256);
+      this.#entries.set(sha256, hit);
+      return hit.provider;
+    }
 
-  const readRange = (start: number, end: number) => buffer.subarray(start, end + 1);
-  readRange.size = buffer.length;
-  const provider = new BundleProvider({ readRange });
-  bundleCache.set(sha256, { provider, size: buffer.length });
-  bundleCacheBytes += buffer.length;
-  for (const [key, entry] of bundleCache) {
-    if (bundleCacheBytes <= CACHE_MAX_BYTES || bundleCache.size === 1) break;
-    bundleCache.delete(key);
-    bundleCacheBytes -= entry.size;
+    const buffer = await load();
+    const raced = this.#entries.get(sha256);
+    if (raced) return raced.provider;
+
+    const readRange = Object.assign((start: number, end: number) => buffer.subarray(start, end + 1), {
+      size: buffer.length,
+    });
+    const provider = new BundleProvider({ readRange });
+    this.#entries.set(sha256, { provider, size: buffer.length });
+    this.#bytes += buffer.length;
+    for (const [key, entry] of this.#entries) {
+      if (this.#bytes <= this.#maxBytes || this.#entries.size === 1) break;
+      this.#entries.delete(key);
+      this.#bytes -= entry.size;
+    }
+    return provider;
   }
-  return provider;
+
+  clear(): void {
+    this.#entries.clear();
+    this.#bytes = 0;
+  }
 }
 
 /**
@@ -40,6 +58,6 @@ export async function loadRunBundle(ctx: HostedDynamic, runDbId: string) {
   );
   if (!rows[0]) return null;
   const artifact = rows[0];
-  const provider = await cachedProvider(artifact.sha256, () => ctx.store.get(artifact.key));
+  const provider = await ctx.runBundleCache.provider(artifact.sha256, () => ctx.store.get(artifact.key));
   return { provider, artifact };
 }

@@ -18,11 +18,11 @@
 //
 // Every mutation runs inside `ledger.tx` (BEGIN IMMEDIATE), so two Playtest
 // processes writing the same ledger serialize rather than interleave.
-import crypto from "node:crypto";
 import { DummyConfigError } from "../config.ts";
+import { sha256Hex } from "../hash.ts";
 import { ulid } from "../ulid.ts";
 import { nowIso } from "./ledger.ts";
-import { CATEGORIES, VERSIONS, deriveCandidateKeys } from "./keys.ts";
+import { CATEGORIES, deriveCandidateKeys } from "./keys.ts";
 import type { Ledger, LedgerRow } from "./ledger.ts";
 
 type DynamicValue = any; // SAFETY: intake spans validated model claims, persisted SQLite rows, and legacy evidence records
@@ -203,7 +203,7 @@ function promoteWithinTx(ledger: Ledger, { candidateId, findingId = null, title 
   } else {
     const claim = parse(c.claim, {});
     // Identity is opaque; the fingerprint is a lookup key only.
-    const fingerprint = c.strict_key || sha256(`${c.workspace_id}bug_candidate${c.id}`);
+    const fingerprint = c.strict_key || sha256Hex(`${c.workspace_id}bug_candidate${c.id}`);
     const id = ulid();
     const ts = nowIso();
     ledger.run(
@@ -681,10 +681,6 @@ export function liveFinding(ledger: Ledger, id: string): LedgerRow | null {
     row = ledger.get("SELECT * FROM findings WHERE id = ?", [row.merged_into]);
   }
   return row ?? null;
-}
-
-function sha256(s: string): string {
-  return crypto.createHash("sha256").update(s).digest("hex");
 }
 
 function clampTitle(s: unknown): string {

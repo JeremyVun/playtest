@@ -6,11 +6,12 @@
 import { api } from "../lib/api.js";
 import { h, mount } from "../lib/dom.js";
 import { link, onPageLeave } from "../lib/router.js";
-import { renderFrame, page, refreshReviewBadge } from "../lib/shell.js";
-import { state, hasRole } from "../lib/state.js";
+import { page } from "../lib/shell.js";
+import { hasRole } from "../lib/state.js";
 import { statusChip, toast, toastError, emptyState, errorState, confirmModal } from "../lib/ui.js";
 import { ago, clamp } from "../lib/labels.js";
 import { subscribeFeed } from "../lib/feed.js";
+import { projectPage } from "../lib/project-page.js";
 
 let live: WebDynamic = null;
 function stopLive() {
@@ -23,10 +24,9 @@ function stopLive() {
 
 export async function reviewPage(projectKey: WebDynamic) {
   stopLive();
-  const main = renderFrame({ projectKey, nav: "review" });
-  const project = state.projectByKey.get(projectKey);
-  if (!project) return mount(main, page({ title: "Changed stories", body: emptyState("Not found", "No such project.") }));
-  mount(main, page({ title: "Changed stories", body: h("div.dim", {}, "Loading…") }));
+  const context = projectPage(projectKey, { nav: "review", title: "Changed stories" });
+  if (!context) return;
+  const { main, project } = context;
 
   const ctl: WebDynamic = {
     items: [],
@@ -124,7 +124,10 @@ export async function reviewPage(projectKey: WebDynamic) {
     }));
     if (focused) {
       const el = document.getElementById(focused);
-      if (el) { el.focus(); el.setSelectionRange?.(el.value.length, el.value.length); }
+      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+        el.focus();
+        el.setSelectionRange(el.value.length, el.value.length);
+      }
     }
   }
 
@@ -277,7 +280,6 @@ export async function reviewPage(projectKey: WebDynamic) {
       toast(action === "accept" ? "New path accepted" : "New path rejected", c.case_id, "ok");
       notes.delete(c.id);
       ctl.open.delete(c.id);
-      refreshReviewBadge();
       await load();
     } catch (err: WebDynamic) {
       if (err.status === 409) {

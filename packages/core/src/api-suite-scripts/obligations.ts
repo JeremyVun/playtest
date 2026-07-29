@@ -1,9 +1,17 @@
-import type { DynamicValue } from "./types.ts";
+import type {
+  AccountedObligation,
+  DynamicValue,
+  ObligationAccounting,
+  ObligationEntry,
+  ObligationSource,
+  ObligationStatus,
+  ScriptGateCheck,
+} from "./types.ts";
 
 // The coverage-obligation manifest and its accounting
 // (docs/contracts/scripts.md#coverage-obligation-manifest).
 //
-// N5 in docs/backlog/api-testing/DESIGN.md: a suite terminates on SOUNDNESS, and
+// A suite terminates on SOUNDNESS, and
 // soundness includes SUFFICIENCY. "Every authored check was exercised" certifies
 // nothing if the suite authored two checks; what makes the claim honest is a
 // manifest derived mechanically from the handout — approved rules, the Level 0
@@ -19,17 +27,12 @@ import { pathTemplateToRegExp } from "../openapi.ts";
 import { policySpec } from "../invariants.ts";
 import { DummyConfigError } from "../config.ts";
 
-interface AccountedObligation {
-  [key: string]: DynamicValue;
-  approved_skip_reasons: DynamicValue[];
-}
-
 /** Manifest shape version, carried in the report. */
 export const OBLIGATION_MANIFEST_VERSION = 1;
 /** Where an obligation came from. */
-export const OBLIGATION_SOURCES: DynamicValue = Object.freeze(["policy", "operation", "rule"]);
+export const OBLIGATION_SOURCES: readonly ObligationSource[] = Object.freeze(["policy", "operation", "rule"]);
 /** Terminal accounting statuses. Only the first three are sound. */
-export const OBLIGATION_STATUSES: DynamicValue = Object.freeze(["covered", "skipped", "unsupported", "unaccounted"]);
+export const OBLIGATION_STATUSES: readonly ObligationStatus[] = Object.freeze(["covered", "skipped", "unsupported", "unaccounted"]);
 
 /** `policy:` id for one Level 0 policy declaration. */
 export const policyObligationId = (declaration: DynamicValue) => `policy:${policySpec(declaration).replace(/^invariant:\s*/, "")}`;
@@ -47,10 +50,10 @@ export const ruleObligationId = (id: DynamicValue) => `rule:${id}`;
  *           operations?: {method: string, path: string}[] }} handout
  * @returns {object[]} manifest entries
  */
-export function deriveObligations({ policies = [], spec = null, rules = [], operations = null }: DynamicValue = {}) {
-  const out: DynamicValue = [];
-  const seen: DynamicValue = new Set();
-  const add = (entry: DynamicValue) => {
+export function deriveObligations({ policies = [], spec = null, rules = [], operations = null }: DynamicValue = {}): ObligationEntry[] {
+  const out: ObligationEntry[] = [];
+  const seen = new Set<string>();
+  const add = (entry: ObligationEntry) => {
     if (seen.has(entry.id)) return;
     seen.add(entry.id);
     out.push(entry);
@@ -93,11 +96,11 @@ export function deriveObligations({ policies = [], spec = null, rules = [], oper
  * Validate a manifest supplied by a caller. Shape problems are user input, so
  * they surface as DummyConfigError rather than as a mid-run failure.
  */
-export function normalizeObligations(entries: DynamicValue, { where = "obligations" }: DynamicValue = {}) {
+export function normalizeObligations(entries: DynamicValue, { where = "obligations" }: { where?: string } = {}): ObligationEntry[] {
   if (entries === null || entries === undefined) return [];
   if (!Array.isArray(entries)) throw new DummyConfigError(`${where} must be a list of obligation entries`);
-  const out: DynamicValue = [];
-  const seen: DynamicValue = new Set();
+  const out: ObligationEntry[] = [];
+  const seen = new Set<string>();
   for (const entry of entries) {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
       throw new DummyConfigError(`${where}: each entry is an object { id, source, statement }`);
@@ -137,9 +140,15 @@ const normalizeReason = (reason: DynamicValue) => String(reason ?? "").trim().to
  *   `unknown` lists report records citing an obligation id the manifest does not
  *   contain — a script defect, because every report entry must trace to one.
  */
-export function accountObligations({ obligations = [], records = [], trace = [], gateChecks = [] }: DynamicValue) {
-  const state: DynamicValue = new Map(
-    obligations.map((entry: DynamicValue) => [
+export function accountObligations({ obligations = [], records = [], trace = [], gateChecks = [] }: {
+  obligations?: ObligationEntry[];
+  /** Check records; they crossed the child-process boundary as JSON, so fields are read defensively. */
+  records?: DynamicValue[];
+  trace?: Array<{ method: string; path: string }>;
+  gateChecks?: Array<Partial<ScriptGateCheck>>;
+}): ObligationAccounting {
+  const state = new Map<string, AccountedObligation>(
+    obligations.map((entry): [string, AccountedObligation] => [
       entry.id,
       {
         ...entry,
@@ -149,7 +158,7 @@ export function accountObligations({ obligations = [], records = [], trace = [],
       },
     ]),
   );
-  const unknown: DynamicValue = [];
+  const unknown: ObligationAccounting["unknown"] = [];
 
   // 1. Report records. Every record that names an obligation must name a real one.
   for (const record of records ?? []) {
@@ -169,7 +178,8 @@ export function accountObligations({ obligations = [], records = [], trace = [],
     }
     if (record.kind === "skip" || record.kind === "unsupported") {
       if (entry.status === "covered") continue;
-      const approved = (entry.approved_skip_reasons ?? []).map(normalizeReason);
+      const approvedReasons = entry.approved_skip_reasons ?? [];
+      const approved = approvedReasons.map(normalizeReason);
       if (approved.includes(normalizeReason(record.reason))) {
         entry.status = record.kind === "skip" ? "skipped" : "unsupported";
         entry.reason = record.reason;
@@ -177,7 +187,7 @@ export function accountObligations({ obligations = [], records = [], trace = [],
         entry.status = "unaccounted";
         entry.reason =
           `${record.kind === "skip" ? "skipped" : "marked unsupported"} with the unapproved reason ${JSON.stringify(record.reason)}` +
-          (approved.length ? ` (approved: ${entry.approved_skip_reasons.map((r) => JSON.stringify(r)).join(", ")})` : " — this obligation approves no skip reason");
+          (approved.length ? ` (approved: ${approvedReasons.map((r) => JSON.stringify(r)).join(", ")})` : " — this obligation approves no skip reason");
       }
     }
   }

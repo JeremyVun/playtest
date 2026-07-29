@@ -73,7 +73,7 @@ const TARGET_FREE_SUITE_FILES = SUITE_FILES.map((f) =>
   f.path === "playtest.yaml" ? { path: f.path, content: "app:\n  driver: web\n" } : f,
 );
 
-async function seed(api: HostedDynamic, app: HostedDynamic, tmp: HostedDynamic, files = SUITE_FILES) {
+async function seed(api: HostedDynamic, files = SUITE_FILES) {
   const project = (await api.post("/projects", { key: "pwx", name: "Playwright export" })).body;
   // The suite binds to an application, and the ring is what holds the URL a
   // hosted run points at, so the target pair is created before the suite.
@@ -107,7 +107,7 @@ test("playwright export returns a downloadable spec for the accepted baseline", 
   const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), "pt-pwx-"));
   try {
     await withApp(async ({ api, app }: HostedDynamic) => {
-      const { project, suite } = await seed(api, app, tmp);
+      const { project, suite } = await seed(api);
       const key = await seedBundle(app, tmp, "checkout");
       await insertBaseline(app, { project, suite, storyId: "checkout", trajectoryKey: key });
 
@@ -146,7 +146,7 @@ test("playwright export of a target-free hosted suite bakes in no default URL", 
       // A hosted suite legitimately authors no target: the ring supplies the URL
       // at launch, and the ring is NOT a suite file, so it cannot leak into an
       // export that is meant to stand alone.
-      const { project, suite } = await seed(api, app, tmp, TARGET_FREE_SUITE_FILES);
+      const { project, suite } = await seed(api, TARGET_FREE_SUITE_FILES);
       const key = await seedBundle(app, tmp, "checkout");
       await insertBaseline(app, { project, suite, storyId: "checkout", trajectoryKey: key });
 
@@ -176,7 +176,7 @@ test("playwright export follows the live baseline, not a superseded one", async 
   const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), "pt-pwx-v-"));
   try {
     await withApp(async ({ api, app }: HostedDynamic) => {
-      const { project, suite } = await seed(api, app, tmp);
+      const { project, suite } = await seed(api);
       const key = await seedBundle(app, tmp, "checkout");
       const v2 = ulid();
       await insertBaseline(app, { project, suite, storyId: "checkout", trajectoryKey: key, version: 1, supersededBy: v2 });
@@ -195,8 +195,8 @@ test("playwright export follows the live baseline, not a superseded one", async 
 test("playwright export refuses missing, non-web and never-run stories with friendly messages", async () => {
   const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), "pt-pwx-refuse-"));
   try {
-    await withApp(async ({ api, app }: HostedDynamic) => {
-      const { suite } = await seed(api, app, tmp);
+    await withApp(async ({ api }: HostedDynamic) => {
+      const { suite } = await seed(api);
 
       const noStory = await api.get(`/suites/${suite.id}/playwright-export`);
       assert.equal(noStory.status, 400);

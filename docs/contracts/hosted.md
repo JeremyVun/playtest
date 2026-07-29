@@ -412,6 +412,20 @@ mint routes. It verifies that:
 5. the dispatch's current-executor pointer still equals this executor; and
 6. the run group has not settled underneath it.
 
+The guard's answer is additionally **re-asserted inside every write
+transaction** (`reassertCurrentExecutor`): the dispatch's state, its
+current-executor pointer, and the group's state are re-read at the write, under
+the transaction's write lock, so a replacement exchange, cancel, or reconcile
+landing in the gap between the route guard and the commit refuses the stale
+write rather than letting it land. A route that widens the guard's state lists
+(completion) passes the same lists to the re-assert, so the owner's idempotent
+retry stays a retry and not a conflict. The bundle upload stores its bytes
+under an attempt-specific key (`runs/<group>/<run>.<executor>.ptrun`) and
+publishes the artifact row only inside that fenced transaction — two executors
+racing for one run can never overwrite each other's upload, a refused publish
+deletes its own staged bytes, and the row's `key` is the only path readers ever
+follow.
+
 A refusal is always `409 executor_conflict` with one of these
 `details.reason` values:
 
@@ -960,9 +974,12 @@ group does. No suite files and no secrets travel before the claim, and mint
 compatibility is labels only — no binding is required to claim one.
 
 **`skip` is how a runner declines locally.** A runner that can take nothing on a
-page re-polls naming those dispatch ids in `skip` (comma-separated, at most 64 —
-more is `400`, because past that many unclaimable offers the runner should back
-off rather than keep asking). The server excludes them, which means the
+page re-polls naming those dispatch ids in `skip` (comma-separated, at most the
+board's cap — more is `400`, because past that many unclaimable offers the
+runner should back off rather than keep asking). The cap is the server's own
+number (64 today) and every poll answer advertises it as `skip_cap`, so the
+agent sizes its list from the deployment it is talking to; an agent pointed at
+a control plane that predates the field assumes 64. The server excludes them, which means the
 long-poll **holds when nothing else remains** instead of returning the same page
 for the agent to re-poll against in a tight loop. The list is session-local,
 never persisted, and carries no reason: the advertisement itself is never

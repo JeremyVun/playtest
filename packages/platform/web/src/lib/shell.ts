@@ -3,7 +3,7 @@
 // status bar along the bottom. Pages call renderFrame() to paint the chrome and
 // get the #main element to fill. Developer/admin surfaces appear only when the
 // role allows.
-import { h, mount, initials } from "./dom.js";
+import { byId, h, mount, initials } from "./dom.js";
 import { link, navigate } from "./router.js";
 import { state, hasRole, displayName } from "./state.js";
 import { enhanceSelect } from "./ui.js";
@@ -88,7 +88,9 @@ function themeToggle() {
 
 const THEME_KEY = "pt-theme";
 const repaintThemeToggles = () => {
-  for (const el of document.querySelectorAll(".theme-toggle")) el.repaintTheme?.();
+  for (const el of document.querySelectorAll(".theme-toggle")) {
+    (el as Element & { repaintTheme?: () => void }).repaintTheme?.();
+  }
 };
 
 /** The console's theme, or null when it follows the OS preference. */
@@ -106,7 +108,7 @@ const effectiveTheme = () => currentTheme() || (prefersDark() ? "dark" : "light"
  * back to prefers-color-scheme and already agree.
  */
 export function syncViewerTheme() {
-  for (const frame of document.querySelectorAll("iframe.viewer-embed")) {
+  for (const frame of document.querySelectorAll<HTMLIFrameElement>("iframe.viewer-embed")) {
     const url = new URL(frame.src, location.origin);
     const theme = currentTheme();
     if (theme) url.searchParams.set("theme", theme);
@@ -153,18 +155,12 @@ async function logout() {
   location.href = "/login";
 }
 
-// Changed journeys are decided on their run's evidence page, not from a global
-// badge. `refreshReviewBadge` stays exported (run/review pages call it after a
-// decision) but is now a no-op: there is no top-bar pill to update. Suites
-// derives "Review all changed stories" from a fresh health read instead.
-export async function refreshReviewBadge() { /* review is contextual; nothing global to repaint */ }
-
 /**
  * Paint topbar + rail; return the #main element for the page to fill.
  * @param {{ projectKey?: string|null, nav?: string }} opts
  */
 export function renderFrame({ projectKey = null, nav = null }: WebDynamic = {}) {
-  const app = document.getElementById("app");
+  const app = byId("app");
   app.removeAttribute("aria-busy");
   // Remember where the person was working: `/` used to drop a returning user
   // into whichever project sorts first alphabetically, which for most teams is

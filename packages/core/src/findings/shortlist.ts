@@ -6,16 +6,15 @@
 // reaches a model call, and the routing decision itself is made here, before any
 // call is issued.
 //
-// This is the LOCAL (core/CLI) implementation of the algorithms frozen by P0
+// This is the ONE implementation of the algorithms frozen by P0
 // (`tests/core/findings/spec.ts`). `tests/core/unit/findings-local-keys.test.ts`
 // asserts byte parity with the frozen spec over the P0 fixture corpus, so a
 // change here that diverges from the spec fails the gate rather than silently
 // re-partitioning findings.
 //
-// LAYERING: core may not import the control plane, so the
-// hosted port (`packages/platform/control-plane/src/findings/shortlist.ts`) and this
-// one are deliberate duplicates of the same frozen spec, each pinned to it by
-// its own parity test.
+// LAYERING: exported through `@playtest/core/findings`; the control plane's
+// `src/findings/shortlist.ts` re-exports it (public export, never a core
+// internal) and keeps its own parity test against the same frozen spec.
 //
 // A matching category raises similarity (the category word is the first token of
 // the match text) but never gates comparison: the model may label one defect

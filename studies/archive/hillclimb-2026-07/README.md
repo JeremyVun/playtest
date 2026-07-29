@@ -3,7 +3,8 @@
 This is the immutable record of the original Fern & Fog seeded-fault study and
 its instrument-v2 follow-on. It originally lived at `studies/hillclimb/`.
 Current work is specified in
-[`docs/backlog/hillclimb-rerun.md`](../../../docs/backlog/hillclimb-rerun.md).
+[`docs/backlog/detection-study/web.md`](../../../docs/backlog/detection-study/web.md)
+(which superseded the interim `hillclimb-rerun.md` plan on 2026-07-29).
 
 Do not treat this directory as the current study or run its old operator
 commands against today's harness. Reproduce an old round from its recorded

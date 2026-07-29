@@ -43,29 +43,29 @@ test("failing checks become findings, passing checks and defects do not", () => 
   const findings = scriptFindings(report, { harEntries });
   const checkFindings = findings.filter((finding: LegacyTestValue) => finding.source === "check");
   assert.deepEqual(checkFindings.map((finding: LegacyTestValue) => finding.id), ["republish-is-refused", "unevidenced"]);
-  assert.equal(checkFindings[0].statement, "Publishing twice is refused with 409.");
-  assert.equal(checkFindings[0].expected, "409");
-  assert.deepEqual(checkFindings[0].evidence.subject, { widget: "w_1" });
+  assert.equal(checkFindings[0]!.statement, "Publishing twice is refused with 409.");
+  assert.equal(checkFindings[0]!.expected, "409");
+  assert.deepEqual(checkFindings[0]!.evidence.subject, { widget: "w_1" });
 });
 
 test("evidence is re-verified against the recorded HAR, not taken on trust", () => {
   const [republish, unevidenced] = scriptFindings(report, { harEntries });
-  assert.equal(republish.evidence_verified, true);
-  assert.deepEqual(republish.evidence.exchanges, [{ har_entry: 1, method: "POST", url: "http://api.test/widgets/w_1/publish", status: 200, time_ms: 8 }]);
-  assert.equal(unevidenced.evidence_verified, false);
-  assert.deepEqual(unevidenced.evidence.exchanges, []);
+  assert.equal(republish!.evidence_verified, true);
+  assert.deepEqual(republish!.evidence.exchanges, [{ har_entry: 1, method: "POST", url: "http://api.test/widgets/w_1/publish", status: 200, time_ms: 8 }]);
+  assert.equal(unevidenced!.evidence_verified, false);
+  assert.deepEqual(unevidenced!.evidence.exchanges, []);
 
   // With the HAR gone (retention), the citation is present but unresolved.
   const withoutHar = scriptFindings(report, { harEntries: [] });
-  assert.equal(withoutHar[0].evidence_verified, false);
-  assert.deepEqual(withoutHar[0].evidence.har_entries, [1]);
+  assert.equal(withoutHar[0]!.evidence_verified, false);
+  assert.deepEqual(withoutHar[0]!.evidence.har_entries, [1]);
 });
 
 test("an applicable failing policy is a finding from the HAR column; an inapplicable one is not", () => {
   const policies = scriptFindings(report, { harEntries }).filter((finding: LegacyTestValue) => finding.source === "policy");
   assert.equal(policies.length, 1);
-  assert.equal(policies[0].id, "policy:no_server_error");
-  assert.match(policies[0].observed, /GET \/boom answered 500/);
+  assert.equal(policies[0]!.id, "policy:no_server_error");
+  assert.match(policies[0]!.observed ?? "", /GET \/boom answered 500/);
 });
 
 test("findings render for a terminal, unevidenced ones marked as such", () => {

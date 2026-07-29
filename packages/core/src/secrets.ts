@@ -17,7 +17,7 @@
 // shows (snapshots, har.json, logs, the actor's own view). Registration happens
 // at resolution time, which is what makes redaction automatic for every value
 // core injected.
-import { DummyConfigError } from "./config.ts";
+import { DummyConfigError } from "./config/errors.ts";
 import type {
   RedactConfig,
   ResolvedRedact,

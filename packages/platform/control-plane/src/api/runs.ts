@@ -1,5 +1,5 @@
 import { audit, actorOf } from "../audit.ts";
-import { HttpResult, readJsonBody } from "../http.ts";
+import { HttpResult, readJsonBody, waitSeconds } from "../http.ts";
 import { badRequest, conflict, notFound } from "../errors.ts";
 import { requireAuth, guard, getProjectByKey, getSuite, parsePagination } from "./util.ts";
 import {
@@ -319,17 +319,6 @@ export async function getGroup(ctx: HostedDynamic) {
 
 /** A run group nothing more will happen to. */
 const SETTLED = new Set(["done", "canceled"]);
-
-/** The hold window a caller asked for, capped at the feed's own maximum. */
-function waitSeconds(raw: unknown): number {
-  if (raw == null || raw === "" || raw === "false" || raw === "0") return 0;
-  if (raw === "true") return MAX_WAIT_S;
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n <= 0) return 0;
-  return Math.min(n, MAX_WAIT_S);
-}
-
-const MAX_WAIT_S = 25;
 
 export async function cancelGroup(ctx: HostedDynamic) {
   const principal = requireAuth(ctx);

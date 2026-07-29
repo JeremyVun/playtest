@@ -13,10 +13,11 @@
 // failed_action, no_effect, repeated_action, perf_budget. The coarse D4
 // `signal_type` used for exact keys is derived later, server-side (P2), from
 // trusted context — never authored here or by the model.
+import { parseThreshold, compareThreshold } from "./threshold.ts";
+import type { ParsedThreshold } from "./threshold.ts";
 import type { StepEnvelope } from "./trajectory.ts";
 import type { PerfConfig } from "./types.ts";
 
-type ComparisonOperator = "<" | "<=" | ">" | ">=";
 type PerfMetric = keyof PerfConfig;
 export type AnomalyType =
   | "http_4xx"
@@ -37,34 +38,11 @@ export interface AnomalySignal {
   };
 }
 
-interface ParsedThreshold {
-  op: ComparisonOperator;
-  limit: number;
-}
-
 interface ParsedBudget extends ParsedThreshold {
   key: PerfMetric;
 }
 
 const oneLine = (s: unknown): string => String(s ?? "").replace(/\s*\n\s*/g, " ").trim();
-
-/** "< 2500" / "<= 2500" / ">= 10" / "> 10"; a bare number means "<= n". */
-function parseThreshold(threshold: string | number): ParsedThreshold | null {
-  if (typeof threshold === "number") return { op: "<=", limit: threshold };
-  const m = String(threshold).trim().match(/^(<=|>=|<|>)\s*(\d+(?:\.\d+)?)$/);
-  if (!m) return null;
-  return { op: m[1] as ComparisonOperator, limit: Number(m[2]) };
-}
-
-function withinBudget(value: number, op: ComparisonOperator, limit: number): boolean {
-  switch (op) {
-    case "<": return value < limit;
-    case "<=": return value <= limit;
-    case ">": return value > limit;
-    case ">=": return value >= limit;
-    default: return true;
-  }
-}
 
 // Only metrics the harness records per step can ground a deterministic budget
 // signal. Keys mirror the perf gate (gate.js#checkPerf).
@@ -150,7 +128,7 @@ export function extractAnomalies(
     // this is the only place a latency budget is surfaced for a discovery grade.
     for (const b of budgets) {
       const value = metricValue(env, b.key);
-      if (typeof value === "number" && !withinBudget(value, b.op, b.limit)) {
+      if (typeof value === "number" && !compareThreshold(value, b.op, b.limit)) {
         signals.push({ type: "perf_budget", step, detail: `${b.key} ${value} violates ${b.op} ${b.limit}` });
       }
     }

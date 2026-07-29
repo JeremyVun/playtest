@@ -22,7 +22,7 @@
 // a renamed response field still changes the projection and still triggers
 // drift. A rule can widen or quiet a value; no rule can hide that a field was
 // renamed, added, or removed.
-import { DummyConfigError } from "./config.ts";
+import { DummyConfigError } from "./config/errors.ts";
 import type { MatchConfig, ResolvedMatch } from "./types.ts";
 
 export type PathSegment =

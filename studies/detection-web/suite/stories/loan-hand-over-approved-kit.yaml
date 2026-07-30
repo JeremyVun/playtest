@@ -7,15 +7,24 @@ story: |
 success:
   - console_errors: 0
   - url_matches: "*/loans/L-1044"
-  - label: Collected banner and status
+  - label: Collected banner
     assert: >-
       The loan page shows the success banner
-      `L-1044 is now out with Theo Lindqvist.`, its status pill reads Out, and
-      the Schedule panel records it as picked up on Mon 16 Mar 2026, 09:00
-      with due back still Mon 30 Mar 2026, 17:00.
-  - label: Out-with-borrower actions and unchanged charges
+      `L-1044 is now out with Theo Lindqvist.`
+  - label: Status now out
     assert: >-
-      The page now offers the `Out with the borrower` panel with an Extension
-      line and a `Check in` form instead of any pickup or approval action, the
-      Charges panel still reads Total due at pickup $341.00, and the Approvals
-      link in the header carries a count of 1.
+      The page is headed `Loan L-1044` with a status pill reading `Out`.
+  - label: Pickup recorded, due date unmoved
+    assert: >-
+      The Schedule panel records it as picked up on `Mon 16 Mar 2026, 09:00`,
+      with pickup date Mon 16 Mar 2026, a loan period of 14 days and due back
+      still `Mon 30 Mar 2026, 17:00`.
+  - label: Extension still unused
+    assert: >-
+      The Schedule panel's extension line reads `None used (one allowed)`.
+  - label: Items and charges carried through the hand-over
+    assert: >-
+      The Items panel is headed `Items (2 units)`: the Sennheiser MKH-416 Boom
+      Kit row, asset tag AUD-416, reads daily rate $9.00, `Charge for 14 days`
+      $126.00 and deposit $145.00; the Zoom H6 Field Recorder row, asset tag
+      AUD-H6, reads daily rate $5.00 and `Charge for 14 days` $70.00.

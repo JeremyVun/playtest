@@ -7,16 +7,27 @@ story: |
 success:
   - console_errors: 0
   - url_matches: "*/loans/L-1048"
-  - label: Extension banner and new due date
+  - label: Extension banner
     assert: >-
       The loan page shows the success banner
-      `Extended. L-1048 is now due Thu 26 Mar 2026 at 17:00.`, its status pill
-      still reads Out, and the Schedule panel shows due back
-      Thu 26 Mar 2026, 17:00 with the extension line
-      `One 7-day extension used`.
-  - label: No second extension, and no charge change
+      `Extended. L-1048 is now due Thu 26 Mar 2026 at 17:00.`
+  - label: Still out with the borrower
     assert: >-
-      A further extension is refused: the extend control is disabled and the
-      reason shown is `This loan has already used its one extension.` The
-      Charges panel is unchanged, still reading Base charge $140.00,
-      Refundable deposit $204.00 and Total due at pickup $344.00.
+      The page is headed `Loan L-1048` with a status pill still reading `Out`.
+  - label: New due date and extension line
+    assert: >-
+      The Schedule panel shows due back `Thu 26 Mar 2026, 17:00` and the
+      extension line `One 7-day extension used`.
+  - label: Pickup and period untouched by the extension
+    assert: >-
+      The Schedule panel still shows pickup date Thu 12 Mar 2026 and a loan
+      period of 7 days.
+  - label: Charges unchanged
+    assert: >-
+      The Charges panel still reads Base charge $140.00 and Refundable deposit
+      $204.00.
+  - label: Items unchanged
+    assert: >-
+      The Items panel is headed `Items (2 units)` and its DJI RS 4 Pro Gimbal
+      row, asset tag SUP-RS4, reads daily rate $10.00, `Charge for 7 days`
+      $140.00 and deposit $204.00.

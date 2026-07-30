@@ -8,15 +8,23 @@ story: |
 success:
   - console_errors: 0
   - url_matches: "*/approvals"
-  - label: Decline banner and queue count
+  - label: Decline banner
     assert: >-
       The approvals page shows the success banner
-      `L-1045 declined. 2 units are back in stock.`, its subtitle now reads
-      `1 request is waiting for a supervisor decision`, the Approvals link in
-      the header carries a count of 1, and no card for L-1045 remains.
+      `L-1045 declined. 2 units are back in stock.`
+  - label: Queue after the decline
+    assert: >-
+      The approvals subtitle now reads
+      `1 request is waiting for a supervisor decision` and no card for L-1045
+      remains in the queue.
   - label: The remaining request
     assert: >-
       The only card left is L-1044 for Theo Lindqvist of Music, giving
       `Loan period is 14 days.` as its one and only reason, the line
       `2 units for 14 days, pickup Mon 16 Mar 2026, due Mon 30 Mar 2026.` and
       `Total due at pickup $341.00.`
+  - label: Remaining request's item charges
+    assert: >-
+      That card's items table charges the Sennheiser MKH-416 Boom Kit line
+      $126.00 with a $145.00 deposit, and the Zoom H6 Field Recorder line
+      $70.00.

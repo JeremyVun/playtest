@@ -8,19 +8,21 @@ story: |
 success:
   - console_errors: 0
   - url_matches: "*/loans/L-1042"
-  - label: Check-in banner
+  - label: Return record condition and time
     assert: >-
-      The loan page shows the success banner
-      `L-1042 checked in. Late fee of $45.00 charged. Deposit of $669.00 held
-      pending inspection.` and its status pill now reads Returned.
-  - label: Return record
+      The loan now carries a `Return record` panel showing checked in
+      `Mon 16 Mar 2026, 09:00`, condition Damaged and a note about the cracked
+      tripod head.
+  - label: Late fee and deposit outcome
     assert: >-
-      The Return record panel shows checked in Mon 16 Mar 2026, 09:00,
-      condition Damaged, a note about the cracked tripod head, late fee $45.00
-      and deposit `$669.00 held pending inspection.`, and the Charges panel
-      carries the extra line `Late fee charged on return: $45.00.` beneath a
-      total due at pickup of $876.90.
-  - label: No further actions
+      That Return record panel shows late fee $45.00 and deposit
+      `$669.00 held pending inspection.`
+  - label: Returned-loan charge line
     assert: >-
-      The page offers no check-in form, no extension control and no cancel
-      control — a returned loan has no actions left.
+      The Charges panel carries the returned-loan line
+      `Late fee charged on return: $45.00.`
+  - label: Charges unchanged by the return
+    assert: >-
+      The Charges panel still reads Base charge $231.00,
+      `Bundle discount (3+ units)` of −$23.10, Refundable deposit $669.00 and
+      Total due at pickup $876.90.

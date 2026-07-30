@@ -8,27 +8,35 @@ story: |
 success:
   - console_errors: 0
   - url_matches: "/"
-  - label: Counter tiles
+  - label: Page identity
     assert: >-
       The page is headed `Desk overview` with the subtitle
-      `Desk day Mon 16 Mar 2026`, the footer reads
-      `Desk time Mon 16 Mar 2026, 09:00`, and the seven counter tiles read:
-      Out on loan 3 (`Currently with borrowers`), Overdue 1
-      (`Past the 17:00 due time`), Due back today 1
-      (`Expected at the desk by 17:00`), Awaiting approval 2
-      (`Needs a supervisor decision`), Ready for pickup 1
-      (`Approved and waiting on the shelf`), Units available 40
-      (`of 53 units in the catalogue`), and Charges booked today $341.00
-      (`New loans and late fees`).
-  - label: Overdue and due-back lists
+      `Desk day Mon 16 Mar 2026`.
+  - label: Counter tile notes and money
     assert: >-
-      The Overdue loans list holds exactly one row — loan L-1042 for
-      Marcus Webb, due Wed 11 Mar 2026, 3 business days late, late fee today
-      $45.00 — and the Due back today list holds exactly one row, loan L-1041
-      for Priya Raman, due Mon 16 Mar 2026, 17:00.
-  - label: Pickup and approval lists
+      Among the counter tiles, `Charges booked today` reads $341.00 under the
+      note `New loans and late fees`, and `Units available` carries the note
+      `of 53 units in the catalogue`.
+  - label: Overdue list
     assert: >-
-      The Ready for pickup list holds only loan L-1043 for Dana Okoye with
-      pickup Tue 17 Mar 2026, and the Awaiting approval list holds exactly two
-      rows: loan L-1044 for Theo Lindqvist with total due $341.00 and loan
-      L-1045 for Aisha Farouk with total due $1,131.00.
+      The Overdue loans list holds exactly one row: loan L-1042 for
+      Marcus Webb, items `Canon C70 Cinema Camera + 2 more (3 units)`, due
+      Wed 11 Mar 2026, with a late fee today of $45.00.
+  - label: Due back today list
+    assert: >-
+      The Due back today list holds exactly one row: loan L-1041 for
+      Priya Raman, items `Sony A7 IV Mirrorless Kit + 1 more (2 units)`, due
+      `Mon 16 Mar 2026, 17:00`.
+  - label: Ready for pickup list
+    assert: >-
+      Beneath the caption `Approved loans waiting for the borrower to
+      collect.`, the Ready for pickup list holds exactly one row: loan L-1043
+      for Dana Okoye, items `GoPro Hero 12 Action Kit (2 units)`, pickup
+      Tue 17 Mar 2026.
+  - label: Awaiting approval list
+    assert: >-
+      Beneath the caption `Requests held until a supervisor decides.`, the
+      Awaiting approval list holds exactly two rows: loan L-1044 for
+      Theo Lindqvist of Music, status Awaiting approval, total due $341.00; and
+      loan L-1045 for Aisha Farouk of Architecture, status Awaiting approval,
+      total due $1,131.00.

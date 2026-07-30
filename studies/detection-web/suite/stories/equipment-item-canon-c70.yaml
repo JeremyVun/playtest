@@ -7,15 +7,22 @@ story: |
 success:
   - console_errors: 0
   - url_matches: "*/equipment/*"
-  - label: Desk record
+  - label: Desk record identity and availability
     assert: >-
       The page is headed Canon C70 Cinema Camera and its Desk record shows
-      asset tag CAM-C70, category Cameras, availability `1 of 3 units free`,
-      daily rate `$18.00 per unit per day`, replacement value $5,400.00 and
-      deposit per unit `$540.00 (refundable)`.
+      asset tag CAM-C70, category Cameras and availability
+      `1 of 3 units free`.
+  - label: Desk record rate and deposit
+    assert: >-
+      The same Desk record shows daily rate `$18.00 per unit per day`,
+      replacement value $5,400.00 and deposit per unit `$540.00 (refundable)`.
   - label: Open loans holding this item
     assert: >-
-      The `On loan now` table lists exactly two open loans, in loan-number
-      order: L-1042 for Marcus Webb, 1 unit, status Overdue, due
-      Wed 11 Mar 2026; and L-1045 for Aisha Farouk, 1 unit, status
-      Awaiting approval, due Wed 25 Mar 2026.
+      Under the caption `Open loans holding units of this item.`, the
+      `On loan now` table lists exactly two open loans, in loan-number order:
+      L-1042 for Marcus Webb, status Overdue, due Wed 11 Mar 2026; then L-1045
+      for Aisha Farouk, status Awaiting approval, due Wed 25 Mar 2026.
+  - label: Specification rows present
+    assert: >-
+      A `Specification` section is shown for this item beneath the caption
+      `What comes in the case.`

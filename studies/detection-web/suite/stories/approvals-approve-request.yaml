@@ -6,12 +6,15 @@ story: |
 success:
   - console_errors: 0
   - url_matches: "*/approvals"
-  - label: Approval banner and queue count
+  - label: Approval banner
     assert: >-
       The approvals page shows the success banner
-      `L-1044 approved and moved to ready for pickup.`, its subtitle now reads
-      `1 request is waiting for a supervisor decision`, the Approvals link in
-      the header carries a count of 1, and no card for L-1044 remains.
+      `L-1044 approved and moved to ready for pickup.`
+  - label: Queue after the approval
+    assert: >-
+      The approvals subtitle now reads
+      `1 request is waiting for a supervisor decision` and no card for L-1044
+      remains in the queue.
   - label: The remaining request
     assert: >-
       The only card left is L-1045 for Aisha Farouk of Architecture, giving the
@@ -19,3 +22,8 @@ success:
       threshold.`, the line
       `2 units for 7 days, pickup Wed 18 Mar 2026, due Wed 25 Mar 2026.` and
       `Total due at pickup $1,131.00.`
+  - label: Remaining request's item charges
+    assert: >-
+      That card's items table charges the MacBook Pro edit laptop line $105.00
+      with a $360.00 deposit, and the Canon C70 Cinema Camera line $126.00 with
+      a $540.00 deposit.

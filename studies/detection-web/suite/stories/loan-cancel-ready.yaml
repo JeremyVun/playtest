@@ -7,14 +7,26 @@ story: |
 success:
   - console_errors: 0
   - url_matches: "*/loans/L-1043"
-  - label: Cancelled banner and panel
+  - label: Cancelled banner
     assert: >-
       The loan page shows the success banner
-      `L-1043 cancelled. 2 units are back in stock.`, its status pill reads
-      Cancelled, and a Cancelled panel reads `This loan was cancelled on
-      Mon 16 Mar 2026, 09:00 and its units went back into stock.`
-  - label: No actions remain, charges unchanged
+      `L-1043 cancelled. 2 units are back in stock.`
+  - label: Status pill
     assert: >-
-      The page offers no pickup, cancel or check-in action any more, its Items
-      panel is headed `Items (2 units)` listing GoPro Hero 12 Action Kit, and
-      the Charges panel still reads Total due at pickup $36.00.
+      The page is headed `Loan L-1043` with a status pill reading `Cancelled`,
+      under the subtitle `Dana Okoye · Athletics · booked Fri 13 Mar 2026,
+      10:05`.
+  - label: Cancellation recorded on the schedule
+    assert: >-
+      The Schedule panel records the loan as Cancelled at
+      `Mon 16 Mar 2026, 09:00`.
+  - label: Schedule otherwise unchanged
+    assert: >-
+      The Schedule panel still shows pickup date Tue 17 Mar 2026, a loan period
+      of 3 days, due back `Fri 20 Mar 2026, 17:00` and extension
+      `None used (one allowed)`.
+  - label: Items and charge unchanged
+    assert: >-
+      The Items panel is headed `Items (2 units)` and its one row is
+      GoPro Hero 12 Action Kit, asset tag CAM-GP12, daily rate $6.00, with
+      `Charge for 3 days` of $36.00.

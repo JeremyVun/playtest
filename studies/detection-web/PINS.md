@@ -10,6 +10,8 @@ measured data exists.
 | — | Harness scripts + prompts (pre-freeze drafts; prompt SHAs freeze at G4) | `07e35dd` | 2026-07-30 |
 | G1 | Subject app `subject/` (Loanpoint) — app, SPEC.md, tests, README | `7f45ff3` | 2026-07-30 |
 | G2 | Story suite `suite/` — 13 journeys + 2 risk discovery cases + playtest.yaml + init.sh | `f7100b6` | 2026-07-30 |
+| G2′ | Suite config amendment: init.sh → init.mjs (hosted exec-bit; stories untouched) | `8aa7d4f` | 2026-07-30 |
+| G3 | Fault catalog `catalog/` — 20 faults, injector, manifestation checks, telemetry | `cb6692b` | 2026-07-30 |
 
 ## G1 notes
 
@@ -36,3 +38,18 @@ measured data exists.
   of its rounds (fresh-session symmetry, per protocol).
 - Shakedown watch item: hosted runner must honor `app.init` (uploaded via
   suite commit — exec-bit/materialization verified at G4).
+
+## G3 notes
+
+- Catalog author (fresh opus-5) saw clean subject + SPEC + PREREG quotas;
+  never the story suite. Quotas verified on all three axes; masking chains:
+  `f-cancel-confirm-noop` ← `f-cancel-button-missing`,
+  `f-extend-limit-off-by-one` ← `f-extension-block-missing` (both 1 deep);
+  18/20 reachable in round 1.
+- Lead audit: independent `verify-catalog.mjs` run green (20/20 live,
+  three-direction checks), subject tree byte-untouched, boundary grep clean,
+  four client-visible faults eyeballed in a real browser on the
+  full-injection build (`build_id 3cc3a0a5ba33`).
+- `/__build` on injected builds returns only the opaque build id; the
+  active/withdrawn mapping lives in unserved `build-meta.json`; trigger
+  telemetry appends to unserved `telemetry.jsonl` (diagnostic only).

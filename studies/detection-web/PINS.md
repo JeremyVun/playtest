@@ -83,3 +83,21 @@ measured data exists.
   only via `arm-p-round.mjs`.
 - Judge route smoke reconfirmed in the dry run (Fable subagents, both
   passes). Clean reference for classification runs on :4622.
+
+## G5 product-bug log (PREREG environment-pin clause)
+
+- **2026-07-30, trial 1 round 3 (arm P):** 6 of 13 journeys crashed `infra`
+  at `gate.ts` `isInheritable` during clean-replay verdict inheritance — the
+  hosted runner's per-case child receives the resolved case as JSON, which
+  flattens the `_assertions.routing` Map to a plain object. First manifested
+  in round 3 because it requires a *clean* act replay (rounds 1–2 replays all
+  drifted/healed or recorded). Fix commit `916bacf` (runner-agent child
+  revives the Map; typecheck + runner tests green) landed **before** the
+  round was re-measured. The crashed group `01KYSKJD9Y8EXEG99EMVWQTNEX` is
+  excluded from measurement; arm P round 3 was re-run in full against the
+  same round-3 build (`ba6e2d843d1d`) in the same project. Arm C round 3 was
+  already in flight against its own build when the re-run happened, so the
+  strict "arm P round completes first" ordering was violated for round 3;
+  the ordering exists only to derive arm C's 2×-wall cap, which was set from
+  the crashed group's 33.5 min (67-min cap) — reported alongside the valid
+  re-run wall time.

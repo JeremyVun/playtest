@@ -18,6 +18,12 @@ const { values: args } = parseArgs({
     dir: { type: "string" },
     catalog: { type: "string" },
     "allow-still-masked": { type: "boolean", default: false },
+    // Comma-separated fault ids already withdrawn per arm before this round.
+    // A `seeded` verdict naming one is impossible for that arm (its
+    // manifestation is gone) and is recorded as an override per SCORING.md
+    // rule 2.
+    "withdrawn-p": { type: "string", default: "" },
+    "withdrawn-c": { type: "string", default: "" },
   },
 });
 if (!args.dir || !args.catalog) {
@@ -120,6 +126,26 @@ const mixed = ledger.claims.filter((c) => c.arm === "MIXED");
 if (mixed.length) {
   console.error(`FATAL: ${mixed.length} claims merge items across arms: ${mixed.map((c) => c.claim_id).join(", ")}`);
   process.exit(1);
+}
+
+// SCORING.md rule 2: an arm cannot be credited a fault already withdrawn for
+// it. Applied after unblinding because withdrawal sets are per-arm.
+const withdrawnFor = {
+  P: new Set(args["withdrawn-p"].split(",").map((s) => s.trim()).filter(Boolean)),
+  C: new Set(args["withdrawn-c"].split(",").map((s) => s.trim()).filter(Boolean)),
+};
+for (const c of ledger.claims) {
+  if (c.verdict === "seeded" && withdrawnFor[c.arm]?.has(c.fault_id)) {
+    c.override = {
+      by: "judge-merge",
+      from: `seeded:${c.fault_id}`,
+      to: "invalid:not-a-bug",
+      reason: "withdrawn-before-round",
+    };
+    c.verdict = "invalid";
+    c.sublabel = "not-a-bug";
+    c.fault_id = null;
+  }
 }
 
 fs.writeFileSync(path.join(args.dir, "ledger.json"), JSON.stringify(ledger, null, 2));

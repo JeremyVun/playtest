@@ -12,6 +12,7 @@ measured data exists.
 | G2 | Story suite `suite/` — 13 journeys + 2 risk discovery cases + playtest.yaml + init.sh | `f7100b6` | 2026-07-30 |
 | G2′ | Suite config amendment: init.sh → init.mjs (hosted exec-bit; stories untouched) | `8aa7d4f` | 2026-07-30 |
 | G3 | Fault catalog `catalog/` — 20 faults, injector, manifestation checks, telemetry | `cb6692b` | 2026-07-30 |
+| G4 | Gate recalibration `d2bf39e`; prompts, driver fixes, QUIRKS.md, SCORING.md frozen at the commit recording this row | (this commit) | 2026-07-30 |
 
 ## G1 notes
 
@@ -53,3 +54,32 @@ measured data exists.
 - `/__build` on injected builds returns only the opaque build id; the
   active/withdrawn mapping lives in unserved `build-meta.json`; trigger
   telemetry appends to unserved `telemetry.jsonl` (diagnostic only).
+
+## G4 notes (shakedown 2026-07-30; all fixes pre-measurement)
+
+- **Environment pin added:** hosted boot requires absolute `PLAYTEST_DATA_DIR`
+  and `PLAYTEST_SYNTHESIS_MODEL=gpt5_5` (the synthesis default tier is not
+  servable by the codex gateway; consolidation/auto-resolve default
+  `gpt5_6_terra` is servable and is left as the product default).
+- **Harness fixes:** suite `init.sh`→`init.mjs` (`8aa7d4f`, exec-bit);
+  journey-gate recalibration to the instrument's captured snapshot
+  (`d2bf39e` — capture omits header/nav, bare-number table cells, below-fold
+  content; app↔SPEC agreement confirmed, zero gate changes to stories);
+  `arm-p-round.mjs` `--group` resume, synthesis 5xx retry, per-run `totals`
+  metrics; `judge-merge.mjs` per-arm `--withdrawn-p/-c` overrides.
+- **Clean-round results (harness green):** arm P 13 pass / 0 fail /
+  2 explored, $9.79, 64 min, unattended end-to-end (det-sd3). Arm C finished
+  by itself: 98 messages, 25 min, ~$10.8 priced-equivalent, 3 bugs (all
+  clean-app quirks). Judge dry-run: 36 claims, 13 duplicates, **0 seeded**,
+  4 latent, 19 invalid; ledger validates; no cross-arm merges.
+- **Adjudication:** accepted quirks recorded in `QUIRKS.md` (3 latent
+  new-loan validation defects; no subject rework). Scoring interpretation
+  frozen in `SCORING.md` before any measured data.
+- **Prompt/text SHAs (sha256/12):** `arm-c-brief.md 6b5a80929775`,
+  `judge-classify.md 7fb4d19acf81`, `judge-normalize.md 9e782e9e021a`,
+  rendered arm C stories doc `aecfb00665c7` (regenerated per trial by
+  `render-stories.mjs` from the frozen suite; must hash identically).
+- Synthesis is not idempotent: exactly one `synthesize-findings` per round,
+  only via `arm-p-round.mjs`.
+- Judge route smoke reconfirmed in the dry run (Fable subagents, both
+  passes). Clean reference for classification runs on :4622.

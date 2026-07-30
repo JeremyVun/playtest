@@ -179,6 +179,7 @@ test("mode defaults to journey; report defaults to []", async () => {
   });
   const [c]: LegacyTestValue = await discoverCases([dir]);
   assert.equal(c.mode, "journey");
+  assert.deepEqual(c.limits, { max_steps: 50, timeout_ms: 600_000 });
   assert.deepEqual(c.report, []);
   assert.ok(!("personas" in c), "personas never lands on a final ResolvedCase");
 });

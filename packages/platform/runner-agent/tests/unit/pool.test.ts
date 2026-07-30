@@ -309,8 +309,12 @@ function mobileConfig(body?: string) {
     body ??
       `version: 1
 targets:
-  todo-ios:
-    local: { platform: ios, app: Todo.app, backend: local-ios }
+  - project: acme
+    application: todo-ios
+    environment: local
+    platform: ios
+    app: Todo.app
+    backend: local-ios
 mobile:
   backends:
     local-ios: { platform: ios, appium: { mode: managed } }
@@ -385,20 +389,6 @@ test("pool: a bound runner claims the very offer an unbound one skipped", async 
     assert.equal(groups.length, 1);
     assert.equal(groups[0].group, "g-ios");
     assert.equal(groups[0].config, c.config, "the executor is handed this machine's own bindings");
-  } finally {
-    await stub.close();
-    c.cleanup();
-  }
-});
-
-test("pool: a site-scoped runner with flat target keys stops with the qualification it needs", async () => {
-  const c = mobileConfig();
-  const stub = await board([{ runner: { id: "rn1", name: "local", labels: [], scope: "site", project_key: null }, offers: [] }]);
-  try {
-    await assert.rejects(
-      () => runPool(options(stub.url, { config: c.config }), { log: () => {}, sleep: async () => {}, maxPolls: 1 }),
-      /this runner is site-scoped/,
-    );
   } finally {
     await stub.close();
     c.cleanup();

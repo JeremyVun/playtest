@@ -42,7 +42,7 @@ and user-facing commands are defined in
   visual_regression_drift: 10,
   artifacts: "core",
   parallel: null,
-  limits: { max_steps: 50, timeout_ms: 240000 },
+  limits: { max_steps: 50, timeout_ms: 600000 },
   actor_model: "gpt5_4_mini",
   grader_model: "gpt5_5",
   env: {
@@ -88,7 +88,7 @@ actor_model: gpt5_4_mini
 grader_model: gpt5_5
 limits:
   max_steps: 50
-  timeout: 4m
+  timeout: 10m
 visual_regression: true
 visual_regression_drift: 10
 artifacts: core

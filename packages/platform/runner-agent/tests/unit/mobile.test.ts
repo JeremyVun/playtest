@@ -27,7 +27,7 @@ const backend = (over: Partial<AppiumBackend> = {}): AppiumBackend => ({
 });
 
 const binding = (over: Partial<MobileBinding> = {}): MobileBinding => ({
-  projectKey: null,
+  projectKey: "acme",
   applicationKey: "todo-ios",
   ringKey: "local",
   platform: "ios",

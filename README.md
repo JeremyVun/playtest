@@ -185,7 +185,7 @@ persona: tester                    # tester · exploratory · adversarial · or 
 actor_model: gpt5_4_mini           # role-plays the user (this is the default; any name your gateway accepts)
 grader_model: gpt5_5               # scores runs and checks `assert:` gates (default shown)
 max_steps: 50                      # per-run limit on actor steps
-timeout: 4m                        # per-run wall-clock limit
+timeout: 10m                       # per-run wall-clock limit
 artifacts: core                    # core (default) · debug — how much each run keeps
 ```
 

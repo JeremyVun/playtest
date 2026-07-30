@@ -15,11 +15,11 @@ test("launch limits show effective defaults in the empty override fields", () =>
 test("launch limits show the inherited range when story settings vary", () => {
   assert.deepEqual(launchLimitPlaceholders([
     { limits: { max_steps: 300, timeout_ms: 1_800_000 } },
-    { limits: { max_steps: 50, timeout_ms: 240_000 } },
-    { limits: { max_steps: 50, timeout_ms: 240_000 } },
+    { limits: { max_steps: 50, timeout_ms: 600_000 } },
+    { limits: { max_steps: 50, timeout_ms: 600_000 } },
   ]), {
     maxSteps: "50–300",
-    timeoutSeconds: "240–1800",
+    timeoutSeconds: "600–1800",
   });
 });
 

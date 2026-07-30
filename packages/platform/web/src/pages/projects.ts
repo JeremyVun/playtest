@@ -13,7 +13,7 @@ import { findingStateLabel } from "../lib/finding-buckets.js";
 import { initialDefaultsYaml } from "../lib/defaults-form.js";
 import {
   DRIVERS, PLATFORMS, driverLabel, driverGist,
-  applicationLine, keyFromName, keyProblem, ringUrlProblem,
+  applicationPickerLabel, keyFromName, keyProblem, ringUrlProblem,
 } from "../lib/rings.js";
 import { projectPage } from "../lib/project-page.js";
 
@@ -529,7 +529,7 @@ export function newSuiteModal(projectKey: WebDynamic) {
       } catch (loadErr: WebDynamic) { applications = []; toastError(loadErr); }
       mount(application,
         ...applications.map((a: WebDynamic) =>
-          h("option", { value: a.id }, applicationLine(a))),
+          h("option", { value: a.id }, applicationPickerLabel(a))),
         canManage ? h("option", { value: NEW }, "＋ Create an application…") : null);
       if (!applications.length && canManage) application.value = NEW;
       paintInline();

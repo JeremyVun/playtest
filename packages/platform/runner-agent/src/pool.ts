@@ -35,7 +35,7 @@ import { ApiClient, RunnerApiError } from "./api-client.ts";
 import { execGroup } from "./exec-group.ts";
 import { execMint } from "./exec-mint.ts";
 import { AppiumBackends } from "./appium.ts";
-import { assertConfigScope, configBannerLines, loadRunnerConfig, resolveMobilePlacement } from "./runner-config.ts";
+import { configBannerLines, loadRunnerConfig, resolveMobilePlacement } from "./runner-config.ts";
 import type { AppiumBackend, RunnerConfig } from "./runner-config.ts";
 
 /** How long a single check-in may hold, matching the board's own cap. */
@@ -228,14 +228,7 @@ export async function runPool(opts: PoolOptions, deps: PoolDeps = {}): Promise<{
       }
 
       if (!announced) {
-        // Identity is the CONTROL PLANE's answer and arrives with this first
-        // check-in, so everything that depends on it is decided here. A
-        // site-scoped runner with flat target keys stops rather than executing
-        // anything: the check needs the scope the board just told us, and it is
-        // still a startup error in every way that matters to whoever is
-        // watching the terminal.
         const identity: RunnerIdentity | null = answer.runner ?? null;
-        assertConfigScope(opts.config, { siteScoped: identity?.scope === "site" });
         for (const line of startupLines(opts, identity)) log(line);
         announced = true;
       }

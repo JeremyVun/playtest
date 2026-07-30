@@ -312,12 +312,13 @@ Uncommenting it is the whole of mobile setup.
 version: 1
 
 targets:
-  todo-ios:                          # the application key, from the console
-    local:                           # the environment key
-      platform: ios                  # ios | android
-      app: /Users/ada/build/Todo.app # your build; relative paths resolve here
-      backend: local-ios
-      device: iPhone 16              # optional — omit for Appium's default
+  - project: acme                    # the project key, from the console URL
+    application: todo-ios            # the application key
+    environment: local               # the environment key
+    platform: ios                    # ios | android
+    app: /Users/ada/build/Todo.app   # your build; relative paths resolve here
+    backend: local-ios
+    device: iPhone 16                # optional — omit for Appium's default
 
 mobile:
   backends:
@@ -327,11 +328,10 @@ mobile:
         mode: managed
 ```
 
-Three things about the keys, because they are the join between two places:
-they are the **immutable** keys the console shows on the application and the
-environment, not their display names; they never change once created; and nothing else
-in the file is visible to the platform. Rename an application freely — the
-binding holds.
+The target names all three parts of its identity instead of encoding them in
+YAML nesting. `project`, `application`, and `environment` are the **immutable**
+keys the console shows, not display names; nothing else in the file is visible
+to the platform. Rename an application freely — the binding holds.
 
 `app:` pointing at a path is the whole of v1's provider story: the build is
 already on this disk, however it got there — Xcode, a CI artifact download, a
@@ -353,7 +353,7 @@ Playtest runner "adas-laptop" — project acme
   isolation  process — cases run directly on this machine
   work dir   /tmp/playtest-runner
   config     /Users/ada/.playtest/runner.yaml
-  targets    todo-ios/local — ios via backend "local-ios"
+  targets    acme/todo-ios/local — ios via backend "local-ios"
   backends   local-ios — ios, managed Appium (started here)
 waiting for work — launch a run against an environment whose runner labels this runner advertises
 ```
@@ -463,7 +463,6 @@ heartbeats included — revoking never kills work you are waiting on.
 | `skipping run group …: this runner has no configuration binding …` | The offer needs a machine-local binding this runner does not hold. Add it under `--config`, or let a runner that has it claim the offer — the offer is untouched either way. |
 | `skipping run group …: … the Appium backend "…" cannot start here` | Appium or its platform driver is missing, or an external backend is not answering. The reason names which; the install command is in it. |
 | `skipping run group …: this runner runs cases in containers` | Mobile needs `--isolation process`. |
-| `this runner is site-scoped … move "targets.x.y"` | A site runner takes work from every project, so its targets must name theirs: `projects.<project-key>.targets.x.y`. |
 | `the app build this runner binds to "…" is not on the runner's disk` | The claim succeeded and the preflight did not. Rebuild, or correct the `app` path in that runner's config file. |
 | A CI registration answers `503 not_configured` | The deployment has not named the repository allowed to register runners (`PLAYTEST_POOL_OIDC_REPOSITORY`). |
 | `registered for one CI job and that registration expired` | The ephemeral credential outlived its window (`PLAYTEST_POOL_OIDC_TTL_S`). Register again from the job that needs it; a group already running is unaffected. |

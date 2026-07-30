@@ -248,7 +248,7 @@ function render(main: WebDynamic, st: WebDynamic) {
     const timeout = h("input", {
       type: "text",
       value: configuredTimeout,
-      placeholder: "4m",
+      placeholder: "10m",
       onchange: (e: WebDynamic) => setLimit("timeout", e.target.value.trim() || null),
     });
     const limitsCard = h("div.card.pad", { style: "margin-top:14px" },
@@ -262,7 +262,7 @@ function render(main: WebDynamic, st: WebDynamic) {
             : "The actor stops after this many actions even when time remains."),
         formField("Timeout per story", timeout,
           configuredTimeout === ""
-            ? "Using the engine default: 4m for journeys, 30m for discovery. Accepts values such as 6m, 90s, or milliseconds."
+            ? "Using the engine default: 10m for journeys, 30m for discovery. Accepts values such as 6m, 90s, or milliseconds."
             : "Wall-clock budget including model calls and browser actions. Accepts values such as 6m or 90s."),
       ),
     );

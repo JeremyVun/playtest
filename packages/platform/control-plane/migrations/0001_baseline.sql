@@ -46,7 +46,7 @@ CREATE TABLE projects (
   auto_dedupe INT_BOOL CHECK (auto_dedupe IS NULL OR auto_dedupe IN (0, 1)),
   auto_resolve INT_BOOL CHECK (auto_resolve IS NULL OR auto_resolve IN (0, 1)),
   auto_resolve_mode TEXT CHECK (auto_resolve_mode IS NULL OR auto_resolve_mode IN ('semi', 'full')),
-  parallel    TEXT_JSON NOT NULL DEFAULT '{"record":1,"total":1}',
+  parallel    TEXT_JSON NOT NULL DEFAULT '{"record":3,"total":10}',
   created_at  INT_TS NOT NULL DEFAULT (CAST(unixepoch('subsec') * 1000 AS INTEGER)),
   updated_at  INT_TS NOT NULL DEFAULT (CAST(unixepoch('subsec') * 1000 AS INTEGER))
 );

@@ -158,7 +158,7 @@ function preflight(): void {
  * meaning remember to hand-start Appium" — the agent spawns its own server on a
  * free loopback port and tears it down with the group.
  */
-function writeRunnerConfig(dir: string): string {
+function writeRunnerConfig(dir: string, project: string): string {
   const file = path.join(dir, "runner.yaml");
   fs.writeFileSync(
     file,
@@ -166,12 +166,13 @@ function writeRunnerConfig(dir: string): string {
       "version: 1",
       `labels: [${LABELS.join(", ")}]`,
       "targets:",
-      "  todo-ios:",
-      "    local:",
-      "      platform: ios",
-      `      app: ${appPath}`,
-      "      backend: local-ios",
-      `      device: ${DEVICE}`,
+      `  - project: ${project}`,
+      "    application: todo-ios",
+      "    environment: local",
+      "    platform: ios",
+      `    app: ${appPath}`,
+      "    backend: local-ios",
+      `    device: ${DEVICE}`,
       "mobile:",
       "  backends:",
       "    local-ios:",
@@ -242,7 +243,7 @@ test("hosted mobile: a runner bound to (todo-ios, local) claims the launch, star
       // Nothing is hand-started: no Appium of ours, and the config asks for a
       // managed backend. If something were already listening on Appium's default
       // port it would be irrelevant — the agent binds a free port of its own.
-      const configFile = writeRunnerConfig(configDir);
+      const configFile = writeRunnerConfig(configDir, project.key);
       const registered = await api.post(`/projects/${project.key}/runners`, { name: "adas-mac-mini", labels: LABELS });
       assert.equal(registered.status, 201, JSON.stringify(registered.body));
 
@@ -266,7 +267,7 @@ test("hosted mobile: a runner bound to (todo-ios, local) claims the launch, star
         120_000,
       );
       await until(
-        async () => /targets\s+todo-ios\/local — ios via backend "local-ios"/.test(agent.out.stdout),
+        async () => /targets\s+poolmobile\/todo-ios\/local — ios via backend "local-ios"/.test(agent.out.stdout),
         "the runner banner to state its bindings",
         agent,
         30_000,

@@ -31,7 +31,88 @@ export async function reconcileDispatches(ctx: HostedDynamic, { limit = 50 } = {
   );
   const results: HostedDynamic[] = [];
   for (const d of rows) results.push(await reconcileOne(ctx, d));
+  // Older completion code could settle a group while leaving a pre-restart
+  // story `running`. Those groups have no active dispatch left for the normal
+  // scan above to inspect, so repair the impossible parent/child state
+  // independently. This keeps the fix self-healing for rows already on disk.
+  await repairSettledGroups(ctx, { limit });
   return results;
+}
+
+async function repairSettledGroups(ctx: HostedDynamic, { limit }: { limit: number }) {
+  const { rows: groups } = await ctx.db.query(
+    `SELECT DISTINCT g.id, g.project_id, g.status
+       FROM run_groups g
+       JOIN runs r ON r.run_group_id = g.id
+      WHERE g.status IN ('done','canceled')
+        AND r.status IN ('queued','running','uploading')
+      ORDER BY g.updated_at, g.id
+      LIMIT $1`,
+    [limit],
+  );
+  for (const candidate of groups) {
+    let count = 0;
+    await ctx.db.withTx(async (tx: HostedDynamic) => {
+      const group = (
+        await tx.query(`SELECT * FROM run_groups WHERE id = $1 AND status IN ('done','canceled')`, [candidate.id])
+      ).rows[0];
+      if (!group) return;
+      const { rows: runs } = await tx.query(
+        `SELECT * FROM runs
+          WHERE run_group_id = $1 AND status IN ('queued','running','uploading')
+          ORDER BY case_id`,
+        [group.id],
+      );
+      const status = group.status === "canceled" ? "canceled" : "infra";
+      const reason =
+        group.status === "canceled"
+          ? "run group was canceled before this story completed"
+          : "runner restarted before this story completed";
+      for (const run of runs) {
+        const updated = await tx.query(
+          `UPDATE runs
+              SET status = $2, finished_at = now(), error = $3,
+                  progress = NULL, updated_at = now()
+            WHERE id = $1 AND status IN ('queued','running','uploading')`,
+          [run.id, status, reason],
+        );
+        if (updated.rowCount === 0) continue;
+        count += 1;
+        await appendRunEvent(tx, {
+          runDbId: run.id,
+          projectId: group.project_id,
+          type: "case_report",
+          payload: { case_id: run.case_id, status, error: reason },
+        });
+        await emitRunStatus(tx, {
+          projectId: group.project_id,
+          runGroupId: group.id,
+          runDbId: run.id,
+          status,
+        });
+      }
+      if (!count) return;
+      const summary = await exitSummary(tx, group.id);
+      await tx.query(`UPDATE run_groups SET exit_summary = $2, updated_at = now() WHERE id = $1`, [
+        group.id,
+        summary.exit_summary,
+      ]);
+      await audit(tx, {
+        actor: { system: "reconciler" },
+        action: "run_group.repaired",
+        entityType: "run_group",
+        entityId: group.id,
+        projectId: group.project_id,
+        detail: { repaired_runs: count, status },
+      });
+      await emitPlatformEvent(tx, {
+        projectId: group.project_id,
+        type: "run.status",
+        entity: { run_group_id: group.id },
+        payload: { status: group.status, exit_summary: summary.exit_summary },
+      });
+    });
+  }
 }
 
 async function reconcileOne(ctx: HostedDynamic, dispatch: HostedDynamic) {

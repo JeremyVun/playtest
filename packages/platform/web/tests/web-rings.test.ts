@@ -10,7 +10,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  DRIVERS, PLATFORMS, driverLabel, driverGist, applicationLine, keyFromName, keyProblem,
+  DRIVERS, PLATFORMS, driverLabel, driverGist, applicationPickerLabel, keyFromName, keyProblem,
   ringUrlProblem, ringConfigProblem, ringOptionLabel, isProdRing, defaultRingId,
   environmentKeyFromUrl, isLoopbackUrl,
   launchTargetWords, hostOf, PHYSICAL_APP_KEYS, LOGICAL_APP_KEYS,
@@ -18,18 +18,21 @@ import {
 } from "../src/lib/rings.js";
 import { initialDefaultsYaml } from "../src/lib/defaults-form.js";
 
-test("application: the three surfaces each read as themselves", () => {
+test("application: the three surfaces each describe themselves", () => {
   assert.deepEqual([...DRIVERS], ["web", "api", "mobile"]);
   assert.deepEqual([...PLATFORMS], ["ios", "android"]);
   for (const d of DRIVERS) {
     assert.ok(driverLabel(d) && !driverLabel(d).includes("_"), d);
     assert.ok(driverGist(d).length > 20, `${d} needs a sentence, not a token`);
   }
-  assert.equal(applicationLine({ key: "todo-ios", driver: "mobile", platform: "ios" }), "todo-ios · mobile · ios");
-  assert.equal(applicationLine({ key: "todo-web", driver: "web", platform: null }), "todo-web · web");
-  // A name earns the key its own place in the line; a name that IS the key does not.
-  assert.equal(applicationLine({ key: "todo-web", name: "Todo Web", driver: "web" }), "Todo Web · todo-web · web");
-  assert.equal(applicationLine({ key: "gss", name: "gss", driver: "web" }), "gss · web");
+});
+
+test("application: the suite picker shows only the name for every surface", () => {
+  assert.equal(applicationPickerLabel({ key: "todo-web", name: "Todo Web" }), "Todo Web");
+  assert.equal(applicationPickerLabel({ key: "todo-api", name: "Todo API" }), "Todo API");
+  assert.equal(applicationPickerLabel({ key: "todo-ios", name: "Todo iOS" }), "Todo iOS");
+  assert.equal(applicationPickerLabel({ key: "todo-android", name: "Todo Android" }), "Todo Android");
+  assert.equal(applicationPickerLabel({ key: "legacy-app" }), "legacy-app");
 });
 
 test("application: a key is suggested from the name, and shaped like the server's", () => {

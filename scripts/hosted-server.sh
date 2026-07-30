@@ -125,24 +125,19 @@ if [ ! -f "$RUNNER_CONFIG_FILE" ]; then
 #
 # What belongs here is what no platform record may hold: where a mobile build
 # lives on this disk, which Appium backend runs it, and which device it targets,
-# keyed by the application and ring keys you see in the console.
+# bound to the project, application, and environment keys you see in the console.
 #
 # To run a mobile suite, uncomment everything below and set `app` to your build.
-# The peer runner started by `npm run hosted` is SITE-scoped — it takes work from
-# every project — so its targets name their project. See
-# docs/guidance/hosted-runners.md.
-#
 # version: 1
 #
-# projects:
-#   <project-key>:                  # the key in the console URL, e.g. "acme"
-#     targets:
-#       todo-ios:                   # Applications → the application's key
-#         local:                    # …→ the ring's key
-#           platform: ios           # ios | android
-#           app: /Users/you/build/Todo.app
-#           backend: local-ios
-#           # device: iPhone 16     # optional; Appium's default otherwise
+# targets:
+#   - project: acme                 # the project key in the console URL
+#     application: todo-ios         # the application key
+#     environment: local            # the environment key
+#     platform: ios                 # ios | android
+#     app: /Users/you/build/Todo.app
+#     backend: local-ios
+#     # device: iPhone 16           # optional; Appium's default otherwise
 #
 # mobile:
 #   backends:

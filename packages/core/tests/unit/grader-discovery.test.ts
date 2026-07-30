@@ -171,7 +171,7 @@ function makeFixture({ mode = "journey", report = [], baseline = false, envelope
     tags: [],
     success: [],
     perf: {},
-    limits: { max_steps: 50, timeout_ms: 240_000 },
+    limits: { max_steps: 50, timeout_ms: 600_000 },
     actor_model: "claude-haiku-4-5",
     grader_model: "claude-sonnet-4-6",
     mode,

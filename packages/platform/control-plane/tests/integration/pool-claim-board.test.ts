@@ -283,6 +283,56 @@ test("pool: a re-exchange fences the earlier bearer and serves only the new one"
   });
 });
 
+test("pool: reconciliation repairs a completed group left with a pre-restart story running", async () => {
+  await withApp(async ({ api, base, app }: HostedDynamic) => {
+    const { project, suite, ring } = await setUp(api, { key: "pool6repair" });
+    const runner = claimer(base, (await register(api, project, { name: "adas-laptop", labels: ["macos"] })).credential);
+    const groupId = (await launch(api, { project, suite, ring })).body.run_group.id;
+    const dispatchId = (await runner.poll()).body.offers[0].dispatch_id;
+    assert.equal((await runner.claim(dispatchId)).status, 200);
+    const exchanged = await runner.exchange({ dispatch_id: dispatchId, isolation: "process" });
+    const headers = { authorization: `Bearer ${exchanged.body.token}`, "content-type": "application/json" };
+    const spec = await fetch(`${base}/api/v1/runner/groups/${groupId}`, { headers }).then((r) => r.json());
+    const interrupted = spec.cases[0];
+    assert.equal(
+      (await fetch(`${base}/api/v1/runner/groups/${groupId}/cases/${interrupted.run_id}/start`, {
+        method: "POST",
+        headers,
+        body: "{}",
+      })).status,
+      200,
+    );
+    assert.equal(
+      (await fetch(`${base}/api/v1/runner/groups/${groupId}/cases/${interrupted.run_id}/progress`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ doing: "recording", step: 18, max_steps: 50 }),
+      })).status,
+      200,
+    );
+
+    // Reproduce the state written by the old completion path: the attempt and
+    // group are terminal, but its child story still says it is recording.
+    await app.db.query(`UPDATE dispatches SET status = 'concluded', concluded_at = now() WHERE id = $1`, [dispatchId]);
+    await app.db.query(
+      `UPDATE run_groups SET status = 'done', exit_summary = $2, updated_at = now() WHERE id = $1`,
+      [groupId, { exit_code: 0, cases: [] }],
+    );
+    const stuck = await api.get(`/run-groups/${groupId}`);
+    assert.equal(stuck.body.status, "done");
+    assert.equal(stuck.body.runs[0].status, "running");
+    assert.equal(stuck.body.runs[0].progress.step, 18);
+
+    await reconcileDispatches(app.ctx);
+    const healed = await api.get(`/run-groups/${groupId}`);
+    assert.equal(healed.body.status, "done");
+    assert.equal(healed.body.exit_summary.exit_code, 2);
+    assert.equal(healed.body.runs[0].status, "infra");
+    assert.equal(healed.body.runs[0].progress, null);
+    assert.match(healed.body.runs[0].error, /runner restarted before this story completed/);
+  });
+});
+
 test("pool: a revoked credential is refused at poll, claim, and exchange", async () => {
   await withApp(async ({ api, base }: HostedDynamic) => {
     const { project, suite, ring } = await setUp(api, { key: "pool2" });

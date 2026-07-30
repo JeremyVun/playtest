@@ -210,7 +210,7 @@ if [ -z "$SIMULATOR_UDID" ]; then
 fi
 
 if [ "$BOOT_SIMULATOR" -eq 1 ]; then
-  echo "hosted-ios: booting $DEVICE…" >&2
+  echo "hosted-ios: booting ${DEVICE}…" >&2
   xcrun simctl boot "$SIMULATOR_UDID" >/dev/null 2>&1 || true
   xcrun simctl bootstatus "$SIMULATOR_UDID" -b
 fi
@@ -252,15 +252,14 @@ trap 'rm -f "$TEMP_CONFIG"' EXIT
   echo "$GENERATED_MARKER"
   echo "version: 1"
   echo
-  echo "projects:"
-  echo "  $PROJECT_YAML:"
-  echo "    targets:"
-  echo "      $APPLICATION_YAML:"
-  echo "        $ENVIRONMENT_YAML:"
-  echo "          platform: ios"
-  echo "          app: $APP_PATH_YAML"
-  echo "          backend: local-ios"
-  echo "          device: $DEVICE_YAML"
+  echo "targets:"
+  echo "  - project: $PROJECT_YAML"
+  echo "    application: $APPLICATION_YAML"
+  echo "    environment: $ENVIRONMENT_YAML"
+  echo "    platform: ios"
+  echo "    app: $APP_PATH_YAML"
+  echo "    backend: local-ios"
+  echo "    device: $DEVICE_YAML"
   echo
   echo "mobile:"
   echo "  backends:"

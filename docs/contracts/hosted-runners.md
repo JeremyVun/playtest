@@ -334,6 +334,10 @@ unreported work becomes infrastructure failure and queued remainder may be
 continued once. Dispatches never claimed within 600 seconds by default fail
 with an actionable diagnostic distinguishing no registered runner, label
 mismatch, no polling runner, and a silent claim holder.
+The same reconciliation pass repairs a terminal group with any nonterminal
+story rows: `done` groups resolve them as infrastructure failure, canceled
+groups resolve them as canceled, stale progress is cleared, and the exit
+summary is recomputed.
 
 Loss and continuation mutations reassert their preconditions. A late executor
 that completes before reconciliation wins. At most one group attempt is active,

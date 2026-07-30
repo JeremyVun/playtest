@@ -16,6 +16,8 @@ import { autoResolveEnabledFor, scheduleAutoResolve } from "../findings/auto-res
 import { modelTiers, defaultModels } from "@playtest/core/llm";
 import { checkInWindowMs } from "../dispatch/pool.ts";
 
+const DEFAULT_PROJECT_PARALLEL = Object.freeze({ total: 10, record: 3 });
+
 /** True when the principal is admin of at least one project (or a dev/admin token). */
 function isAdminSomewhere(p: HostedDynamic) {
   if (p.kind === "token") return p.role === "admin";
@@ -114,8 +116,8 @@ export async function createProject(ctx: HostedDynamic) {
     let rows;
     try {
       ({ rows } = await tx.query(
-        `INSERT INTO projects (id, key, name) VALUES ($1, $2, $3) RETURNING *`,
-        [id, key, name],
+        `INSERT INTO projects (id, key, name, parallel) VALUES ($1, $2, $3, $4) RETURNING *`,
+        [id, key, name, DEFAULT_PROJECT_PARALLEL],
       ));
     } catch (e: HostedDynamic) {
       // The pre-check above is best-effort; a concurrent create can still race past

@@ -72,7 +72,7 @@ function startAppiumStub(): Promise<HostedDynamic> {
  * A runner's own `runner.yaml`: the file that holds what no platform record may.
  * Written on the runner's disk, passed with `--config`, and never uploaded.
  */
-function writeRunnerConfig(dir: string, { labels, app, appiumUrl }: HostedDynamic) {
+function writeRunnerConfig(dir: string, { project, labels, app, appiumUrl }: HostedDynamic) {
   const file = path.join(dir, "runner.yaml");
   fs.writeFileSync(
     file,
@@ -80,12 +80,13 @@ function writeRunnerConfig(dir: string, { labels, app, appiumUrl }: HostedDynami
       "version: 1",
       `labels: [${labels.join(", ")}]`,
       "targets:",
-      "  todo-ios:",
-      "    local:",
-      "      platform: ios",
-      `      app: ${app}`,
-      "      backend: bench-ios",
-      `      device: ${DEVICE}`,
+      `  - project: ${project}`,
+      "    application: todo-ios",
+      "    environment: local",
+      "    platform: ios",
+      `    app: ${app}`,
+      "    backend: bench-ios",
+      `    device: ${DEVICE}`,
       "mobile:",
       "  backends:",
       "    bench-ios:",
@@ -193,7 +194,7 @@ test("an unbound runner skips a mobile offer locally, and a bound one claims the
 
       // Now a runner that binds the pair, with an external Appium backend that
       // really answers. It takes the SAME dispatch the unbound one left alone.
-      const configFile = writeRunnerConfig(disk.dir, { labels, app: disk.app, appiumUrl: appium.url });
+      const configFile = writeRunnerConfig(disk.dir, { project: project.key, labels, app: disk.app, appiumUrl: appium.url });
       const boundRunner = await registerRunner(api, project, { name: "bound-mac", labels });
       // No --labels: this runner's labels come from its config file, which is
       // the one source per invocation.
@@ -201,7 +202,7 @@ test("an unbound runner skips a mobile offer locally, and a bound one claims the
       // The banner states what this machine binds, by key: never the build path
       // or the device behind it.
       await until(
-        async () => /targets\s+todo-ios\/local — ios via backend "bench-ios"/.test(bound.out.stdout),
+        async () => /targets\s+gate4mobile\/todo-ios\/local — ios via backend "bench-ios"/.test(bound.out.stdout),
         "the bound runner's banner to state its targets",
         bound,
       );
@@ -245,7 +246,7 @@ test("a post-claim mobile preflight failure is one actionable infra error, not a
     await withApp(async ({ api, base, app }: HostedDynamic) => {
       const labels = ["ios-bench"];
       const { project, suite, ring } = await setUpMobileProject(api, "gate10mobile", { labels });
-      const configFile = writeRunnerConfig(disk.dir, { labels, app: disk.app, appiumUrl: appium.url });
+      const configFile = writeRunnerConfig(disk.dir, { project: project.key, labels, app: disk.app, appiumUrl: appium.url });
       const runner = await registerRunner(api, project, { name: "preflight-mac", labels });
       agent = startPoolAgent(base, runner.credential, { config: configFile });
       await until(
@@ -339,7 +340,7 @@ test("no platform-managed record or response carries a mobile path, device id, o
       });
       // The runner's own config file: this is where the three facts live, and
       // this file is never uploaded.
-      const configFile = writeRunnerConfig(disk.dir, { labels, app: disk.app, appiumUrl: appium.url });
+      const configFile = writeRunnerConfig(disk.dir, { project: project.key, labels, app: disk.app, appiumUrl: appium.url });
       assert.equal(fs.readFileSync(configFile, "utf8").includes(disk.app), true, "the facts are real, on the runner");
 
       const launched = await api.post(`/projects/${project.key}/run-groups`, {
@@ -489,7 +490,7 @@ test("a real session-boundary failure is scrubbed by the runner, not by the plat
       // `app.envs.<ring key>` — the placement tests above never run far enough
       // to find out.
       const { project, suite, ring } = await setUpMobileProject(api, "gate9session", { labels, config: {} });
-      const configFile = writeRunnerConfig(disk.dir, { labels, app: disk.app, appiumUrl: appium.url });
+      const configFile = writeRunnerConfig(disk.dir, { project: project.key, labels, app: disk.app, appiumUrl: appium.url });
       const runner = await registerRunner(api, project, { name: "session-mac", labels });
       agent = startPoolAgent(base, runner.credential, { config: configFile });
       await until(

@@ -256,6 +256,11 @@ test("uniqueness constraints, including the partial active-fingerprint index, ho
 test("JSON columns store canonical JSON and read back as JS values", async () => {
   const { db } = await freshDb();
   await db.query("INSERT INTO projects (id, key, name) VALUES ($1, $2, $3)", ["p1", "k", "N"]);
+  assert.deepEqual(
+    (await db.query("SELECT parallel FROM projects WHERE id = 'p1'")).rows[0].parallel,
+    { record: 3, total: 10 },
+    "new project rows use the hosted concurrency default",
+  );
 
   // Bound as a JS object; two logically equal documents must be byte-equal.
   await db.query(

@@ -49,16 +49,9 @@ export const BUILD_FROM_RUNNER = "the claiming runner supplies the build";
 /** The operations guide, named where the console has to send someone to it. */
 export const RUNNER_GUIDE = "docs/guidance/hosted-runners.md";
 
-/**
- * How an application reads in one line: what it is called, then only the facts
- * the name does not already give. `Todo Web · todo-web · web`, but `gss · web`
- * when the name and the key are the same word — a picker that prints one word
- * twice reads as two things.
- */
-export function applicationLine(application: { key?: string; name?: string; driver?: string; platform?: string | null }): string {
-  const name = application?.name || application?.key;
-  const key = application?.key && application.key !== name ? application.key : null;
-  return [name, key, application?.driver, application?.platform].filter(Boolean).join(" · ");
+/** A suite picker shows the chosen application name, regardless of surface. */
+export function applicationPickerLabel(application: { key?: string; name?: string }): string {
+  return application?.name || application?.key || "";
 }
 
 /** Turn a typed name into a candidate key, so nobody has to invent one twice. */

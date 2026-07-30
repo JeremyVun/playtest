@@ -86,7 +86,7 @@ test("launch preview: fans out a journey + a 2-persona discovery study; no histo
     assert.equal(modes["export-study@tester"], "explore");
     assert.equal(modes["export-study@exploratory"], "explore");
     const limits = Object.fromEntries(previewOff.body.cases.map((c: HostedDynamic) => [c.id, c.limits]));
-    assert.deepEqual(limits["add-todo"], { max_steps: 50, timeout_ms: 240_000 });
+    assert.deepEqual(limits["add-todo"], { max_steps: 50, timeout_ms: 600_000 });
     assert.deepEqual(limits["export-study@tester"], { max_steps: 300, timeout_ms: 1_800_000 });
     assert.equal(previewOff.body.discovery.runs, 2);
     assert.equal(previewOff.body.estimate.est_total_usd, null, "no run history yet -> an honest null, never a fabricated number");

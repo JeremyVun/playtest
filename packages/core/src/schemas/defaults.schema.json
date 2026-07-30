@@ -54,7 +54,7 @@
     "timeout": {
       "type": ["string", "number"],
       "exclusiveMinimum": 0,
-      "description": "Wall-clock limit per run: \"5m\", \"90s\", \"250ms\", or a number of milliseconds (must be > 0). Mode-aware default when unset: \"4m\" for a journey, \"30m\" for a discovery run. Equivalent nested spelling: limits.timeout."
+      "description": "Wall-clock limit per run: \"5m\", \"90s\", \"250ms\", or a number of milliseconds (must be > 0). Mode-aware default when unset: \"10m\" for a journey, \"30m\" for a discovery run. Equivalent nested spelling: limits.timeout."
     },
     "limits": {
       "type": "object",

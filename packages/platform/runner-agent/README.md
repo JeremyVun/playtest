@@ -63,8 +63,8 @@ There is one mode — the long-lived pool loop:
 The credential comes from runner registration in the console (or, under
 `PLAYTEST_AUTH=dev`, from the site-scoped `local` runner the server seeds under
 its data root). `--config` names the runner configuration file that binds
-mobile applications/rings to builds, devices, and Appium backends on this
-machine; web/API-only runners do not need one.
+mobile project/application/environment targets to builds, devices, and Appium
+backends on this machine; web/API-only runners do not need one.
 
 ## Source map
 

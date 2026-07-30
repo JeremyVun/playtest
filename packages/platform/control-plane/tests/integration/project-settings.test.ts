@@ -162,7 +162,7 @@ test("models: consolidation_model is a project policy over a terra deployment de
 test("project concurrency settings validate, persist, and reach the runner", async () => {
   await withApp(async ({ api, base }: HostedDynamic) => {
     const project = (await api.post("/projects", { key: "parallel", name: "Parallel" })).body;
-    assert.deepEqual((await api.get("/projects/parallel")).body.parallel, { total: 1, record: 1 });
+    assert.deepEqual((await api.get("/projects/parallel")).body.parallel, { total: 10, record: 3 });
 
     for (const bad of [
       { total: 0, record: 1 },

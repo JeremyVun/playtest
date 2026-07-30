@@ -7,10 +7,10 @@ import { applyLimitOverrides, claimGroupSessions, resolveHostedBudget } from "..
 import { RunnerApiError } from "../../src/api-client.ts";
 
 test("run-group limits override one resolved case without mutating suite defaults", () => {
-  const resolved = { id: "checkout", limits: { max_steps: 50, timeout_ms: 240_000 } };
+  const resolved = { id: "checkout", limits: { max_steps: 50, timeout_ms: 600_000 } };
   const overridden = applyLimitOverrides(resolved, { max_steps: 80, timeout_ms: 360_000 });
   assert.deepEqual(overridden.limits, { max_steps: 80, timeout_ms: 360_000 });
-  assert.deepEqual(resolved.limits, { max_steps: 50, timeout_ms: 240_000 });
+  assert.deepEqual(resolved.limits, { max_steps: 50, timeout_ms: 600_000 });
   assert.equal(applyLimitOverrides(resolved), resolved);
 });
 
@@ -32,7 +32,7 @@ test("hosted concurrency inherits the project policy and lets the suite replace 
   assert.deepEqual(
     resolveHostedBudget([], null),
     { total: 1, record: 1, grade: 1, cpu: 1 },
-    "hosted remains serial by default",
+    "a legacy spec with no project policy stays serial",
   );
   // The tail permits are carried but never exercised here:
   // the hosted executor runs each case through runCaseIsolated without passing

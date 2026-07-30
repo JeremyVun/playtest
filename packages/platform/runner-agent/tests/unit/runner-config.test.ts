@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { assertConfigScope, bindingFor, configBannerLines, loadRunnerConfig } from "../../src/runner-config.ts";
+import { bindingFor, configBannerLines, loadRunnerConfig } from "../../src/runner-config.ts";
 
 /** Write a config file (and the app build it points at) into a scratch dir. */
 function withConfig(body: string, { app = "Todo.app" }: { app?: string | null } = {}) {
@@ -22,12 +22,13 @@ const MANAGED = `
 version: 1
 labels: [macbook, ios]
 targets:
-  todo-ios:
-    local:
-      platform: ios
-      app: Todo.app
-      backend: local-ios
-      device: iPhone 16
+  - project: acme
+    application: todo-ios
+    environment: local
+    platform: ios
+    app: Todo.app
+    backend: local-ios
+    device: iPhone 16
 mobile:
   backends:
     local-ios:
@@ -50,11 +51,12 @@ test("runner config: a v1 file becomes labels, backends and bindings, with the a
     assert.equal(binding.app, path.join(c.dir, "Todo.app"), "a relative build path is this file's own directory");
     assert.equal(binding.backend.name, "local-ios");
     assert.equal(binding.backend.mode, "managed");
-    assert.equal(binding.projectKey, null, "a flat key belongs to whatever project this runner is scoped to");
+    assert.equal(binding.projectKey, "acme");
 
     // The lookup the claim and the executor both use.
     const found = bindingFor(config, { projectKey: "acme", applicationKey: "todo-ios", ringKey: "local" });
     assert.equal(found, binding);
+    assert.equal(bindingFor(config, { projectKey: "other", applicationKey: "todo-ios", ringKey: "local" }), null);
     assert.equal(bindingFor(config, { projectKey: "acme", applicationKey: "todo-ios", ringKey: "staging" }), null);
     assert.equal(bindingFor(null, { projectKey: "acme", applicationKey: "todo-ios", ringKey: "local" }), null);
   } finally {
@@ -63,7 +65,7 @@ test("runner config: a v1 file becomes labels, backends and bindings, with the a
 });
 
 test("runner config: an omitted device stays omitted — the runtime target must never inherit one", () => {
-  const c = withConfig(MANAGED.replace("      device: iPhone 16\n", ""));
+  const c = withConfig(MANAGED.replace("    device: iPhone 16\n", ""));
   try {
     assert.equal(loadRunnerConfig(c.file).bindings[0]!.device, null);
   } finally {
@@ -95,26 +97,29 @@ test("runner config: the version is required, and a missing file names the flag"
   }
 });
 
-test("runner config: a duplicate target is refused by position, not silently collapsed", () => {
+test("runner config: a duplicate project/application/environment target is refused by position", () => {
   const c = withConfig(`
 version: 1
 targets:
-  todo-ios:
-    local:
-      platform: ios
-      app: Todo.app
-      backend: local-ios
-    local:
-      platform: ios
-      app: Todo.app
-      backend: local-ios
+  - project: acme
+    application: todo-ios
+    environment: local
+    platform: ios
+    app: Todo.app
+    backend: local-ios
+  - project: acme
+    application: todo-ios
+    environment: local
+    platform: ios
+    app: Todo.app
+    backend: local-ios
 mobile:
   backends:
     local-ios: { platform: ios, appium: { mode: managed } }
 `);
   try {
-    assert.throws(() => loadRunnerConfig(c.file), /is not valid YAML/);
-    assert.throws(() => loadRunnerConfig(c.file), /exactly once/);
+    assert.throws(() => loadRunnerConfig(c.file), /targets\[1\] duplicates targets\[0\]/);
+    assert.throws(() => loadRunnerConfig(c.file), /project\/application\/environment target may be declared exactly once/);
   } finally {
     c.cleanup();
   }
@@ -238,63 +243,38 @@ mobile:
   }
 });
 
-test("runner config: a site-scoped runner must name the project of every target", () => {
-  const flat = withConfig(MANAGED);
-  try {
-    const config = loadRunnerConfig(flat.file);
-    // A project-scoped runner is unambiguous, so a flat key is exactly right.
-    assert.doesNotThrow(() => assertConfigScope(config, { siteScoped: false }));
-    assert.throws(() => assertConfigScope(config, { siteScoped: true }), /this runner is site-scoped/);
-    assert.throws(() => assertConfigScope(config, { siteScoped: true }), /projects\.<project-key>\.targets\.todo-ios\.local/);
-    assert.throws(() => assertConfigScope(config, { siteScoped: true }), /silently rebind/);
-  } finally {
-    flat.cleanup();
-  }
-
-  const qualified = withConfig(`
+test("runner config: targets explicitly require project, application, and environment fields", () => {
+  const missing = withConfig(`
 version: 1
-projects:
-  acme:
-    targets:
-      todo-ios:
-        local: { platform: ios, app: Todo.app, backend: local-ios }
+targets:
+  - application: todo-ios
+    environment: local
+    platform: ios
+    app: Todo.app
+    backend: local-ios
 mobile:
   backends:
     local-ios: { platform: ios, appium: { mode: managed } }
 `);
   try {
-    const config = loadRunnerConfig(qualified.file);
-    assert.doesNotThrow(() => assertConfigScope(config, { siteScoped: true }));
-    assert.equal(config.bindings[0]!.projectKey, "acme");
-    assert.ok(bindingFor(config, { projectKey: "acme", applicationKey: "todo-ios", ringKey: "local" }));
-    assert.equal(
-      bindingFor(config, { projectKey: "other", applicationKey: "todo-ios", ringKey: "local" }),
-      null,
-      "another project's identically-keyed application is a different application",
-    );
-    assert.match(configBannerLines(config).join("\n"), /acme\/todo-ios\/local — ios via backend "local-ios"/);
+    assert.throws(() => loadRunnerConfig(missing.file), /targets\[0\]\.project must be a non-empty string/);
   } finally {
-    qualified.cleanup();
+    missing.cleanup();
   }
 });
 
-test("runner config: flat and project-qualified targets in one file is refused rather than resolved", () => {
+test("runner config: targets are an explicit list, not positional nested mappings", () => {
   const c = withConfig(`
 version: 1
 targets:
   todo-ios:
     local: { platform: ios, app: Todo.app, backend: local-ios }
-projects:
-  acme:
-    targets:
-      todo-ios:
-        local: { platform: ios, app: Todo.app, backend: local-ios }
 mobile:
   backends:
     local-ios: { platform: ios, appium: { mode: managed } }
 `);
   try {
-    assert.throws(() => loadRunnerConfig(c.file), /not both/);
+    assert.throws(() => loadRunnerConfig(c.file), /targets must be a list/);
   } finally {
     c.cleanup();
   }
@@ -305,7 +285,7 @@ test("runner config: the banner states keys and backends, and no build path or d
   try {
     const banner = configBannerLines(loadRunnerConfig(c.file)).join("\n");
     assert.match(banner, /config\s+.*runner\.yaml/);
-    assert.match(banner, /targets\s+todo-ios\/local — ios via backend "local-ios"/);
+    assert.match(banner, /targets\s+acme\/todo-ios\/local — ios via backend "local-ios"/);
     assert.match(banner, /backends\s+local-ios — ios, managed Appium \(started here\)/);
     assert.equal(banner.includes("Todo.app"), false, "the build path is a machine-local fact, not banner furniture");
     assert.equal(banner.includes("iPhone 16"), false, "and neither is the device");

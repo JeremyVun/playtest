@@ -224,9 +224,10 @@ Hosted execution applies the ring as a
 authored physical fields while preserving logical suite precedence. Minted
 `auth_states` remain operator-owned.
 
-A mobile ring stores no build path, device, Appium endpoint, or application
-bytes. The runner resolves those facts from its own configuration keyed by
-`(application key, ring key)`. Hosted offers and launch previews therefore
+A mobile environment stores no build path, device, Appium endpoint, or
+application bytes. The runner resolves those facts from its own configuration
+bound explicitly to `(project key, application key, environment key)`. Hosted
+offers and launch previews therefore
 carry `base_url: null` and `build_supplied_by_runner: true`.
 No hosted route uploads or serves application binaries, and run groups do not
 pin them.
@@ -358,9 +359,11 @@ Run-group concurrency resolves once:
 
 1. the pinned suite's `parallel`, when present;
 2. the project's concrete `{ total, record }` policy;
-3. `{ total: 1, record: 1 }`.
+3. `{ total: 1, record: 1 }` for a legacy payload with no project policy.
 
-Project policy requires positive integers with `record <= total`. The runner
+New projects start with `{ total: 10, record: 3 }`. Existing projects retain
+their saved policy. Project policy requires positive integers with
+`record <= total`. The runner
 passes the effective policy to core’s worker pool: `total` caps all stories and
 `record` caps actor-driven stories. Input order and core’s start stagger are
 preserved. Process-isolated execution keeps the shared ring overlay alive until

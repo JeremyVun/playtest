@@ -111,10 +111,10 @@ export const defaultModels = Object.freeze({
 
 // max_steps/timeout are mode-aware, so they're resolved after merge (once the
 // case's mode is known) rather than living in DEFAULTS: a journey is a tight
-// regression (50 steps / 4m), a discovery run explores freely (300 / 30m). An
+// regression (50 steps / 10m), a discovery run explores freely (300 / 30m). An
 // explicit case/defaults value still wins — these only fill an unset budget.
 const STEP_BUDGET: Record<CaseMode, number> = { journey: 50, discovery: 300 };
-const TIME_BUDGET: Record<CaseMode, DurationInput> = { journey: "4m", discovery: "30m" };
+const TIME_BUDGET: Record<CaseMode, DurationInput> = { journey: "10m", discovery: "30m" };
 
 // Per-driver success-criterion validity. The schemas accept every kind; this
 // table is the cross-field rule the schema cannot express — a kind used under
@@ -652,7 +652,7 @@ export async function resolveCase(
   if (!Array.isArray(tags)) throw new DummyConfigError(`${file}: "tags" must be an array`);
 
   // Fill the step/wall-clock budget from the resolved mode when the user set
-  // neither: a journey stays a tight 50/4m, a discovery run gets room to explore
+  // neither: a journey stays a tight 50/10m, a discovery run gets room to explore
   // (300/30m). An explicit case/defaults value wins (it merged above, so it's set).
   const max_steps = merged.max_steps ?? STEP_BUDGET[merged.mode] ?? STEP_BUDGET.journey;
   const timeout = merged.timeout ?? TIME_BUDGET[merged.mode] ?? TIME_BUDGET.journey;

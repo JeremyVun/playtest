@@ -167,6 +167,34 @@ test("a suite can create the application it runs against, in that dialog's own w
   });
 });
 
+test("the new-suite application picker shows only names for every surface", async () => {
+  await withApp(async ({ base, api }: HostedDynamic) => {
+    const project = (await api.post("/projects", { key: "todo", name: "Todo" })).body;
+    for (const application of [
+      { key: "todo-web", name: "Todo Web", driver: "web" },
+      { key: "todo-api", name: "Todo API", driver: "api" },
+      { key: "todo-ios", name: "Todo iOS", driver: "mobile", platform: "ios" },
+      { key: "todo-android", name: "Todo Android", driver: "mobile", platform: "android" },
+    ]) {
+      await api.post(`/projects/${project.key}/applications`, application);
+    }
+
+    await withPage(async (page: HostedDynamic) => {
+      await page.goto(`${base}/p/${project.key}`);
+      await page.getByRole("button", { name: "Create a suite" }).click();
+      const application = page.locator("#modal-root .modal").getByLabel("Application");
+      await application.locator("option", { hasText: "Todo Android" }).waitFor({ state: "attached" });
+      assert.deepEqual(await application.locator("option").allTextContents(), [
+        "Todo Android",
+        "Todo API",
+        "Todo iOS",
+        "Todo Web",
+        "＋ Create an application…",
+      ]);
+    });
+  });
+});
+
 test("adding an environment asks where runs point, and names it from the answer", async () => {
   await withApp(async ({ base, api }: HostedDynamic) => {
     const project = (await api.post("/projects", { key: "checkout", name: "Checkout" })).body;
@@ -351,6 +379,9 @@ test("a mobile application says the runner supplies the build, and its environme
       // with the runner's own configuration keys.
       await page.getByText("Where the build comes from", { exact: true }).waitFor();
       await page.getByText(/no environment holds them and nothing on this page can set them/).waitFor();
+      await page.getByText(/project: <project key>/).waitFor();
+      await page.getByText(/application: <application key>/).waitFor();
+      await page.getByText(/environment: <environment key>/).waitFor();
       await page.getByText(/app: \/path\/to\/your\/build/).waitFor();
       await page.getByText(/docs\/guidance\/hosted-runners\.md/).first().waitFor();
 

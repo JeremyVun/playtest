@@ -575,12 +575,13 @@ version: 1
 labels: [macbook, ios]
 
 targets:
-  todo-ios:                          # immutable application key
-    local:                           # immutable ring key
-      platform: ios                  # ios | android
-      app: /Users/ada/build/Todo.app # absolute, or relative to this file
-      backend: local-ios
-      device: iPhone 16              # optional; Appium's default otherwise
+  - project: acme                    # immutable project key
+    application: todo-ios            # immutable application key
+    environment: local               # immutable environment key
+    platform: ios                    # ios | android
+    app: /Users/ada/build/Todo.app   # absolute, or relative to this file
+    backend: local-ios
+    device: iPhone 16                # optional; Appium's default otherwise
 
 mobile:
   backends:
@@ -593,17 +594,13 @@ mobile:
 - **Schema version.** A non-empty file must begin `version: 1`. A file that
   parses to nothing — the seeded, all-comments `runner.yaml` — is a valid EMPTY
   configuration: no targets, no backends, and **no labels declaration**.
-- **Targets** are keyed by immutable application key, then ring key. v1 declares
-  mobile targets only, with a local filesystem `app` path; web and API rings need
-  no entry, because a ring's URL travels with the job and is evaluated from the
-  runner's own network position.
-- **Project qualification.** A **site-scoped** runner must qualify every target
-  (`projects.<project-key>.targets.<app>.<ring>`) — a flat key would silently
-  rebind if another project later created an application with the same key. Flat
-  `targets` are the form for project-scoped runners, whose scope makes them
-  unambiguous. Declaring both forms in one file is refused. Scope is the control
-  plane's answer and arrives with the first check-in, so a site-scoped runner
-  holding flat keys stops there, with the qualification it needs in the message.
+- **Targets** are a list of explicit bindings. Every entry names the immutable
+  `project`, `application`, and `environment` keys from the console, then the
+  runner-local physical facts. Project is required for every runner scope, so
+  identically keyed applications in different projects cannot collide. v1
+  declares mobile targets only; web and API environments need no entry because
+  their URL travels with the job and is evaluated from the runner's own network
+  position.
 - **Backends.** `mode: managed` (the default) means this runner starts, health
   checks, supervises and stops an Appium of its own; `mode: external` dials one
   that already runs and takes `url` plus an optional `credential_file` or
@@ -616,12 +613,13 @@ mobile:
 - **Labels have exactly one source per invocation**: the file's `labels`, or the
   `--labels` / `PLAYTEST_RUNNER_LABELS` forms. Supplying both is a startup error,
   never a merge. A file that declares no `labels` is not a source.
-- **Startup validation** is whole-file and actionable: an unparseable file
-  (including a duplicate application, ring or backend key), a missing `version`,
-  an unknown key, a target naming an undeclared backend, a target whose platform
-  disagrees with its backend's, a build path that is not on this machine, and a
-  credential file or environment variable that is not there — each names the
-  position in the file and what to do about it.
+- **Startup validation** is whole-file and actionable: an unparseable file, a
+  missing `version`, an unknown or missing field, a duplicate
+  `(project, application, environment)` target, a target naming an undeclared
+  backend, a target whose platform disagrees with its backend's, a build path
+  that is not on this machine, and a credential file or environment variable
+  that is not there — each names the position in the file and what to do about
+  it.
 
 ### Claim compatibility
 
@@ -637,9 +635,8 @@ group is claimable only when all of the following hold:
 1. this runner uses `--isolation process`. A container reaches neither the
    device, nor an Appium on loopback, nor a build outside the workspace, so a
    container-isolation runner refuses mobile offers with that stated reason;
-2. its configuration file binds the offered `(application key, ring key)` —
-   project-qualified for a site-scoped runner, using the offer envelope's
-   `project_key`;
+2. its configuration file binds the offered
+   `(project key, application key, environment key)`;
 3. the binding's platform equals the offered application's platform;
 4. the binding's backend is **startable**. Managed: the Appium server and the
    platform driver (`xcuitest` / `uiautomator2`) are present. External: a

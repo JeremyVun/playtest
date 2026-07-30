@@ -331,11 +331,11 @@ const mobileBuildNote = () =>
     h("div.label", { style: "margin-bottom:6px" }, "Where the build comes from"),
     h("p.dim", { style: "font-size:12.5px;margin:0 0 8px" },
       "The build's path on disk, the Appium server that drives it and the device it targets are facts only a runner can know, so no environment holds them and nothing on this page can set them. "
-      + "The runner that claims a mobile run reads all three from a file on its own disk, keyed by these exact keys:"),
+      + "The runner that claims a mobile run reads all three from a file on its own disk, bound to these exact keys:"),
     h("pre.mono", { style: "background:var(--bg2);padding:10px;border-radius:6px;overflow:auto;font-size:12px" },
-      "targets:\n  <application key>:\n    <environment key>:\n      platform: …\n      app: /path/to/your/build\n      backend: …"),
+      "targets:\n  - project: <project key>\n    application: <application key>\n    environment: <environment key>\n    platform: …\n    app: /path/to/your/build\n    backend: …"),
     h("p.faint", { style: "font-size:11.5px;margin:8px 0 0" },
-      "Three lines per environment, then restart the runner. The full reference — managed or external Appium, devices, credentials — is ",
+      "Add one explicit target entry per environment, then restart the runner. The full reference — managed or external Appium, devices, credentials — is ",
       h("span.mono", {}, RUNNER_GUIDE), "."),
   );
 

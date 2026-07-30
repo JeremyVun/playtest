@@ -1,0 +1,12 @@
+{
+ "trial": 2,
+ "round": 3,
+ "audited_by": "lead",
+ "reviewed": [
+  {
+   "claim_id": "C013",
+   "decision": "stands"
+  }
+ ],
+ "overrides": []
+}

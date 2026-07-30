@@ -1,0 +1,8 @@
+{
+ "trial": 2,
+ "round": 2,
+ "audited_by": "lead",
+ "reviewed": [],
+ "note": "no low-confidence claims; override C029 withdrawn-before-round verified",
+ "overrides": []
+}

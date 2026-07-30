@@ -1,0 +1,640 @@
+{
+ "trials": {
+  "t1": {
+   "rounds": [
+    {
+     "round": 1,
+     "armP": {
+      "wall_ms": 3738182,
+      "cost_usd": 9.9302,
+      "steps": 153,
+      "stats": {
+       "pass": 5,
+       "fail": 8,
+       "explored": 2,
+       "infra": 0
+      }
+     },
+     "armC": {
+      "wall_ms": 1355712,
+      "cost_usd": 11.1059,
+      "messages": 98,
+      "tool_calls": 97,
+      "bugs": 8,
+      "end_reason": "finished",
+      "tokens": {
+       "prompt": 2541770,
+       "completion": 35271,
+       "cached": 591360
+      }
+     },
+     "judge": {
+      "C": {
+       "seeded": [
+        "f-approve-pending-label",
+        "f-available-filter-ignored",
+        "f-booking-no-redirect",
+        "f-cancel-button-missing",
+        "f-extension-block-missing",
+        "f-overview-units-total"
+       ],
+       "latent": 2,
+       "invalid": 0,
+       "duplicates": 0,
+       "nondup": 8,
+       "invalid_sublabels": {}
+      },
+      "P": {
+       "seeded": [
+        "f-available-filter-ignored",
+        "f-booking-no-redirect",
+        "f-bundle-threshold-off-by-one",
+        "f-cancel-button-missing",
+        "f-extension-block-missing",
+        "f-late-fee-day-count",
+        "f-overview-units-total"
+       ],
+       "latent": 0,
+       "invalid": 20,
+       "duplicates": 16,
+       "nondup": 26,
+       "invalid_sublabels": {
+        "soft-ux": 7,
+        "not-a-bug": 11,
+        "harness-artifact": 2
+       }
+      }
+     },
+     "new_seeded_P": [
+      "f-available-filter-ignored",
+      "f-booking-no-redirect",
+      "f-bundle-threshold-off-by-one",
+      "f-cancel-button-missing",
+      "f-extension-block-missing",
+      "f-late-fee-day-count",
+      "f-overview-units-total"
+     ],
+     "new_seeded_C": [
+      "f-approve-pending-label",
+      "f-available-filter-ignored",
+      "f-booking-no-redirect",
+      "f-cancel-button-missing",
+      "f-extension-block-missing",
+      "f-overview-units-total"
+     ],
+     "cum_seeded_P": 7,
+     "cum_seeded_C": 6
+    },
+    {
+     "round": 2,
+     "armP": {
+      "wall_ms": 2906924,
+      "cost_usd": 7.8968,
+      "steps": 131,
+      "stats": {
+       "pass": 11,
+       "fail": 2,
+       "explored": 2,
+       "infra": 0
+      }
+     },
+     "armC": {
+      "wall_ms": 1593531,
+      "cost_usd": 13.3323,
+      "messages": 118,
+      "tool_calls": 117,
+      "bugs": 4,
+      "end_reason": "finished",
+      "tokens": {
+       "prompt": 3167805,
+       "completion": 38553,
+       "cached": 814080
+      }
+     },
+     "judge": {
+      "P": {
+       "seeded": [
+        "f-cancel-confirm-noop"
+       ],
+       "latent": 3,
+       "invalid": 10,
+       "duplicates": 9,
+       "nondup": 13,
+       "invalid_sublabels": {
+        "soft-ux": 4,
+        "not-a-bug": 4,
+        "harness-artifact": 2
+       }
+      },
+      "C": {
+       "seeded": [
+        "f-cancel-confirm-noop",
+        "f-extend-limit-off-by-one"
+       ],
+       "latent": 1,
+       "invalid": 0,
+       "duplicates": 1,
+       "nondup": 3,
+       "invalid_sublabels": {}
+      }
+     },
+     "new_seeded_P": [
+      "f-cancel-confirm-noop"
+     ],
+     "new_seeded_C": [
+      "f-cancel-confirm-noop",
+      "f-extend-limit-off-by-one"
+     ],
+     "cum_seeded_P": 8,
+     "cum_seeded_C": 8
+    },
+    {
+     "round": 3,
+     "armP": {
+      "wall_ms": 1939966,
+      "cost_usd": 4.8155,
+      "steps": 133,
+      "stats": {
+       "pass": 13,
+       "fail": 0,
+       "explored": 2,
+       "infra": 0
+      }
+     },
+     "armC": {
+      "wall_ms": 1298239,
+      "cost_usd": 10.8242,
+      "messages": 103,
+      "tool_calls": 102,
+      "bugs": 3,
+      "end_reason": "finished",
+      "tokens": {
+       "prompt": 2654309,
+       "completion": 31317,
+       "cached": 752640
+      }
+     },
+     "judge": {
+      "C": {
+       "seeded": [],
+       "latent": 1,
+       "invalid": 1,
+       "duplicates": 1,
+       "nondup": 2,
+       "invalid_sublabels": {
+        "harness-artifact": 1
+       }
+      },
+      "P": {
+       "seeded": [],
+       "latent": 2,
+       "invalid": 14,
+       "duplicates": 5,
+       "nondup": 16,
+       "invalid_sublabels": {
+        "soft-ux": 7,
+        "not-a-bug": 4,
+        "harness-artifact": 3
+       }
+      }
+     },
+     "new_seeded_P": [],
+     "new_seeded_C": [],
+     "cum_seeded_P": 8,
+     "cum_seeded_C": 8
+    }
+   ],
+   "seeded_P": [
+    "f-available-filter-ignored",
+    "f-booking-no-redirect",
+    "f-bundle-threshold-off-by-one",
+    "f-cancel-button-missing",
+    "f-cancel-confirm-noop",
+    "f-extension-block-missing",
+    "f-late-fee-day-count",
+    "f-overview-units-total"
+   ],
+   "seeded_C": [
+    "f-approve-pending-label",
+    "f-available-filter-ignored",
+    "f-booking-no-redirect",
+    "f-cancel-button-missing",
+    "f-cancel-confirm-noop",
+    "f-extend-limit-off-by-one",
+    "f-extension-block-missing",
+    "f-overview-units-total"
+   ],
+   "verdicts": {
+    "B1": {
+     "passes": false,
+     "recall_masking_aware": 0.4,
+     "recall_raw": 0.4,
+     "note": "all 20 reachable by round 2 (both maskers withdrawn round 1)"
+    },
+    "B2": {
+     "passes": false,
+     "armP_unique": 8,
+     "armC_unique": 8
+    },
+    "B3": {
+     "passes": false,
+     "per_round": [
+      {
+       "round": 1,
+       "invalid": 20,
+       "nondup": 26,
+       "ratio": 0.769,
+       "passes": false
+      },
+      {
+       "round": 2,
+       "invalid": 10,
+       "nondup": 13,
+       "ratio": 0.769,
+       "passes": false
+      },
+      {
+       "round": 3,
+       "invalid": 14,
+       "nondup": 16,
+       "ratio": 0.875,
+       "passes": false
+      }
+     ]
+    },
+    "B4": {
+     "passes": true,
+     "cost_P": 22.64,
+     "cost_C": 35.26,
+     "wall_P_min": 143.1,
+     "wall_C_min": 70.8
+    }
+   }
+  },
+  "t2": {
+   "rounds": [
+    {
+     "round": 1,
+     "armP": {
+      "wall_ms": 3643636,
+      "cost_usd": 10.0995,
+      "steps": 151,
+      "stats": {
+       "pass": 5,
+       "fail": 8,
+       "explored": 2,
+       "infra": 0
+      }
+     },
+     "armC": {
+      "wall_ms": 1136840,
+      "cost_usd": 9.936,
+      "messages": 92,
+      "tool_calls": 91,
+      "bugs": 9,
+      "end_reason": "finished",
+      "tokens": {
+       "prompt": 2350071,
+       "completion": 27072,
+       "cached": 583680
+      }
+     },
+     "judge": {
+      "P": {
+       "seeded": [
+        "f-available-filter-ignored",
+        "f-booking-no-redirect",
+        "f-bundle-threshold-off-by-one",
+        "f-cancel-button-missing",
+        "f-extension-block-missing",
+        "f-late-fee-day-count",
+        "f-overview-units-total"
+       ],
+       "latent": 3,
+       "invalid": 21,
+       "duplicates": 16,
+       "nondup": 30,
+       "invalid_sublabels": {
+        "soft-ux": 7,
+        "not-a-bug": 12,
+        "harness-artifact": 2
+       }
+      },
+      "C": {
+       "seeded": [
+        "f-approve-pending-label",
+        "f-available-filter-ignored",
+        "f-booking-no-redirect",
+        "f-cancel-button-missing",
+        "f-extension-block-missing",
+        "f-overview-units-total"
+       ],
+       "latent": 1,
+       "invalid": 1,
+       "duplicates": 5,
+       "nondup": 4,
+       "invalid_sublabels": {
+        "not-a-bug": 1
+       }
+      }
+     },
+     "new_seeded_P": [
+      "f-available-filter-ignored",
+      "f-booking-no-redirect",
+      "f-bundle-threshold-off-by-one",
+      "f-cancel-button-missing",
+      "f-extension-block-missing",
+      "f-late-fee-day-count",
+      "f-overview-units-total"
+     ],
+     "new_seeded_C": [
+      "f-approve-pending-label",
+      "f-available-filter-ignored",
+      "f-booking-no-redirect",
+      "f-cancel-button-missing",
+      "f-extension-block-missing",
+      "f-overview-units-total"
+     ],
+     "cum_seeded_P": 7,
+     "cum_seeded_C": 6
+    },
+    {
+     "round": 2,
+     "armP": {
+      "wall_ms": 2937394,
+      "cost_usd": 8.4636,
+      "steps": 148,
+      "stats": {
+       "pass": 12,
+       "fail": 1,
+       "explored": 2,
+       "infra": 0
+      }
+     },
+     "armC": {
+      "wall_ms": 1273960,
+      "cost_usd": 10.7442,
+      "messages": 101,
+      "tool_calls": 100,
+      "bugs": 4,
+      "end_reason": "finished",
+      "tokens": {
+       "prompt": 2629134,
+       "completion": 29392,
+       "cached": 729600
+      }
+     },
+     "judge": {
+      "C": {
+       "seeded": [
+        "f-cancel-confirm-noop",
+        "f-extend-limit-off-by-one"
+       ],
+       "latent": 2,
+       "invalid": 0,
+       "duplicates": 0,
+       "nondup": 4,
+       "invalid_sublabels": {}
+      },
+      "P": {
+       "seeded": [
+        "f-cancel-confirm-noop"
+       ],
+       "latent": 0,
+       "invalid": 16,
+       "duplicates": 11,
+       "nondup": 16,
+       "invalid_sublabels": {
+        "soft-ux": 8,
+        "not-a-bug": 5,
+        "harness-artifact": 3
+       }
+      }
+     },
+     "new_seeded_P": [
+      "f-cancel-confirm-noop"
+     ],
+     "new_seeded_C": [
+      "f-cancel-confirm-noop",
+      "f-extend-limit-off-by-one"
+     ],
+     "cum_seeded_P": 8,
+     "cum_seeded_C": 8
+    },
+    {
+     "round": 3,
+     "armP": {
+      "wall_ms": 1333011,
+      "cost_usd": 3.92,
+      "steps": 141,
+      "stats": {
+       "pass": 13,
+       "fail": 0,
+       "explored": 2,
+       "infra": 0
+      }
+     },
+     "armC": {
+      "wall_ms": 1807494,
+      "cost_usd": 14.0664,
+      "messages": 125,
+      "tool_calls": 124,
+      "bugs": 2,
+      "end_reason": "finished",
+      "tokens": {
+       "prompt": 3369319,
+       "completion": 47871,
+       "cached": 936960
+      }
+     },
+     "judge": {
+      "P": {
+       "seeded": [],
+       "latent": 2,
+       "invalid": 12,
+       "duplicates": 9,
+       "nondup": 14,
+       "invalid_sublabels": {
+        "soft-ux": 7,
+        "not-a-bug": 3,
+        "harness-artifact": 2
+       }
+      },
+      "C": {
+       "seeded": [],
+       "latent": 1,
+       "invalid": 0,
+       "duplicates": 1,
+       "nondup": 1,
+       "invalid_sublabels": {}
+      }
+     },
+     "new_seeded_P": [],
+     "new_seeded_C": [],
+     "cum_seeded_P": 8,
+     "cum_seeded_C": 8
+    }
+   ],
+   "seeded_P": [
+    "f-available-filter-ignored",
+    "f-booking-no-redirect",
+    "f-bundle-threshold-off-by-one",
+    "f-cancel-button-missing",
+    "f-cancel-confirm-noop",
+    "f-extension-block-missing",
+    "f-late-fee-day-count",
+    "f-overview-units-total"
+   ],
+   "seeded_C": [
+    "f-approve-pending-label",
+    "f-available-filter-ignored",
+    "f-booking-no-redirect",
+    "f-cancel-button-missing",
+    "f-cancel-confirm-noop",
+    "f-extend-limit-off-by-one",
+    "f-extension-block-missing",
+    "f-overview-units-total"
+   ],
+   "verdicts": {
+    "B1": {
+     "passes": false,
+     "recall_masking_aware": 0.4,
+     "recall_raw": 0.4,
+     "note": "all 20 reachable by round 2 (both maskers withdrawn round 1)"
+    },
+    "B2": {
+     "passes": false,
+     "armP_unique": 8,
+     "armC_unique": 8
+    },
+    "B3": {
+     "passes": false,
+     "per_round": [
+      {
+       "round": 1,
+       "invalid": 21,
+       "nondup": 30,
+       "ratio": 0.7,
+       "passes": false
+      },
+      {
+       "round": 2,
+       "invalid": 16,
+       "nondup": 16,
+       "ratio": 1.0,
+       "passes": false
+      },
+      {
+       "round": 3,
+       "invalid": 12,
+       "nondup": 14,
+       "ratio": 0.857,
+       "passes": false
+      }
+     ]
+    },
+    "B4": {
+     "passes": true,
+     "cost_P": 22.48,
+     "cost_C": 34.75,
+     "wall_P_min": 131.9,
+     "wall_C_min": 70.3
+    }
+   }
+  }
+ },
+ "miss_analysis": {
+  "f-overdue-empty-state": {
+   "P_t1": false,
+   "P_t2": false,
+   "C_t1": true,
+   "C_t2": true
+  },
+  "f-charges-late-fee": {
+   "P_t1": false,
+   "P_t2": false,
+   "C_t1": true,
+   "C_t2": true
+  },
+  "f-equipment-empty-copy": {
+   "P_t1": false,
+   "P_t2": false,
+   "C_t1": false,
+   "C_t2": false
+  },
+  "f-equipment-missing-message": {
+   "P_t1": false,
+   "P_t2": false,
+   "C_t1": false,
+   "C_t2": false
+  },
+  "f-out-filter-drops-overdue": {
+   "P_t1": false,
+   "P_t2": false,
+   "C_t1": false,
+   "C_t2": false
+  },
+  "f-saturday-roll-short": {
+   "P_t1": false,
+   "P_t2": false,
+   "C_t1": false,
+   "C_t2": false
+  },
+  "f-booking-error-swallowed": {
+   "P_t1": true,
+   "P_t2": true,
+   "C_t1": false,
+   "C_t2": false
+  },
+  "f-step2-remove-missing": {
+   "P_t1": true,
+   "P_t2": true,
+   "C_t1": true,
+   "C_t2": true
+  },
+  "f-decline-status-line": {
+   "P_t1": true,
+   "P_t2": true,
+   "C_t1": true,
+   "C_t2": true
+  },
+  "f-approvals-empty-action": {
+   "P_t1": false,
+   "P_t2": false,
+   "C_t1": true,
+   "C_t2": true
+  }
+ },
+ "found_union": [
+  "f-approve-pending-label",
+  "f-available-filter-ignored",
+  "f-booking-no-redirect",
+  "f-bundle-threshold-off-by-one",
+  "f-cancel-button-missing",
+  "f-cancel-confirm-noop",
+  "f-extend-limit-off-by-one",
+  "f-extension-block-missing",
+  "f-late-fee-day-count",
+  "f-overview-units-total"
+ ],
+ "overhead_tokens": {
+  "judge_fable": {
+   "dry_run": 121489,
+   "t1": 348956,
+   "t2": 370830
+  },
+  "authors_opus": {
+   "subject": 239120,
+   "stories": 114750,
+   "catalog": 242929,
+   "gate_recalibration": 83041,
+   "note": "two earlier subject-author attempts died on API 529 before writing files; tokens unrecorded"
+  },
+  "note": "Claude-side tokens (judge: Fable 5; authors: Opus 5); PREREG prices only gateway (gpt-5.5) usage, so these are reported as raw tokens, excluded from arm cost"
+ },
+ "shakedown": {
+  "armP_cost_usd": 20.45,
+  "armC_cost_usd": 10.84,
+  "note": "clean-subject calibration rounds + judge dry-run; pre-measurement"
+ }
+}

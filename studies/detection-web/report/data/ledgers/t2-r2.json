@@ -1,0 +1,691 @@
+{
+  "trial": 2,
+  "round": 2,
+  "shuffle_seed": 2002,
+  "judged_at": "2026-07-30T18:08:10.967Z",
+  "claims": [
+    {
+      "claim_id": "C001",
+      "arm": "C",
+      "source_items": [
+        "I026"
+      ],
+      "provenance": [
+        {
+          "arm": "C",
+          "bug_n": 3
+        }
+      ],
+      "text": "Entering an over-quantity on the new-loan Step 2 form blocks progress without a clear validation message. Evidence: \"Change \\\"Units of Canon C70 Cinema Camera\\\" to 4\" when the row says \"3 of 3 available\"; after clicking Continue to review, \"The app stays on Step 2 and preserves the entered values, but it displays no error or explanation. The user cannot tell why \\\"Continue to review\\\" did nothing.\"",
+      "duplicate_of": null,
+      "verdict": "latent",
+      "sublabel": null,
+      "fault_id": null,
+      "confidence": "medium",
+      "rationale": "Verified via curl that the clean server's schedule check returns the exact spec message ('Only 1 unit of Canon C70 Cinema Camera is available.'), so the silent block is a client-side gap (native constraint validation instead of the SPEC 1.6 inline message). No catalog fault touches step-2 quantity validation, so the behavior is shared with the clean build and violates SPEC 1.6/7.2.",
+      "override": null
+    },
+    {
+      "claim_id": "C002",
+      "arm": "P",
+      "source_items": [
+        "I001"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYSWM8076KR6B7KPQ58GZYQ7",
+          "state": "new"
+        }
+      ],
+      "text": "Over-quantity validation on the Units field gives only an unclear native browser error. Evidence: \"Over-quantity validation gives unclear native Units error\" (Severity: major). Restates the inadequate over-quantity validation feedback covered by C001.",
+      "duplicate_of": "C001",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C001",
+      "override": null
+    },
+    {
+      "claim_id": "C003",
+      "arm": "P",
+      "source_items": [
+        "I007"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYT1GBA1C1Y3E21GHR6WM37K",
+          "state": "new"
+        }
+      ],
+      "text": "Over-quantity validation shows a vague native message with no item or stock context. Evidence: \"Over-quantity validation uses a vague native message that omits the item and stock rationale.\" (Severity: major). Restates the inadequate over-quantity validation feedback covered by C001.",
+      "duplicate_of": "C001",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C001",
+      "override": null
+    },
+    {
+      "claim_id": "C004",
+      "arm": "P",
+      "source_items": [
+        "I002"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYSW81K8SJRCXWY8EP5NNY2N",
+          "state": "new"
+        }
+      ],
+      "text": "In the equipment catalogue, the availability of the MacBook Pro 16-inch Edit Laptop is not visible without scrolling. Evidence: \"Equipment catalogue requires scrolling to view MacBook Pro 16-inch Edit Laptop availability\" (Severity: minor).",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "soft-ux",
+      "fault_id": null,
+      "confidence": "high",
+      "rationale": "Needing to scroll to see one catalogue row is viewport layout friction, not a SPEC violation; the availability data is present and correct.",
+      "override": null
+    },
+    {
+      "claim_id": "C005",
+      "arm": "P",
+      "source_items": [
+        "I003"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYT1E7A4G25Y06HMZQK7Y4N6",
+          "state": "new"
+        }
+      ],
+      "text": "The quantity control for an item is only discoverable after the item has been added; none is offered beforehand. Evidence: \"The Canon quantity path was only discoverable after adding the item; there was no quantity control before pressing Add item.\" (Severity: minor).",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "soft-ux",
+      "fault_id": null,
+      "confidence": "medium",
+      "rationale": "SPEC 7.2 deliberately designs step 2 this way: items are added from the Add equipment list and the units box appears on the added row. The complaint is a discoverability preference, not a violation.",
+      "override": null
+    },
+    {
+      "claim_id": "C006",
+      "arm": "P",
+      "source_items": [
+        "I004"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYT1GBA0Q0GTQF46BSNP9CP6",
+          "state": "new"
+        }
+      ],
+      "text": "Borrower-form validation messages persist after the offending fields are corrected, leaving stale errors on screen. Evidence: \"Corrected borrower fields keep stale validation messages, making the form state hard to trust.\" (Severity: minor).",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "not-a-bug",
+      "fault_id": null,
+      "confidence": "medium",
+      "rationale": "SPEC 1.6 ties message clearing to the next form check, and the clean server verifiably clears corrected fields on recheck (curl: refusal responses list only currently-failing fields). A message persisting until resubmission matches the SPEC, and the claim gives no evidence messages survived a resubmit.",
+      "override": null
+    },
+    {
+      "claim_id": "C007",
+      "arm": "P",
+      "source_items": [
+        "I019"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYSWM8076KR6B7KPQ58GZYQ0",
+          "state": "new"
+        }
+      ],
+      "text": "Borrower validation errors do not clear after valid corrections. Evidence: \"Borrower validation errors remain after valid field corrections\" (Severity: minor). Restates the stale borrower validation messages covered by C006.",
+      "duplicate_of": "C006",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C006",
+      "override": null
+    },
+    {
+      "claim_id": "C008",
+      "arm": "P",
+      "source_items": [
+        "I005"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYT1GBA3T0KZS1NH002QEN71",
+          "state": "new"
+        }
+      ],
+      "text": "Accessibility scanning reports widespread color-contrast violations affecting readability of text across the app. Evidence: \"Accessibility scans found widespread color-contrast violations, which may reduce readability of counts, validation, and status text.\" (Severity: minor).",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "soft-ux",
+      "fault_id": null,
+      "confidence": "medium",
+      "rationale": "Generic axe color-contrast findings with no named element or SPEC-covered behavior; the SPEC sets no contrast requirement, so this is polish, not a defect claim that can be credited.",
+      "override": null
+    },
+    {
+      "claim_id": "C009",
+      "arm": "P",
+      "source_items": [
+        "I006"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYSSB6P0Y3ZVMG6FFZB09VSR",
+          "state": "new"
+        }
+      ],
+      "text": "Widespread color-contrast accessibility violations. Evidence: \"Widespread accessibility color-contrast violations\" (Severity: minor). Restates the contrast findings covered by C008.",
+      "duplicate_of": "C008",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C008",
+      "override": null
+    },
+    {
+      "claim_id": "C010",
+      "arm": "P",
+      "source_items": [
+        "I008"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYSYSWY3T2WDDR9C0F6MRHQY",
+          "state": "new"
+        }
+      ],
+      "text": "Recorded actions are skipped when the current page snapshot drifts from the recorded baseline, so steps do not replay. Evidence: \"Recorded actions are skipped when the page snapshot drifts from baseline\" (Severity: minor).",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "harness-artifact",
+      "fault_id": null,
+      "confidence": "high",
+      "rationale": "Recorded-action replay skipping on baseline snapshot drift describes the test harness's own replay mechanics, not any behavior of the product.",
+      "override": null
+    },
+    {
+      "claim_id": "C011",
+      "arm": "P",
+      "source_items": [
+        "I009"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYSSJ9H6XKB16FAEPPMBT59M",
+          "state": "new"
+        }
+      ],
+      "text": "On the decline flow, the confirmation control sits below the reason field and is hidden from view. Evidence: \"Decline confirmation control is hidden below the reason field\" (Severity: major).",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "soft-ux",
+      "fault_id": null,
+      "confidence": "high",
+      "rationale": "The Confirm decline control exists and works (the decline completed elsewhere in the run); sitting below the reason field/fold is layout preference, not a SPEC violation. Distinct from f-decline-status-line, which is about the missing running status line.",
+      "override": null
+    },
+    {
+      "claim_id": "C012",
+      "arm": "C",
+      "source_items": [
+        "I010"
+      ],
+      "provenance": [
+        {
+          "arm": "C",
+          "bug_n": 4
+        }
+      ],
+      "text": "A weekday pickup date outside the allowed range is not rejected with a range message; the form instead keeps showing the stale weekend error. Evidence: after setting the date to \"2026-04-15, which is a weekday but outside the displayed allowed range of 2026-03-16 to 2026-03-30\" and clicking Continue to review, \"The form remains on Step 2 with pickup date 2026-04-15, but still displays \\\"The desk is closed at weekends. Choose a weekday.\\\" even though that date is not a weekend.\"",
+      "duplicate_of": null,
+      "verdict": "latent",
+      "sublabel": null,
+      "fault_id": null,
+      "confidence": "medium",
+      "rationale": "Verified via curl that the clean server returns the correct 'Pickup date must be on or before 2026-03-30.' for 2026-04-15, so the stale weekend message is a client-side validation gap. No catalog fault touches pickup-date validation, so the behavior is shared with the clean build and violates SPEC 7.2's ordered date checks and 1.6's message conventions.",
+      "override": null
+    },
+    {
+      "claim_id": "C013",
+      "arm": "P",
+      "source_items": [
+        "I014"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYT1E7A5S4JQ7DT2Q242KK4C",
+          "state": "new"
+        }
+      ],
+      "text": "Invalid pickup dates (Saturday and out-of-window) produced no immediate date-specific validation; the date problem stayed unsurfaced while the invalid Units field blocked continuing. Evidence: \"The Saturday and out-of-window pickup dates showed no immediate date-specific validation; attempts to continue were blocked by the still-invalid Units field, leaving the date probl[em unsurfaced]\" (Severity: minor). Restates the broken pickup-date validation feedback covered by C012.",
+      "duplicate_of": "C012",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C012",
+      "override": null
+    },
+    {
+      "claim_id": "C014",
+      "arm": "C",
+      "source_items": [
+        "I011"
+      ],
+      "provenance": [
+        {
+          "arm": "C",
+          "bug_n": 1
+        }
+      ],
+      "text": "Confirming cancellation of ready-for-pickup loan L-1043 has no effect: the loan is never withdrawn. Evidence: after clicking \"Cancel loan\" then \"Yes, cancel loan\", \"The page remains on \\\"Loan L-1043 Ready for pickup\\\". The confirmation prompt stays visible, the status is unchanged, and the loan is not withdrawn.\" Expected the loan to change to Cancelled/withdrawn and its \"2 GoPro units\" returned to stock.",
+      "duplicate_of": null,
+      "verdict": "seeded",
+      "sublabel": null,
+      "fault_id": "f-cancel-confirm-noop",
+      "confidence": "high",
+      "rationale": "Exactly the catalog manifestation: 'Yes, cancel loan' on L-1043 does nothing, status stays Ready for pickup. Verified the clean reference cancels L-1043 correctly ('L-1043 cancelled. 2 units are back in stock.').",
+      "override": null
+    },
+    {
+      "claim_id": "C015",
+      "arm": "P",
+      "source_items": [
+        "I025"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYST7VMVBXWRWPAGSNA0MYCJ",
+          "state": "new"
+        }
+      ],
+      "text": "Cancellation of a ready-for-pickup loan does not complete. Evidence: \"Ready-for-pickup loan cancellation does not complete\" (Severity: major). Restates the non-functional loan cancellation covered by C014.",
+      "duplicate_of": "C014",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C014",
+      "override": null
+    },
+    {
+      "claim_id": "C016",
+      "arm": "P",
+      "source_items": [
+        "I017"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYSZGV9926896VSJ4C55M7EW",
+          "state": "new"
+        }
+      ],
+      "text": "With the cancellation confirmation failing, no alternate visible path exists to withdraw the booking, so the stock-return workflow cannot be completed from the loan record. Evidence: \"There was no alternate visible path to withdraw the booking once the confirmation action failed, so the user could not complete the required stock-return workflow from the loan rec[ord]\" (Severity: major). This is the same user-observable defect as C014: the loan cannot be withdrawn.",
+      "duplicate_of": "C014",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C014",
+      "override": null
+    },
+    {
+      "claim_id": "C017",
+      "arm": "P",
+      "source_items": [
+        "I012"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYT0DZ29PSH5QH2X15GYM4TR",
+          "state": "new"
+        }
+      ],
+      "text": "After the initial booking confirmation, the loan was not actually confirmed but was routed to supervisor approval; the reporter notes the app explained the approval reasons and provided a path forward. Evidence: \"After the initial booking confirmation, the loan was not actually confirmed; it was sent for supervisor approval. The app did explain the approval reasons and provided a path to ap[prove]\" (Severity: minor). May be expected behavior rather than a defect; recorded for classification.",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "not-a-bug",
+      "fault_id": null,
+      "confidence": "high",
+      "rationale": "Routing a qualifying booking to supervisor approval with the reasons shown is exactly SPEC R5/7.3 behavior; the reporter even notes the app explained the reasons and the path forward.",
+      "override": null
+    },
+    {
+      "claim_id": "C018",
+      "arm": "P",
+      "source_items": [
+        "I013"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYSYXF19TKTC78RWY5NT59WY",
+          "state": "new"
+        }
+      ],
+      "text": "The L-1045 decline reason control was unstable: the same baseline locator matched 2 then 3 elements, and the entered reason appeared to be lost or reset, forcing re-entry. Evidence: \"the same baseline locator was ambiguous with 2 then 3 matches, and the entered reason appeared to be lost or reset, forcing the u[ser]\" (Severity: major).",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "harness-artifact",
+      "fault_id": null,
+      "confidence": "medium",
+      "rationale": "Ambiguous baseline locators matching 2 then 3 elements is automated-driver instability; the reported reason loss is framed as a consequence of re-driving the control, not a demonstrated product defect.",
+      "override": null
+    },
+    {
+      "claim_id": "C019",
+      "arm": "P",
+      "source_items": [
+        "I022"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYSW81K7332DJ8Q2WN78HE60",
+          "state": "new"
+        }
+      ],
+      "text": "Charges for a declined loan remain included in the \"Charges booked today\" figure. Evidence: \"Declined loan charges remain included in Charges booked today\" (Category: data_mismatch, Severity: major).",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "not-a-bug",
+      "fault_id": null,
+      "confidence": "high",
+      "rationale": "Verified on the clean reference: the $341.00 tile is L-1044 only; declining L-1045 (booked 13 Mar, never counted per R6) correctly leaves it at $341.00, and declining L-1044 correctly drops it to $0.00. The declined loan's charges were never included, so the claim's premise is wrong.",
+      "override": null
+    },
+    {
+      "claim_id": "C020",
+      "arm": "P",
+      "source_items": [
+        "I015"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYT1GBA0Q0GTQF46BSNP9CP0",
+          "state": "new"
+        }
+      ],
+      "text": "The \"Charges booked today\" figure is ambiguous or potentially stale after a loan decline. Evidence: \"Charges booked today is ambiguous or potentially stale after a loan decline.\" (Category: data_mismatch, Severity: minor). Restates the declined-charges accounting issue covered by C019.",
+      "duplicate_of": "C019",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C019",
+      "override": null
+    },
+    {
+      "claim_id": "C021",
+      "arm": "P",
+      "source_items": [
+        "I016"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYSZN4WTTTV59YJJ3R7NCDH0",
+          "state": "new"
+        }
+      ],
+      "text": "On the overdue return page, the primary return controls and note field require scrolling twice to reach, adding friction to the desk check-in workflow (the check-in itself succeeded). Evidence: \"the user had to scroll twice to reach the return controls and note field. For a desk workflow on an overdue return page, the primary [controls should be visible]\" (Severity: minor).",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "soft-ux",
+      "fault_id": null,
+      "confidence": "high",
+      "rationale": "Check-in succeeded; having to scroll to the return controls is layout friction, not a SPEC violation.",
+      "override": null
+    },
+    {
+      "claim_id": "C022",
+      "arm": "P",
+      "source_items": [
+        "I018"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYSVGNV54DCF0NZKK28DHMDJ",
+          "state": "new"
+        }
+      ],
+      "text": "The equipment picker cannot reliably select the MacBook Pro 16-inch Edit Laptop by its label. Evidence: \"Equipment picker cannot reliably select MacBook Pro 16-inch Edit Laptop by label\" (Severity: minor).",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "harness-artifact",
+      "fault_id": null,
+      "confidence": "medium",
+      "rationale": "Selecting an option 'by label' is a driver operation; the MacBook Pro 16\" name contains a quote character that trips locators. No product misbehavior is described, only the automated picker's reliability.",
+      "override": null
+    },
+    {
+      "claim_id": "C023",
+      "arm": "P",
+      "source_items": [
+        "I020"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYSZSPCWP45DHBP3751MKRMQ",
+          "state": "new"
+        }
+      ],
+      "text": "The loan detail page requires repeated vertical scrolling to reconcile the schedule, charge breakdown, and supervisor approval reason during a readback task. Evidence: \"The loan detail page requires repeated vertical scrolling to reconcile schedule details with the charge breakdown and supervisor approval reason, adding friction to a readback task\" (Severity: minor).",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "soft-ux",
+      "fault_id": null,
+      "confidence": "high",
+      "rationale": "Scrolling to reconcile panels on the loan detail page is reading friction; the SPEC prescribes these panels and no viewport requirement.",
+      "override": null
+    },
+    {
+      "claim_id": "C024",
+      "arm": "P",
+      "source_items": [
+        "I023"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYT13WG2CFAQCM0D4HZQE7VG",
+          "state": "new"
+        }
+      ],
+      "text": "On the approvals page, L-1045's action controls are below the fold beneath L-1044, forcing a scroll before the target loan can be declined. Evidence: \"L-1045's action controls were below the fold beneath L-1044, so the user had to scroll before they could decline the target loan.\" (Severity: minor).",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "soft-ux",
+      "fault_id": null,
+      "confidence": "high",
+      "rationale": "SPEC 8 orders approval cards by loan number ascending, so L-1045 sits beneath L-1044; needing to scroll to it is layout preference, not a violation.",
+      "override": null
+    },
+    {
+      "claim_id": "C025",
+      "arm": "P",
+      "source_items": [
+        "I021"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYT1GBA2JK3V0SG6KTTJ44JD",
+          "state": "new"
+        }
+      ],
+      "text": "L-1045's action controls on the approvals page were below the fold, requiring scrolling to reach them. Evidence: \"L-1045's action controls were below the fold\" (Severity: minor). Restates the approvals-page below-the-fold placement covered by C024.",
+      "duplicate_of": "C024",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C024",
+      "override": null
+    },
+    {
+      "claim_id": "C026",
+      "arm": "P",
+      "source_items": [
+        "I021"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYT1GBA2JK3V0SG6KTTJ44JD",
+          "state": "new"
+        }
+      ],
+      "text": "The final Confirm decline button sat below the visible textarea after the reason was entered, requiring scrolling to reach it. Evidence: \"the final Confirm decline button was below the visible textarea after entering th[e reason]\" (Severity: minor). Restates the hidden decline confirmation control covered by C011.",
+      "duplicate_of": "C011",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C011",
+      "override": null
+    },
+    {
+      "claim_id": "C027",
+      "arm": "P",
+      "source_items": [
+        "I024"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYT1GBA2JK3V0SG6KTTJ44JK",
+          "state": "new"
+        }
+      ],
+      "text": "After adding the Canon C70, the Add equipment picker resets to Aputure while the Canon row remains below, creating a possible mismatch between the picker's selected value and the already-added item. Evidence: \"The Add equipment picker resets to Aputure after adding Canon C70 while the Canon row remains below, creating a possible mismatch between the selected equipment control and the alr[eady added item]\" (Severity: minor).",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "not-a-bug",
+      "fault_id": null,
+      "confidence": "medium",
+      "rationale": "SPEC 7.2 removes already-added items from the Add equipment list, so the select naturally shows the first remaining item (Aputure, alphabetically first) while the Canon row stays in the table; the 'possible mismatch' is speculative, not an observed defect.",
+      "override": null
+    },
+    {
+      "claim_id": "C028",
+      "arm": "P",
+      "source_items": [
+        "I027"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYSWM809KKE2T82J3MB0VYZA",
+          "state": "new"
+        }
+      ],
+      "text": "The equipment picker resets after adding the Canon C70. Evidence: \"Equipment picker resets after adding Canon C70\" (Severity: minor). Restates the picker-reset behavior covered by C027.",
+      "duplicate_of": "C027",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C027",
+      "override": null
+    },
+    {
+      "claim_id": "C029",
+      "arm": "P",
+      "source_items": [
+        "I028"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYSSS4N3NX5GV9FHA6VPGBG7",
+          "state": "new"
+        }
+      ],
+      "text": "The Available-only filter checkbox does not toggle when activated. Evidence: \"Available-only filter checkbox does not toggle\" (Category: no_effect, Severity: minor).",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "not-a-bug",
+      "fault_id": null,
+      "confidence": "medium",
+      "rationale": "Same surface and kind of wrongness as the catalog fault: activating the Available now only filter has no effect (category no_effect). Verified the clean reference filters correctly (availableOnly=1 lists 11 items, excluding the fully booked gimbal). Medium because 'does not toggle' loosely describes the checkbox rather than the ignored filtering.",
+      "override": {
+        "by": "judge-merge",
+        "from": "seeded:f-available-filter-ignored",
+        "to": "invalid:not-a-bug",
+        "reason": "withdrawn-before-round"
+      }
+    },
+    {
+      "claim_id": "C030",
+      "arm": "C",
+      "source_items": [
+        "I029"
+      ],
+      "provenance": [
+        {
+          "arm": "C",
+          "bug_n": 2
+        }
+      ],
+      "text": "Loan L-1048 can be extended a second time despite the stated one-extension limit. Evidence: after the first extension the page \"still shows an enabled \\\"Extend by 7 days\\\" button\"; on the second click, \"The second click succeeds. The status says \\\"Extended. L-1048 is now due Thu 2 Apr 2026 at 17:00\\\" and the schedule shows Due back Thu 2 Apr 2026 while still saying \\\"One 7-day extension used\\\".\"",
+      "duplicate_of": null,
+      "verdict": "seeded",
+      "sublabel": null,
+      "fault_id": "f-extend-limit-off-by-one",
+      "confidence": "high",
+      "rationale": "Exactly the catalog manifestation: after one extension L-1048 still offers an enabled Extend button and a second extension succeeds, moving the due date to Thu 2 Apr 2026. Verified the clean reference refuses the second extension with 'This loan has already used its one extension.'",
+      "override": null
+    },
+    {
+      "claim_id": "C031",
+      "arm": "P",
+      "source_items": [
+        "I030"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYSWM808DJVR1AF8RMKTZVG5",
+          "state": "new"
+        }
+      ],
+      "text": "On the borrower step, the submit action is placed below the initial viewport and is not visible without scrolling. Evidence: \"Borrower step submit action is below the initial viewport\" (Severity: minor).",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "soft-ux",
+      "fault_id": null,
+      "confidence": "high",
+      "rationale": "The borrower-step submit button being below the initial viewport is layout preference; the SPEC specifies the buttons but no fold placement.",
+      "override": null
+    }
+  ]
+}

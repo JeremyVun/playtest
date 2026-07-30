@@ -1,0 +1,28 @@
+{
+ "trial": 1,
+ "round": 2,
+ "audited_by": "lead",
+ "reviewed": [
+  {
+   "claim_id": "C003",
+   "decision": "stands",
+   "note": "coverage-note item, no defect claim; not-a-bug correct"
+  },
+  {
+   "claim_id": "C008",
+   "decision": "stands",
+   "note": "seeded->withdrawn override correct (stale re-report of withdrawn fault)"
+  },
+  {
+   "claim_id": "C011",
+   "decision": "stands",
+   "note": "Q3 accepted quirk; latent correct"
+  },
+  {
+   "claim_id": "C020",
+   "decision": "stands",
+   "note": "validation-ordering latent (Q-family); reproduces on clean"
+  }
+ ],
+ "overrides": []
+}

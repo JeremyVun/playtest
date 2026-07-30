@@ -1,0 +1,18 @@
+{
+ "trial": 1,
+ "round": 3,
+ "audited_by": "lead",
+ "reviewed": [
+  {
+   "claim_id": "C017",
+   "decision": "stands",
+   "note": "reviewed rationale; capture/driving artifact"
+  },
+  {
+   "claim_id": "C023",
+   "decision": "stands",
+   "note": "reviewed rationale; latent verified on clean"
+  }
+ ],
+ "overrides": []
+}

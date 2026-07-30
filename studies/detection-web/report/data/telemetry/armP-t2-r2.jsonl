@@ -1,0 +1,15 @@
+{"ts":"2026-07-30T16:46:59.253Z","fault_id":"f-approve-pending-label","probe":"POST /api/approvals/L-1044/approve"}
+{"ts":"2026-07-30T16:48:54.038Z","fault_id":"f-decline-status-line","probe":"POST /api/approvals/L-1045/decline"}
+{"ts":"2026-07-30T16:51:26.303Z","fault_id":"f-approve-pending-label","probe":"POST /api/approvals/L-1044/approve"}
+{"ts":"2026-07-30T16:51:28.189Z","fault_id":"f-cancel-confirm-noop","probe":"GET /api/loans/L-1044"}
+{"ts":"2026-07-30T16:56:34.840Z","fault_id":"f-cancel-confirm-noop","probe":"GET /api/loans/L-1043"}
+{"ts":"2026-07-30T17:03:14.799Z","fault_id":"f-cancel-confirm-noop","probe":"GET /api/loans/L-1045"}
+{"ts":"2026-07-30T17:12:53.723Z","fault_id":"f-step2-remove-missing","probe":"PATCH /api/loan-drafts/D-1"}
+{"ts":"2026-07-30T17:12:53.739Z","fault_id":"f-step2-remove-missing","probe":"GET /api/loan-drafts/D-1"}
+{"ts":"2026-07-30T17:13:13.723Z","fault_id":"f-cancel-confirm-noop","probe":"GET /api/loans/L-1049"}
+{"ts":"2026-07-30T17:14:13.206Z","fault_id":"f-approve-pending-label","probe":"POST /api/approvals/L-1049/approve"}
+{"ts":"2026-07-30T17:14:30.182Z","fault_id":"f-cancel-confirm-noop","probe":"GET /api/loans/L-1049"}
+{"ts":"2026-07-30T17:19:10.967Z","fault_id":"f-step2-remove-missing","probe":"PATCH /api/loan-drafts/D-1"}
+{"ts":"2026-07-30T17:19:10.983Z","fault_id":"f-step2-remove-missing","probe":"GET /api/loan-drafts/D-1"}
+{"ts":"2026-07-30T17:19:32.053Z","fault_id":"f-cancel-confirm-noop","probe":"GET /api/loans/L-1049"}
+{"ts":"2026-07-30T17:26:09.602Z","fault_id":"f-decline-status-line","probe":"POST /api/approvals/L-1045/decline"}

@@ -1,0 +1,23 @@
+{
+ "trial": 1,
+ "round": 1,
+ "audited_by": "lead",
+ "reviewed": [
+  {
+   "claim_id": "C016",
+   "decision": "stands",
+   "note": "judge verified clean draft data + SPEC 7.3; hedged claim; snapshot drops bare values"
+  },
+  {
+   "claim_id": "C019",
+   "decision": "stands",
+   "note": "judge verified lateBusinessDays present on clean via API; visibility artifact of capture"
+  },
+  {
+   "claim_id": "C028",
+   "decision": "stands",
+   "note": "unspecific contrast bundle; SPEC silent; soft-ux defensible (dry-run judged similar claim latent - judge variance, no override)"
+  }
+ ],
+ "overrides": []
+}

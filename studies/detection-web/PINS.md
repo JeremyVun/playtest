@@ -12,7 +12,9 @@ measured data exists.
 | G2 | Story suite `suite/` — 13 journeys + 2 risk discovery cases + playtest.yaml + init.sh | `f7100b6` | 2026-07-30 |
 | G2′ | Suite config amendment: init.sh → init.mjs (hosted exec-bit; stories untouched) | `8aa7d4f` | 2026-07-30 |
 | G3 | Fault catalog `catalog/` — 20 faults, injector, manifestation checks, telemetry | `cb6692b` | 2026-07-30 |
-| G4 | Gate recalibration `d2bf39e`; prompts, driver fixes, QUIRKS.md, SCORING.md frozen at the commit recording this row | (this commit) | 2026-07-30 |
+| G4 | Gate recalibration `d2bf39e`; prompts, driver fixes, QUIRKS.md, SCORING.md frozen at the commit recording this row | `5e1227b` | 2026-07-30 |
+| G5 | Measured trials complete — product-bug fix `916bacf` logged below; all ledgers + audits under `report/data/ledgers/` | (report commit) | 2026-07-31 |
+| G6 | Report published under `report/` (index.html + study.json + ledgers + telemetry + evidence linter) | (this commit) | 2026-07-31 |
 
 ## G1 notes
 

@@ -1,0 +1,41 @@
+{
+ "trial": 2,
+ "round": 1,
+ "audited_by": "lead",
+ "reviewed": [
+  {
+   "claim_id": "C005",
+   "decision": "stands"
+  },
+  {
+   "claim_id": "C006",
+   "decision": "stands"
+  },
+  {
+   "claim_id": "C010",
+   "decision": "stands"
+  },
+  {
+   "claim_id": "C011",
+   "decision": "stands"
+  },
+  {
+   "claim_id": "C019",
+   "decision": "stands"
+  },
+  {
+   "claim_id": "C025",
+   "decision": "stands"
+  },
+  {
+   "claim_id": "C041",
+   "decision": "stands"
+  },
+  {
+   "claim_id": "C048",
+   "decision": "stands"
+  }
+ ],
+ "note": "C005/C048 latents verified on clean; C006/C019/C025 capture-window artifacts (clean API supplies the data, no fault touches it); C010/C011/C041 unattributable bare console errors",
+ "overrides": []
+}

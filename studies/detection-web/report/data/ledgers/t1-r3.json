@@ -1,0 +1,533 @@
+{
+  "trial": 1,
+  "round": 3,
+  "shuffle_seed": 1003,
+  "judged_at": "2026-07-30T15:10:10.878Z",
+  "claims": [
+    {
+      "claim_id": "C001",
+      "arm": "C",
+      "source_items": [
+        "I001"
+      ],
+      "provenance": [
+        {
+          "arm": "C",
+          "bug_n": 2
+        }
+      ],
+      "text": "Submitting an over-quantity units value on the new-loan items step is rejected silently, with no visible validation message. Evidence: \"Change 'Units of Canon C70 Cinema Camera' to 4\" (only \"3 of 3 available\"), then \"The page remains on Step 2 and preserves the values, but no validation message is shown anywhere in the rendered form. The user gets no explanation for why Continue did nothing.\"",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "harness-artifact",
+      "fault_id": null,
+      "confidence": "medium",
+      "rationale": "The spec (7.2) mandates a native max on the units box, so an over-quantity value blocks submission with a transient browser validation bubble that DOM snapshots cannot capture; a sibling report from the same build (I003, folded into C003) confirms a native browser error was shown. The clean reference's server also returns the proper 'Only 1 unit of Canon C70 Cinema Camera is available.' message when the form does submit (verified via the draft API), so 'no explanation at all' is an artifact of automated observation, and no catalog fault covers step-2 validation display.",
+      "override": null
+    },
+    {
+      "claim_id": "C002",
+      "arm": "P",
+      "source_items": [
+        "I002"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYSRKHH8YX93V1X7MCRARMSR",
+          "state": "new"
+        }
+      ],
+      "text": "The equipment picker control visually resets to an unrelated option while the chosen item stays in the loan row, which can mislead about what is being booked. Evidence: \"The equipment picker visually resets to an unrelated Aputure option while Canon C70 remains in the loan row, which can distract users from the item actually being booked.\"",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "soft-ux",
+      "fault_id": null,
+      "confidence": "medium",
+      "rationale": "Items already on the loan are removed from the Add equipment list per spec (7.2), so the select naturally falls back to the first remaining option (Aputure 300x LED Light is alphabetically first); the loan row still shows the chosen item. 'Can distract users' is a polish preference, not a SPEC violation.",
+      "override": null
+    },
+    {
+      "claim_id": "C003",
+      "arm": "P",
+      "source_items": [
+        "I003"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYSH5RM1TG09AW3SSX488AHQ",
+          "state": "new"
+        }
+      ],
+      "text": "Over-quantity validation surfaces no proper in-app message, leaving only native browser constraint feedback. Evidence: \"Over-quantity validation provides only a generic native browser error\". This restates the same defect as C001: the app provides no rendered validation message for an over-quantity units value.",
+      "duplicate_of": "C001",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C001",
+      "override": null
+    },
+    {
+      "claim_id": "C004",
+      "arm": "P",
+      "source_items": [
+        "I004"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYSC84RG25B2MP6RMAF4W6DH",
+          "state": "new"
+        }
+      ],
+      "text": "Borrower-step validation error messages persist after the offending fields have been corrected. Evidence: \"Borrower validation errors remain stale after correcting fields\".",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "not-a-bug",
+      "fault_id": null,
+      "confidence": "medium",
+      "rationale": "SPEC 1.6 requires messages for now-acceptable fields to clear when the form is next rejected/re-rendered, not to clear live as the user types; the source report itself says the form continues once resubmitted with corrected values. Persisting inline errors between submits matches the spec'd submit-driven validation model.",
+      "override": null
+    },
+    {
+      "claim_id": "C005",
+      "arm": "P",
+      "source_items": [
+        "I005"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYSMPAMPHYS37G23HHK97C0M",
+          "state": "new"
+        }
+      ],
+      "text": "Clicking the focused equipment combobox produces no response at all, so the user cannot open it or choose an option. Evidence: \"Clicking the focused equipment combobox produced no DOM, input, request, or URL change, leaving the user without a usable way to open or choose from the listed options\".",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "harness-artifact",
+      "fault_id": null,
+      "confidence": "high",
+      "rationale": "Clicking a native select opens an OS-drawn dropdown that produces no DOM, request, or URL change by design; 'no observable change after clicking the combobox' is a limitation of snapshot-based automated driving, not a product defect. Other reports in the same round successfully added items via the same picker.",
+      "override": null
+    },
+    {
+      "claim_id": "C006",
+      "arm": "P",
+      "source_items": [
+        "I006"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYSRKHHA0JQN6P9JYZ8H23PF",
+          "state": "new"
+        }
+      ],
+      "text": "No defect claimed; this is praise for existing behavior. Evidence: \"The blank borrower submit reported all required borrower failures at once, which is useful behavior to preserve.\"",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "not-a-bug",
+      "fault_id": null,
+      "confidence": "high",
+      "rationale": "The claim explicitly reports no defect; it is praise for spec-compliant behavior (SPEC 7.1: all failing borrower fields are reported at once).",
+      "override": null
+    },
+    {
+      "claim_id": "C007",
+      "arm": "P",
+      "source_items": [
+        "I007"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYSN02KXDCM1E6DZ6ZN3ZP11",
+          "state": "new"
+        }
+      ],
+      "text": "The approvals queue exposes a decline control belonging to a different loan ahead of the intended one. Evidence: \"Approvals queue exposes another loan's decline control before L-1045\".",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "not-a-bug",
+      "fault_id": null,
+      "confidence": "high",
+      "rationale": "SPEC 8 orders approval cards by loan number ascending, so L-1044's card and its own Decline button legitimately precede L-1045's. Verified on the clean reference API that the queue lists L-1044 then L-1045; each card carrying its own decline control is spec'd behavior.",
+      "override": null
+    },
+    {
+      "claim_id": "C008",
+      "arm": "C",
+      "source_items": [
+        "I008"
+      ],
+      "provenance": [
+        {
+          "arm": "C",
+          "bug_n": 1
+        }
+      ],
+      "text": "Borrower-step validation errors remain visible after correction. Evidence: after fixing the values, \"The form still displays 'Borrower email must be a fairmont.edu address.' after the email is changed to jordan.beck@fairmont.edu, and still displays 'Choose a department.' after Film & Media is selected. The form can continue afterward, but the on-screen error state is stale and misleading.\" Same defect as C004.",
+      "duplicate_of": "C004",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C004",
+      "override": null
+    },
+    {
+      "claim_id": "C009",
+      "arm": "C",
+      "source_items": [
+        "I009"
+      ],
+      "provenance": [
+        {
+          "arm": "C",
+          "bug_n": 3
+        }
+      ],
+      "text": "After changing the pickup date from a weekend to an out-of-range weekday, the form rejects it but shows the stale weekend-specific error instead of the real out-of-range reason. Evidence: with 2026-04-15 (a Wednesday) entered, \"the form ... still displays 'The desk is closed at weekends. Choose a weekday.' even though 2026-04-15 is a weekday. The user is not told the real reason the date is rejected.\"",
+      "duplicate_of": null,
+      "verdict": "latent",
+      "sublabel": null,
+      "fault_id": null,
+      "confidence": "medium",
+      "rationale": "Checked the clean reference draft API: after a weekend rejection, resubmitting 2026-04-15 returns the correct 'Pickup date must be on or before 2026-03-30.' with no weekend text, so the stale inline weekend error is a client display defect — the date field's native max blocks resubmission and the previously rendered error is left standing (corroborated by I024, which saw the real max-date rejection surface only outside the inline area). That base-UI behavior is shared with the clean build, is covered by no catalog fault, and showing a weekend-closure error for a Wednesday violates SPEC 1.6's requirement that cleared-up problems lose their message.",
+      "override": null
+    },
+    {
+      "claim_id": "C010",
+      "arm": "P",
+      "source_items": [
+        "I010"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYSRH8HHNQXG6DGRYA1X978V",
+          "state": "new"
+        }
+      ],
+      "text": "The pickup date field accepts invalid dates as typed input, deferring all rejection to submit time; the help text itself is noted as good. Evidence: \"The pickup date help text made the weekday/date-window rule discoverable before submission, but invalid dates were also accepted into the field until submit-time validation.\"",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "soft-ux",
+      "fault_id": null,
+      "confidence": "medium",
+      "rationale": "SPEC 1.6/7.2 define pickup-date checking as submit-time validation with messages under the field; letting the user type an invalid date until submit matches the spec. Wanting the field to refuse invalid input as typed is a polish preference.",
+      "override": null
+    },
+    {
+      "claim_id": "C011",
+      "arm": "P",
+      "source_items": [
+        "I011"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYSRKHH9PS92NZSWQC1E9D3Q",
+          "state": "new"
+        }
+      ],
+      "text": "No defect claimed; this is a positive coverage note on the decline path. Evidence: \"The decline path reconciled correctly: the success banner appeared, approval counts decreased, catalogue availability increased by two units, charges booked today stayed unchanged\".",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "not-a-bug",
+      "fault_id": null,
+      "confidence": "high",
+      "rationale": "The claim reports no defect; it is a positive note that the decline path reconciled correctly.",
+      "override": null
+    },
+    {
+      "claim_id": "C012",
+      "arm": "P",
+      "source_items": [
+        "I012"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYS8W56YV9Y946EPK2NWT9TH",
+          "state": "new"
+        }
+      ],
+      "text": "The application has widespread color-contrast accessibility violations. Evidence: \"System-wide color-contrast accessibility violations\".",
+      "duplicate_of": null,
+      "verdict": "latent",
+      "sublabel": null,
+      "fault_id": null,
+      "confidence": "high",
+      "rationale": "Verified on the clean reference: fetched /styles.css and computed WCAG ratios — the widely used --ink-faint text color #7c8b89 yields 3.05:1 to 3.55:1 against the app's backgrounds (#fff, #fbfcfc, #eef1f5, #eceeed), below the 4.5:1 AA minimum for normal text, across hints, captions, and notes app-wide. This is in the base application, not the fault catalog, and violates a clearly reasonable accessibility expectation.",
+      "override": null
+    },
+    {
+      "claim_id": "C013",
+      "arm": "P",
+      "source_items": [
+        "I013"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYSN02KZ82NTQYT5ZPTKKMHS",
+          "state": "new"
+        }
+      ],
+      "text": "When the catalogue is scrolled, navigation to loan records is not discoverable. Evidence: \"Navigation to loan records is not discoverable from scrolled catalogue positions\".",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "soft-ux",
+      "fault_id": null,
+      "confidence": "high",
+      "rationale": "The Loans link is in the standard page header per SPEC 1.4; a non-sticky header scrolling out of view on a long page is a layout preference, not a SPEC or reasonable-expectation violation.",
+      "override": null
+    },
+    {
+      "claim_id": "C014",
+      "arm": "P",
+      "source_items": [
+        "I014"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYSRKHH747RQSZRH9RRWEEJ6",
+          "state": "new"
+        }
+      ],
+      "text": "As a general layout problem, key controls and records on long desk pages frequently sit below the fold. Evidence: \"Important workflow controls and records are often below the fold on long desk pages, increasing the chance of missed or wrong actions.\"",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "soft-ux",
+      "fault_id": null,
+      "confidence": "high",
+      "rationale": "A general complaint that content on long pages sits below the fold; the spec prescribes the content and order, and needing to scroll is a polish/layout preference, not a defect.",
+      "override": null
+    },
+    {
+      "claim_id": "C015",
+      "arm": "P",
+      "source_items": [
+        "I015"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYSRKHH8YX93V1X7MCRARMSX",
+          "state": "new"
+        }
+      ],
+      "text": "Color-contrast violations recur across workflows, hampering perception of dense text and validation feedback. Evidence: \"Repeated color-contrast violations were recorded across both workflows, which can make text-heavy state reconciliation and subtle validation feedback harder to perceive.\" Same defect as C012.",
+      "duplicate_of": "C012",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C012",
+      "override": null
+    },
+    {
+      "claim_id": "C016",
+      "arm": "P",
+      "source_items": [
+        "I016"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYSN02KXDCM1E6DZ6ZN3ZP0W",
+          "state": "new"
+        }
+      ],
+      "text": "In the equipment catalogue, the availability rows needed for the task are below the fold and require scrolling. Evidence: \"Equipment catalogue requires scrolling to view required availability rows\".",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "soft-ux",
+      "fault_id": null,
+      "confidence": "high",
+      "rationale": "The catalogue table contains 12 rows per spec; some availability rows requiring scrolling is normal page layout, a polish preference rather than a SPEC violation.",
+      "override": null
+    },
+    {
+      "claim_id": "C017",
+      "arm": "P",
+      "source_items": [
+        "I017"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYSAY2X3THGX8N309HK3J0DP",
+          "state": "new"
+        }
+      ],
+      "text": "Selecting a visible option from the equipment dropdown does not reliably take effect. Evidence: \"Equipment dropdown selection is unreliable for visible MacBook option\".",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "harness-artifact",
+      "fault_id": null,
+      "confidence": "low",
+      "rationale": "'Selection is unreliable' for a visible, selectable option names no concrete product symptom and matches no catalog fault; it is most consistent with automated select-driving flakiness (the same picker worked for other steps in the round). Not checkable over HTTP; flagged low for audit.",
+      "override": null
+    },
+    {
+      "claim_id": "C018",
+      "arm": "P",
+      "source_items": [
+        "I018"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYSRH8HJN9DZTC0T2Q3G5JKM",
+          "state": "new"
+        }
+      ],
+      "text": "The equipment picker resets its displayed value to an Aputure light while the Canon C70 stays in the loan row. Evidence: \"The final Step 2 equipment picker visually reset to an Aputure light while the Canon C70 remained in the loan row, which could distract from the item actually being booked.\" Same defect as C002.",
+      "duplicate_of": "C002",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C002",
+      "override": null
+    },
+    {
+      "claim_id": "C019",
+      "arm": "P",
+      "source_items": [
+        "I019"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYSBXYRDSPWRGJMZYXWE6YQD",
+          "state": "new"
+        }
+      ],
+      "text": "On the approvals page, the decline confirmation controls sit below the fold. Evidence: \"Decline confirmation controls are below the fold\".",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "soft-ux",
+      "fault_id": null,
+      "confidence": "high",
+      "rationale": "The decline confirmation block appearing below the fold on the approvals page is a scrolling/layout preference; the spec'd controls are present and functional (the round's own decline completed successfully).",
+      "override": null
+    },
+    {
+      "claim_id": "C020",
+      "arm": "P",
+      "source_items": [
+        "I020"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYSRH8HG1VWTPK4FFNRBHATK",
+          "state": "new"
+        }
+      ],
+      "text": "On Step 1 of the new-loan form, the primary continue action is below the fold. Evidence: \"On Step 1, the primary 'Continue to items' action sat below the fold, so the user had to scroll before making the required blank-submit attempt.\"",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "soft-ux",
+      "fault_id": null,
+      "confidence": "high",
+      "rationale": "The Continue to items button sitting below the fold on step 1 is a layout preference; the spec'd control exists and works.",
+      "override": null
+    },
+    {
+      "claim_id": "C021",
+      "arm": "P",
+      "source_items": [
+        "I021"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYSEN6DC64DY2WK194G0K5WM",
+          "state": "new"
+        }
+      ],
+      "text": "Recorded actions get skipped when page snapshots drift from the baseline. Evidence: \"Recorded actions are skipped when page snapshots drift from baseline\".",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "harness-artifact",
+      "fault_id": null,
+      "confidence": "high",
+      "rationale": "'Recorded actions are skipped when page snapshots drift from baseline' describes the replay tooling's own behavior, not anything the product under test does.",
+      "override": null
+    },
+    {
+      "claim_id": "C022",
+      "arm": "P",
+      "source_items": [
+        "I022"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYSPXXVH64950AFBZSG863Z8",
+          "state": "new"
+        }
+      ],
+      "text": "The decline workflow on the approvals page required scrolling to reach or complete its controls. Evidence: \"The decline workflow required scrolling to reach or complete the relevant controls, adding some navigation friction on the approvals page.\" Same defect as C019.",
+      "duplicate_of": "C019",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C019",
+      "override": null
+    },
+    {
+      "claim_id": "C023",
+      "arm": "P",
+      "source_items": [
+        "I023"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYSC84RG25B2MP6RMAF4W6DR",
+          "state": "new"
+        }
+      ],
+      "text": "When the units value is invalid, its validation masks the pickup-date validation, so the date problem is not reported. Evidence: \"Invalid Units validation masks pickup-date validation\".",
+      "duplicate_of": null,
+      "verdict": "latent",
+      "sublabel": null,
+      "fault_id": null,
+      "confidence": "low",
+      "rationale": "Checked the clean reference draft API: with both an over-quantity units value and a bad pickup date submitted together, the server reports both field errors at once, so the masking arises in the shared client layer — the spec'd native max on the units box blocks submission before date validation runs, leaving the date problem unreported, which would behave identically on the clean build and falls short of SPEC 1.6's promise that every bad field gets its message. Not fully verifiable without a browser, so flagged low for audit.",
+      "override": null
+    },
+    {
+      "claim_id": "C024",
+      "arm": "P",
+      "source_items": [
+        "I024"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYSRH8HHNQXG6DGRYA1X9790",
+          "state": "new"
+        }
+      ],
+      "text": "For an out-of-window date, the inline error still claimed a weekend closure while the field showed the weekday date, with the real max-date rejection surfacing elsewhere. Evidence: \"For the out-of-window date, the focused date field showed 2026-04-15 while the inline error still said the desk was closed at weekends; the actual max-date rejection appeared only\" [text truncated in source]. Same defect as C009.",
+      "duplicate_of": "C009",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C009",
+      "override": null
+    }
+  ]
+}

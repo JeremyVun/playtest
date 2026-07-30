@@ -1,7 +1,15 @@
 # Detection study — Playtest vs a coding agent (web)
 
-**Status:** designed 2026-07-29; not started. All pins, bars, and rubrics
-below are defaults; they become binding at the G0 freeze commit and may not
+**Status: COMPLETE 2026-07-31.** Both trials ran under the G0 freeze
+(`studies/detection-web/PREREG.md`); report published at
+[`studies/detection-web/report/`](../../../studies/detection-web/report/).
+Headline: both arms found the same 8/20 seeded faults in both trials
+(different 8 — Playtest uniquely caught value-math faults, the agent
+uniquely caught interaction edges); B1/B2/B3 failed identically in both
+trials, B4 passed; replication delta ≈ 0. The prose below is the design as
+frozen; PINS.md/SCORING.md/QUIRKS.md beside the prereg record what closed
+at each gate. All pins, bars, and rubrics
+below are defaults; they became binding at the G0 freeze commit and may not
 move after any measured data exists. Failure against a bar is a result.
 **Supersedes:** `docs/backlog/hillclimb-rerun.md` (deleted 2026-07-29;
 preserved in git history). Prior evidence:

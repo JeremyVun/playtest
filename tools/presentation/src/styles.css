@@ -34,15 +34,16 @@
 }
 
 :root {
-  /* palette */
-  --ink: #0a0d13;
-  --ink-2: #10151f;
-  --line: #1d2432;
-  --dim: #414b5d;
-  --mute: #7b8598;
-  --chalk: #ede9e1;
-  --pass: #63d9b4;
-  --flag: #f2703f;
+  /* palette — light: warm paper ground, near-black ink, accents deepened
+     for contrast. Prominence order is unchanged: line < dim < mute < chalk. */
+  --ink: #f7f5ef;
+  --ink-2: #fffdf8;
+  --line: #e3ddcf;
+  --dim: #b5ac99;
+  --mute: #7a7263;
+  --chalk: #1c1914;
+  --pass: #0e7d59;
+  --flag: #bc4619;
 
   /* type */
   --display: 'Archivo', 'Helvetica Neue', Arial, sans-serif;
@@ -82,7 +83,7 @@ body {
   display: grid;
   place-items: center;
   background:
-    radial-gradient(120% 90% at 12% 0%, #131a26 0%, rgba(19, 26, 38, 0) 62%),
+    radial-gradient(120% 90% at 12% 0%, #efeadd 0%, rgba(239, 234, 221, 0) 62%),
     var(--ink);
   cursor: default;
 }
@@ -326,10 +327,10 @@ body {
   bottom: 0;
   max-height: 46vh;
   overflow: auto;
-  background: rgba(9, 12, 18, 0.97);
+  background: rgba(255, 253, 248, 0.97);
   border-top: 1px solid var(--line);
   padding: 20px clamp(20px, 4vw, 56px) 24px;
-  box-shadow: 0 -24px 60px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 -24px 60px rgba(60, 52, 36, 0.18);
   animation: notes-in 200ms ease both;
 }
 
@@ -352,7 +353,7 @@ body {
   font-size: clamp(14px, 1.15vw, 17px);
   line-height: 1.6;
   font-weight: 350;
-  color: #cfd4dd;
+  color: #4c463a;
   white-space: pre-wrap;
   max-width: 108ch;
 }
@@ -427,7 +428,7 @@ body {
 }
 
 .loop .node.story {
-  fill: rgba(99, 217, 180, 0.07);
+  fill: rgba(14, 125, 89, 0.06);
   stroke: var(--pass);
 }
 

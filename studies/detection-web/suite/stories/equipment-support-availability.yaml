@@ -1,0 +1,21 @@
+description: Narrow the catalogue to support kit that still has units free today.
+story: |
+  A lecturer at the desk wants to know what camera support the department can
+  actually lend out right now. Narrow the equipment catalogue down to the
+  "Support" category and to items that still have at least one unit free
+  today, so you can answer without opening every item, and leave the narrowed
+  view in place.
+success:
+  - console_errors: 0
+  - url_matches: "*/equipment?*availableOnly=1*"
+  - label: Filtered result set
+    assert: >-
+      The catalogue reads `Showing 1 of 12 equipment items.` above a single
+      result row: Manfrotto 504X Tripod with asset tag SUP-504X, category
+      Support, availability `5 of 6 available`, daily rate `$4.00 / day` and
+      deposit per unit `None`. The DJI RS 4 Pro Gimbal is not listed.
+  - label: Filter panel state
+    assert: >-
+      The filter panel still shows the Support category selected and the
+      available-now-only checkbox ticked, and the results table carries the
+      caption `Daily rate is charged to the borrower's department.`

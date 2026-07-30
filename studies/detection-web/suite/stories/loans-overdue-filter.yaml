@@ -1,0 +1,15 @@
+description: Filter the loans list down to the overdue loans only.
+story: |
+  You are chasing kit that has not come back. Narrow the desk's list of loans
+  down to just the overdue ones so you know exactly who to ring this morning,
+  and leave the narrowed view in place so a colleague can be sent a link to
+  the same thing.
+success:
+  - console_errors: 0
+  - url_matches: "*/loans?*status=overdue*"
+  - label: Only the overdue loan is listed
+    assert: >-
+      The loans list reads `Showing 1 of 8 loans.` above exactly one row: loan
+      L-1042 for Marcus Webb of Film & Media, whose Items cell ends
+      `+ 2 more (3 units)`, with status Overdue, pickup Wed 4 Mar 2026, due
+      Wed 11 Mar 2026 and total due $876.90.

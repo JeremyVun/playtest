@@ -1,0 +1,20 @@
+description: Withdraw the ready-for-pickup GoPro booking and return its units.
+story: |
+  Dana Okoye has emailed to say the inter-college relay coverage is off and she
+  no longer needs the action cameras she booked on loan "L-1043". Withdraw that
+  booking at the desk so the cameras go straight back into stock, and confirm
+  on the loan's record that it is done.
+success:
+  - console_errors: 0
+  - url_matches: "*/loans/L-1043"
+  - label: Cancelled banner and panel
+    assert: >-
+      The loan page shows the success banner
+      `L-1043 cancelled. 2 units are back in stock.`, its status pill reads
+      Cancelled, and a Cancelled panel reads `This loan was cancelled on
+      Mon 16 Mar 2026, 09:00 and its units went back into stock.`
+  - label: No actions remain, charges unchanged
+    assert: >-
+      The page offers no pickup, cancel or check-in action any more, its Items
+      panel is headed `Items (2 units)` listing GoPro Hero 12 Action Kit, and
+      the Charges panel still reads Total due at pickup $36.00.

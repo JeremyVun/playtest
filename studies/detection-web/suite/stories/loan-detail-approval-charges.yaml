@@ -1,0 +1,22 @@
+description: Read loan L-1045's charge breakdown and why it needs approval.
+story: |
+  Aisha Farouk has asked what her booking will cost and why it is still
+  sitting undecided. Open her request, loan "L-1045", and read back its
+  schedule, the charge breakdown she will owe at pickup, and the reason a
+  supervisor has to sign it off.
+success:
+  - console_errors: 0
+  - url_matches: "*/loans/L-1045"
+  - label: Heading and schedule
+    assert: >-
+      The page is headed `Loan L-1045` with a status pill reading
+      `Awaiting approval` and the subtitle
+      `Aisha Farouk · Architecture · booked Fri 13 Mar 2026, 15:40`, and the
+      Schedule panel shows pickup Wed 18 Mar 2026, a loan period of 7 days,
+      due back Wed 25 Mar 2026, 17:00, and no extension used.
+  - label: Charges and approval reason
+    assert: >-
+      The Charges panel reads Base charge $231.00, Refundable deposit $900.00
+      and Total due at pickup $1,131.00, with no bundle-discount line at all,
+      and the `Awaiting supervisor approval` panel gives exactly one reason:
+      `Replacement value $9,000.00 is at or above the $2,500.00 threshold.`

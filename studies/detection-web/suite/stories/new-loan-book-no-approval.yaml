@@ -1,0 +1,29 @@
+description: Book a three-unit audio loan end to end that needs no approval.
+story: |
+  Jordan Beck from Film & Media is at the desk booking kit for a three-day
+  shoot he will collect tomorrow, Tue 17 Mar 2026: one "Zoom H6 Field
+  Recorder" and two units of the "Rode Wireless GO II Lav Pair". His address is
+  jordan.beck@fairmont.edu and the booking is for "Documentary interviews in
+  the Kessler workshop." Take the booking all the way from his details to a
+  confirmed loan on the desk's books.
+success:
+  - console_errors: 0
+  - url_matches: "*/loans/L-1049"
+  - label: Booked and ready banner
+    assert: >-
+      The new loan's page shows the success banner
+      `L-1049 booked and ready for pickup on Tue 17 Mar 2026.`, its status pill
+      reads Ready for pickup, and the Schedule panel shows pickup
+      Tue 17 Mar 2026, a loan period of 3 days and due back
+      Fri 20 Mar 2026, 17:00.
+  - label: Charge breakdown with the bundle discount
+    assert: >-
+      The Items panel is headed `Items (3 units)`, and the Charges panel reads
+      Base charge $39.00, a `Bundle discount (3+ units)` line of $3.90 shown as
+      a subtracted amount, Refundable deposit $0.00 and Total due at pickup
+      $35.10.
+  - label: Borrower details carried through
+    assert: >-
+      The Borrower panel shows Jordan Beck, the email jordan.beck@fairmont.edu,
+      the department Film & Media and the purpose
+      `Documentary interviews in the Kessler workshop.`

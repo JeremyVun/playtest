@@ -5,3 +5,6 @@
 work/
 # Server logs written beside the build by subject-ctl.
 *.log
+# Injected build outputs and catalog verification scratch.
+.builds/
+catalog/.verify/

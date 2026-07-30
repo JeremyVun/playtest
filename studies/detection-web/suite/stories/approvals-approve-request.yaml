@@ -1,0 +1,21 @@
+description: Approve the fourteen-day chapel recording request from the queue.
+story: |
+  Two requests are sitting on your desk waiting for a decision. Theo
+  Lindqvist's two-week chapel recording booking is fine by you, so sign it off
+  and leave the approvals queue showing what is still outstanding.
+success:
+  - console_errors: 0
+  - url_matches: "*/approvals"
+  - label: Approval banner and queue count
+    assert: >-
+      The approvals page shows the success banner
+      `L-1044 approved and moved to ready for pickup.`, its subtitle now reads
+      `1 request is waiting for a supervisor decision`, the Approvals link in
+      the header carries a count of 1, and no card for L-1044 remains.
+  - label: The remaining request
+    assert: >-
+      The only card left is L-1045 for Aisha Farouk of Architecture, giving the
+      reason `Replacement value $9,000.00 is at or above the $2,500.00
+      threshold.`, the line
+      `2 units for 7 days, pickup Wed 18 Mar 2026, due Wed 25 Mar 2026.` and
+      `Total due at pickup $1,131.00.`

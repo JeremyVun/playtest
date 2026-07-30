@@ -1,0 +1,26 @@
+description: Check the overdue camera loan back in as damaged and settle its fee.
+story: |
+  Marcus Webb has finally brought back the long-overdue camera package on loan
+  "L-1042", and the tripod head has come back cracked. Book the whole kit back
+  in at the desk this morning, recording that it returned damaged and noting
+  the cracked tripod head, so the late fee and the deposit are settled on the
+  loan's record.
+success:
+  - console_errors: 0
+  - url_matches: "*/loans/L-1042"
+  - label: Check-in banner
+    assert: >-
+      The loan page shows the success banner
+      `L-1042 checked in. Late fee of $45.00 charged. Deposit of $669.00 held
+      pending inspection.` and its status pill now reads Returned.
+  - label: Return record
+    assert: >-
+      The Return record panel shows checked in Mon 16 Mar 2026, 09:00,
+      condition Damaged, a note about the cracked tripod head, late fee $45.00
+      and deposit `$669.00 held pending inspection.`, and the Charges panel
+      carries the extra line `Late fee charged on return: $45.00.` beneath a
+      total due at pickup of $876.90.
+  - label: No further actions
+    assert: >-
+      The page offers no check-in form, no extension control and no cancel
+      control — a returned loan has no actions left.

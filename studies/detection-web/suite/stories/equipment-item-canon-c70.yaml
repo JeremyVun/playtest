@@ -1,0 +1,21 @@
+description: Check the Canon C70's desk record and which open loans hold it.
+story: |
+  Someone wants to book a "Canon C70 Cinema Camera" this week and you need to
+  know whether the desk has one spare, what it will cost them per day, what
+  deposit it carries, and who is holding the other bodies. Open that camera's
+  own page in the catalogue and read its desk record and its open loans.
+success:
+  - console_errors: 0
+  - url_matches: "*/equipment/*"
+  - label: Desk record
+    assert: >-
+      The page is headed Canon C70 Cinema Camera and its Desk record shows
+      asset tag CAM-C70, category Cameras, availability `1 of 3 units free`,
+      daily rate `$18.00 per unit per day`, replacement value $5,400.00 and
+      deposit per unit `$540.00 (refundable)`.
+  - label: Open loans holding this item
+    assert: >-
+      The `On loan now` table lists exactly two open loans, in loan-number
+      order: L-1042 for Marcus Webb, 1 unit, status Overdue, due
+      Wed 11 Mar 2026; and L-1045 for Aisha Farouk, 1 unit, status
+      Awaiting approval, due Wed 25 Mar 2026.

@@ -1,0 +1,24 @@
+description: Decline a request, then re-read every number that should have moved.
+mode: discovery
+tags: [risk]
+persona: [adversarial]
+story: |
+  Before you touch anything, write down exactly what the desk currently shows
+  in five places: the count on the "Approvals" link in the header; the
+  "Units available", "Awaiting approval" and "Charges booked today" tiles on
+  the desk overview; and the availability of the "Canon C70 Cinema Camera" and
+  the MacBook Pro 16" Edit Laptop in the equipment catalogue.
+  Now turn down loan "L-1045" from the approvals queue, giving the reason
+  "Kit already committed to the open day."
+  Then go back and re-read all five of those places, and open loan L-1045's own
+  page as well. For each one, say what it shows now against what you wrote down,
+  and whether it moved the way returning that loan's units to stock should move
+  it, moved by the wrong amount, or stayed stale.
+report:
+  - Did the decline actually complete? Quote the banner and the loan's status afterwards.
+  - Give the before and after reading for each of the five places you noted, quoting both, and say which ones changed.
+  - Did any surface stay stale, move by the wrong amount, or only catch up after you forced a page reload?
+  - The header count is meant to update without a reload — did it, and did the desk overview agree with the approvals queue?
+  - Does loan L-1045's own page now carry the decline reason in the exact wording you typed, and does it still show its old charges correctly?
+  - Did anything change that should not have changed at all?
+  - What would a desk supervisor conclude is broken or misleading here?

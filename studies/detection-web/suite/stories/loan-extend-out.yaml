@@ -1,0 +1,22 @@
+description: Give the gimbal loan its one seven-day extension.
+story: |
+  Nina Brandt has rung the desk: her degree-show shoot has slipped by a week
+  and she needs to keep the gimbal package on loan "L-1048" for longer. Give
+  her the one extension the desk allows and confirm the new return date on the
+  loan's record.
+success:
+  - console_errors: 0
+  - url_matches: "*/loans/L-1048"
+  - label: Extension banner and new due date
+    assert: >-
+      The loan page shows the success banner
+      `Extended. L-1048 is now due Thu 26 Mar 2026 at 17:00.`, its status pill
+      still reads Out, and the Schedule panel shows due back
+      Thu 26 Mar 2026, 17:00 with the extension line
+      `One 7-day extension used`.
+  - label: No second extension, and no charge change
+    assert: >-
+      A further extension is refused: the extend control is disabled and the
+      reason shown is `This loan has already used its one extension.` The
+      Charges panel is unchanged, still reading Base charge $140.00,
+      Refundable deposit $204.00 and Total due at pickup $344.00.

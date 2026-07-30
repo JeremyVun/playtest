@@ -1,0 +1,22 @@
+description: Turn down the architecture request with a written reason.
+story: |
+  The riverside site-survey request from Aisha Farouk, loan "L-1045", clashes
+  with the open day and cannot go ahead. Turn it down from the approvals queue
+  and tell her why — "Kit already committed to the open day." — so the kit goes
+  back into stock and the reason is on the record. Leave the queue showing what
+  is still outstanding.
+success:
+  - console_errors: 0
+  - url_matches: "*/approvals"
+  - label: Decline banner and queue count
+    assert: >-
+      The approvals page shows the success banner
+      `L-1045 declined. 2 units are back in stock.`, its subtitle now reads
+      `1 request is waiting for a supervisor decision`, the Approvals link in
+      the header carries a count of 1, and no card for L-1045 remains.
+  - label: The remaining request
+    assert: >-
+      The only card left is L-1044 for Theo Lindqvist of Music, giving
+      `Loan period is 14 days.` as its one and only reason, the line
+      `2 units for 14 days, pickup Mon 16 Mar 2026, due Mon 30 Mar 2026.` and
+      `Total due at pickup $341.00.`

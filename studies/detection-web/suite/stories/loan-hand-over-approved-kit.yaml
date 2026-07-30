@@ -1,0 +1,21 @@
+description: Sign off Theo Lindqvist's request and hand the kit over today.
+story: |
+  Theo Lindqvist is standing at the desk to collect the recording kit he
+  booked for today, but his request "L-1044" has never been signed off. As the
+  supervisor, approve it yourself and then hand the kit over so the desk
+  records it as collected by him, finishing on that loan's own record.
+success:
+  - console_errors: 0
+  - url_matches: "*/loans/L-1044"
+  - label: Collected banner and status
+    assert: >-
+      The loan page shows the success banner
+      `L-1044 is now out with Theo Lindqvist.`, its status pill reads Out, and
+      the Schedule panel records it as picked up on Mon 16 Mar 2026, 09:00
+      with due back still Mon 30 Mar 2026, 17:00.
+  - label: Out-with-borrower actions and unchanged charges
+    assert: >-
+      The page now offers the `Out with the borrower` panel with an Extension
+      line and a `Check in` form instead of any pickup or approval action, the
+      Charges panel still reads Total due at pickup $341.00, and the Approvals
+      link in the header carries a count of 1.

@@ -1,0 +1,8 @@
+# Frozen study suite config (PREREG: actor/grader gpt5_5, one run at a time).
+app:
+  driver: web
+  base_url: http://127.0.0.1:4620
+  init: init.sh
+actor_model: gpt5_5
+grader_model: gpt5_5
+parallel: 1

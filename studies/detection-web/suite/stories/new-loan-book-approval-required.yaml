@@ -1,0 +1,25 @@
+description: Book a fortnight-long laptop loan that trips both approval rules.
+story: |
+  Elena Vasquez from Design needs an edit laptop for a fortnight and wants to
+  take it away today, Mon 16 Mar 2026. Book her one MacBook Pro 16" Edit Laptop
+  for 14 days, using elena.vasquez@fairmont.edu and the purpose "Fortnight of
+  offline editing for the degree show." Take it right through to a confirmed
+  booking and see where the desk sends it.
+success:
+  - console_errors: 0
+  - url_matches: "*/loans/L-1049"
+  - label: Sent for approval, with both reasons
+    assert: >-
+      The new loan's page shows the success banner
+      `L-1049 booked and sent for supervisor approval.`, its status pill reads
+      Awaiting approval, and the `Awaiting supervisor approval` panel lists two
+      reasons in this order:
+      `Replacement value $3,600.00 is at or above the $2,500.00 threshold.`
+      then `Loan period is 14 days.`
+  - label: Schedule and charge breakdown
+    assert: >-
+      The Schedule panel shows pickup Mon 16 Mar 2026, a loan period of 14 days
+      and due back Mon 30 Mar 2026, 17:00; the Items panel is headed
+      `Items (1 unit)`; and the Charges panel reads Base charge $210.00, no
+      bundle-discount line, Refundable deposit $360.00 and Total due at pickup
+      $570.00.

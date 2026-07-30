@@ -1,0 +1,23 @@
+description: Force empty and out-of-bounds submissions through the new-loan flow.
+mode: discovery
+tags: [risk]
+persona: [adversarial]
+story: |
+  Start booking a new loan at the lending desk, and be careless on purpose.
+  First, try to move past the borrower step with every field still blank, and
+  read back exactly what the desk says and where the keyboard focus lands.
+  Then put "jordan.beck@fairmont" in the email box, fill the name in, leave the
+  department unchosen, and try to move on again.
+  Once you are through to the items and dates step, over-ask deliberately: put
+  4 units of the "Canon C70 Cinema Camera" on the loan, then set the pickup
+  date to Saturday 2026-03-21, then to 2026-04-15.
+  After every rejected attempt, re-read the whole form before you change
+  anything, and say whether any value you had already entered was wiped,
+  reset or silently altered.
+report:
+  - Did the empty borrower submit actually happen? Quote every message the desk showed, and say whether all the failing fields were reported at once or only the first.
+  - Where did keyboard focus land after each rejected submit, and did a message clear when its field was corrected, or linger after it was fixed?
+  - For each out-of-bounds item and date attempt, quote the message shown verbatim, and say whether it names the right field, the right item and the right numbers.
+  - Did any attempt wipe, reset or silently change a value you had already entered elsewhere on the form?
+  - Did any invalid value slip through to the next step, or produce no message at all, or produce a message in a place you would not look?
+  - What would a desk supervisor conclude is broken or misleading here?

@@ -1,0 +1,5 @@
+# Study data root: dev runner credential, auth state, raw artifacts.
+# Disposable; never archived or published (see PREREG.md).
+.data/
+# Scratch transcripts and working files before scrubbing into report/.
+work/

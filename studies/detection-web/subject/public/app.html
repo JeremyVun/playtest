@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Loanpoint</title>
+    <meta
+      name="description"
+      content="Loanpoint — the Fairmont University Media Services equipment lending desk."
+    />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to main content</a>
+    <header class="site-header">
+      <div class="site-header__inner">
+        <a class="brand" href="/">
+          <span class="brand__mark" aria-hidden="true">LP</span>
+          <span class="brand__text">
+            <strong>Loanpoint</strong>
+            <span>Media Services lending desk</span>
+          </span>
+        </a>
+        <nav aria-label="Main">
+          <ul class="nav">
+            <li><a href="/" data-nav="/">Overview</a></li>
+            <li><a href="/equipment" data-nav="/equipment">Equipment</a></li>
+            <li><a href="/loans" data-nav="/loans">Loans</a></li>
+            <li>
+              <a href="/approvals" data-nav="/approvals">
+                Approvals
+                <span class="badge" id="approvals-badge" hidden></span>
+              </a>
+            </li>
+          </ul>
+        </nav>
+        <div class="site-header__actions">
+          <p class="operator" id="operator"></p>
+          <a class="button button--primary" href="/new-loan">New loan</a>
+        </div>
+      </div>
+    </header>
+    <main id="main" tabindex="-1"></main>
+    <footer class="site-footer">
+      <p>Fairmont University Media Services &middot; Kessler Building, room 118</p>
+      <p id="desk-time"></p>
+    </footer>
+  </body>
+</html>

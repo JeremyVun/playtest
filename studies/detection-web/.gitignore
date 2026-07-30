@@ -3,3 +3,5 @@
 .data/
 # Scratch transcripts and working files before scrubbing into report/.
 work/
+# Server logs written beside the build by subject-ctl.
+*.log

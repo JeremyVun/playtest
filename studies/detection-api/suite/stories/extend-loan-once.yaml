@@ -1,0 +1,51 @@
+description: Extend L-1048 by seven days, then find the second extension refused.
+story: |
+  You are the desk supervisor at Fairmont University Media Services. Nina
+  Brandt has asked to keep loan L-1048 — 2 units of the DJI RS 4 Pro Gimbal,
+  out with her since 12 March and due back on Thursday 19 March 2026 — for
+  another week. The desk clock is frozen at Monday 16 March 2026, so the loan
+  is out and not yet overdue. Each loan is allowed one extension of 7 days, and
+  extending is free.
+
+  Open loan L-1048 and check it can be extended. Extend it. Then try to extend
+  it a second time, which the desk should refuse. Finish by opening loan L-1048
+  again and reading it in full.
+
+  You expect the first extension to move the due date from Thursday 19 March
+  2026 to Thursday 26 March 2026 at 17:00 and to record that the loan's one
+  extension has been used. You expect the second attempt to be refused as a
+  conflict, with a message saying this loan has already used its one extension.
+  You expect the extension to change no money at all: the loan should still show
+  a base charge of $140.00, a $204.00 refundable deposit and $344.00 total due
+  at pickup, with its status still "out".
+success:
+  - label: the loan can be extended before the first attempt
+    response_matches: { op: "GET /api/loans/{id}", match: "$.loan.actions.canExtend == true", occurrence: first }
+  - response_matches: { op: "GET /api/loans/{id}", match: '$.loan.actions.extendedDueDate == "2026-03-26"', occurrence: first }
+  - label: the first extension succeeds
+    response_status: { op: "POST /api/loans/{id}/extend", status: "200", occurrence: first }
+  - response_matches: { op: "POST /api/loans/{id}/extend", match: '$.loan.dueDate == "2026-03-26"', occurrence: first }
+  - response_matches: { op: "POST /api/loans/{id}/extend", match: "$.loan.extensionsUsed == 1", occurrence: first }
+  - label: the second extension is refused as a conflict
+    response_status: { op: "POST /api/loans/{id}/extend", status: "409", occurrence: last }
+  - response_matches:
+      op: "POST /api/loans/{id}/extend"
+      match: '$.error.message == "This loan has already used its one extension."'
+      occurrence: last
+  - label: the extended loan is still out, due 26 March, at the same price
+    response_matches: { op: "GET /api/loans/{id}", match: '$.loan.status == "out"', occurrence: last }
+  - response_matches: { op: "GET /api/loans/{id}", match: '$.loan.dueAt == "2026-03-26T17:00:00Z"', occurrence: last }
+  - response_matches: { op: "GET /api/loans/{id}", match: "$.loan.extensionsUsed == 1", occurrence: last }
+  - response_matches: { op: "GET /api/loans/{id}", match: "$.loan.quote.baseChargeCents == 14000", occurrence: last }
+  - response_matches: { op: "GET /api/loans/{id}", match: "$.loan.quote.depositCents == 20400", occurrence: last }
+  - response_matches: { op: "GET /api/loans/{id}", match: "$.loan.totalDueCents == 34400", occurrence: last }
+  - invariant: { policy: no_server_error }
+  - label: the refusal uses the desk's error envelope
+    invariant:
+      policy: error_shape
+      scope: "POST /api/loans/{id}/extend"
+      require: ["$.error.message"]
+  - assert: >-
+      The response is loan L-1048 for Nina Brandt, still out with the borrower,
+      now due 2026-03-26 at 17:00 with one extension used and 34400 cents due at
+      pickup — the same total as before the extension.

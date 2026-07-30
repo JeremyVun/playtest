@@ -1,0 +1,365 @@
+{
+  "I001": {
+    "arm": "P",
+    "finding_id": "01KYTC1JR57KHXK6YWNAWYFFH5",
+    "state": "new"
+  },
+  "I002": {
+    "arm": "P",
+    "finding_id": "01KYTE5ABC317NZDY1HNGX4AHF",
+    "state": "new"
+  },
+  "I003": {
+    "arm": "P",
+    "finding_id": "01KYTC6QTBDDDA936V7V5DFC25",
+    "state": "new"
+  },
+  "I004": {
+    "arm": "P",
+    "finding_id": "01KYTBFWQRHTDK8PE7E0EHVVK1",
+    "state": "new"
+  },
+  "I005": {
+    "arm": "P",
+    "finding_id": "01KYTCB7DMCJT225B08KW18FN5",
+    "state": "new"
+  },
+  "I006": {
+    "arm": "F",
+    "item_n": 14,
+    "ref": "POST /api/loans/{id}/extend"
+  },
+  "I007": {
+    "arm": "P",
+    "finding_id": "01KYTEZ1PRM27NWRK8QRT6CANC",
+    "state": "new"
+  },
+  "I008": {
+    "arm": "F",
+    "item_n": 17,
+    "ref": "GET /api/equipment/{id}"
+  },
+  "I009": {
+    "arm": "P",
+    "finding_id": "01KYTC6QTC8C399MTRG1YVAGPG",
+    "state": "new"
+  },
+  "I010": {
+    "arm": "F",
+    "item_n": 2,
+    "ref": "POST /api/loan-drafts"
+  },
+  "I011": {
+    "arm": "P",
+    "finding_id": "01KYTEZ1PY7G6B4705ZJNPH8WY",
+    "state": "new"
+  },
+  "I012": {
+    "arm": "C",
+    "bug_n": 11
+  },
+  "I013": {
+    "arm": "P",
+    "finding_id": "01KYTCB7DNSTD67NJS2MAYRRPG",
+    "state": "new"
+  },
+  "I014": {
+    "arm": "P",
+    "finding_id": "01KYTD353Y6R4050DAHZXR7YP7",
+    "state": "new"
+  },
+  "I015": {
+    "arm": "P",
+    "finding_id": "01KYTEZ1PT6P8XE12QKXJT3YTM",
+    "state": "new"
+  },
+  "I016": {
+    "arm": "C",
+    "bug_n": 8
+  },
+  "I017": {
+    "arm": "P",
+    "finding_id": "01KYTC1JR57KHXK6YWNAWYFFHM",
+    "state": "new"
+  },
+  "I018": {
+    "arm": "F",
+    "item_n": 10,
+    "ref": "POST /api/approvals/{id}/approve"
+  },
+  "I019": {
+    "arm": "P",
+    "finding_id": "01KYTEW9980SB4YDQE8WZ01MWQ",
+    "state": "new"
+  },
+  "I020": {
+    "arm": "C",
+    "bug_n": 9
+  },
+  "I021": {
+    "arm": "C",
+    "bug_n": 6
+  },
+  "I022": {
+    "arm": "F",
+    "item_n": 19,
+    "ref": "GET /api/loan-drafts/{id}"
+  },
+  "I023": {
+    "arm": "P",
+    "finding_id": "01KYTBFWQQRA654ZJDY2PDBBMN",
+    "state": "new"
+  },
+  "I024": {
+    "arm": "C",
+    "bug_n": 1
+  },
+  "I025": {
+    "arm": "P",
+    "finding_id": "01KYTEW996E1WMFNE6904XNWFY",
+    "state": "new"
+  },
+  "I026": {
+    "arm": "P",
+    "finding_id": "01KYTEZ1PVKRDTPCK8ZB68QV9H",
+    "state": "new"
+  },
+  "I027": {
+    "arm": "P",
+    "finding_id": "01KYTDA9ZYJG0ZY5QV4EMPNPK2",
+    "state": "new"
+  },
+  "I028": {
+    "arm": "F",
+    "item_n": 16,
+    "ref": "POST /api/loans/{id}/pickup"
+  },
+  "I029": {
+    "arm": "F",
+    "item_n": 13,
+    "ref": "POST /api/loans/{id}/checkin"
+  },
+  "I030": {
+    "arm": "P",
+    "finding_id": "01KYTE5ABDPYKFQFCPT4C6HAMB",
+    "state": "new"
+  },
+  "I031": {
+    "arm": "P",
+    "finding_id": "01KYTC6QTBDDDA936V7V5DFC2A",
+    "state": "new"
+  },
+  "I032": {
+    "arm": "F",
+    "item_n": 6,
+    "ref": "GET /api/equipment"
+  },
+  "I033": {
+    "arm": "P",
+    "finding_id": "01KYTEZ1Q0V8SAJPQMA1KNH4Q9",
+    "state": "new"
+  },
+  "I034": {
+    "arm": "F",
+    "item_n": 3,
+    "ref": "POST /api/loan-drafts/{id}/submit"
+  },
+  "I035": {
+    "arm": "F",
+    "item_n": 11,
+    "ref": "POST /api/approvals/{id}/decline"
+  },
+  "I036": {
+    "arm": "P",
+    "finding_id": "01KYTC6QTAQ7BFN48R8CTQM8FM",
+    "state": "new"
+  },
+  "I037": {
+    "arm": "F",
+    "item_n": 9,
+    "ref": "GET /api/session"
+  },
+  "I038": {
+    "arm": "P",
+    "finding_id": "01KYTA87R0QWMH33MM7RRDYMVF",
+    "state": "new"
+  },
+  "I039": {
+    "arm": "F",
+    "item_n": 20,
+    "ref": "PATCH /api/loan-drafts/{id}"
+  },
+  "I040": {
+    "arm": "P",
+    "finding_id": "01KYTEZ1PY7G6B4705ZJNPH8WS",
+    "state": "new"
+  },
+  "I041": {
+    "arm": "C",
+    "bug_n": 12
+  },
+  "I042": {
+    "arm": "P",
+    "finding_id": "01KYTE5ABC317NZDY1HNGX4AH9",
+    "state": "new"
+  },
+  "I043": {
+    "arm": "C",
+    "bug_n": 2
+  },
+  "I044": {
+    "arm": "F",
+    "item_n": 7,
+    "ref": "GET /api/loans"
+  },
+  "I045": {
+    "arm": "P",
+    "finding_id": "01KYTC1JR4VCSBJ4TMDK3HYQN9",
+    "state": "new"
+  },
+  "I046": {
+    "arm": "P",
+    "finding_id": "01KYTD6CVKFJ38B3KNW881Y3B2",
+    "state": "new"
+  },
+  "I047": {
+    "arm": "C",
+    "bug_n": 7
+  },
+  "I048": {
+    "arm": "P",
+    "finding_id": "01KYTAVW135QJSEFY2KPM23776",
+    "state": "new"
+  },
+  "I049": {
+    "arm": "F",
+    "item_n": 12,
+    "ref": "POST /api/loans/{id}/cancel"
+  },
+  "I050": {
+    "arm": "P",
+    "finding_id": "01KYTEZ1PWPHF50S4HZSTVA924",
+    "state": "new"
+  },
+  "I051": {
+    "arm": "F",
+    "item_n": 4,
+    "ref": "POST /api/loan-drafts/{id}/submit"
+  },
+  "I052": {
+    "arm": "P",
+    "finding_id": "01KYTC1JR57KHXK6YWNAWYFFHE",
+    "state": "new"
+  },
+  "I053": {
+    "arm": "P",
+    "finding_id": "01KYTD6CVHCNMX0T806PANDN3H",
+    "state": "new"
+  },
+  "I054": {
+    "arm": "F",
+    "item_n": 8,
+    "ref": "GET /api/overview"
+  },
+  "I055": {
+    "arm": "P",
+    "finding_id": "01KYTBFWQTJ74SF4SFK4ZMJAG8",
+    "state": "new"
+  },
+  "I056": {
+    "arm": "F",
+    "item_n": 1,
+    "ref": "POST /api/loan-drafts"
+  },
+  "I057": {
+    "arm": "C",
+    "bug_n": 3
+  },
+  "I058": {
+    "arm": "P",
+    "finding_id": "01KYTD6CVJ56MCT170R1W73K5Q",
+    "state": "new"
+  },
+  "I059": {
+    "arm": "P",
+    "finding_id": "01KYTC6QTC8C399MTRG1YVAGPN",
+    "state": "new"
+  },
+  "I060": {
+    "arm": "P",
+    "finding_id": "01KYTAVW14E4C9875SXKRC3FW5",
+    "state": "new"
+  },
+  "I061": {
+    "arm": "C",
+    "bug_n": 10
+  },
+  "I062": {
+    "arm": "P",
+    "finding_id": "01KYTA87R19Z77Q6ZNEEHRGDFA",
+    "state": "new"
+  },
+  "I063": {
+    "arm": "P",
+    "finding_id": "01KYTAVW150VPZ6ETDNE9AEGH0",
+    "state": "new"
+  },
+  "I064": {
+    "arm": "P",
+    "finding_id": "01KYTEZ1PSTKE73DK077SQFBRF",
+    "state": "new"
+  },
+  "I065": {
+    "arm": "F",
+    "item_n": 21,
+    "ref": "PATCH /api/loan-drafts/{id}"
+  },
+  "I066": {
+    "arm": "F",
+    "item_n": 18,
+    "ref": "GET /api/loans/{id}"
+  },
+  "I067": {
+    "arm": "C",
+    "bug_n": 4
+  },
+  "I068": {
+    "arm": "F",
+    "item_n": 5,
+    "ref": "GET /api/approvals"
+  },
+  "I069": {
+    "arm": "P",
+    "finding_id": "01KYTA87R19Z77Q6ZNEEHRGDFF",
+    "state": "new"
+  },
+  "I070": {
+    "arm": "F",
+    "item_n": 15,
+    "ref": "POST /api/loans/{id}/extend"
+  },
+  "I071": {
+    "arm": "C",
+    "bug_n": 5
+  },
+  "I072": {
+    "arm": "P",
+    "finding_id": "01KYTDQXEM5RK7XVP81NVBMVXF",
+    "state": "new"
+  },
+  "I073": {
+    "arm": "P",
+    "finding_id": "01KYTE5ABBM94945D1KQMNXJCJ",
+    "state": "new"
+  },
+  "I074": {
+    "arm": "P",
+    "finding_id": "01KYTE5ABDPYKFQFCPT4C6HAM6",
+    "state": "new"
+  },
+  "I075": {
+    "arm": "P",
+    "finding_id": "01KYTEW997367DM1MM1474JFA7",
+    "state": "new"
+  }
+}

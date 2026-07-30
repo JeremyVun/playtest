@@ -1,0 +1,91 @@
+description: Bad input and out-of-sequence desk actions are refused with the desk's own wording.
+story: |
+  You are the desk supervisor at Fairmont University Media Services, and today
+  a series of things go wrong at the counter. The desk clock is frozen at
+  Monday 16 March 2026. Loan L-1043 is on the pickup shelf for tomorrow, 17
+  March; loan L-1042 is out and overdue; loan L-1046 was returned back on 5
+  March; and loan L-1045 is a request still awaiting a supervisor decision.
+
+  Try each of these in turn and read what the desk says.
+
+  1. Start a new loan draft for a borrower called "A" with the email
+     "a.person@gmail.com" and the department "Wizardry".
+  2. Mark loan L-1043 as picked up, a day before its pickup date.
+  3. Check loan L-1043 back in, even though it never went out.
+  4. Extend loan L-1042, which is overdue.
+  5. Cancel loan L-1046, which was returned two weeks ago.
+  6. Decline the request on loan L-1045 with the one-word reason "no".
+  7. Open loan L-9999, which does not exist.
+
+  You expect every one of these to be refused, never quietly accepted, and each
+  refusal to carry a message you could read out to the borrower. You expect the
+  bad borrower details and the one-word decline reason to come back as
+  rejected form input, naming the offending fields (the name is too short, the
+  email is not a fairmont.edu address, the department is not one of the desk's
+  departments, and a decline reason needs at least five characters); the four
+  out-of-sequence actions to come back as conflicts saying the loan is
+  scheduled for pickup on Tue 17 Mar 2026, that only a loan that is out can be
+  checked in, that an overdue loan cannot be extended and must be checked in
+  first, and that only a loan awaiting approval or ready for pickup can be
+  cancelled; and the unknown loan to come back as not found, saying that loan
+  does not exist. You also expect no loan or draft to have been created or
+  changed by any of it.
+success:
+  - label: the bad borrower details are rejected
+    response_status: { op: "POST /api/loan-drafts", status: "400", occurrence: any }
+  - response_matches:
+      op: "POST /api/loan-drafts"
+      match: '$.error.fields.email == "Borrower email must be a fairmont.edu address."'
+      occurrence: any
+  - response_matches:
+      op: "POST /api/loan-drafts"
+      match: '$.error.fields.department == "Choose a department."'
+      occurrence: any
+  - label: an early pickup is refused with that loan's own pickup date
+    response_status: { op: "POST /api/loans/{id}/pickup", status: "409", occurrence: any }
+  - response_matches:
+      op: "POST /api/loans/{id}/pickup"
+      match: '$.error.message == "This loan is scheduled for pickup on Tue 17 Mar 2026."'
+      occurrence: any
+  - label: checking in a loan that never went out is refused
+    response_status: { op: "POST /api/loans/{id}/checkin", status: "409", occurrence: any }
+  - response_matches:
+      op: "POST /api/loans/{id}/checkin"
+      match: '$.error.message == "Only a loan that is out can be checked in."'
+      occurrence: any
+  - label: extending an overdue loan is refused
+    response_status: { op: "POST /api/loans/{id}/extend", status: "409", occurrence: any }
+  - response_matches:
+      op: "POST /api/loans/{id}/extend"
+      match: '$.error.message == "An overdue loan cannot be extended. Check it in first."'
+      occurrence: any
+  - label: cancelling a returned loan is refused
+    response_status: { op: "POST /api/loans/{id}/cancel", status: "409", occurrence: any }
+  - response_matches:
+      op: "POST /api/loans/{id}/cancel"
+      match: '$.error.message == "Only a loan awaiting approval or ready for pickup can be cancelled."'
+      occurrence: any
+  - label: a one-word decline reason is rejected
+    response_status: { op: "POST /api/approvals/{id}/decline", status: "400", occurrence: any }
+  - response_matches:
+      op: "POST /api/approvals/{id}/decline"
+      match: '$.error.fields.reason == "Give a reason for declining (at least 5 characters)."'
+      occurrence: any
+  - label: an unknown loan is not found
+    response_status: { op: "GET /api/loans/{id}", status: "404", occurrence: any }
+  - response_matches:
+      op: "GET /api/loans/{id}"
+      match: '$.error.message == "That loan does not exist."'
+      occurrence: any
+  - label: no refusal is a server error
+    invariant: { policy: no_server_error }
+  - label: the rejected borrower form uses the desk's error envelope
+    invariant:
+      policy: error_shape
+      scope: "POST /api/loan-drafts"
+      require: ["$.error.message"]
+observe:
+  - label: every refusal in the run carries a message
+    invariant:
+      policy: error_shape
+      require: ["$.error.message"]

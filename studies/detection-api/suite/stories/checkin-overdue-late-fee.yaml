@@ -1,0 +1,46 @@
+description: Check in the overdue L-1042 damaged; the late fee is charged, the deposit held, and the day's figures move.
+story: |
+  You are the desk supervisor at Fairmont University Media Services. Marcus
+  Webb has finally brought back loan L-1042 — a Canon C70 Cinema Camera, a
+  Manfrotto 504X Tripod and an Aputure 300x LED Light — and the lens hood is
+  cracked. The loan was due back on Wednesday 11 March 2026 and the desk clock
+  is frozen at Monday 16 March 2026, so it is late. The desk is open Monday to
+  Friday only.
+
+  Open loan L-1042 and read the late fee it says the borrower owes if the kit
+  comes back today. Then check the loan in with the returned condition recorded
+  as damaged and the note "Lens hood cracked on the front element." Finish by
+  reading the desk overview.
+
+  You expect the loan to be 3 business days late — Thursday 12, Friday 13 and
+  Monday 16 March — which at $5.00 per unit per late business day across its 3
+  units is a late fee of $45.00. You expect checking in to move the loan to
+  "returned", record the return at 09:00 on 16 March 2026, charge that $45.00,
+  and hold the $669.00 deposit for inspection rather than releasing it, because
+  the kit came back damaged. You expect the desk overview afterwards to show no
+  overdue loans, 2 loans still out, 43 of 53 units available, and charges booked
+  today of $386.00 — the $341.00 booked on L-1044 this morning plus the $45.00
+  late fee just charged.
+success:
+  - label: the loan is three business days late with a $45.00 fee preview
+    response_matches: { op: "GET /api/loans/{id}", match: "$.loan.lateBusinessDays == 3", occurrence: first }
+  - response_matches: { op: "GET /api/loans/{id}", match: "$.loan.lateFeePreviewCents == 4500", occurrence: first }
+  - label: the check-in succeeds
+    response_status: { op: "POST /api/loans/{id}/checkin", status: "200", occurrence: any }
+  - label: the late fee charged is $45.00 and the deposit is held
+    response_matches: { op: "POST /api/loans/{id}/checkin", match: "$.lateFeeCents == 4500", occurrence: any }
+  - response_matches: { op: "POST /api/loans/{id}/checkin", match: '$.depositOutcome == "held"', occurrence: any }
+  - response_matches: { op: "POST /api/loans/{id}/checkin", match: '$.loan.status == "returned"', occurrence: any }
+  - response_matches: { op: "POST /api/loans/{id}/checkin", match: '$.loan.conditionLabel == "Damaged"', occurrence: any }
+  - response_matches: { op: "POST /api/loans/{id}/checkin", match: '$.loan.returnedAt == "2026-03-16T09:00:00Z"', occurrence: any }
+  - label: nothing is overdue once the kit is back
+    response_matches: { op: "GET /api/overview", match: "$.metrics.overdueCount == 0", occurrence: last }
+  - response_matches: { op: "GET /api/overview", match: "$.metrics.outCount == 2", occurrence: last }
+  - label: the three units are back on the shelf
+    response_matches: { op: "GET /api/overview", match: "$.metrics.unitsAvailable == 43", occurrence: last }
+  - label: the late fee lands in today's booked charges
+    response_matches: { op: "GET /api/overview", match: "$.metrics.chargesBookedTodayCents == 38600", occurrence: last }
+  - invariant: { policy: no_server_error }
+  - assert: >-
+      The desk overview reports no overdue loans, 2 loans still out, 43 of 53
+      units available and 38600 cents of charges booked today.

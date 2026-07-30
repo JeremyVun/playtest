@@ -1,0 +1,3586 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Loanpoint API",
+    "version": "1.0.0",
+    "description": "JSON API for Loanpoint, the equipment lending desk used by Fairmont University Media Services. The desk lends camera, audio, lighting, support and computing kit. The API covers the catalogue, the loan register, the supervisor approvals queue, and the three-step new-loan draft flow. All money values are integer cents; all dates are calendar dates in YYYY-MM-DD form and all instants are ISO 8601 UTC. The desk clock is frozen, so date-dependent values are reproducible."
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:4620"
+    }
+  ],
+  "tags": [
+    {
+      "name": "session",
+      "description": "Desk operator, desk clock and policy constants."
+    },
+    {
+      "name": "overview",
+      "description": "Desk overview counters and work queues."
+    },
+    {
+      "name": "equipment",
+      "description": "The equipment catalogue."
+    },
+    {
+      "name": "loans",
+      "description": "The loan register and loan actions."
+    },
+    {
+      "name": "approvals",
+      "description": "The supervisor approvals queue."
+    },
+    {
+      "name": "loan-drafts",
+      "description": "The new-loan draft flow."
+    }
+  ],
+  "paths": {
+    "/api/session": {
+      "get": {
+        "tags": [
+          "session"
+        ],
+        "operationId": "getSession",
+        "summary": "Get the desk session",
+        "description": "Returns the signed-in desk operator, the frozen desk clock, the department and category lists used by the interface, the selectable loan periods, the latest bookable pickup date, and the policy constants behind the pricing and approval rules.",
+        "responses": {
+          "200": {
+            "description": "The desk session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                },
+                "example": {
+                  "operator": {
+                    "name": "Rowan Ellis",
+                    "role": "Desk supervisor"
+                  },
+                  "deskTime": {
+                    "iso": "2026-03-16T09:00:00Z",
+                    "date": "2026-03-16",
+                    "time": "09:00",
+                    "formatted": "Mon 16 Mar 2026, 09:00"
+                  },
+                  "departments": [
+                    "Architecture",
+                    "Athletics",
+                    "Design",
+                    "Film & Media",
+                    "Journalism",
+                    "Music",
+                    "Student Life"
+                  ],
+                  "categories": [
+                    "Audio",
+                    "Cameras",
+                    "Computing",
+                    "Lighting",
+                    "Support"
+                  ],
+                  "loanDayOptions": [
+                    1,
+                    3,
+                    7,
+                    14
+                  ],
+                  "latestPickupDate": "2026-03-30",
+                  "policy": {
+                    "bundleMinUnits": 3,
+                    "bundleDiscountRate": 0.1,
+                    "depositThresholdCents": 100000,
+                    "depositRate": 0.1,
+                    "approvalValueThresholdCents": 250000,
+                    "lateFeePerUnitPerDayCents": 500,
+                    "lateFeeCapCents": 15000
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          }
+        }
+      }
+    },
+    "/api/overview": {
+      "get": {
+        "tags": [
+          "overview"
+        ],
+        "operationId": "getOverview",
+        "summary": "Get the desk overview",
+        "description": "Returns the desk counter tiles and the four work queues: overdue loans (with a live late-fee preview), loans due back today, loans ready for pickup, and loans awaiting supervisor approval.",
+        "responses": {
+          "200": {
+            "description": "The desk overview.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OverviewResponse"
+                },
+                "example": {
+                  "metrics": {
+                    "outCount": 3,
+                    "overdueCount": 1,
+                    "dueTodayCount": 1,
+                    "awaitingApprovalCount": 2,
+                    "readyForPickupCount": 1,
+                    "unitsAvailable": 40,
+                    "unitsTotal": 53,
+                    "chargesBookedTodayCents": 34100
+                  },
+                  "overdue": [
+                    {
+                      "id": "L-1042",
+                      "borrowerName": "Marcus Webb",
+                      "department": "Film & Media",
+                      "itemsLabel": "Canon C70 Cinema Camera + 2 more",
+                      "unitCount": 3,
+                      "status": "out",
+                      "statusLabel": "Overdue",
+                      "overdue": true,
+                      "lateBusinessDays": 3,
+                      "loanDays": 7,
+                      "pickupDate": "2026-03-04",
+                      "dueDate": "2026-03-11",
+                      "dueAt": "2026-03-11T17:00:00Z",
+                      "bookedAt": "2026-03-02T14:05:00Z",
+                      "totalDueCents": 87690,
+                      "lateFeePreviewCents": 4500
+                    }
+                  ],
+                  "dueToday": [
+                    {
+                      "id": "L-1041",
+                      "borrowerName": "Priya Raman",
+                      "department": "Journalism",
+                      "itemsLabel": "Sony A7 IV Mirrorless Kit + 1 more",
+                      "unitCount": 2,
+                      "status": "out",
+                      "statusLabel": "Out",
+                      "overdue": false,
+                      "lateBusinessDays": 0,
+                      "loanDays": 7,
+                      "pickupDate": "2026-03-09",
+                      "dueDate": "2026-03-16",
+                      "dueAt": "2026-03-16T17:00:00Z",
+                      "bookedAt": "2026-03-05T10:42:00Z",
+                      "totalDueCents": 40200
+                    }
+                  ],
+                  "readyForPickup": [
+                    {
+                      "id": "L-1043",
+                      "borrowerName": "Dana Okoye",
+                      "department": "Athletics",
+                      "itemsLabel": "GoPro Hero 12 Action Kit",
+                      "unitCount": 2,
+                      "status": "ready",
+                      "statusLabel": "Ready for pickup",
+                      "overdue": false,
+                      "lateBusinessDays": 0,
+                      "loanDays": 3,
+                      "pickupDate": "2026-03-17",
+                      "dueDate": "2026-03-20",
+                      "dueAt": "2026-03-20T17:00:00Z",
+                      "bookedAt": "2026-03-13T10:05:00Z",
+                      "totalDueCents": 3600
+                    }
+                  ],
+                  "awaitingApproval": [
+                    {
+                      "id": "L-1044",
+                      "borrowerName": "Theo Lindqvist",
+                      "department": "Music",
+                      "itemsLabel": "Sennheiser MKH-416 Boom Kit + 1 more",
+                      "unitCount": 2,
+                      "status": "pending_approval",
+                      "statusLabel": "Awaiting approval",
+                      "overdue": false,
+                      "lateBusinessDays": 0,
+                      "loanDays": 14,
+                      "pickupDate": "2026-03-16",
+                      "dueDate": "2026-03-30",
+                      "dueAt": "2026-03-30T17:00:00Z",
+                      "bookedAt": "2026-03-16T08:20:00Z",
+                      "totalDueCents": 34100
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          }
+        }
+      }
+    },
+    "/api/equipment": {
+      "get": {
+        "tags": [
+          "equipment"
+        ],
+        "operationId": "listEquipment",
+        "summary": "List catalogue items",
+        "description": "Lists the equipment catalogue, sorted by item name. The free-text filter matches the item name, asset tag and description, case-insensitively. Filters are applied after the total count is taken, so `totalCount` is always the size of the whole catalogue and `shownCount` is the size of the filtered list.",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Free-text filter matched case-insensitively against item name, asset tag and description. Leading and trailing whitespace is ignored; an empty value applies no filter.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "canon"
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "description": "Restrict results to one catalogue category. The value `All`, an empty value, or an omitted parameter applies no category filter. A value outside the category list matches nothing.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "All",
+                "Audio",
+                "Cameras",
+                "Computing",
+                "Lighting",
+                "Support"
+              ]
+            },
+            "example": "Cameras"
+          },
+          {
+            "name": "availableOnly",
+            "in": "query",
+            "required": false,
+            "description": "When `1` or `true`, only items with at least one available unit are returned. Every other value, including `0` and `false`, leaves the filter off.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1",
+                "true",
+                "0",
+                "false"
+              ]
+            },
+            "example": "1"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The filtered catalogue.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EquipmentListResponse"
+                },
+                "example": {
+                  "items": [
+                    {
+                      "id": "cam-c70",
+                      "tag": "CAM-C70",
+                      "name": "Canon C70 Cinema Camera",
+                      "category": "Cameras",
+                      "description": "Super 35 cinema body with dual-gain output, built-in ND filters and an RF 24-105mm zoom. Ships in a hard case with two batteries and a 512GB card.",
+                      "totalUnits": 3,
+                      "availableUnits": 1,
+                      "dailyRateCents": 1800,
+                      "replacementValueCents": 540000,
+                      "depositPerUnitCents": 54000
+                    }
+                  ],
+                  "totalCount": 12,
+                  "shownCount": 1,
+                  "filters": {
+                    "q": "canon",
+                    "category": "Cameras",
+                    "availableOnly": true
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          }
+        }
+      }
+    },
+    "/api/equipment/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "The catalogue item identifier, for example `cam-c70`.",
+          "schema": {
+            "type": "string"
+          },
+          "example": "cam-c70"
+        }
+      ],
+      "get": {
+        "tags": [
+          "equipment"
+        ],
+        "operationId": "getEquipment",
+        "summary": "Get one catalogue item",
+        "description": "Returns one catalogue item with its specification rows and the list of open loans currently holding units of it. Holders are loans whose status is `pending_approval`, `ready` or `out`, sorted by loan identifier.",
+        "responses": {
+          "200": {
+            "description": "The catalogue item.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EquipmentDetailResponse"
+                },
+                "example": {
+                  "item": {
+                    "id": "cam-c70",
+                    "tag": "CAM-C70",
+                    "name": "Canon C70 Cinema Camera",
+                    "category": "Cameras",
+                    "description": "Super 35 cinema body with dual-gain output, built-in ND filters and an RF 24-105mm zoom. Ships in a hard case with two batteries and a 512GB card.",
+                    "totalUnits": 3,
+                    "availableUnits": 1,
+                    "dailyRateCents": 1800,
+                    "replacementValueCents": 540000,
+                    "depositPerUnitCents": 54000,
+                    "specs": [
+                      {
+                        "label": "Sensor",
+                        "value": "Super 35 DGO"
+                      },
+                      {
+                        "label": "Mount",
+                        "value": "Canon RF"
+                      },
+                      {
+                        "label": "Media",
+                        "value": "2x SD UHS-II"
+                      },
+                      {
+                        "label": "Case weight",
+                        "value": "7.4 kg"
+                      }
+                    ],
+                    "holders": [
+                      {
+                        "id": "L-1042",
+                        "borrowerName": "Marcus Webb",
+                        "quantity": 1,
+                        "status": "out",
+                        "statusLabel": "Overdue",
+                        "overdue": true,
+                        "dueDate": "2026-03-11",
+                        "pickupDate": "2026-03-04"
+                      },
+                      {
+                        "id": "L-1045",
+                        "borrowerName": "Aisha Farouk",
+                        "quantity": 1,
+                        "status": "pending_approval",
+                        "statusLabel": "Awaiting approval",
+                        "overdue": false,
+                        "dueDate": "2026-03-25",
+                        "pickupDate": "2026-03-18"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No catalogue item has that identifier.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "message": "That equipment item does not exist."
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          }
+        }
+      }
+    },
+    "/api/loans": {
+      "get": {
+        "tags": [
+          "loans"
+        ],
+        "operationId": "listLoans",
+        "summary": "List loans",
+        "description": "Lists loans, newest identifier first. The status filter is applied before the free-text filter. `totalCount` is the size of the whole register; `shownCount` is the size of the filtered list. An unrecognised `status` value falls back to `all`, and the echoed `filters.status` reports the value actually applied.",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Restrict results to one loan status. `overdue` selects loans that are `out` and past their due date, which is a derived state rather than a stored status. Any other value falls back to `all`.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "all",
+                "pending_approval",
+                "ready",
+                "out",
+                "overdue",
+                "returned",
+                "cancelled",
+                "declined"
+              ],
+              "default": "all"
+            },
+            "example": "out"
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Free-text filter matched case-insensitively against the loan identifier and the borrower name. Leading and trailing whitespace is ignored; an empty value applies no filter.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "webb"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The filtered loan register.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoanListResponse"
+                },
+                "example": {
+                  "loans": [
+                    {
+                      "id": "L-1042",
+                      "borrowerName": "Marcus Webb",
+                      "department": "Film & Media",
+                      "itemsLabel": "Canon C70 Cinema Camera + 2 more",
+                      "unitCount": 3,
+                      "status": "out",
+                      "statusLabel": "Overdue",
+                      "overdue": true,
+                      "lateBusinessDays": 3,
+                      "loanDays": 7,
+                      "pickupDate": "2026-03-04",
+                      "dueDate": "2026-03-11",
+                      "dueAt": "2026-03-11T17:00:00Z",
+                      "bookedAt": "2026-03-02T14:05:00Z",
+                      "totalDueCents": 87690
+                    }
+                  ],
+                  "totalCount": 8,
+                  "shownCount": 1,
+                  "filters": {
+                    "status": "out",
+                    "q": "webb"
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          }
+        }
+      }
+    },
+    "/api/loans/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "The loan identifier, for example `L-1042`.",
+          "schema": {
+            "type": "string"
+          },
+          "example": "L-1042"
+        }
+      ],
+      "get": {
+        "tags": [
+          "loans"
+        ],
+        "operationId": "getLoan",
+        "summary": "Get one loan",
+        "description": "Returns one loan with its borrower, priced lines, quote, approval reasons, supervisor decision, check-in outcome, and the actions currently available on it.",
+        "responses": {
+          "200": {
+            "description": "The loan.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoanEnvelope"
+                },
+                "example": {
+                  "loan": {
+                    "id": "L-1043",
+                    "borrowerName": "Dana Okoye",
+                    "department": "Athletics",
+                    "itemsLabel": "GoPro Hero 12 Action Kit",
+                    "unitCount": 2,
+                    "status": "ready",
+                    "statusLabel": "Ready for pickup",
+                    "overdue": false,
+                    "lateBusinessDays": 0,
+                    "loanDays": 3,
+                    "pickupDate": "2026-03-17",
+                    "dueDate": "2026-03-20",
+                    "dueAt": "2026-03-20T17:00:00Z",
+                    "bookedAt": "2026-03-13T10:05:00Z",
+                    "totalDueCents": 3600,
+                    "borrower": {
+                      "name": "Dana Okoye",
+                      "email": "dana.okoye@fairmont.edu",
+                      "department": "Athletics"
+                    },
+                    "purpose": "Helmet-cam coverage of the inter-college relay.",
+                    "lines": [
+                      {
+                        "equipmentId": "cam-gopro",
+                        "name": "GoPro Hero 12 Action Kit",
+                        "tag": "CAM-GP12",
+                        "quantity": 2,
+                        "dailyRateCents": 600,
+                        "replacementValueCents": 48000,
+                        "lineChargeCents": 3600,
+                        "lineDepositCents": 0
+                      }
+                    ],
+                    "quote": {
+                      "baseChargeCents": 3600,
+                      "bundleDiscountCents": 0,
+                      "depositCents": 0,
+                      "totalDueCents": 3600,
+                      "unitCount": 2,
+                      "replacementTotalCents": 96000
+                    },
+                    "approvalRequired": false,
+                    "approvalReasons": [],
+                    "decision": null,
+                    "pickedUpAt": null,
+                    "extensionsUsed": 0,
+                    "returnedAt": null,
+                    "condition": null,
+                    "conditionLabel": null,
+                    "conditionNote": null,
+                    "lateFeeCents": null,
+                    "depositOutcome": null,
+                    "cancelledAt": null,
+                    "lateFeePreviewCents": 0,
+                    "actions": {
+                      "canPickup": false,
+                      "pickupBlockedReason": "This loan is scheduled for pickup on Tue 17 Mar 2026.",
+                      "canExtend": false,
+                      "extendBlockedReason": "Only a loan that is out can be extended.",
+                      "extendedDueDate": null,
+                      "canCheckin": false,
+                      "canCancel": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/LoanNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          }
+        }
+      }
+    },
+    "/api/loans/{id}/pickup": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "The loan identifier.",
+          "schema": {
+            "type": "string"
+          },
+          "example": "L-1043"
+        }
+      ],
+      "post": {
+        "tags": [
+          "loans"
+        ],
+        "operationId": "pickupLoan",
+        "summary": "Mark a loan picked up",
+        "description": "Hands a loan that is ready for pickup to the borrower and moves it to `out`, recording the pickup instant. Only a loan whose status is `ready` and whose pickup date is today or earlier may be picked up. The request takes no body.",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/EmptyBody"
+        },
+        "responses": {
+          "200": {
+            "description": "The loan is now out with the borrower. The example below shows only the fields the action changes; `loan` always carries the complete loan detail.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoanActionResponse"
+                },
+                "example": {
+                  "loan": {
+                    "id": "L-1043",
+                    "status": "out",
+                    "statusLabel": "Out"
+                  },
+                  "message": "L-1043 is now out with Dana Okoye."
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJson"
+          },
+          "404": {
+            "$ref": "#/components/responses/LoanNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "description": "The loan is not ready for pickup, or its pickup date has not arrived.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "wrongStatus": {
+                    "summary": "The loan is not ready for pickup",
+                    "value": {
+                      "error": {
+                        "message": "Only a loan that is ready for pickup can be marked picked up."
+                      }
+                    }
+                  },
+                  "tooEarly": {
+                    "summary": "The pickup date is in the future",
+                    "value": {
+                      "error": {
+                        "message": "This loan is scheduled for pickup on Tue 17 Mar 2026."
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/loans/{id}/extend": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "The loan identifier.",
+          "schema": {
+            "type": "string"
+          },
+          "example": "L-1041"
+        }
+      ],
+      "post": {
+        "tags": [
+          "loans"
+        ],
+        "operationId": "extendLoan",
+        "summary": "Extend a loan",
+        "description": "Adds seven calendar days to the due date, rolling a weekend result forward to the following Monday, and increments the extension counter. A loan may be extended only while it is `out`, not overdue, and has not been extended before. Extending changes no charges. The request takes no body.",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/EmptyBody"
+        },
+        "responses": {
+          "200": {
+            "description": "The loan has a new due date. The example below shows only the fields the action changes; `loan` always carries the complete loan detail.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoanActionResponse"
+                },
+                "example": {
+                  "loan": {
+                    "id": "L-1041",
+                    "dueDate": "2026-03-23",
+                    "extensionsUsed": 1
+                  },
+                  "message": "Extended. L-1041 is now due Mon 23 Mar 2026 at 17:00."
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJson"
+          },
+          "404": {
+            "$ref": "#/components/responses/LoanNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "description": "The loan is not eligible for an extension.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "notOut": {
+                    "summary": "The loan is not out",
+                    "value": {
+                      "error": {
+                        "message": "Only a loan that is out can be extended."
+                      }
+                    }
+                  },
+                  "overdue": {
+                    "summary": "The loan is overdue",
+                    "value": {
+                      "error": {
+                        "message": "An overdue loan cannot be extended. Check it in first."
+                      }
+                    }
+                  },
+                  "alreadyExtended": {
+                    "summary": "The one extension has been used",
+                    "value": {
+                      "error": {
+                        "message": "This loan has already used its one extension."
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/loans/{id}/checkin": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "The loan identifier.",
+          "schema": {
+            "type": "string"
+          },
+          "example": "L-1042"
+        }
+      ],
+      "post": {
+        "tags": [
+          "loans"
+        ],
+        "operationId": "checkinLoan",
+        "summary": "Check a loan back in",
+        "description": "Returns the kit to stock, moves the loan to `returned`, records the returned condition, charges any late fee, and settles the deposit. The deposit outcome is `none` when no deposit was held, `released` when the condition is good, and `held` otherwise. Only a loan whose status is `out` can be checked in.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckinRequest"
+              },
+              "example": {
+                "condition": "damaged",
+                "note": "Lens hood cracked on the front element."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The loan is checked in. The example below shows only the fields the action changes; `loan` always carries the complete loan detail.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckinResponse"
+                },
+                "example": {
+                  "loan": {
+                    "id": "L-1042",
+                    "status": "returned",
+                    "statusLabel": "Returned",
+                    "condition": "damaged",
+                    "conditionLabel": "Damaged",
+                    "conditionNote": "Lens hood cracked on the front element.",
+                    "lateFeeCents": 4500,
+                    "depositOutcome": "held"
+                  },
+                  "lateFeeCents": 4500,
+                  "depositOutcome": "held",
+                  "message": "L-1042 checked in. Late fee of $45.00 charged. Deposit of $669.00 held pending inspection."
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The check-in form was rejected, or the request body was not valid JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "fields": {
+                    "summary": "Field-level validation failure",
+                    "value": {
+                      "error": {
+                        "message": "Check the highlighted fields.",
+                        "fields": {
+                          "note": "Describe the condition in at least 10 characters."
+                        }
+                      }
+                    }
+                  },
+                  "missingCondition": {
+                    "summary": "No condition chosen",
+                    "value": {
+                      "error": {
+                        "message": "Check the highlighted fields.",
+                        "fields": {
+                          "condition": "Select the returned condition."
+                        }
+                      }
+                    }
+                  },
+                  "invalidJson": {
+                    "summary": "Unparseable body",
+                    "value": {
+                      "error": {
+                        "message": "The request body was not valid JSON."
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/LoanNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "description": "The loan is not out, so it cannot be checked in.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "message": "Only a loan that is out can be checked in."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/loans/{id}/cancel": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "The loan identifier.",
+          "schema": {
+            "type": "string"
+          },
+          "example": "L-1043"
+        }
+      ],
+      "post": {
+        "tags": [
+          "loans"
+        ],
+        "operationId": "cancelLoan",
+        "summary": "Cancel a loan",
+        "description": "Withdraws a loan before pickup. The loan moves to `cancelled`, the cancellation instant is recorded, and its units return to the available pool immediately. Only a loan awaiting approval or ready for pickup may be cancelled. The request takes no body.",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/EmptyBody"
+        },
+        "responses": {
+          "200": {
+            "description": "The loan is cancelled. The example below shows only the fields the action changes; `loan` always carries the complete loan detail.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoanActionResponse"
+                },
+                "example": {
+                  "loan": {
+                    "id": "L-1043",
+                    "status": "cancelled",
+                    "statusLabel": "Cancelled",
+                    "cancelledAt": "2026-03-16T09:00:00Z"
+                  },
+                  "message": "L-1043 cancelled. 2 units are back in stock."
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJson"
+          },
+          "404": {
+            "$ref": "#/components/responses/LoanNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "description": "The loan is past the point where it can be cancelled.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "message": "Only a loan awaiting approval or ready for pickup can be cancelled."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/approvals": {
+      "get": {
+        "tags": [
+          "approvals"
+        ],
+        "operationId": "listApprovals",
+        "summary": "List loans awaiting approval",
+        "description": "Lists every loan whose status is `pending_approval`, oldest identifier first, with the purpose, the quote, the priced lines and the reasons approval is required. A loan needs approval when its total replacement value is at or above $2,500.00 or when its loan period is 14 days.",
+        "responses": {
+          "200": {
+            "description": "The approvals queue.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalListResponse"
+                },
+                "example": {
+                  "loans": [
+                    {
+                      "id": "L-1044",
+                      "borrowerName": "Theo Lindqvist",
+                      "department": "Music",
+                      "itemsLabel": "Sennheiser MKH-416 Boom Kit + 1 more",
+                      "unitCount": 2,
+                      "status": "pending_approval",
+                      "statusLabel": "Awaiting approval",
+                      "overdue": false,
+                      "lateBusinessDays": 0,
+                      "loanDays": 14,
+                      "pickupDate": "2026-03-16",
+                      "dueDate": "2026-03-30",
+                      "dueAt": "2026-03-30T17:00:00Z",
+                      "bookedAt": "2026-03-16T08:20:00Z",
+                      "totalDueCents": 34100,
+                      "purpose": "Two-week residency recording in the chapel.",
+                      "quote": {
+                        "baseChargeCents": 19600,
+                        "bundleDiscountCents": 0,
+                        "depositCents": 14500,
+                        "totalDueCents": 34100,
+                        "unitCount": 2,
+                        "replacementTotalCents": 187000
+                      },
+                      "approvalReasons": [
+                        "Loan period is 14 days."
+                      ],
+                      "lines": [
+                        {
+                          "equipmentId": "aud-boom",
+                          "name": "Sennheiser MKH-416 Boom Kit",
+                          "tag": "AUD-416",
+                          "quantity": 1,
+                          "dailyRateCents": 900,
+                          "replacementValueCents": 145000,
+                          "lineChargeCents": 12600,
+                          "lineDepositCents": 14500
+                        },
+                        {
+                          "equipmentId": "aud-h6",
+                          "name": "Zoom H6 Field Recorder",
+                          "tag": "AUD-H6",
+                          "quantity": 1,
+                          "dailyRateCents": 500,
+                          "replacementValueCents": 42000,
+                          "lineChargeCents": 7000,
+                          "lineDepositCents": 0
+                        }
+                      ]
+                    }
+                  ],
+                  "count": 1
+                }
+              }
+            }
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          }
+        }
+      }
+    },
+    "/api/approvals/{id}/approve": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "The loan identifier of the request awaiting approval.",
+          "schema": {
+            "type": "string"
+          },
+          "example": "L-1044"
+        }
+      ],
+      "post": {
+        "tags": [
+          "approvals"
+        ],
+        "operationId": "approveLoan",
+        "summary": "Approve a loan request",
+        "description": "Records an approval decision by the signed-in supervisor and moves the loan to `ready` for pickup. Only a loan awaiting approval can be decided. The request takes no body.",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/EmptyBody"
+        },
+        "responses": {
+          "200": {
+            "description": "The loan is approved. The example below shows only the fields the action changes; `loan` always carries the complete loan detail.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoanActionResponse"
+                },
+                "example": {
+                  "loan": {
+                    "id": "L-1044",
+                    "status": "ready",
+                    "statusLabel": "Ready for pickup",
+                    "decision": {
+                      "outcome": "approved",
+                      "decidedAt": "2026-03-16T09:00:00Z",
+                      "decidedBy": "Rowan Ellis",
+                      "reason": null
+                    }
+                  },
+                  "message": "L-1044 approved and moved to ready for pickup."
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidJson"
+          },
+          "404": {
+            "$ref": "#/components/responses/LoanNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "description": "The loan is no longer awaiting a decision.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "message": "This loan is no longer awaiting approval."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/approvals/{id}/decline": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "The loan identifier of the request awaiting approval.",
+          "schema": {
+            "type": "string"
+          },
+          "example": "L-1045"
+        }
+      ],
+      "post": {
+        "tags": [
+          "approvals"
+        ],
+        "operationId": "declineLoan",
+        "summary": "Decline a loan request",
+        "description": "Records a decline decision by the signed-in supervisor together with the stated reason, moves the loan to `declined`, and returns its units to the available pool. Only a loan awaiting approval can be decided.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeclineRequest"
+              },
+              "example": {
+                "reason": "Equipment reserved for a department shoot."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The loan is declined. The example below shows only the fields the action changes; `loan` always carries the complete loan detail.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoanActionResponse"
+                },
+                "example": {
+                  "loan": {
+                    "id": "L-1045",
+                    "status": "declined",
+                    "statusLabel": "Declined",
+                    "decision": {
+                      "outcome": "declined",
+                      "decidedAt": "2026-03-16T09:00:00Z",
+                      "decidedBy": "Rowan Ellis",
+                      "reason": "Equipment reserved for a department shoot."
+                    }
+                  },
+                  "message": "L-1045 declined. 2 units are back in stock."
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The decline form was rejected, or the request body was not valid JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "fields": {
+                    "summary": "Reason too short",
+                    "value": {
+                      "error": {
+                        "message": "Check the highlighted fields.",
+                        "fields": {
+                          "reason": "Give a reason for declining (at least 5 characters)."
+                        }
+                      }
+                    }
+                  },
+                  "invalidJson": {
+                    "summary": "Unparseable body",
+                    "value": {
+                      "error": {
+                        "message": "The request body was not valid JSON."
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/LoanNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "description": "The loan is no longer awaiting a decision.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "message": "This loan is no longer awaiting approval."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/loan-drafts": {
+      "post": {
+        "tags": [
+          "loan-drafts"
+        ],
+        "operationId": "createDraft",
+        "summary": "Start a new-loan draft",
+        "description": "Starts the three-step new-loan flow by recording the borrower (step 1). The new draft has no items, a default loan period of 3 days, and a default pickup date of the desk date. The borrower email must be a fairmont.edu address and the department must be one of the desk's departments.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BorrowerStepRequest"
+              },
+              "example": {
+                "name": "Ada Byron",
+                "email": "ada.byron@fairmont.edu",
+                "department": "Design",
+                "purpose": "Studio test shoot."
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The draft was created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftEnvelope"
+                },
+                "example": {
+                  "draft": {
+                    "id": "D-1",
+                    "borrower": {
+                      "name": "Ada Byron",
+                      "email": "ada.byron@fairmont.edu",
+                      "department": "Design"
+                    },
+                    "purpose": "Studio test shoot.",
+                    "lines": [],
+                    "loanDays": 3,
+                    "pickupDate": "2026-03-16",
+                    "preview": null
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The borrower form was rejected, or the request body was not valid JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "fields": {
+                    "summary": "Field-level validation failure",
+                    "value": {
+                      "error": {
+                        "message": "Check the highlighted fields.",
+                        "fields": {
+                          "name": "Borrower name must be at least 2 characters.",
+                          "email": "Borrower email must be a fairmont.edu address.",
+                          "department": "Choose a department."
+                        }
+                      }
+                    }
+                  },
+                  "invalidJson": {
+                    "summary": "Unparseable body",
+                    "value": {
+                      "error": {
+                        "message": "The request body was not valid JSON."
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          }
+        }
+      }
+    },
+    "/api/loan-drafts/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "The draft identifier, for example `D-1`.",
+          "schema": {
+            "type": "string"
+          },
+          "example": "D-1"
+        }
+      ],
+      "get": {
+        "tags": [
+          "loan-drafts"
+        ],
+        "operationId": "getDraft",
+        "summary": "Get a new-loan draft",
+        "description": "Returns the draft as the new-loan flow sees it, including the live quote and schedule preview once the draft has at least one item, a loan period and a pickup date.",
+        "responses": {
+          "200": {
+            "description": "The draft.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftEnvelope"
+                },
+                "example": {
+                  "draft": {
+                    "id": "D-1",
+                    "borrower": {
+                      "name": "Ada Byron",
+                      "email": "ada.byron@fairmont.edu",
+                      "department": "Design"
+                    },
+                    "purpose": "Studio test shoot.",
+                    "lines": [],
+                    "loanDays": 3,
+                    "pickupDate": "2026-03-16",
+                    "preview": null
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/DraftNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "loan-drafts"
+        ],
+        "operationId": "updateDraft",
+        "summary": "Update one step of a new-loan draft",
+        "description": "Applies one step of the new-loan flow to the draft. The `step` field selects which step: `borrower` replaces the borrower and purpose (step 1), `schedule` replaces the item lines, loan period and pickup date (step 2). The schedule step checks item structure first and availability last, and requires a pickup date that is a weekday, not in the past, and no more than 14 calendar days after the desk date.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DraftUpdateRequest"
+              },
+              "examples": {
+                "borrowerStep": {
+                  "summary": "Step 1 \u2014 borrower",
+                  "value": {
+                    "step": "borrower",
+                    "name": "Ada Byron",
+                    "email": "ada.byron@fairmont.edu",
+                    "department": "Design",
+                    "purpose": "Studio test shoot."
+                  }
+                },
+                "scheduleStep": {
+                  "summary": "Step 2 \u2014 items and schedule",
+                  "value": {
+                    "step": "schedule",
+                    "lines": [
+                      {
+                        "equipmentId": "cam-gopro",
+                        "quantity": 2
+                      },
+                      {
+                        "equipmentId": "aud-h6",
+                        "quantity": 1
+                      }
+                    ],
+                    "loanDays": 3,
+                    "pickupDate": "2026-03-17"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated draft.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftEnvelope"
+                },
+                "example": {
+                  "draft": {
+                    "id": "D-1",
+                    "borrower": {
+                      "name": "Ada Byron",
+                      "email": "ada.byron@fairmont.edu",
+                      "department": "Design"
+                    },
+                    "purpose": "Studio test shoot.",
+                    "lines": [
+                      {
+                        "equipmentId": "cam-gopro",
+                        "quantity": 2,
+                        "name": "GoPro Hero 12 Action Kit",
+                        "tag": "CAM-GP12",
+                        "dailyRateCents": 600,
+                        "availableUnits": 4
+                      },
+                      {
+                        "equipmentId": "aud-h6",
+                        "quantity": 1,
+                        "name": "Zoom H6 Field Recorder",
+                        "tag": "AUD-H6",
+                        "dailyRateCents": 500,
+                        "availableUnits": 4
+                      }
+                    ],
+                    "loanDays": 3,
+                    "pickupDate": "2026-03-17",
+                    "preview": {
+                      "quote": {
+                        "lines": [
+                          {
+                            "equipmentId": "cam-gopro",
+                            "name": "GoPro Hero 12 Action Kit",
+                            "tag": "CAM-GP12",
+                            "quantity": 2,
+                            "dailyRateCents": 600,
+                            "replacementValueCents": 48000,
+                            "lineChargeCents": 3600,
+                            "lineDepositCents": 0
+                          },
+                          {
+                            "equipmentId": "aud-h6",
+                            "name": "Zoom H6 Field Recorder",
+                            "tag": "AUD-H6",
+                            "quantity": 1,
+                            "dailyRateCents": 500,
+                            "replacementValueCents": 42000,
+                            "lineChargeCents": 1500,
+                            "lineDepositCents": 0
+                          }
+                        ],
+                        "unitCount": 3,
+                        "baseChargeCents": 5100,
+                        "bundleDiscountCents": 510,
+                        "depositCents": 0,
+                        "replacementTotalCents": 138000,
+                        "totalDueCents": 4590
+                      },
+                      "dueDate": "2026-03-20",
+                      "dueAt": "2026-03-20T17:00:00Z",
+                      "approvalRequired": false,
+                      "approvalReasons": []
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The step was rejected, the `step` field was not recognised, or the request body was not valid JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "scheduleFields": {
+                    "summary": "Schedule step validation failure",
+                    "value": {
+                      "error": {
+                        "message": "Check the highlighted fields.",
+                        "fields": {
+                          "items": "Add at least one item to this loan.",
+                          "loanDays": "Choose a loan period.",
+                          "pickupDate": "The desk is closed at weekends. Choose a weekday."
+                        }
+                      }
+                    }
+                  },
+                  "unknownStep": {
+                    "summary": "The step field was missing or unrecognised",
+                    "value": {
+                      "error": {
+                        "message": "Unknown draft step."
+                      }
+                    }
+                  },
+                  "invalidJson": {
+                    "summary": "Unparseable body",
+                    "value": {
+                      "error": {
+                        "message": "The request body was not valid JSON."
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/DraftNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          }
+        }
+      }
+    },
+    "/api/loan-drafts/{id}/submit": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "The draft identifier.",
+          "schema": {
+            "type": "string"
+          },
+          "example": "D-1"
+        }
+      ],
+      "post": {
+        "tags": [
+          "loan-drafts"
+        ],
+        "operationId": "submitDraft",
+        "summary": "Book the loan from a draft",
+        "description": "Step 3 of the new-loan flow. Re-checks the borrower and schedule recorded on the draft, prices the loan, computes the due date, and books it. The new loan starts in `pending_approval` when it needs supervisor approval, otherwise in `ready`. The draft is discarded once the loan exists. Availability is re-checked at the moment of booking, because units can be committed elsewhere while the draft sits open. The request takes no body.",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/EmptyBody"
+        },
+        "responses": {
+          "201": {
+            "description": "The loan was booked. The example below shows only the fields the action changes; `loan` always carries the complete loan detail.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookedLoanResponse"
+                },
+                "example": {
+                  "loan": {
+                    "id": "L-1049",
+                    "borrowerName": "Ada Byron",
+                    "department": "Design",
+                    "itemsLabel": "GoPro Hero 12 Action Kit + 1 more",
+                    "unitCount": 3,
+                    "status": "ready",
+                    "statusLabel": "Ready for pickup",
+                    "overdue": false,
+                    "lateBusinessDays": 0,
+                    "loanDays": 3,
+                    "pickupDate": "2026-03-17",
+                    "dueDate": "2026-03-20",
+                    "dueAt": "2026-03-20T17:00:00Z",
+                    "bookedAt": "2026-03-16T09:00:00Z",
+                    "totalDueCents": 4590,
+                    "quote": {
+                      "baseChargeCents": 5100,
+                      "bundleDiscountCents": 510,
+                      "depositCents": 0,
+                      "totalDueCents": 4590,
+                      "unitCount": 3,
+                      "replacementTotalCents": 138000
+                    },
+                    "approvalRequired": false,
+                    "approvalReasons": [],
+                    "decision": null,
+                    "extensionsUsed": 0
+                  },
+                  "message": "L-1049 booked and ready for pickup on Tue 17 Mar 2026.",
+                  "dueAt": "2026-03-20T17:00:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The draft is incomplete or invalid, or the request body was not valid JSON. Availability is not checked at this stage.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "fields": {
+                    "summary": "The draft has no items",
+                    "value": {
+                      "error": {
+                        "message": "Check the highlighted fields.",
+                        "fields": {
+                          "items": "Add at least one item to this loan."
+                        }
+                      }
+                    }
+                  },
+                  "invalidJson": {
+                    "summary": "Unparseable body",
+                    "value": {
+                      "error": {
+                        "message": "The request body was not valid JSON."
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/DraftNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "description": "Units on the draft are no longer available.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "noneLeft": {
+                    "summary": "No units left",
+                    "value": {
+                      "error": {
+                        "message": "DJI RS 4 Pro Gimbal has no units available."
+                      }
+                    }
+                  },
+                  "someLeft": {
+                    "summary": "Fewer units left than requested",
+                    "value": {
+                      "error": {
+                        "message": "Only 1 unit of Canon C70 Cinema Camera is available."
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "requestBodies": {
+      "EmptyBody": {
+        "required": false,
+        "description": "No body is required. If a body is sent it must be valid JSON; its contents are ignored.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "example": {}
+          }
+        }
+      }
+    },
+    "responses": {
+      "MethodNotAllowed": {
+        "description": "The path exists but does not support this HTTP method.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "message": "DELETE is not allowed on this endpoint."
+              }
+            }
+          }
+        }
+      },
+      "InvalidJson": {
+        "description": "A request body was sent but could not be parsed as JSON.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "message": "The request body was not valid JSON."
+              }
+            }
+          }
+        }
+      },
+      "LoanNotFound": {
+        "description": "No loan has that identifier.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "message": "That loan does not exist."
+              }
+            }
+          }
+        }
+      },
+      "DraftNotFound": {
+        "description": "No draft has that identifier; the draft has expired or has already been submitted.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "message": "That draft loan has expired. Start a new loan."
+              }
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "description": "The body returned with every 4xx and 5xx response. `fields` is present only when a form was rejected field by field.",
+        "required": [
+          "error"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": [
+              "message"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "message": {
+                "type": "string",
+                "description": "The message shown to the desk operator."
+              },
+              "fields": {
+                "type": "object",
+                "description": "Map of input field name to the message for that field. Present only on form validation failures.",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "LoanStatus": {
+        "type": "string",
+        "description": "The stored status of a loan. `overdue` is derived, not stored.",
+        "enum": [
+          "pending_approval",
+          "ready",
+          "out",
+          "returned",
+          "cancelled",
+          "declined"
+        ]
+      },
+      "LoanStatusLabel": {
+        "type": "string",
+        "description": "The display label for the loan's status. `Overdue` replaces `Out` for a loan past its due date.",
+        "enum": [
+          "Awaiting approval",
+          "Ready for pickup",
+          "Out",
+          "Overdue",
+          "Returned",
+          "Cancelled",
+          "Declined"
+        ]
+      },
+      "Department": {
+        "type": "string",
+        "description": "A borrowing department at the university.",
+        "enum": [
+          "Architecture",
+          "Athletics",
+          "Design",
+          "Film & Media",
+          "Journalism",
+          "Music",
+          "Student Life"
+        ]
+      },
+      "Category": {
+        "type": "string",
+        "description": "A catalogue category.",
+        "enum": [
+          "Audio",
+          "Cameras",
+          "Computing",
+          "Lighting",
+          "Support"
+        ]
+      },
+      "Condition": {
+        "type": "string",
+        "description": "The condition of the kit as recorded at check-in.",
+        "enum": [
+          "good",
+          "damaged",
+          "missing_parts"
+        ]
+      },
+      "Borrower": {
+        "type": "object",
+        "description": "The person a loan is booked to.",
+        "required": [
+          "name",
+          "email",
+          "department"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The borrower's full name."
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "description": "The borrower's fairmont.edu email address."
+          },
+          "department": {
+            "$ref": "#/components/schemas/Department"
+          }
+        }
+      },
+      "Quote": {
+        "type": "object",
+        "description": "The stored charges for a loan, all in integer cents. Total due = base charge \u2212 bundle discount + deposit.",
+        "required": [
+          "baseChargeCents",
+          "bundleDiscountCents",
+          "depositCents",
+          "totalDueCents",
+          "unitCount",
+          "replacementTotalCents"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "baseChargeCents": {
+            "type": "integer",
+            "description": "Sum over lines of daily rate x quantity x loan period in days."
+          },
+          "bundleDiscountCents": {
+            "type": "integer",
+            "description": "10% of the base charge when the loan carries three or more units in total; otherwise 0."
+          },
+          "depositCents": {
+            "type": "integer",
+            "description": "Sum of the refundable deposits: 10% of replacement value per unit, counting only items whose replacement value is $1,000.00 or more."
+          },
+          "totalDueCents": {
+            "type": "integer",
+            "description": "The amount due at pickup."
+          },
+          "unitCount": {
+            "type": "integer",
+            "description": "Total number of units across all lines."
+          },
+          "replacementTotalCents": {
+            "type": "integer",
+            "description": "Total replacement value of every unit on the loan; drives the approval threshold."
+          }
+        }
+      },
+      "QuoteLine": {
+        "type": "object",
+        "description": "One priced line of a loan or draft quote.",
+        "required": [
+          "equipmentId",
+          "name",
+          "tag",
+          "quantity",
+          "dailyRateCents",
+          "replacementValueCents",
+          "lineChargeCents",
+          "lineDepositCents"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "equipmentId": {
+            "type": "string",
+            "description": "The catalogue item identifier."
+          },
+          "name": {
+            "type": "string",
+            "description": "The catalogue item name."
+          },
+          "tag": {
+            "type": "string",
+            "description": "The asset tag of the catalogue item."
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Units of this item on the loan."
+          },
+          "dailyRateCents": {
+            "type": "integer",
+            "description": "Rental rate per unit per day, in cents."
+          },
+          "replacementValueCents": {
+            "type": "integer",
+            "description": "Replacement value of one unit, in cents."
+          },
+          "lineChargeCents": {
+            "type": "integer",
+            "description": "Daily rate x quantity x loan period in days."
+          },
+          "lineDepositCents": {
+            "type": "integer",
+            "description": "Deposit held for this line, in cents; 0 for items below the deposit threshold."
+          }
+        }
+      },
+      "DraftQuote": {
+        "type": "object",
+        "description": "The live quote for a draft, including its priced lines.",
+        "required": [
+          "lines",
+          "unitCount",
+          "baseChargeCents",
+          "bundleDiscountCents",
+          "depositCents",
+          "replacementTotalCents",
+          "totalDueCents"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuoteLine"
+            },
+            "description": "The priced lines behind the quote."
+          },
+          "unitCount": {
+            "type": "integer"
+          },
+          "baseChargeCents": {
+            "type": "integer"
+          },
+          "bundleDiscountCents": {
+            "type": "integer"
+          },
+          "depositCents": {
+            "type": "integer"
+          },
+          "replacementTotalCents": {
+            "type": "integer"
+          },
+          "totalDueCents": {
+            "type": "integer"
+          }
+        }
+      },
+      "Decision": {
+        "type": "object",
+        "description": "The supervisor decision recorded on a loan that needed approval.",
+        "required": [
+          "outcome",
+          "decidedAt",
+          "decidedBy",
+          "reason"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "approved",
+              "declined"
+            ]
+          },
+          "decidedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The instant the decision was recorded."
+          },
+          "decidedBy": {
+            "type": "string",
+            "description": "The name of the supervisor who decided."
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The stated reason for a decline; null for an approval."
+          }
+        }
+      },
+      "LoanActions": {
+        "type": "object",
+        "description": "Which desk actions are currently available on a loan, and why any are blocked.",
+        "required": [
+          "canPickup",
+          "pickupBlockedReason",
+          "canExtend",
+          "extendBlockedReason",
+          "extendedDueDate",
+          "canCheckin",
+          "canCancel"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "canPickup": {
+            "type": "boolean",
+            "description": "True when the loan is ready for pickup and its pickup date has arrived."
+          },
+          "pickupBlockedReason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why pickup is blocked, when the loan is ready but scheduled for a later date; otherwise null."
+          },
+          "canExtend": {
+            "type": "boolean",
+            "description": "True when the loan is out, not overdue, and has not been extended."
+          },
+          "extendBlockedReason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why the loan cannot be extended; null when it can."
+          },
+          "extendedDueDate": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The due date the loan would have after extending, as YYYY-MM-DD; null when extending is blocked."
+          },
+          "canCheckin": {
+            "type": "boolean",
+            "description": "True when the loan status is `out`."
+          },
+          "canCancel": {
+            "type": "boolean",
+            "description": "True when the loan is awaiting approval or ready for pickup."
+          }
+        }
+      },
+      "LoanSummary": {
+        "type": "object",
+        "description": "A loan as it appears in a list or queue.",
+        "required": [
+          "id",
+          "borrowerName",
+          "department",
+          "itemsLabel",
+          "unitCount",
+          "status",
+          "statusLabel",
+          "overdue",
+          "lateBusinessDays",
+          "loanDays",
+          "pickupDate",
+          "dueDate",
+          "dueAt",
+          "bookedAt",
+          "totalDueCents"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The loan identifier, for example `L-1042`."
+          },
+          "borrowerName": {
+            "type": "string"
+          },
+          "department": {
+            "$ref": "#/components/schemas/Department"
+          },
+          "itemsLabel": {
+            "type": "string",
+            "description": "A one-line description of the items, for example `Canon C70 Cinema Camera + 2 more`, or `No items`."
+          },
+          "unitCount": {
+            "type": "integer",
+            "description": "Total units across the loan's lines."
+          },
+          "status": {
+            "$ref": "#/components/schemas/LoanStatus"
+          },
+          "statusLabel": {
+            "$ref": "#/components/schemas/LoanStatusLabel"
+          },
+          "overdue": {
+            "type": "boolean",
+            "description": "True when the loan is out and the desk date is past its due date."
+          },
+          "lateBusinessDays": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Business days after the due date up to and including the desk date, for a loan that is out; 0 otherwise."
+          },
+          "loanDays": {
+            "type": "integer",
+            "enum": [
+              1,
+              3,
+              7,
+              14
+            ],
+            "description": "The loan period in calendar days."
+          },
+          "pickupDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "dueDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "dueAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The due instant, always 17:00 desk time on the due date."
+          },
+          "bookedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "totalDueCents": {
+            "type": "integer",
+            "description": "The amount due at pickup, in cents."
+          }
+        }
+      },
+      "OverdueLoanSummary": {
+        "type": "object",
+        "description": "A loan summary with the late fee it would incur if checked in today.",
+        "required": [
+          "id",
+          "borrowerName",
+          "department",
+          "itemsLabel",
+          "unitCount",
+          "status",
+          "statusLabel",
+          "overdue",
+          "lateBusinessDays",
+          "loanDays",
+          "pickupDate",
+          "dueDate",
+          "dueAt",
+          "bookedAt",
+          "totalDueCents",
+          "lateFeePreviewCents"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The loan identifier, for example `L-1042`."
+          },
+          "borrowerName": {
+            "type": "string"
+          },
+          "department": {
+            "$ref": "#/components/schemas/Department"
+          },
+          "itemsLabel": {
+            "type": "string",
+            "description": "A one-line description of the items, for example `Canon C70 Cinema Camera + 2 more`, or `No items`."
+          },
+          "unitCount": {
+            "type": "integer",
+            "description": "Total units across the loan's lines."
+          },
+          "status": {
+            "$ref": "#/components/schemas/LoanStatus"
+          },
+          "statusLabel": {
+            "$ref": "#/components/schemas/LoanStatusLabel"
+          },
+          "overdue": {
+            "type": "boolean",
+            "description": "True when the loan is out and the desk date is past its due date."
+          },
+          "lateBusinessDays": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Business days after the due date up to and including the desk date, for a loan that is out; 0 otherwise."
+          },
+          "loanDays": {
+            "type": "integer",
+            "enum": [
+              1,
+              3,
+              7,
+              14
+            ],
+            "description": "The loan period in calendar days."
+          },
+          "pickupDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "dueDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "dueAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The due instant, always 17:00 desk time on the due date."
+          },
+          "bookedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "totalDueCents": {
+            "type": "integer",
+            "description": "The amount due at pickup, in cents."
+          },
+          "lateFeePreviewCents": {
+            "type": "integer",
+            "description": "Late business days x $5.00 x unit count, capped at $150.00, in cents."
+          }
+        }
+      },
+      "LoanDetail": {
+        "type": "object",
+        "description": "A loan with everything the desk shows on its detail page.",
+        "required": [
+          "id",
+          "borrowerName",
+          "department",
+          "itemsLabel",
+          "unitCount",
+          "status",
+          "statusLabel",
+          "overdue",
+          "lateBusinessDays",
+          "loanDays",
+          "pickupDate",
+          "dueDate",
+          "dueAt",
+          "bookedAt",
+          "totalDueCents",
+          "borrower",
+          "purpose",
+          "lines",
+          "quote",
+          "approvalRequired",
+          "approvalReasons",
+          "decision",
+          "pickedUpAt",
+          "extensionsUsed",
+          "returnedAt",
+          "condition",
+          "conditionLabel",
+          "conditionNote",
+          "lateFeeCents",
+          "depositOutcome",
+          "cancelledAt",
+          "lateFeePreviewCents",
+          "actions"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The loan identifier, for example `L-1042`."
+          },
+          "borrowerName": {
+            "type": "string"
+          },
+          "department": {
+            "$ref": "#/components/schemas/Department"
+          },
+          "itemsLabel": {
+            "type": "string",
+            "description": "A one-line description of the items, for example `Canon C70 Cinema Camera + 2 more`, or `No items`."
+          },
+          "unitCount": {
+            "type": "integer",
+            "description": "Total units across the loan's lines."
+          },
+          "status": {
+            "$ref": "#/components/schemas/LoanStatus"
+          },
+          "statusLabel": {
+            "$ref": "#/components/schemas/LoanStatusLabel"
+          },
+          "overdue": {
+            "type": "boolean",
+            "description": "True when the loan is out and the desk date is past its due date."
+          },
+          "lateBusinessDays": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Business days after the due date up to and including the desk date, for a loan that is out; 0 otherwise."
+          },
+          "loanDays": {
+            "type": "integer",
+            "enum": [
+              1,
+              3,
+              7,
+              14
+            ],
+            "description": "The loan period in calendar days."
+          },
+          "pickupDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "dueDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "dueAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The due instant, always 17:00 desk time on the due date."
+          },
+          "bookedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "totalDueCents": {
+            "type": "integer",
+            "description": "The amount due at pickup, in cents."
+          },
+          "borrower": {
+            "$ref": "#/components/schemas/Borrower"
+          },
+          "purpose": {
+            "type": "string",
+            "description": "What the kit is being borrowed for; may be an empty string."
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuoteLine"
+            }
+          },
+          "quote": {
+            "$ref": "#/components/schemas/Quote"
+          },
+          "approvalRequired": {
+            "type": "boolean",
+            "description": "Whether the loan needed supervisor approval when it was booked."
+          },
+          "approvalReasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Why approval was required, value reason first; empty when none applied."
+          },
+          "decision": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Decision"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The supervisor decision, or null when no decision has been recorded."
+          },
+          "pickedUpAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "When the borrower collected the kit; null before pickup."
+          },
+          "extensionsUsed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "How many of the loan's one permitted extensions have been used."
+          },
+          "returnedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "When the kit was checked in; null until then."
+          },
+          "condition": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Condition"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The condition recorded at check-in; null until then."
+          },
+          "conditionLabel": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "Good",
+              "Damaged",
+              "Missing parts",
+              null
+            ],
+            "description": "The display label for the recorded condition; null until check-in."
+          },
+          "conditionNote": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The note describing damage or missing parts; null when the kit came back in good condition or has not been returned."
+          },
+          "lateFeeCents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "The late fee charged at check-in, in cents; null until the loan is returned."
+          },
+          "depositOutcome": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "none",
+              "released",
+              "held",
+              null
+            ],
+            "description": "How the deposit was settled at check-in; null until the loan is returned."
+          },
+          "cancelledAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "When the loan was cancelled; null otherwise."
+          },
+          "lateFeePreviewCents": {
+            "type": "integer",
+            "description": "The late fee the loan would incur if checked in today; 0 when the loan is not overdue."
+          },
+          "actions": {
+            "$ref": "#/components/schemas/LoanActions"
+          }
+        }
+      },
+      "ApprovalItem": {
+        "type": "object",
+        "description": "A loan awaiting a supervisor decision, with the detail needed to decide.",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "borrowerName",
+          "department",
+          "itemsLabel",
+          "unitCount",
+          "status",
+          "statusLabel",
+          "overdue",
+          "lateBusinessDays",
+          "loanDays",
+          "pickupDate",
+          "dueDate",
+          "dueAt",
+          "bookedAt",
+          "totalDueCents",
+          "purpose",
+          "quote",
+          "approvalReasons",
+          "lines"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The loan identifier, for example `L-1042`."
+          },
+          "borrowerName": {
+            "type": "string"
+          },
+          "department": {
+            "$ref": "#/components/schemas/Department"
+          },
+          "itemsLabel": {
+            "type": "string",
+            "description": "A one-line description of the items, for example `Canon C70 Cinema Camera + 2 more`, or `No items`."
+          },
+          "unitCount": {
+            "type": "integer",
+            "description": "Total units across the loan's lines."
+          },
+          "status": {
+            "$ref": "#/components/schemas/LoanStatus"
+          },
+          "statusLabel": {
+            "$ref": "#/components/schemas/LoanStatusLabel"
+          },
+          "overdue": {
+            "type": "boolean",
+            "description": "True when the loan is out and the desk date is past its due date."
+          },
+          "lateBusinessDays": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Business days after the due date up to and including the desk date, for a loan that is out; 0 otherwise."
+          },
+          "loanDays": {
+            "type": "integer",
+            "enum": [
+              1,
+              3,
+              7,
+              14
+            ],
+            "description": "The loan period in calendar days."
+          },
+          "pickupDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "dueDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "dueAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The due instant, always 17:00 desk time on the due date."
+          },
+          "bookedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "totalDueCents": {
+            "type": "integer",
+            "description": "The amount due at pickup, in cents."
+          },
+          "purpose": {
+            "type": "string"
+          },
+          "quote": {
+            "$ref": "#/components/schemas/Quote"
+          },
+          "approvalReasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Why the request needs approval, value reason first."
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuoteLine"
+            }
+          }
+        }
+      },
+      "EquipmentSummary": {
+        "type": "object",
+        "description": "A catalogue item as it appears in the catalogue list.",
+        "required": [
+          "id",
+          "tag",
+          "name",
+          "category",
+          "description",
+          "totalUnits",
+          "availableUnits",
+          "dailyRateCents",
+          "replacementValueCents",
+          "depositPerUnitCents"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The catalogue item identifier, for example `cam-c70`."
+          },
+          "tag": {
+            "type": "string",
+            "description": "The asset tag, for example `CAM-C70`."
+          },
+          "name": {
+            "type": "string"
+          },
+          "category": {
+            "$ref": "#/components/schemas/Category"
+          },
+          "description": {
+            "type": "string"
+          },
+          "totalUnits": {
+            "type": "integer",
+            "description": "Units the desk owns."
+          },
+          "availableUnits": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Total units minus units committed by loans that are awaiting approval, ready or out. Never below zero."
+          },
+          "dailyRateCents": {
+            "type": "integer"
+          },
+          "replacementValueCents": {
+            "type": "integer"
+          },
+          "depositPerUnitCents": {
+            "type": "integer",
+            "description": "10% of replacement value when that value is $1,000.00 or more; otherwise 0."
+          }
+        }
+      },
+      "EquipmentSpec": {
+        "type": "object",
+        "description": "One specification row on an item's detail page.",
+        "required": [
+          "label",
+          "value"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        }
+      },
+      "EquipmentHolder": {
+        "type": "object",
+        "description": "An open loan currently holding units of the item.",
+        "required": [
+          "id",
+          "borrowerName",
+          "quantity",
+          "status",
+          "statusLabel",
+          "overdue",
+          "dueDate",
+          "pickupDate"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The loan identifier."
+          },
+          "borrowerName": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer",
+            "description": "Units of this item held by that loan."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending_approval",
+              "ready",
+              "out"
+            ],
+            "description": "Only loans in a status that commits units appear as holders."
+          },
+          "statusLabel": {
+            "$ref": "#/components/schemas/LoanStatusLabel"
+          },
+          "overdue": {
+            "type": "boolean"
+          },
+          "dueDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "pickupDate": {
+            "type": "string",
+            "format": "date"
+          }
+        }
+      },
+      "EquipmentDetail": {
+        "type": "object",
+        "description": "A catalogue item with its specifications and current holders.",
+        "required": [
+          "id",
+          "tag",
+          "name",
+          "category",
+          "description",
+          "totalUnits",
+          "availableUnits",
+          "dailyRateCents",
+          "replacementValueCents",
+          "depositPerUnitCents",
+          "specs",
+          "holders"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The catalogue item identifier, for example `cam-c70`."
+          },
+          "tag": {
+            "type": "string",
+            "description": "The asset tag, for example `CAM-C70`."
+          },
+          "name": {
+            "type": "string"
+          },
+          "category": {
+            "$ref": "#/components/schemas/Category"
+          },
+          "description": {
+            "type": "string"
+          },
+          "totalUnits": {
+            "type": "integer",
+            "description": "Units the desk owns."
+          },
+          "availableUnits": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Total units minus units committed by loans that are awaiting approval, ready or out. Never below zero."
+          },
+          "dailyRateCents": {
+            "type": "integer"
+          },
+          "replacementValueCents": {
+            "type": "integer"
+          },
+          "depositPerUnitCents": {
+            "type": "integer",
+            "description": "10% of replacement value when that value is $1,000.00 or more; otherwise 0."
+          },
+          "specs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EquipmentSpec"
+            }
+          },
+          "holders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EquipmentHolder"
+            }
+          }
+        }
+      },
+      "DraftLine": {
+        "type": "object",
+        "description": "One item line on a draft, with catalogue detail folded in.",
+        "required": [
+          "equipmentId",
+          "quantity",
+          "name",
+          "tag",
+          "dailyRateCents",
+          "availableUnits"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "equipmentId": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "name": {
+            "type": "string",
+            "description": "The catalogue item name, or the raw identifier if the item is no longer in the catalogue."
+          },
+          "tag": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The asset tag, or null if the item is no longer in the catalogue."
+          },
+          "dailyRateCents": {
+            "type": "integer",
+            "description": "Rental rate per unit per day, or 0 if the item is no longer in the catalogue."
+          },
+          "availableUnits": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Units of this item currently available at the desk."
+          }
+        }
+      },
+      "DraftPreview": {
+        "type": "object",
+        "description": "The live quote and schedule shown on the review step. Null until the draft has at least one line, a pickup date and a loan period.",
+        "required": [
+          "quote",
+          "dueDate",
+          "dueAt",
+          "approvalRequired",
+          "approvalReasons"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "quote": {
+            "$ref": "#/components/schemas/DraftQuote"
+          },
+          "dueDate": {
+            "type": "string",
+            "format": "date",
+            "description": "Pickup date plus the loan period, rolled forward off a weekend."
+          },
+          "dueAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "approvalRequired": {
+            "type": "boolean",
+            "description": "Whether booking this draft would need supervisor approval."
+          },
+          "approvalReasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "Draft": {
+        "type": "object",
+        "description": "A new-loan draft in progress.",
+        "required": [
+          "id",
+          "borrower",
+          "purpose",
+          "lines",
+          "loanDays",
+          "pickupDate",
+          "preview"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The draft identifier, for example `D-1`."
+          },
+          "borrower": {
+            "$ref": "#/components/schemas/Borrower"
+          },
+          "purpose": {
+            "type": "string",
+            "description": "May be an empty string."
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DraftLine"
+            }
+          },
+          "loanDays": {
+            "type": "integer",
+            "enum": [
+              1,
+              3,
+              7,
+              14
+            ]
+          },
+          "pickupDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "preview": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DraftPreview"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "SessionResponse": {
+        "type": "object",
+        "required": [
+          "operator",
+          "deskTime",
+          "departments",
+          "categories",
+          "loanDayOptions",
+          "latestPickupDate",
+          "policy"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "operator": {
+            "type": "object",
+            "description": "The signed-in desk operator.",
+            "required": [
+              "name",
+              "role"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "role": {
+                "type": "string"
+              }
+            }
+          },
+          "deskTime": {
+            "type": "object",
+            "description": "The frozen desk clock.",
+            "required": [
+              "iso",
+              "date",
+              "time",
+              "formatted"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "iso": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "date": {
+                "type": "string",
+                "format": "date"
+              },
+              "time": {
+                "type": "string",
+                "description": "24-hour desk time, `HH:MM`."
+              },
+              "formatted": {
+                "type": "string",
+                "description": "The desk date and time in long form, for example `Mon 16 Mar 2026, 09:00`."
+              }
+            }
+          },
+          "departments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Department"
+            },
+            "description": "Selectable departments, in display order."
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Category"
+            },
+            "description": "Catalogue categories, in display order after `All`."
+          },
+          "loanDayOptions": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "Selectable loan periods in days."
+          },
+          "latestPickupDate": {
+            "type": "string",
+            "format": "date",
+            "description": "The last pickup date the desk will book: 14 calendar days after the desk date."
+          },
+          "policy": {
+            "type": "object",
+            "description": "The constants behind the pricing, approval and late-fee rules.",
+            "required": [
+              "bundleMinUnits",
+              "bundleDiscountRate",
+              "depositThresholdCents",
+              "depositRate",
+              "approvalValueThresholdCents",
+              "lateFeePerUnitPerDayCents",
+              "lateFeeCapCents"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "bundleMinUnits": {
+                "type": "integer",
+                "description": "Units on a loan at which the bundle discount applies."
+              },
+              "bundleDiscountRate": {
+                "type": "number",
+                "description": "Fraction of the base charge taken off as bundle discount."
+              },
+              "depositThresholdCents": {
+                "type": "integer",
+                "description": "Replacement value at or above which a deposit is held."
+              },
+              "depositRate": {
+                "type": "number",
+                "description": "Fraction of replacement value held as deposit per unit."
+              },
+              "approvalValueThresholdCents": {
+                "type": "integer",
+                "description": "Total replacement value at or above which supervisor approval is required."
+              },
+              "lateFeePerUnitPerDayCents": {
+                "type": "integer",
+                "description": "Late fee per unit per late business day."
+              },
+              "lateFeeCapCents": {
+                "type": "integer",
+                "description": "Maximum late fee for one loan."
+              }
+            }
+          }
+        }
+      },
+      "OverviewResponse": {
+        "type": "object",
+        "required": [
+          "metrics",
+          "overdue",
+          "dueToday",
+          "readyForPickup",
+          "awaitingApproval"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "metrics": {
+            "type": "object",
+            "description": "The desk counter tiles.",
+            "required": [
+              "outCount",
+              "overdueCount",
+              "dueTodayCount",
+              "awaitingApprovalCount",
+              "readyForPickupCount",
+              "unitsAvailable",
+              "unitsTotal",
+              "chargesBookedTodayCents"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "outCount": {
+                "type": "integer",
+                "description": "Loans currently with borrowers."
+              },
+              "overdueCount": {
+                "type": "integer",
+                "description": "Loans that are out and past their due date."
+              },
+              "dueTodayCount": {
+                "type": "integer",
+                "description": "Loans that are out and due back on the desk date."
+              },
+              "awaitingApprovalCount": {
+                "type": "integer"
+              },
+              "readyForPickupCount": {
+                "type": "integer"
+              },
+              "unitsAvailable": {
+                "type": "integer",
+                "description": "Units in the catalogue not committed by an open loan."
+              },
+              "unitsTotal": {
+                "type": "integer",
+                "description": "Units the desk owns across the catalogue."
+              },
+              "chargesBookedTodayCents": {
+                "type": "integer",
+                "description": "Total due of loans booked on the desk date that are not cancelled or declined, plus late fees recorded on the desk date."
+              }
+            }
+          },
+          "overdue": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OverdueLoanSummary"
+            },
+            "description": "Overdue loans, earliest due date first."
+          },
+          "dueToday": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LoanSummary"
+            },
+            "description": "Loans that are out and due back today."
+          },
+          "readyForPickup": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LoanSummary"
+            },
+            "description": "Loans waiting on the shelf, earliest pickup date first."
+          },
+          "awaitingApproval": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LoanSummary"
+            },
+            "description": "Loans awaiting a supervisor decision."
+          }
+        }
+      },
+      "EquipmentListResponse": {
+        "type": "object",
+        "required": [
+          "items",
+          "totalCount",
+          "shownCount",
+          "filters"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EquipmentSummary"
+            },
+            "description": "The matching catalogue items, sorted by name."
+          },
+          "totalCount": {
+            "type": "integer",
+            "description": "Items in the whole catalogue, before filtering."
+          },
+          "shownCount": {
+            "type": "integer",
+            "description": "Items after filtering."
+          },
+          "filters": {
+            "type": "object",
+            "description": "The filters as applied, echoed back.",
+            "required": [
+              "q",
+              "category",
+              "availableOnly"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "q": {
+                "type": "string"
+              },
+              "category": {
+                "type": "string",
+                "description": "The category filter, or `All` when no category filter is applied."
+              },
+              "availableOnly": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "EquipmentDetailResponse": {
+        "type": "object",
+        "required": [
+          "item"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "item": {
+            "$ref": "#/components/schemas/EquipmentDetail"
+          }
+        }
+      },
+      "LoanListResponse": {
+        "type": "object",
+        "required": [
+          "loans",
+          "totalCount",
+          "shownCount",
+          "filters"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "loans": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LoanSummary"
+            },
+            "description": "The matching loans, newest identifier first."
+          },
+          "totalCount": {
+            "type": "integer",
+            "description": "Loans in the whole register, before filtering."
+          },
+          "shownCount": {
+            "type": "integer",
+            "description": "Loans after filtering."
+          },
+          "filters": {
+            "type": "object",
+            "description": "The filters as applied, echoed back.",
+            "required": [
+              "status",
+              "q"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "all",
+                  "pending_approval",
+                  "ready",
+                  "out",
+                  "overdue",
+                  "returned",
+                  "cancelled",
+                  "declined"
+                ],
+                "description": "The status filter actually applied; `all` when the requested value was not recognised."
+              },
+              "q": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "LoanEnvelope": {
+        "type": "object",
+        "required": [
+          "loan"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "loan": {
+            "$ref": "#/components/schemas/LoanDetail"
+          }
+        }
+      },
+      "LoanActionResponse": {
+        "type": "object",
+        "description": "The loan after a desk action, with the message to show the operator.",
+        "required": [
+          "loan",
+          "message"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "loan": {
+            "$ref": "#/components/schemas/LoanDetail"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "CheckinResponse": {
+        "type": "object",
+        "description": "The loan after check-in, with the settled fee and deposit repeated at the top level.",
+        "required": [
+          "loan",
+          "lateFeeCents",
+          "depositOutcome",
+          "message"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "loan": {
+            "$ref": "#/components/schemas/LoanDetail"
+          },
+          "lateFeeCents": {
+            "type": "integer",
+            "description": "The late fee charged, in cents; 0 when returned on time."
+          },
+          "depositOutcome": {
+            "type": "string",
+            "enum": [
+              "none",
+              "released",
+              "held"
+            ],
+            "description": "`none` when no deposit was held, `released` when the condition is good, `held` otherwise."
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "BookedLoanResponse": {
+        "type": "object",
+        "description": "The loan created from a submitted draft.",
+        "required": [
+          "loan",
+          "message",
+          "dueAt"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "loan": {
+            "$ref": "#/components/schemas/LoanDetail"
+          },
+          "message": {
+            "type": "string"
+          },
+          "dueAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The due instant of the new loan, 17:00 desk time on its due date."
+          }
+        }
+      },
+      "ApprovalListResponse": {
+        "type": "object",
+        "required": [
+          "loans",
+          "count"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "loans": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApprovalItem"
+            },
+            "description": "Loans awaiting a decision, oldest identifier first."
+          },
+          "count": {
+            "type": "integer",
+            "description": "How many loans await a decision."
+          }
+        }
+      },
+      "DraftEnvelope": {
+        "type": "object",
+        "required": [
+          "draft"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "draft": {
+            "$ref": "#/components/schemas/Draft"
+          }
+        }
+      },
+      "CheckinRequest": {
+        "type": "object",
+        "description": "The check-in form. A note of at least 10 characters after trimming is required whenever the condition is not `good`.",
+        "required": [
+          "condition"
+        ],
+        "properties": {
+          "condition": {
+            "$ref": "#/components/schemas/Condition"
+          },
+          "note": {
+            "type": "string",
+            "description": "Describes the damage or the missing parts. Ignored when the condition is `good`; otherwise must be at least 10 characters after trimming."
+          }
+        }
+      },
+      "DeclineRequest": {
+        "type": "object",
+        "description": "The decline form.",
+        "required": [
+          "reason"
+        ],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 5,
+            "description": "Why the request is refused. At least 5 characters after trimming."
+          }
+        }
+      },
+      "BorrowerStepRequest": {
+        "type": "object",
+        "description": "Step 1 of the new-loan flow: who is borrowing.",
+        "required": [
+          "name",
+          "email",
+          "department"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 2,
+            "description": "The borrower's full name, at least 2 characters after trimming."
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "description": "The borrower's email address; must end in `@fairmont.edu`, case-insensitively."
+          },
+          "department": {
+            "$ref": "#/components/schemas/Department"
+          },
+          "purpose": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "What the kit is for. Optional; at most 200 characters after trimming."
+          }
+        }
+      },
+      "DraftLineInput": {
+        "type": "object",
+        "description": "One requested item line. Each catalogue item may appear only once on a loan.",
+        "required": [
+          "equipmentId",
+          "quantity"
+        ],
+        "properties": {
+          "equipmentId": {
+            "type": "string",
+            "description": "The catalogue item identifier."
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Units requested; a whole number of at least 1, and no more than the units currently available."
+          }
+        }
+      },
+      "DraftUpdateRequest": {
+        "description": "One step of the new-loan flow. The `step` field selects which fields are read; any other value is refused with `Unknown draft step.`",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/DraftBorrowerStep"
+          },
+          {
+            "$ref": "#/components/schemas/DraftScheduleStep"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "step",
+          "mapping": {
+            "borrower": "#/components/schemas/DraftBorrowerStep",
+            "schedule": "#/components/schemas/DraftScheduleStep"
+          }
+        }
+      },
+      "DraftBorrowerStep": {
+        "type": "object",
+        "description": "Step 1 applied to an existing draft. Replaces the borrower and the purpose.",
+        "required": [
+          "step",
+          "name",
+          "email",
+          "department"
+        ],
+        "properties": {
+          "step": {
+            "type": "string",
+            "const": "borrower"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 2
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "department": {
+            "$ref": "#/components/schemas/Department"
+          },
+          "purpose": {
+            "type": "string",
+            "maxLength": 200
+          }
+        }
+      },
+      "DraftScheduleStep": {
+        "type": "object",
+        "description": "Step 2 applied to an existing draft. Replaces the item lines, the loan period and the pickup date.",
+        "required": [
+          "step",
+          "lines",
+          "loanDays",
+          "pickupDate"
+        ],
+        "properties": {
+          "step": {
+            "type": "string",
+            "const": "schedule"
+          },
+          "lines": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/DraftLineInput"
+            },
+            "description": "At least one line. Each catalogue item may appear only once, and each quantity must be available."
+          },
+          "loanDays": {
+            "type": "integer",
+            "enum": [
+              1,
+              3,
+              7,
+              14
+            ],
+            "description": "The loan period in calendar days."
+          },
+          "pickupDate": {
+            "type": "string",
+            "format": "date",
+            "description": "A weekday, not in the past, and no more than 14 calendar days after the desk date."
+          }
+        }
+      }
+    }
+  }
+}

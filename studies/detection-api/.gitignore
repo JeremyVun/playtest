@@ -1,0 +1,11 @@
+# Study data root: dev runner credential, auth state, raw artifacts.
+# Disposable; never archived or published (see PREREG.md).
+.data/
+# Scratch transcripts and working files before scrubbing into report/.
+work/
+# Server logs written beside the build by subject-ctl.
+*.log
+# Injected build outputs and catalog verification scratch.
+.builds/
+catalog/.verify/
+suite/results/

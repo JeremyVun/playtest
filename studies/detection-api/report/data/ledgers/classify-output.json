@@ -1,0 +1,292 @@
+{
+  "verdicts": [
+    {
+      "claim_id": "C001",
+      "verdict": "invalid",
+      "fault_id": null,
+      "sublabel": "not-a-bug",
+      "confidence": "medium",
+      "rationale": "The loan detail's actions object has no decline affordance by design: openapi's LoanActions schema defines no decline field, and decline is a documented operation at POST /api/approvals/{id}/decline. Verified on clean that a pending_approval loan's actions match the schema; neither document is violated."
+    },
+    {
+      "claim_id": "C002",
+      "verdict": "invalid",
+      "fault_id": null,
+      "sublabel": "not-a-bug",
+      "confidence": "high",
+      "rationale": "The claim that no endpoint exposes the allowed departments is false: openapi documents the Department enum and GET /api/session returns the seven departments (verified on clean). The 'Choose a department.' message is the exact SPEC 7.1 wording."
+    },
+    {
+      "claim_id": "C003",
+      "verdict": "seeded",
+      "fault_id": "f-charges-late-fee",
+      "sublabel": null,
+      "confidence": "high",
+      "rationale": "Matches the catalog fault exactly: late fees charged at check-in never reach the chargesBookedTodayCents metric, violating R6."
+    },
+    {
+      "claim_id": "C004",
+      "verdict": "invalid",
+      "fault_id": null,
+      "sublabel": "not-a-bug",
+      "confidence": "medium",
+      "rationale": "Not reproducible on clean: a freshly created draft accepts a schedule PATCH with 200 and a full preview. No catalog fault touches draft expiry; the 'expired' responses were most likely 404s for a consumed or mistyped draft id."
+    },
+    {
+      "claim_id": "C005",
+      "verdict": "seeded",
+      "fault_id": "f-out-filter-drops-overdue",
+      "sublabel": null,
+      "confidence": "high",
+      "rationale": "Matches the catalog fault: the status=out filter omits the overdue out loan (L-1042). Clean returns all three out loans for status=out."
+    },
+    {
+      "claim_id": "C006",
+      "verdict": "invalid",
+      "fault_id": null,
+      "sublabel": "soft-ux",
+      "confidence": "medium",
+      "rationale": "Verified the clean reference also returns 405 without an Allow header, but neither SPEC.md nor openapi.json promises that header; openapi documents the 405 error body only. The RFC 9110 appeal is a reasonable-expectation/polish argument, which this study does not credit."
+    },
+    {
+      "claim_id": "C007",
+      "verdict": "seeded",
+      "fault_id": "f-extend-limit-off-by-one",
+      "sublabel": null,
+      "confidence": "high",
+      "rationale": "Matches the catalog fault: the once-only extension rule (R10) is not enforced and a second extension is accepted. Clean refuses the second extension with 409."
+    },
+    {
+      "claim_id": "C009",
+      "verdict": "invalid",
+      "fault_id": null,
+      "sublabel": "soft-ux",
+      "confidence": "medium",
+      "rationale": "The overview endpoint is documented at /api/overview in the openapi document every system received; 404 on undocumented guessed paths is correct behavior. Path-naming discoverability is a preference, not a SPEC/openapi violation."
+    },
+    {
+      "claim_id": "C010",
+      "verdict": "invalid",
+      "fault_id": null,
+      "sublabel": "not-a-bug",
+      "confidence": "high",
+      "rationale": "Rejecting a non-fairmont.edu email with exactly this 400 body is required behavior: SPEC 7.1 and the openapi createDraft 400 example both specify 'Borrower email must be a fairmont.edu address.' The fuzzer's expectation was wrong."
+    },
+    {
+      "claim_id": "C011",
+      "verdict": "invalid",
+      "fault_id": null,
+      "sublabel": "not-a-bug",
+      "confidence": "high",
+      "rationale": "A coverage/praise note reporting that lifecycle guards held; no defect is asserted."
+    },
+    {
+      "claim_id": "C012",
+      "verdict": "seeded",
+      "fault_id": "f-equipment-missing-message",
+      "sublabel": null,
+      "confidence": "high",
+      "rationale": "Matches the catalog fault: an unknown equipment id is refused with the loans sentence 'That loan does not exist.' instead of the equipment sentence. Clean returns 'That equipment item does not exist.'"
+    },
+    {
+      "claim_id": "C015",
+      "verdict": "seeded",
+      "fault_id": "f-overview-units-total",
+      "sublabel": null,
+      "confidence": "high",
+      "rationale": "Matches the catalog fault: unitsTotal mirrors the available count (40) instead of the fixed 53-unit catalogue total. Clean reports unitsTotal 53, unitsAvailable 40."
+    },
+    {
+      "claim_id": "C020",
+      "verdict": "seeded",
+      "fault_id": "f-available-filter-ignored",
+      "sublabel": null,
+      "confidence": "high",
+      "rationale": "Matches the catalog fault: with availableOnly on, the fully-booked DJI RS 4 Pro Gimbal (0 available units) is still returned, i.e. the availability filter does not exclude unavailable items. Clean excludes it (11 items)."
+    },
+    {
+      "claim_id": "C021",
+      "verdict": "seeded",
+      "fault_id": "f-cancel-button-missing",
+      "sublabel": null,
+      "confidence": "medium",
+      "rationale": "The claim reports the canCancel affordance inverted against R12 - false on pending-approval loans (the fault's manifestation: cancel offered nowhere it should be) and true on a cancelled loan. Clean shows canCancel true for pending_approval and false after cancel, so neither direction occurs there; this is the cancel-affordance fault surfacing on the API's actions flags."
+    },
+    {
+      "claim_id": "C023",
+      "verdict": "invalid",
+      "fault_id": null,
+      "sublabel": "not-a-bug",
+      "confidence": "low",
+      "rationale": "Too vague to name a defect and not reproducible: clean accepts a well-formed schedule PATCH with 200. No catalog fault makes valid draft updates fail; the rejected updates were most likely genuinely invalid (wrong step name or fields)."
+    },
+    {
+      "claim_id": "C025",
+      "verdict": "seeded",
+      "fault_id": "f-late-fee-day-count",
+      "sublabel": null,
+      "confidence": "high",
+      "rationale": "Matches the catalog fault: late business days are counted one day too many (the due date itself counted late), giving 4 days/$60.00 on L-1042 instead of R8's 3 days/$45.00, and nonzero late days on due-today loans."
+    },
+    {
+      "claim_id": "C027",
+      "verdict": "invalid",
+      "fault_id": null,
+      "sublabel": "duplicate",
+      "confidence": "low",
+      "rationale": "The only wrong shownCount on the loans register is the status=out list showing 2 instead of 3 because the overdue loan is dropped - the same defect already credited to C005 (f-out-filter-drops-overdue). Clean shownCount values are otherwise correct (8 unfiltered, 3 for out)."
+    },
+    {
+      "claim_id": "C030",
+      "verdict": "invalid",
+      "fault_id": null,
+      "sublabel": "soft-ux",
+      "confidence": "medium",
+      "rationale": "The catalogue is documented at /api/equipment in the provided openapi document; 404 on guessed undocumented paths is correct. Naming/discoverability is a preference, not a SPEC/openapi violation."
+    },
+    {
+      "claim_id": "C032",
+      "verdict": "invalid",
+      "fault_id": null,
+      "sublabel": "not-a-bug",
+      "confidence": "high",
+      "rationale": "Documented behavior: openapi's category parameter says 'A value outside the category list matches nothing.' Clean returns 200 with an empty list for category=AAA, exactly as observed."
+    },
+    {
+      "claim_id": "C033",
+      "verdict": "invalid",
+      "fault_id": null,
+      "sublabel": "not-a-bug",
+      "confidence": "high",
+      "rationale": "A praise/coverage note about availability staying coherent; no defect is asserted."
+    },
+    {
+      "claim_id": "C034",
+      "verdict": "invalid",
+      "fault_id": null,
+      "sublabel": "not-a-bug",
+      "confidence": "high",
+      "rationale": "Submitting a draft with no items must fail: the openapi submitDraft 400 example is exactly this body ('Add at least one item to this loan.'), matching SPEC 7.2. The fuzzer's expectation was wrong."
+    },
+    {
+      "claim_id": "C039",
+      "verdict": "latent",
+      "fault_id": null,
+      "sublabel": null,
+      "confidence": "high",
+      "rationale": "Verified on the clean reference: PATCH /api/loan-drafts/D-1 with body {\"lines\":[null],\"loanDays\":1,\"pickupDate\":\"2000-01-01\",\"step\":\"schedule\"} returns 500 'The desk system hit an unexpected problem.' The openapi document lists only 200/400/404/405 for this operation, so a null line crashing the server instead of a field validation is an undocumented real defect not in the fault catalog."
+    },
+    {
+      "claim_id": "C041",
+      "verdict": "seeded",
+      "fault_id": "f-saturday-roll-short",
+      "sublabel": null,
+      "confidence": "high",
+      "rationale": "Matches the catalog fault exactly: a 1-day Friday 2026-03-20 pickup lands on Saturday and is rolled only one day to Sunday 2026-03-22 instead of Monday 2026-03-23 (R3). Clean returns 2026-03-23."
+    },
+    {
+      "claim_id": "C042",
+      "verdict": "invalid",
+      "fault_id": null,
+      "sublabel": "not-a-bug",
+      "confidence": "medium",
+      "rationale": "Not reproducible on clean: unknown loan-drafts subroutes (e.g. /api/loan-drafts/D-1/lines, /D-1/step-two) return 404 {\"error\":{\"message\":\"No such endpoint.\"}}, not the expired-draft message. No catalog fault covers routing, and no SPEC/openapi rule is shown violated."
+    },
+    {
+      "claim_id": "C044",
+      "verdict": "invalid",
+      "fault_id": null,
+      "sublabel": "not-a-bug",
+      "confidence": "high",
+      "rationale": "Documented behavior: openapi's status parameter says an unrecognised value falls back to 'all' and the echoed filters.status reports the value applied. Clean does exactly this for status=AAA (all 8 loans, filters.status 'all')."
+    },
+    {
+      "claim_id": "C045",
+      "verdict": "invalid",
+      "fault_id": null,
+      "sublabel": "harness-artifact",
+      "confidence": "low",
+      "rationale": "The decline operation works on the clean reference (POST /api/approvals/L-1045/decline with a reason returns 200 and moves the loan to declined). 'Never sends the approvals decline request' describes the testing client failing to issue the call, not an API behavior; no product defect is demonstrated."
+    },
+    {
+      "claim_id": "C048",
+      "verdict": "invalid",
+      "fault_id": null,
+      "sublabel": "not-a-bug",
+      "confidence": "medium",
+      "rationale": "As written it describes correct behavior: R5 requires a loan tripping both approval rules to show both reasons. No wrongness is articulated."
+    },
+    {
+      "claim_id": "C052",
+      "verdict": "invalid",
+      "fault_id": null,
+      "sublabel": "not-a-bug",
+      "confidence": "high",
+      "rationale": "R12 explicitly allows cancelling a loan with status pending_approval, no decline decision required; the openapi cancelLoan description says the same. Verified on clean that cancelling pending-approval L-1044 succeeds. The observed behavior is the specified one."
+    },
+    {
+      "claim_id": "C055",
+      "verdict": "invalid",
+      "fault_id": null,
+      "sublabel": "not-a-bug",
+      "confidence": "medium",
+      "rationale": "The documented BorrowerStepRequest shape has name/email/department at the top level of the create body; requiring them there matches openapi. A surprise about the documented shape is not a defect."
+    },
+    {
+      "claim_id": "C058",
+      "verdict": "invalid",
+      "fault_id": null,
+      "sublabel": "not-a-bug",
+      "confidence": "medium",
+      "rationale": "Not reproducible on clean: both rejected-extension paths (already-extended and overdue) return 409 and leave dueDate and extensionsUsed unchanged (verified). The catalog extension fault is a second extension being accepted, not a rejected one mutating state, so this materially different description earns no seeded credit."
+    },
+    {
+      "claim_id": "C059",
+      "verdict": "invalid",
+      "fault_id": null,
+      "sublabel": "soft-ux",
+      "confidence": "medium",
+      "rationale": "The check-in contract (condition enum, note rule) is documented in the openapi CheckinRequest the systems received, and the field errors returned are the exact SPEC messages. Retries needed by the caller are a workflow-smoothness preference, not a SPEC/openapi violation."
+    },
+    {
+      "claim_id": "C060",
+      "verdict": "invalid",
+      "fault_id": null,
+      "sublabel": "soft-ux",
+      "confidence": "medium",
+      "rationale": "'Unknown draft step.' is the exact documented 400 for an unrecognised step, and the allowed steps (borrower, schedule) are documented in the openapi updateDraft operation. Wanting the error to enumerate allowed steps is a polish suggestion."
+    },
+    {
+      "claim_id": "C063",
+      "verdict": "invalid",
+      "fault_id": null,
+      "sublabel": "soft-ux",
+      "confidence": "medium",
+      "rationale": "Terse 404/405 answers on guessed, undocumented routes are correct behavior for documented endpoints elsewhere; wanting more guidance in error bodies is a preference, and neither SPEC nor openapi is violated."
+    },
+    {
+      "claim_id": "C065",
+      "verdict": "invalid",
+      "fault_id": null,
+      "sublabel": "not-a-bug",
+      "confidence": "high",
+      "rationale": "The fuzzed body had an empty equipmentId and absurd quantities; rejecting it with 'That equipment is no longer in the catalogue.' and the pickup-date bound message is exactly the SPEC 7.2 validation. The tool's schema-compliance expectation was wrong."
+    },
+    {
+      "claim_id": "C070",
+      "verdict": "invalid",
+      "fault_id": null,
+      "sublabel": "not-a-bug",
+      "confidence": "medium",
+      "rationale": "The extend request is documented with EmptyBody: 'If a body is sent it must be valid JSON; its contents are ignored.' A bare JSON number is valid JSON, so accepting it and performing a legitimate first extension matches the documented contract."
+    },
+    {
+      "claim_id": "C071",
+      "verdict": "seeded",
+      "fault_id": "f-bundle-threshold-off-by-one",
+      "sublabel": null,
+      "confidence": "high",
+      "rationale": "Matches the catalog fault: a 3-unit draft gets no bundle discount (bundleDiscountCents 0, total 5100) where R4's threshold is three units. Clean returns bundleDiscountCents 510 and total 4590 for the same draft."
+    }
+  ]
+}

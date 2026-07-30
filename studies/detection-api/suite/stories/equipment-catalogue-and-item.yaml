@@ -1,0 +1,62 @@
+description: Filter the equipment catalogue, hit a missing item, then open the Canon C70 record.
+story: |
+  You are the desk supervisor at Fairmont University Media Services, looking
+  for a cinema camera for a student who is standing at the counter. The desk
+  clock is frozen at Monday 16 March 2026.
+
+  Read the whole equipment catalogue first. Then search it for the free text
+  "canon"; then list only the Cameras category; then list only the items that
+  have at least one unit free right now. Next, try to open a catalogue item
+  with the made-up identifier "cam-nonexistent". Finally, open the record for
+  the Canon C70 Cinema Camera.
+
+  You expect the catalogue to hold 12 items in total, and each filtered
+  response to keep reporting 12 as the catalogue total while reporting the
+  smaller number it actually listed: 1 item for the "canon" search, 3 items in
+  Cameras, and 11 items with a unit free (the DJI RS 4 Pro Gimbal is fully
+  booked, so it is the one left out). You expect the made-up identifier to be
+  refused as not found, with a message saying that equipment item does not
+  exist. You expect the Canon C70 record to show asset tag CAM-C70, category
+  Cameras, 1 of 3 units free, a daily rate of $18.00, a replacement value of
+  $5,400.00, a deposit of $540.00 per unit, four specification rows, and the
+  two open loans holding its units — L-1042 (Marcus Webb) and L-1045 (Aisha
+  Farouk).
+success:
+  - label: every catalogue listing succeeds
+    response_status: { op: "GET /api/equipment", status: "200", occurrence: all }
+  - label: the catalogue total stays 12 under every filter
+    response_matches: { op: "GET /api/equipment", match: "$.totalCount == 12", occurrence: all }
+  - label: the unfiltered catalogue lists all 12 items
+    response_matches: { op: "GET /api/equipment", match: "$.shownCount == 12", occurrence: any }
+  - label: searching canon lists one item
+    response_matches: { op: "GET /api/equipment", match: "$.shownCount == 1", occurrence: any }
+  - label: the Cameras category lists three items
+    response_matches: { op: "GET /api/equipment", match: "$.shownCount == 3", occurrence: any }
+  - label: eleven items have a unit free
+    response_matches: { op: "GET /api/equipment", match: "$.shownCount == 11", occurrence: any }
+  - label: the unknown catalogue id is refused as not found
+    response_status: { op: "GET /api/equipment/{id}", status: "404", occurrence: any }
+  - response_matches:
+      op: "GET /api/equipment/{id}"
+      match: '$.error.message == "That equipment item does not exist."'
+      occurrence: any
+  - label: the Canon C70 record carries its desk figures
+    response_matches: { op: "GET /api/equipment/{id}", match: "$.item.availableUnits == 1", occurrence: last }
+  - response_matches: { op: "GET /api/equipment/{id}", match: "$.item.totalUnits == 3", occurrence: last }
+  - response_matches: { op: "GET /api/equipment/{id}", match: "$.item.dailyRateCents == 1800", occurrence: last }
+  - response_matches: { op: "GET /api/equipment/{id}", match: "$.item.replacementValueCents == 540000", occurrence: last }
+  - response_matches: { op: "GET /api/equipment/{id}", match: "$.item.depositPerUnitCents == 54000", occurrence: last }
+  - label: both open loans holding a Canon C70 are listed
+    response_matches: { op: "GET /api/equipment/{id}", match: '$.item.holders[0].id == "L-1042"', occurrence: last }
+  - response_matches: { op: "GET /api/equipment/{id}", match: '$.item.holders[1].id == "L-1045"', occurrence: last }
+  - invariant: { policy: no_server_error }
+  - label: the not-found answer uses the desk's error envelope
+    invariant:
+      policy: error_shape
+      scope: "GET /api/equipment/{id}"
+      require: ["$.error.message"]
+  - assert: >-
+      The response describes the Canon C70 Cinema Camera, asset tag CAM-C70, in
+      the Cameras category, with 1 of 3 units free, four specification rows, and
+      two open loans holding its units — one for Marcus Webb and one for Aisha
+      Farouk.

@@ -1,0 +1,57 @@
+description: Discovery — drive loans out of sequence and check the refusals, the counters and the stock.
+mode: discovery
+vision: false
+persona: adversarial
+story: |
+  You are testing Loanpoint, the equipment lending desk API used by Fairmont
+  University Media Services, before it goes live. One desk supervisor is signed
+  in; there is no login. The desk clock is frozen at Monday 16 March 2026, and
+  the desk is open Monday to Friday only. The register holds 8 loans:
+
+  - L-1041 Priya Raman, out, due back today 16 March.
+  - L-1042 Marcus Webb, out and overdue since 11 March, 3 units.
+  - L-1043 Dana Okoye, ready for pickup tomorrow 17 March, 2 units.
+  - L-1044 Theo Lindqvist, awaiting approval, pickup today, 14-day period.
+  - L-1045 Aisha Farouk, awaiting approval, pickup 18 March, 2 units.
+  - L-1046 Owen Castillo, returned back on 5 March.
+  - L-1047 Sofia Marchetti, cancelled on 9 March.
+  - L-1048 Nina Brandt, out, due back 19 March, 2 units.
+
+  Your mission is the life of a loan after it is booked — approving,
+  declining, marking picked up, extending, checking in, cancelling — and
+  whether the desk holds its own line when those are done in the wrong order,
+  twice over, or on the wrong loan.
+
+  The desk's rules are these:
+
+  - Only a loan that is ready for pickup can be marked picked up, and only on
+    or after its pickup date.
+  - Only a loan that is out can be checked in. Checking in charges a late fee
+    of $5.00 per unit for each business day after the due date up to today,
+    capped at $150.00 per loan, and releases the deposit when the kit comes
+    back in good condition or holds it when it is damaged or missing parts.
+  - Only a loan that is out, is not overdue, and has never been extended can be
+    extended, once, by 7 days, free of charge.
+  - Only a loan awaiting approval or ready for pickup can be cancelled.
+  - Only a loan awaiting approval can be approved or declined, once.
+  - Units are committed while a loan is awaiting approval, ready or out, and go
+    back into stock the moment it is cancelled, declined or returned. Available
+    units are never below zero and never above the 53 units in the catalogue.
+  - The desk overview counters and the equipment availability figures must
+    always agree with the loans behind them.
+
+  Attack the ordering: repeat an action that has already succeeded, act on a
+  loan in the wrong state, decline something already approved, extend the
+  overdue loan, check in something that never went out, cancel something
+  already returned, pick up a day early. After each action that does change
+  something, re-read the desk overview and the affected catalogue items and
+  check the counters and the stock still add up. Report anything the desk let
+  through that it should have refused, any figure that stopped agreeing with
+  the loans behind it, and any refusal whose wording would leave the supervisor
+  guessing.
+report:
+  - Which out-of-sequence or repeated actions were accepted when the rules say they should have been refused?
+  - After each successful action, did the overview counters and the available-unit figures still agree with the loans behind them? Where did they not?
+  - Was any late fee, deposit outcome or new due date wrong for the loan it was applied to?
+  - Did any refusal come back with a confusing message, the wrong status, or no explanation at all?
+  - Did any sequence leave a loan or the catalogue in a state the rules say is impossible?

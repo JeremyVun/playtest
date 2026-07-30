@@ -1,0 +1,294 @@
+{
+  "arm": "P",
+  "round": 1,
+  "wall_ms": 5404202,
+  "group_wall_ms": 5282956,
+  "group_stats": {
+    "total": 13,
+    "queued": 0,
+    "running": 0,
+    "done": 13,
+    "pass": 1,
+    "fail": 10,
+    "infra": 0,
+    "explored": 2,
+    "canceled": 0,
+    "lost": 0,
+    "changed": 0,
+    "cost_usd": 13.595238,
+    "duration_ms": 5282956,
+    "started_at": "2026-07-30T20:00:50.841Z",
+    "finished_at": "2026-07-30T21:28:53.797Z"
+  },
+  "cost_usd": 13.595238,
+  "synthesis_cost_usd": 0.21509,
+  "actor_steps": 222,
+  "runs": [
+    {
+      "id": "01KYT9V1KTSMJYZHAJ13C79T4C",
+      "case_id": "approve-request-then-pickup",
+      "status": "pass",
+      "mode": "record",
+      "steps": 21,
+      "cost_usd": 1.325494,
+      "tokens": {
+        "cache_read": 183808,
+        "in": 336350,
+        "out": 15696
+      },
+      "duration_ms": 405011,
+      "finding_ids": [
+        "01KYTA87R0QWMH33MM7RRDYMVF",
+        "01KYTA87R19Z77Q6ZNEEHRGDFA",
+        "01KYTA87R19Z77Q6ZNEEHRGDFF"
+      ]
+    },
+    {
+      "id": "01KYT9V1KTSMJYZHAJ13C79T4D",
+      "case_id": "book-loan-needs-approval",
+      "status": "fail",
+      "mode": "record",
+      "steps": 15,
+      "cost_usd": 0.919585,
+      "tokens": {
+        "cache_read": 145920,
+        "in": 237809,
+        "out": 12906
+      },
+      "duration_ms": 617950,
+      "finding_ids": [
+        "01KYTAVW135QJSEFY2KPM23776",
+        "01KYTAVW150VPZ6ETDNE9AEGH0",
+        "01KYTAVW14E4C9875SXKRC3FW5"
+      ]
+    },
+    {
+      "id": "01KYT9V1KTSMJYZHAJ13C79T4E",
+      "case_id": "book-loan-straight-to-shelf",
+      "status": "fail",
+      "mode": "record",
+      "steps": 26,
+      "cost_usd": 1.739473,
+      "tokens": {
+        "cache_read": 262656,
+        "in": 422807,
+        "out": 26913
+      },
+      "duration_ms": 626462,
+      "finding_ids": [
+        "01KYTBFWQTJ74SF4SFK4ZMJAG8",
+        "01KYTBFWQQRA654ZJDY2PDBBMN",
+        "01KYTBFWQRHTDK8PE7E0EHVVK1"
+      ]
+    },
+    {
+      "id": "01KYT9V1KTSMJYZHAJ13C79T4F",
+      "case_id": "cancel-and-decline-return-units",
+      "status": "fail",
+      "mode": "record",
+      "steps": 26,
+      "cost_usd": 1.659055,
+      "tokens": {
+        "cache_read": 263680,
+        "in": 435869,
+        "out": 22209
+      },
+      "duration_ms": 548773,
+      "finding_ids": [
+        "01KYTA87R0QWMH33MM7RRDYMVF",
+        "01KYTC1JR57KHXK6YWNAWYFFH5",
+        "01KYTC1JR4VCSBJ4TMDK3HYQN9",
+        "01KYTC1JR57KHXK6YWNAWYFFHE",
+        "01KYTC1JR57KHXK6YWNAWYFFHM"
+      ]
+    },
+    {
+      "id": "01KYT9V1KTSMJYZHAJ13C79T4G",
+      "case_id": "checkin-overdue-late-fee",
+      "status": "fail",
+      "mode": "record",
+      "steps": 8,
+      "cost_usd": 0.431525,
+      "tokens": {
+        "cache_read": 97280,
+        "in": 137083,
+        "out": 6129
+      },
+      "duration_ms": 137817,
+      "finding_ids": [
+        "01KYTC6QTAQ7BFN48R8CTQM8FM",
+        "01KYTC6QTBDDDA936V7V5DFC2A",
+        "01KYTC6QTBDDDA936V7V5DFC25",
+        "01KYTC6QTC8C399MTRG1YVAGPN",
+        "01KYTC6QTC8C399MTRG1YVAGPG"
+      ]
+    },
+    {
+      "id": "01KYT9V1KTSMJYZHAJ13C79T4H",
+      "case_id": "desk-overview-figures",
+      "status": "fail",
+      "mode": "record",
+      "steps": 7,
+      "cost_usd": 0.399571,
+      "tokens": {
+        "cache_read": 87552,
+        "in": 126719,
+        "out": 5332
+      },
+      "duration_ms": 120064,
+      "finding_ids": [
+        "01KYTC6QTAQ7BFN48R8CTQM8FM",
+        "01KYTC6QTBDDDA936V7V5DFC2A",
+        "01KYTCB7DMCJT225B08KW18FN5",
+        "01KYTA87R19Z77Q6ZNEEHRGDFA",
+        "01KYTCB7DNSTD67NJS2MAYRRPG"
+      ]
+    },
+    {
+      "id": "01KYT9V1KTSMJYZHAJ13C79T4J",
+      "case_id": "due-date-weekend-rollforward",
+      "status": "fail",
+      "mode": "record",
+      "steps": 16,
+      "cost_usd": 0.835434,
+      "tokens": {
+        "cache_read": 181248,
+        "in": 253224,
+        "out": 12831
+      },
+      "duration_ms": 617036,
+      "finding_ids": [
+        "01KYTBFWQTJ74SF4SFK4ZMJAG8",
+        "01KYTBFWQQRA654ZJDY2PDBBMN"
+      ]
+    },
+    {
+      "id": "01KYT9V1KTSMJYZHAJ13C79T4K",
+      "case_id": "equipment-catalogue-and-item",
+      "status": "fail",
+      "mode": "record",
+      "steps": 7,
+      "cost_usd": 0.39736,
+      "tokens": {
+        "cache_read": 76800,
+        "in": 122240,
+        "out": 4392
+      },
+      "duration_ms": 109273,
+      "finding_ids": [
+        "01KYTD353Y6R4050DAHZXR7YP7"
+      ]
+    },
+    {
+      "id": "01KYT9V1KTSMJYZHAJ13C79T4M",
+      "case_id": "extend-loan-once",
+      "status": "fail",
+      "mode": "record",
+      "steps": 5,
+      "cost_usd": 0.327562,
+      "tokens": {
+        "cache_read": 57344,
+        "in": 94892,
+        "out": 3705
+      },
+      "duration_ms": 78542,
+      "finding_ids": [
+        "01KYTD6CVHCNMX0T806PANDN3H",
+        "01KYTD6CVJ56MCT170R1W73K5Q",
+        "01KYTD6CVKFJ38B3KNW881Y3B2"
+      ]
+    },
+    {
+      "id": "01KYT9V1KTSMJYZHAJ13C79T4N",
+      "case_id": "loans-register-and-detail",
+      "status": "fail",
+      "mode": "record",
+      "steps": 7,
+      "cost_usd": 0.376254,
+      "tokens": {
+        "cache_read": 78848,
+        "in": 122838,
+        "out": 3896
+      },
+      "duration_ms": 100842,
+      "finding_ids": [
+        "01KYTC6QTAQ7BFN48R8CTQM8FM",
+        "01KYTCB7DMCJT225B08KW18FN5",
+        "01KYTDA9ZYJG0ZY5QV4EMPNPK2"
+      ]
+    },
+    {
+      "id": "01KYT9V1KTSMJYZHAJ13C79T4P",
+      "case_id": "refusals-and-invalid-input",
+      "status": "fail",
+      "mode": "record",
+      "steps": 22,
+      "cost_usd": 1.136859,
+      "tokens": {
+        "cache_read": 224768,
+        "in": 334617,
+        "out": 15841
+      },
+      "duration_ms": 417020,
+      "finding_ids": [
+        "01KYTC1JR57KHXK6YWNAWYFFH5",
+        "01KYTC1JR4VCSBJ4TMDK3HYQN9",
+        "01KYTDQXEM5RK7XVP81NVBMVXF"
+      ]
+    },
+    {
+      "id": "01KYT9V1KTSMJYZHAJ13C79T4Q",
+      "case_id": "risk-booking-boundaries",
+      "status": "explored",
+      "mode": "explore",
+      "steps": 21,
+      "cost_usd": 1.2134500000000001,
+      "tokens": {
+        "cache_read": 215040,
+        "in": 335000,
+        "out": 16871
+      },
+      "duration_ms": 400688,
+      "finding_ids": [
+        "01KYTE5ABBM94945D1KQMNXJCJ",
+        "01KYTE5ABC317NZDY1HNGX4AH9",
+        "01KYTE5ABDPYKFQFCPT4C6HAMB",
+        "01KYTE5ABDPYKFQFCPT4C6HAM6",
+        "01KYTE5ABC317NZDY1HNGX4AHF"
+      ]
+    },
+    {
+      "id": "01KYT9V1KTSMJYZHAJ13C79T4R",
+      "case_id": "risk-loan-lifecycle-conflicts",
+      "status": "explored",
+      "mode": "explore",
+      "steps": 41,
+      "cost_usd": 2.833616,
+      "tokens": {
+        "cache_read": 399872,
+        "in": 752602,
+        "out": 29001
+      },
+      "duration_ms": 701642,
+      "finding_ids": [
+        "01KYTEZ1Q0V8SAJPQMA1KNH4Q9",
+        "01KYTEZ1PY7G6B4705ZJNPH8WY",
+        "01KYTEZ1PY7G6B4705ZJNPH8WS",
+        "01KYTEZ1PWPHF50S4HZSTVA924",
+        "01KYTEZ1PVKRDTPCK8ZB68QV9H",
+        "01KYTEZ1PT6P8XE12QKXJT3YTM",
+        "01KYTEZ1PSTKE73DK077SQFBRF",
+        "01KYTEZ1PRM27NWRK8QRT6CANC",
+        "01KYTE5ABBM94945D1KQMNXJCJ",
+        "01KYTC6QTAQ7BFN48R8CTQM8FM",
+        "01KYTEW997367DM1MM1474JFA7",
+        "01KYTC6QTBDDDA936V7V5DFC2A",
+        "01KYTC6QTBDDDA936V7V5DFC25",
+        "01KYTEW996E1WMFNE6904XNWFY",
+        "01KYTD6CVHCNMX0T806PANDN3H",
+        "01KYTA87R0QWMH33MM7RRDYMVF",
+        "01KYTEW9980SB4YDQE8WZ01MWQ"
+      ]
+    }
+  ]
+}

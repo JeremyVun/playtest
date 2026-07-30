@@ -1,0 +1,51 @@
+description: Discovery — push the new-loan booking flow to its stated boundaries and see what the desk does.
+mode: discovery
+vision: false
+persona: adversarial
+story: |
+  You are testing Loanpoint, the equipment lending desk API used by Fairmont
+  University Media Services, before it goes live. One desk supervisor is signed
+  in; there is no login. The desk clock is frozen at Monday 16 March 2026, a
+  Monday, and the desk is open Monday to Friday only. There are 12 catalogue
+  items totalling 53 units, of which 40 are free right now, and 8 loans on the
+  register (L-1041 to L-1048).
+
+  Your mission is the money and the dates on the three-step new-loan flow:
+  record a borrower, put items and a schedule on the draft, review the figures,
+  and book it. You are not here to confirm that the happy path works — you are
+  here to find where the figures or the rules break down at the edges.
+
+  The desk's own rules are these, so you can tell a correct answer from a wrong
+  one:
+
+  - A pickup date must be a weekday, not in the past, and no more than 14
+    calendar days after 2026-03-16 — so 2026-03-16 to 2026-03-30 inclusive.
+  - The loan period is 1, 3, 7 or 14 days. The due date is the pickup date plus
+    that many calendar days; if it lands on a Saturday it moves on 2 days, if
+    it lands on a Sunday it moves on 1 day. Kit is always due back at 17:00.
+  - The base charge is the sum of daily rate × quantity × days. If the loan
+    carries 3 or more units in total, a bundle discount of 10% of the base
+    charge is taken off. A deposit of 10% of replacement value is added per
+    unit, but only for items whose replacement value is $1,000.00 or more.
+    Percentages round to the nearest cent, halves up. The total due at pickup
+    is base charge − bundle discount + deposit.
+  - A loan needs supervisor approval when its total replacement value is
+    $2,500.00 or more, or when its period is 14 days; otherwise it goes
+    straight to the pickup shelf.
+  - A loan can never commit more units of an item than are free.
+
+  Probe the boundaries those rules define — the first and last acceptable
+  pickup dates, the weekend either side of them, each of the four loan periods,
+  exactly 2 units versus exactly 3 units, an item priced just under and just
+  over the deposit threshold, a request just under and just over the approval
+  threshold, and asking for more units than are free. Try nonsense too:
+  negative or fractional quantities, an item listed twice, an unknown item, a
+  date that is not a date. Read the figures the desk quotes back and check the
+  arithmetic yourself. Where the desk accepts something it should refuse, or
+  quotes a number that does not follow its own rules, say so plainly.
+report:
+  - Which boundary values did the desk get wrong, and what did it answer instead of the correct value?
+  - Did any quoted figure — base charge, bundle discount, deposit, total due — disagree with the stated arithmetic, and on which draft?
+  - Did any due date land on a Saturday or Sunday, or otherwise not match the stated roll-forward rule?
+  - Was any input the rules say should be refused accepted instead, or any valid input wrongly refused?
+  - Did any request answer with a server error, an unhelpful message, or a response that contradicted an earlier one?

@@ -1,0 +1,57 @@
+description: A 14-day Canon C70 booking trips both approval rules and lands in the approvals queue.
+story: |
+  You are the desk supervisor at Fairmont University Media Services, taking a
+  request for an expensive camera over a long period. The desk clock is frozen
+  at Monday 16 March 2026.
+
+  Work through the desk's three-step new-loan flow. Step one: start a new loan
+  draft for Nadia Ferrer, email nadia.ferrer@fairmont.edu, department Film &
+  Media, purpose "Two-week documentary shoot in the valley." Step two: put 1
+  unit of the Canon C70 Cinema Camera on the draft, with a loan period of 14
+  days and a pickup date of 2026-03-18. Step three: read back the review
+  figures, then confirm the booking. Finally, read the queue of requests
+  waiting for a supervisor decision.
+
+  You expect the review to warn that this loan needs supervisor approval, and
+  to give both reasons — the replacement value of $5,400.00 is at or above the
+  $2,500.00 threshold, and the loan period is 14 days — with the value reason
+  first. You expect the figures to be a base charge of $252.00, no bundle
+  discount (it is a single unit), a $540.00 refundable deposit, a total due at
+  pickup of $792.00, and a due date of Wednesday 1 April 2026. You expect
+  confirming to create loan L-1049 with the status "awaiting approval" rather
+  than ready for pickup, and the approvals queue to then hold 3 requests:
+  L-1044, L-1045 and the new L-1049.
+success:
+  - label: the borrower step creates a draft
+    response_status: { op: "POST /api/loan-drafts", status: "201", occurrence: any }
+  - label: the review flags that approval is required, for both reasons
+    response_matches: { op: "PATCH /api/loan-drafts/{id}", match: "$.draft.preview.approvalRequired == true", occurrence: last }
+  - response_matches:
+      op: "PATCH /api/loan-drafts/{id}"
+      match: '$.draft.preview.approvalReasons[0] == "Replacement value $5,400.00 is at or above the $2,500.00 threshold."'
+      occurrence: last
+  - response_matches:
+      op: "PATCH /api/loan-drafts/{id}"
+      match: '$.draft.preview.approvalReasons[1] == "Loan period is 14 days."'
+      occurrence: last
+  - label: the review prices 14 days with the camera deposit
+    response_matches: { op: "PATCH /api/loan-drafts/{id}", match: "$.draft.preview.quote.baseChargeCents == 25200", occurrence: last }
+  - response_matches: { op: "PATCH /api/loan-drafts/{id}", match: "$.draft.preview.quote.depositCents == 54000", occurrence: last }
+  - response_matches: { op: "PATCH /api/loan-drafts/{id}", match: "$.draft.preview.quote.totalDueCents == 79200", occurrence: last }
+  - label: fourteen days from 18 March falls on 1 April
+    response_matches: { op: "PATCH /api/loan-drafts/{id}", match: '$.draft.preview.dueDate == "2026-04-01"', occurrence: last }
+  - label: confirming books the loan into the approval queue
+    response_status: { op: "POST /api/loan-drafts/{id}/submit", status: "201", occurrence: any }
+  - response_matches: { op: "POST /api/loan-drafts/{id}/submit", match: '$.loan.id == "L-1049"', occurrence: any }
+  - response_matches: { op: "POST /api/loan-drafts/{id}/submit", match: '$.loan.status == "pending_approval"', occurrence: any }
+  - response_matches: { op: "POST /api/loan-drafts/{id}/submit", match: "$.loan.totalDueCents == 79200", occurrence: any }
+  - label: the queue now holds three requests, the new one included
+    response_status: { op: "GET /api/approvals", status: "200", occurrence: all }
+  - response_matches: { op: "GET /api/approvals", match: "$.count == 3", occurrence: last }
+  - response_matches: { op: "GET /api/approvals", match: '$.loans[2].id == "L-1049"', occurrence: last }
+  - invariant: { policy: no_server_error }
+  - assert: >-
+      The approvals queue holds three requests — L-1044, L-1045 and the newly
+      booked L-1049 — and L-1049 is listed as needing approval both because its
+      replacement value is at or above the $2,500.00 threshold and because its
+      loan period is 14 days.

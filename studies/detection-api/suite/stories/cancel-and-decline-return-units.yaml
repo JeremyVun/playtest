@@ -1,0 +1,43 @@
+description: Cancel L-1043 and decline L-1045; both send their units straight back into stock.
+story: |
+  You are the desk supervisor at Fairmont University Media Services, clearing
+  two bookings that are not going ahead. The desk clock is frozen at Monday 16
+  March 2026. Loan L-1043 is Dana Okoye's 2 GoPro Hero 12 units waiting on the
+  pickup shelf for tomorrow, and loan L-1045 is Aisha Farouk's request for a
+  MacBook Pro 16" and a Canon C70, still waiting for a supervisor decision.
+
+  Cancel loan L-1043. Then decline the request on loan L-1045, giving the
+  reason "Kit already committed to the open day." Then open loan L-1045 and
+  read it. Finish by reading the desk overview.
+
+  You expect cancelling to move L-1043 to "cancelled" and put its 2 GoPro units
+  straight back into stock, and declining to move L-1045 to "declined", store
+  Rowan Ellis's decision and reason on the loan, and put its 2 units back into
+  stock too. You expect the desk overview afterwards to show nothing ready for
+  pickup, 1 request still awaiting approval (L-1044), and 44 of 53 units
+  available — up from the 40 available before either action.
+success:
+  - label: cancelling succeeds and returns the units
+    response_status: { op: "POST /api/loans/{id}/cancel", status: "200", occurrence: any }
+  - response_matches: { op: "POST /api/loans/{id}/cancel", match: '$.loan.status == "cancelled"', occurrence: any }
+  - response_matches: { op: "POST /api/loans/{id}/cancel", match: '$.loan.cancelledAt == "2026-03-16T09:00:00Z"', occurrence: any }
+  - label: declining succeeds and records the supervisor's reason
+    response_status: { op: "POST /api/approvals/{id}/decline", status: "200", occurrence: any }
+  - response_matches: { op: "POST /api/approvals/{id}/decline", match: '$.loan.status == "declined"', occurrence: any }
+  - response_matches: { op: "POST /api/approvals/{id}/decline", match: '$.loan.decision.outcome == "declined"', occurrence: any }
+  - response_matches:
+      op: "POST /api/approvals/{id}/decline"
+      match: '$.loan.decision.reason == "Kit already committed to the open day."'
+      occurrence: any
+  - label: the declined loan keeps the decision on its record
+    response_matches: { op: "GET /api/loans/{id}", match: '$.loan.statusLabel == "Declined"', occurrence: last }
+  - response_matches: { op: "GET /api/loans/{id}", match: '$.loan.decision.decidedBy == "Rowan Ellis"', occurrence: last }
+  - label: both sets of units are back in the available pool
+    response_matches: { op: "GET /api/overview", match: "$.metrics.unitsAvailable == 44", occurrence: last }
+  - label: the shelf is empty and one request is still waiting
+    response_matches: { op: "GET /api/overview", match: "$.metrics.readyForPickupCount == 0", occurrence: last }
+  - response_matches: { op: "GET /api/overview", match: "$.metrics.awaitingApprovalCount == 1", occurrence: last }
+  - invariant: { policy: no_server_error }
+  - assert: >-
+      The desk overview reports 44 of 53 units available, nothing ready for
+      pickup, and exactly one request still awaiting a supervisor decision.

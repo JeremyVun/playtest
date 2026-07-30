@@ -1,0 +1,45 @@
+description: Approve Theo Lindqvist's request, then hand the kit over the counter the same day.
+story: |
+  You are the desk supervisor at Fairmont University Media Services. Theo
+  Lindqvist is at the counter for the two-week recording residency he requested
+  this morning — loan L-1044, a Sennheiser MKH-416 Boom Kit and a Zoom H6 Field
+  Recorder, still waiting for a supervisor decision. The desk clock is frozen at
+  Monday 16 March 2026, which is the pickup date on that request.
+
+  Read the queue of requests waiting for a decision. Approve L-1044. Then mark
+  L-1044 as picked up. Finish by opening loan L-1044 and reading it in full.
+
+  You expect the queue to hold 2 requests to start with — L-1044 and L-1045 —
+  and L-1044 to be flagged as needing approval only because its loan period is
+  14 days. You expect approving it to move it to "ready for pickup" and record
+  the decision against Rowan Ellis, and marking it picked up to move it to
+  "out" with a pickup time of 09:00 on 16 March 2026. You expect the loan's
+  charges to be unchanged by either action: a base charge of $196.00, no bundle
+  discount, a $145.00 refundable deposit and $341.00 total due at pickup, still
+  due back on Monday 30 March 2026 at 17:00.
+success:
+  - label: the queue starts with two requests
+    response_status: { op: "GET /api/approvals", status: "200", occurrence: all }
+  - response_matches: { op: "GET /api/approvals", match: "$.count == 2", occurrence: first }
+  - label: L-1044 needs approval for its 14-day period
+    response_matches: { op: "GET /api/approvals", match: '$.loans[0].approvalReasons[0] == "Loan period is 14 days."', occurrence: first }
+  - label: approving moves the request to ready for pickup
+    response_status: { op: "POST /api/approvals/{id}/approve", status: "200", occurrence: any }
+  - response_matches: { op: "POST /api/approvals/{id}/approve", match: '$.loan.status == "ready"', occurrence: any }
+  - response_matches: { op: "POST /api/approvals/{id}/approve", match: '$.loan.decision.outcome == "approved"', occurrence: any }
+  - response_matches: { op: "POST /api/approvals/{id}/approve", match: '$.loan.decision.decidedBy == "Rowan Ellis"', occurrence: any }
+  - label: the kit goes out with the borrower
+    response_status: { op: "POST /api/loans/{id}/pickup", status: "200", occurrence: any }
+  - response_matches: { op: "POST /api/loans/{id}/pickup", match: '$.loan.status == "out"', occurrence: any }
+  - label: the loan reads as out, approved and picked up today
+    response_matches: { op: "GET /api/loans/{id}", match: '$.loan.status == "out"', occurrence: last }
+  - response_matches: { op: "GET /api/loans/{id}", match: '$.loan.statusLabel == "Out"', occurrence: last }
+  - response_matches: { op: "GET /api/loans/{id}", match: '$.loan.pickedUpAt == "2026-03-16T09:00:00Z"', occurrence: last }
+  - label: approval and pickup change no charges
+    response_matches: { op: "GET /api/loans/{id}", match: "$.loan.quote.totalDueCents == 34100", occurrence: last }
+  - response_matches: { op: "GET /api/loans/{id}", match: '$.loan.dueAt == "2026-03-30T17:00:00Z"', occurrence: last }
+  - invariant: { policy: no_server_error }
+  - assert: >-
+      The response is loan L-1044 for Theo Lindqvist, now out with the borrower
+      after being approved by Rowan Ellis, still due back on 2026-03-30 with
+      34100 cents due at pickup.

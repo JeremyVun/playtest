@@ -1,0 +1,1646 @@
+{
+  "trial": 1,
+  "round": 1,
+  "shuffle_seed": 1001,
+  "judged_at": "2026-07-30T21:42:45.642Z",
+  "claims": [
+    {
+      "claim_id": "C001",
+      "arm": "P",
+      "source_items": [
+        "I001"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTC1JR57KHXK6YWNAWYFFH5",
+          "state": "new"
+        }
+      ],
+      "text": "The detail view of a loan awaiting approval does not surface any way for a supervisor to decline it. Evidence (title): \"Pending-approval loan detail does not expose supervisor decline action\" (Category: broken_navigation, Severity: major).",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "not-a-bug",
+      "fault_id": null,
+      "confidence": "medium",
+      "rationale": "The loan detail's actions object has no decline affordance by design: openapi's LoanActions schema defines no decline field, and decline is a documented operation at POST /api/approvals/{id}/decline. Verified on clean that a pending_approval loan's actions match the schema; neither document is violated.",
+      "override": null
+    },
+    {
+      "claim_id": "C002",
+      "arm": "P",
+      "source_items": [
+        "I002"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTE5ABC317NZDY1HNGX4AHF",
+          "state": "new"
+        }
+      ],
+      "text": "Draft/borrower creation is blocked because the required `department` field's allowed values are not discoverable: the validation error names no valid options and no endpoint lists them. Evidence (title): \"The mission was blocked at borrower creation: `POST /api/loan-drafts` requires `department`, but validation only says `Choose a department.` and no tried endpoint exposed the allow\" (Category: expectation_violation, Severity: major).",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "not-a-bug",
+      "fault_id": null,
+      "confidence": "high",
+      "rationale": "The claim that no endpoint exposes the allowed departments is false: openapi documents the Department enum and GET /api/session returns the seven departments (verified on clean). The 'Choose a department.' message is the exact SPEC 7.1 wording.",
+      "override": null
+    },
+    {
+      "claim_id": "C003",
+      "arm": "P",
+      "source_items": [
+        "I003"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTC6QTBDDDA936V7V5DFC25",
+          "state": "new"
+        }
+      ],
+      "text": "The overview metric chargesBookedTodayCents omits late fees that were booked today. Evidence (title): \"Overview excludes booked late fees from chargesBookedTodayCents\" (Category: data_mismatch, Severity: major).",
+      "duplicate_of": null,
+      "verdict": "seeded",
+      "sublabel": null,
+      "fault_id": "f-charges-late-fee",
+      "confidence": "high",
+      "rationale": "Matches the catalog fault exactly: late fees charged at check-in never reach the chargesBookedTodayCents metric, violating R6.",
+      "override": null
+    },
+    {
+      "claim_id": "C004",
+      "arm": "P",
+      "source_items": [
+        "I004"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTBFWQRHTDK8PE7E0EHVVK1",
+          "state": "new"
+        }
+      ],
+      "text": "Newly created loan drafts are wrongly reported as expired when working through the equipment step. Evidence (title): \"Fresh loan drafts incorrectly reported as expired during equipment step\" (Category: data_mismatch, Severity: major).",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "not-a-bug",
+      "fault_id": null,
+      "confidence": "medium",
+      "rationale": "Not reproducible on clean: a freshly created draft accepts a schedule PATCH with 200 and a full preview. No catalog fault touches draft expiry; the 'expired' responses were most likely 404s for a consumed or mistyped draft id.",
+      "override": null
+    },
+    {
+      "claim_id": "C005",
+      "arm": "P",
+      "source_items": [
+        "I005"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTCB7DMCJT225B08KW18FN5",
+          "state": "new"
+        }
+      ],
+      "text": "The loans register's status=out filter omits loans that are out but overdue. Evidence (title): \"Out-loans filter excludes overdue loans\" (Category: expectation_violation, Severity: major).",
+      "duplicate_of": null,
+      "verdict": "seeded",
+      "sublabel": null,
+      "fault_id": "f-out-filter-drops-overdue",
+      "confidence": "high",
+      "rationale": "Matches the catalog fault: the status=out filter omits the overdue out loan (L-1042). Clean returns all three out loans for status=out.",
+      "override": null
+    },
+    {
+      "claim_id": "C006",
+      "arm": "F",
+      "source_items": [
+        "I006"
+      ],
+      "provenance": [
+        {
+          "arm": "F",
+          "item_n": 14,
+          "ref": "POST /api/loans/{id}/extend"
+        }
+      ],
+      "text": "405 Method Not Allowed responses to unsupported TRACE requests lack the Allow header that RFC 9110 requires; the identical behavior and identical error body were reported on many endpoints, indicating one shared method-not-allowed handler. Evidence (POST /api/loans/{id}/extend): \"TRACE returned 405 without required `Allow` header\"; response body `{\"error\":{\"message\":\"TRACE is not allowed on this endpoint.\"}}`; reproduce with `curl -X TRACE ... http://127.0.0.1:4623/api/loans/L-1041/extend`.",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "soft-ux",
+      "fault_id": null,
+      "confidence": "medium",
+      "rationale": "Verified the clean reference also returns 405 without an Allow header, but neither SPEC.md nor openapi.json promises that header; openapi documents the 405 error body only. The RFC 9110 appeal is a reasonable-expectation/polish argument, which this study does not credit.",
+      "override": null
+    },
+    {
+      "claim_id": "C007",
+      "arm": "P",
+      "source_items": [
+        "I007"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTEZ1PRM27NWRK8QRT6CANC",
+          "state": "new"
+        }
+      ],
+      "text": "The once-only loan extension rule is not enforced: a loan can be extended more than once, producing an impossible lifecycle state. Evidence (title): \"The once-only extension rule is not enforced, allowing an impossible loan lifecycle state.\" (Category: expectation_violation, Severity: major).",
+      "duplicate_of": null,
+      "verdict": "seeded",
+      "sublabel": null,
+      "fault_id": "f-extend-limit-off-by-one",
+      "confidence": "high",
+      "rationale": "Matches the catalog fault: the once-only extension rule (R10) is not enforced and a second extension is accepted. Clean refuses the second extension with 409.",
+      "override": null
+    },
+    {
+      "claim_id": "C008",
+      "arm": "F",
+      "source_items": [
+        "I008"
+      ],
+      "provenance": [
+        {
+          "arm": "F",
+          "item_n": 17,
+          "ref": "GET /api/equipment/{id}"
+        }
+      ],
+      "text": "Same missing-Allow-header defect on GET /api/equipment/{id}: \"TRACE returned 405 without required `Allow` header\"; body `{\"error\":{\"message\":\"TRACE is not allowed on this endpoint.\"}}` (curl -X TRACE http://127.0.0.1:4623/api/equipment/cam-c70).",
+      "duplicate_of": "C006",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C006",
+      "override": null
+    },
+    {
+      "claim_id": "C009",
+      "arm": "P",
+      "source_items": [
+        "I009"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTC6QTC8C399MTRG1YVAGPG",
+          "state": "new"
+        }
+      ],
+      "text": "The desk overview endpoint is not discoverable at its intuitive paths: `/api/desk/overview` and `/api/desk` return 404, and only `/api/overview` works. Evidence (title): \"The API path for the desk overview was not discoverable from the task wording: `/api/desk/overview` and `/api/desk` both returned 404 before `/api/overview` worked.\" (Category: expectation_violation, Severity: minor).",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "soft-ux",
+      "fault_id": null,
+      "confidence": "medium",
+      "rationale": "The overview endpoint is documented at /api/overview in the openapi document every system received; 404 on undocumented guessed paths is correct behavior. Path-naming discoverability is a preference, not a SPEC/openapi violation.",
+      "override": null
+    },
+    {
+      "claim_id": "C010",
+      "arm": "F",
+      "source_items": [
+        "I010"
+      ],
+      "provenance": [
+        {
+          "arm": "F",
+          "item_n": 2,
+          "ref": "POST /api/loan-drafts"
+        }
+      ],
+      "text": "POST /api/loan-drafts rejected a request the testing tool considered schema-compliant, returning 400 for a non-fairmont email address. Evidence: \"[400] Bad Request: `{\\\"error\\\":{\\\"message\\\":\\\"Check the highlighted fields.\\\",\\\"fields\\\":{\\\"email\\\":\\\"Borrower email must be a fairmont.edu address.\\\"}}}`\" for email `tfg&siIY@e.education`; tool expected 2xx/401/403/404/409/5xx.",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "not-a-bug",
+      "fault_id": null,
+      "confidence": "high",
+      "rationale": "Rejecting a non-fairmont.edu email with exactly this 400 body is required behavior: SPEC 7.1 and the openapi createDraft 400 example both specify 'Borrower email must be a fairmont.edu address.' The fuzzer's expectation was wrong.",
+      "override": null
+    },
+    {
+      "claim_id": "C011",
+      "arm": "P",
+      "source_items": [
+        "I011"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTEZ1PY7G6B4705ZJNPH8WY",
+          "state": "new"
+        }
+      ],
+      "text": "Coverage/praise note, no defect asserted: wrong-state lifecycle guards mostly held. Evidence (title): \"Wrong-state lifecycle guards mostly held with clear refusals for early pickup, overdue extension, ready-loan check-in, returned-loan cancellation, repeat cancellation, and repeat c\" (Category: expectation_violation, Severity: info).",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "not-a-bug",
+      "fault_id": null,
+      "confidence": "high",
+      "rationale": "A coverage/praise note reporting that lifecycle guards held; no defect is asserted.",
+      "override": null
+    },
+    {
+      "claim_id": "C012",
+      "arm": "C",
+      "source_items": [
+        "I012"
+      ],
+      "provenance": [
+        {
+          "arm": "C",
+          "bug_n": 11
+        }
+      ],
+      "text": "Requesting a nonexistent equipment item returns a loan-specific error message instead of an equipment-specific one. Evidence: \"Send GET /api/equipment/cam-nonexistent ... The API returns HTTP 404, but the JSON body says {\\\"error\\\":{\\\"message\\\":\\\"That loan does not exist.\\\"}}, which would mislead clients and operators because the request was for an equipment item, not a loan.\" (Severity: low).",
+      "duplicate_of": null,
+      "verdict": "seeded",
+      "sublabel": null,
+      "fault_id": "f-equipment-missing-message",
+      "confidence": "high",
+      "rationale": "Matches the catalog fault: an unknown equipment id is refused with the loans sentence 'That loan does not exist.' instead of the equipment sentence. Clean returns 'That equipment item does not exist.'",
+      "override": null
+    },
+    {
+      "claim_id": "C013",
+      "arm": "P",
+      "source_items": [
+        "I013"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTCB7DNSTD67NJS2MAYRRPG",
+          "state": "new"
+        }
+      ],
+      "text": "Restates the desk-overview path discoverability issue: \"The intuitive `/api/desk/overview` endpoint returned 404 `No such endpoint`, forcing endpoint guessing before reaching the working `/api/overview` resource.\" (Category: expectation_violation, Severity: minor).",
+      "duplicate_of": "C009",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C009",
+      "override": null
+    },
+    {
+      "claim_id": "C014",
+      "arm": "P",
+      "source_items": [
+        "I014"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTD353Y6R4050DAHZXR7YP7",
+          "state": "new"
+        }
+      ],
+      "text": "Restates the missing-equipment error-message issue: \"Missing equipment endpoint returns loan-specific error message\" (Category: expectation_violation, Severity: major).",
+      "duplicate_of": "C012",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C012",
+      "override": null
+    },
+    {
+      "claim_id": "C015",
+      "arm": "P",
+      "source_items": [
+        "I015"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTEZ1PT6P8XE12QKXJT3YTM",
+          "state": "new"
+        }
+      ],
+      "text": "The overview's `unitsTotal` metric reports the currently available unit count rather than the fixed catalogue total. Evidence (title): \"Overview `unitsTotal` reports the currently available count rather than the fixed catalogue total.\" (Category: data_mismatch, Severity: major).",
+      "duplicate_of": null,
+      "verdict": "seeded",
+      "sublabel": null,
+      "fault_id": "f-overview-units-total",
+      "confidence": "high",
+      "rationale": "Matches the catalog fault: unitsTotal mirrors the available count (40) instead of the fixed 53-unit catalogue total. Clean reports unitsTotal 53, unitsAvailable 40.",
+      "override": null
+    },
+    {
+      "claim_id": "C016",
+      "arm": "C",
+      "source_items": [
+        "I016"
+      ],
+      "provenance": [
+        {
+          "arm": "C",
+          "bug_n": 8
+        }
+      ],
+      "text": "Restates the chargesBookedTodayCents/late-fee omission with concrete evidence: \"Send POST /api/loans/L-1042/checkin with body {\\\"condition\\\":\\\"damaged\\\",...} ... the response reports lateFeeCents = 6000 ... the next overview still reports chargesBookedTodayCents = 118400, unchanged from before the check-in.\" (Severity: medium).",
+      "duplicate_of": "C003",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C003",
+      "override": null
+    },
+    {
+      "claim_id": "C017",
+      "arm": "P",
+      "source_items": [
+        "I017"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTC1JR57KHXK6YWNAWYFFHM",
+          "state": "new"
+        }
+      ],
+      "text": "Restates the desk-overview path issue: \"Desk overview endpoint returns 404\" (Category: broken_navigation, Severity: major).",
+      "duplicate_of": "C009",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C009",
+      "override": null
+    },
+    {
+      "claim_id": "C018",
+      "arm": "F",
+      "source_items": [
+        "I018"
+      ],
+      "provenance": [
+        {
+          "arm": "F",
+          "item_n": 10,
+          "ref": "POST /api/approvals/{id}/approve"
+        }
+      ],
+      "text": "Same missing-Allow-header defect on POST /api/approvals/{id}/approve: \"TRACE returned 405 without required `Allow` header\"; body `{\"error\":{\"message\":\"TRACE is not allowed on this endpoint.\"}}` (curl to /api/approvals/L-1044/approve).",
+      "duplicate_of": "C006",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C006",
+      "override": null
+    },
+    {
+      "claim_id": "C019",
+      "arm": "P",
+      "source_items": [
+        "I019"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTEW9980SB4YDQE8WZ01MWQ",
+          "state": "new"
+        }
+      ],
+      "text": "Restates the unitsTotal defect: \"Overview metrics.unitsTotal repeatedly mirrored current availability rather than the fixed 53-unit catalogue total, including after baseline and each inventory-changing mutation.\" (Category: expectation_violation, Severity: major).",
+      "duplicate_of": "C015",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C015",
+      "override": null
+    },
+    {
+      "claim_id": "C020",
+      "arm": "C",
+      "source_items": [
+        "I020"
+      ],
+      "provenance": [
+        {
+          "arm": "C",
+          "bug_n": 9
+        }
+      ],
+      "text": "The equipment availableOnly filter returns items with zero available units. Evidence: \"Send GET /api/equipment?availableOnly=1 ... The response includes sup-gimbal / DJI RS 4 Pro Gimbal with availableUnits = 0 even though filters.availableOnly is true.\" (Severity: medium).",
+      "duplicate_of": null,
+      "verdict": "seeded",
+      "sublabel": null,
+      "fault_id": "f-available-filter-ignored",
+      "confidence": "high",
+      "rationale": "Matches the catalog fault: with availableOnly on, the fully-booked DJI RS 4 Pro Gimbal (0 available units) is still returned, i.e. the availability filter does not exclude unavailable items. Clean excludes it (11 items).",
+      "override": null
+    },
+    {
+      "claim_id": "C021",
+      "arm": "C",
+      "source_items": [
+        "I021"
+      ],
+      "provenance": [
+        {
+          "arm": "C",
+          "bug_n": 6
+        }
+      ],
+      "text": "The loan detail's actions.canCancel flag contradicts the cancellation rules (only loans awaiting approval or ready for pickup may be cancelled). Evidence: \"Send POST /api/loans/L-1043/cancel ... The cancel response returns L-1043 with status \\\"cancelled\\\" but actions.canCancel = true.\" (Severity: medium). Related duplicate reports show the same flag wrong in the opposite direction on pending-approval loans.",
+      "duplicate_of": null,
+      "verdict": "seeded",
+      "sublabel": null,
+      "fault_id": "f-cancel-button-missing",
+      "confidence": "medium",
+      "rationale": "The claim reports the canCancel affordance inverted against R12 - false on pending-approval loans (the fault's manifestation: cancel offered nowhere it should be) and true on a cancelled loan. Clean shows canCancel true for pending_approval and false after cancel, so neither direction occurs there; this is the cancel-affordance fault surfacing on the API's actions flags.",
+      "override": null
+    },
+    {
+      "claim_id": "C022",
+      "arm": "F",
+      "source_items": [
+        "I022"
+      ],
+      "provenance": [
+        {
+          "arm": "F",
+          "item_n": 19,
+          "ref": "GET /api/loan-drafts/{id}"
+        }
+      ],
+      "text": "Same missing-Allow-header defect on GET /api/loan-drafts/{id}: \"TRACE returned 405 without required `Allow` header\"; body `{\"error\":{\"message\":\"TRACE is not allowed on this endpoint.\"}}` (curl to /api/loan-drafts/D-1).",
+      "duplicate_of": "C006",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C006",
+      "override": null
+    },
+    {
+      "claim_id": "C023",
+      "arm": "P",
+      "source_items": [
+        "I023"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTBFWQQRA654ZJDY2PDBBMN",
+          "state": "new"
+        }
+      ],
+      "text": "The loan-draft PATCH endpoint rejects updates that should be valid. Evidence (title): \"Loan-draft PATCH endpoint rejects valid updates\" (Category: expectation_violation, Severity: major).",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "not-a-bug",
+      "fault_id": null,
+      "confidence": "low",
+      "rationale": "Too vague to name a defect and not reproducible: clean accepts a well-formed schedule PATCH with 200. No catalog fault makes valid draft updates fail; the rejected updates were most likely genuinely invalid (wrong step name or fields).",
+      "override": null
+    },
+    {
+      "claim_id": "C024",
+      "arm": "C",
+      "source_items": [
+        "I024"
+      ],
+      "provenance": [
+        {
+          "arm": "C",
+          "bug_n": 1
+        }
+      ],
+      "text": "Restates the unitsTotal defect with concrete numbers: \"Send GET /api/overview ... Response has metrics.unitsAvailable = 40 and metrics.unitsTotal = 40, contradicting the documented catalogue total and the story expectation of 53 total units.\" (Severity: medium).",
+      "duplicate_of": "C015",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C015",
+      "override": null
+    },
+    {
+      "claim_id": "C025",
+      "arm": "P",
+      "source_items": [
+        "I025"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTEW996E1WMFNE6904XNWFY",
+          "state": "new"
+        }
+      ],
+      "text": "Late business-day counting is off by one: the due date itself is counted as a late day, so late-day counts and late fees violate the business-day and due-date rules (nonzero late days on due-today loans, inflated fees on overdue loans). Evidence (title): \"Late fees ignore business-day and due-date rules\" (Category: data_mismatch, Severity: major).",
+      "duplicate_of": null,
+      "verdict": "seeded",
+      "sublabel": null,
+      "fault_id": "f-late-fee-day-count",
+      "confidence": "high",
+      "rationale": "Matches the catalog fault: late business days are counted one day too many (the due date itself counted late), giving 4 days/$60.00 on L-1042 instead of R8's 3 days/$45.00, and nonzero late days on due-today loans.",
+      "override": null
+    },
+    {
+      "claim_id": "C026",
+      "arm": "P",
+      "source_items": [
+        "I026"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTEZ1PVKRDTPCK8ZB68QV9H",
+          "state": "new"
+        }
+      ],
+      "text": "Restates the chargesBookedTodayCents omission: \"Overview `chargesBookedTodayCents` ignores late fees booked by check-ins.\" (Category: data_mismatch, Severity: major).",
+      "duplicate_of": "C003",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C003",
+      "override": null
+    },
+    {
+      "claim_id": "C027",
+      "arm": "P",
+      "source_items": [
+        "I027"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTDA9ZYJG0ZY5QV4EMPNPK2",
+          "state": "new"
+        }
+      ],
+      "text": "The loans register reports an incorrect shownCount. Evidence (title): \"Loans register shownCount is incorrect\" (Category: expectation_violation, Severity: major).",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": "low",
+      "rationale": "The only wrong shownCount on the loans register is the status=out list showing 2 instead of 3 because the overdue loan is dropped - the same defect already credited to C005 (f-out-filter-drops-overdue). Clean shownCount values are otherwise correct (8 unfiltered, 3 for out).",
+      "override": null
+    },
+    {
+      "claim_id": "C028",
+      "arm": "F",
+      "source_items": [
+        "I028"
+      ],
+      "provenance": [
+        {
+          "arm": "F",
+          "item_n": 16,
+          "ref": "POST /api/loans/{id}/pickup"
+        }
+      ],
+      "text": "Same missing-Allow-header defect on POST /api/loans/{id}/pickup: \"TRACE returned 405 without required `Allow` header\"; body `{\"error\":{\"message\":\"TRACE is not allowed on this endpoint.\"}}` (curl to /api/loans/L-1043/pickup).",
+      "duplicate_of": "C006",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C006",
+      "override": null
+    },
+    {
+      "claim_id": "C029",
+      "arm": "F",
+      "source_items": [
+        "I029"
+      ],
+      "provenance": [
+        {
+          "arm": "F",
+          "item_n": 13,
+          "ref": "POST /api/loans/{id}/checkin"
+        }
+      ],
+      "text": "Same missing-Allow-header defect on POST /api/loans/{id}/checkin: \"TRACE returned 405 without required `Allow` header\"; body `{\"error\":{\"message\":\"TRACE is not allowed on this endpoint.\"}}` (curl to /api/loans/L-1042/checkin).",
+      "duplicate_of": "C006",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C006",
+      "override": null
+    },
+    {
+      "claim_id": "C030",
+      "arm": "P",
+      "source_items": [
+        "I030"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTE5ABDPYKFQFCPT4C6HAMB",
+          "state": "new"
+        }
+      ],
+      "text": "The inventory/catalogue surface is not discoverable under the story's domain language: several intuitive paths 404 before the working endpoint is found. Evidence (title): \"Inventory discovery did not match the story's domain language: `/api/catalogue`, `/api/items`, and `/api/catalog` all 404ed before the usable inventory surface was found at `/api/e\" (truncated; Category: expectation_violation, Severity: minor).",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "soft-ux",
+      "fault_id": null,
+      "confidence": "medium",
+      "rationale": "The catalogue is documented at /api/equipment in the provided openapi document; 404 on guessed undocumented paths is correct. Naming/discoverability is a preference, not a SPEC/openapi violation.",
+      "override": null
+    },
+    {
+      "claim_id": "C031",
+      "arm": "P",
+      "source_items": [
+        "I031"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTC6QTBDDDA936V7V5DFC2A",
+          "state": "new"
+        }
+      ],
+      "text": "Restates the unitsTotal defect: \"Overview reports unitsAvailable as unitsTotal\" (Category: data_mismatch, Severity: minor).",
+      "duplicate_of": "C015",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C015",
+      "override": null
+    },
+    {
+      "claim_id": "C032",
+      "arm": "F",
+      "source_items": [
+        "I032"
+      ],
+      "provenance": [
+        {
+          "arm": "F",
+          "item_n": 6,
+          "ref": "GET /api/equipment"
+        }
+      ],
+      "text": "GET /api/equipment accepts an invalid enum value for the `category` query parameter instead of rejecting it. Evidence: \"Invalid component: parameter `category` in query - category: Invalid enum value ... [200] OK: `{\\\"items\\\":[],\\\"totalCount\\\":12,\\\"shownCount\\\":0,\\\"filters\\\":{\\\"q\\\":\\\"\\\",\\\"category\\\":\\\"AAA\\\",\\\"availableOnly\\\":false}}`\" (curl 'http://127.0.0.1:4623/api/equipment?category=AAA'); tool expected a 4xx/5xx rejection.",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "not-a-bug",
+      "fault_id": null,
+      "confidence": "high",
+      "rationale": "Documented behavior: openapi's category parameter says 'A value outside the category list matches nothing.' Clean returns 200 with an empty list for category=AAA, exactly as observed.",
+      "override": null
+    },
+    {
+      "claim_id": "C033",
+      "arm": "P",
+      "source_items": [
+        "I033"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTEZ1Q0V8SAJPQMA1KNH4Q9",
+          "state": "new"
+        }
+      ],
+      "text": "Praise/coverage note, no defect asserted: \"Catalogue availability itself stayed coherent through lifecycle mutations and returned to 53/53 at the end.\" (Category: expectation_violation, Severity: info).",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "not-a-bug",
+      "fault_id": null,
+      "confidence": "high",
+      "rationale": "A praise/coverage note about availability staying coherent; no defect is asserted.",
+      "override": null
+    },
+    {
+      "claim_id": "C034",
+      "arm": "F",
+      "source_items": [
+        "I034"
+      ],
+      "provenance": [
+        {
+          "arm": "F",
+          "item_n": 3,
+          "ref": "POST /api/loan-drafts/{id}/submit"
+        }
+      ],
+      "text": "POST /api/loan-drafts/{id}/submit rejected a request the testing tool considered schema-compliant (an empty body), returning 400. Evidence: \"[400] Bad Request: `{\\\"error\\\":{\\\"message\\\":\\\"Check the highlighted fields.\\\",\\\"fields\\\":{\\\"items\\\":\\\"Add at least one item to this loan.\\\"}}}`\" (curl -X POST -d '{}' http://127.0.0.1:4623/api/loan-drafts/D-1/submit); tool expected 2xx/401/403/404/409/5xx.",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "not-a-bug",
+      "fault_id": null,
+      "confidence": "high",
+      "rationale": "Submitting a draft with no items must fail: the openapi submitDraft 400 example is exactly this body ('Add at least one item to this loan.'), matching SPEC 7.2. The fuzzer's expectation was wrong.",
+      "override": null
+    },
+    {
+      "claim_id": "C035",
+      "arm": "F",
+      "source_items": [
+        "I035"
+      ],
+      "provenance": [
+        {
+          "arm": "F",
+          "item_n": 11,
+          "ref": "POST /api/approvals/{id}/decline"
+        }
+      ],
+      "text": "Same missing-Allow-header defect on POST /api/approvals/{id}/decline: \"TRACE returned 405 without required `Allow` header\"; body `{\"error\":{\"message\":\"TRACE is not allowed on this endpoint.\"}}` (curl to /api/approvals/L-1045/decline).",
+      "duplicate_of": "C006",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C006",
+      "override": null
+    },
+    {
+      "claim_id": "C036",
+      "arm": "P",
+      "source_items": [
+        "I036"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTC6QTAQ7BFN48R8CTQM8FM",
+          "state": "new"
+        }
+      ],
+      "text": "Restates the off-by-one late-day counting defect: \"Late-business-day calculation counts one day too early\" (Category: expectation_violation, Severity: major).",
+      "duplicate_of": "C025",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C025",
+      "override": null
+    },
+    {
+      "claim_id": "C037",
+      "arm": "F",
+      "source_items": [
+        "I037"
+      ],
+      "provenance": [
+        {
+          "arm": "F",
+          "item_n": 9,
+          "ref": "GET /api/session"
+        }
+      ],
+      "text": "Same missing-Allow-header defect on GET /api/session: \"TRACE returned 405 without required `Allow` header\"; body `{\"error\":{\"message\":\"TRACE is not allowed on this endpoint.\"}}` (curl -X TRACE http://127.0.0.1:4623/api/session).",
+      "duplicate_of": "C006",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C006",
+      "override": null
+    },
+    {
+      "claim_id": "C038",
+      "arm": "P",
+      "source_items": [
+        "I038"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTA87R0QWMH33MM7RRDYMVF",
+          "state": "new"
+        }
+      ],
+      "text": "Restates the missing/undiscoverable approve-decline affordance on the loan API: \"Approval and decline transitions are undiscoverable from the loan API\" (Category: expectation_violation, Severity: major).",
+      "duplicate_of": "C001",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C001",
+      "override": null
+    },
+    {
+      "claim_id": "C039",
+      "arm": "F",
+      "source_items": [
+        "I039"
+      ],
+      "provenance": [
+        {
+          "arm": "F",
+          "item_n": 20,
+          "ref": "PATCH /api/loan-drafts/{id}"
+        }
+      ],
+      "text": "PATCH /api/loan-drafts/{id} returns an undocumented 500 Internal Server Error for certain bodies. Evidence: \"Received: 500; Documented: 200, 400, 404, 405 ... [500] Internal Server Error: `{\\\"error\\\":{\\\"message\\\":\\\"The desk system hit an unexpected problem.\\\"}}`\"; reproduced with body `{\"lines\": [null], \"loanDays\": 1, \"pickupDate\": \"2000-01-01\", \"step\": \"schedule\"}` against /api/loan-drafts/D-1.",
+      "duplicate_of": null,
+      "verdict": "latent",
+      "sublabel": null,
+      "fault_id": null,
+      "confidence": "high",
+      "rationale": "Verified on the clean reference: PATCH /api/loan-drafts/D-1 with body {\"lines\":[null],\"loanDays\":1,\"pickupDate\":\"2000-01-01\",\"step\":\"schedule\"} returns 500 'The desk system hit an unexpected problem.' The openapi document lists only 200/400/404/405 for this operation, so a null line crashing the server instead of a field validation is an undocumented real defect not in the fault catalog.",
+      "override": null
+    },
+    {
+      "claim_id": "C040",
+      "arm": "P",
+      "source_items": [
+        "I040"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTEZ1PY7G6B4705ZJNPH8WS",
+          "state": "new"
+        }
+      ],
+      "text": "Restates the off-by-one late-day counting defect as its due-today symptom: \"A due-today loan reports nonzero late business days before it is overdue.\" (Category: data_mismatch, Severity: minor).",
+      "duplicate_of": "C025",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C025",
+      "override": null
+    },
+    {
+      "claim_id": "C041",
+      "arm": "C",
+      "source_items": [
+        "I041"
+      ],
+      "provenance": [
+        {
+          "arm": "C",
+          "bug_n": 12
+        }
+      ],
+      "text": "Draft scheduling fails to roll a weekend due date forward: a 1-day Friday pickup is due on Sunday instead of Monday. Evidence: \"Update it again: PATCH /api/loan-drafts/D-3 with ... \\\"loanDays\\\":1,\\\"pickupDate\\\":\\\"2026-03-20\\\" ... The second schedule update returns preview.dueDate = \\\"2026-03-22\\\" and preview.dueAt = \\\"2026-03-22T17:00:00Z\\\", which is Sunday while the desk is closed.\" A prior 3-day update on the same draft \"correctly rolls to 2026-03-23\". (Severity: high).",
+      "duplicate_of": null,
+      "verdict": "seeded",
+      "sublabel": null,
+      "fault_id": "f-saturday-roll-short",
+      "confidence": "high",
+      "rationale": "Matches the catalog fault exactly: a 1-day Friday 2026-03-20 pickup lands on Saturday and is rolled only one day to Sunday 2026-03-22 instead of Monday 2026-03-23 (R3). Clean returns 2026-03-23.",
+      "override": null
+    },
+    {
+      "claim_id": "C042",
+      "arm": "P",
+      "source_items": [
+        "I042"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTE5ABC317NZDY1HNGX4AH9",
+          "state": "new"
+        }
+      ],
+      "text": "Unknown subroutes under /api/loan-drafts are misrouted and answered as if the draft ID were expired. Evidence (title): \"Unknown loan-drafts subroutes are handled as expired draft IDs\" (Category: expectation_violation, Severity: minor).",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "not-a-bug",
+      "fault_id": null,
+      "confidence": "medium",
+      "rationale": "Not reproducible on clean: unknown loan-drafts subroutes (e.g. /api/loan-drafts/D-1/lines, /D-1/step-two) return 404 {\"error\":{\"message\":\"No such endpoint.\"}}, not the expired-draft message. No catalog fault covers routing, and no SPEC/openapi rule is shown violated.",
+      "override": null
+    },
+    {
+      "claim_id": "C043",
+      "arm": "C",
+      "source_items": [
+        "I043"
+      ],
+      "provenance": [
+        {
+          "arm": "C",
+          "bug_n": 2
+        }
+      ],
+      "text": "Restates the out-filter/overdue omission with concrete evidence: \"GET /api/loans?status=out returns only L-1048 and L-1041 with shownCount 2. It omits L-1042 even though /api/overview shows L-1042 has status \\\"out\\\" and is overdue.\" Expected L-1048, L-1042, L-1041 with shownCount 3. (Severity: medium).",
+      "duplicate_of": "C005",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C005",
+      "override": null
+    },
+    {
+      "claim_id": "C044",
+      "arm": "F",
+      "source_items": [
+        "I044"
+      ],
+      "provenance": [
+        {
+          "arm": "F",
+          "item_n": 7,
+          "ref": "GET /api/loans"
+        }
+      ],
+      "text": "GET /api/loans accepts an invalid enum value for the `status` query parameter instead of rejecting it, silently returning loans. Evidence: \"Invalid component: parameter `status` in query - status: Invalid enum value ... [200] OK: `{\\\"loans\\\":[{\\\"id\\\":\\\"L-1048\\\",...\" (curl 'http://127.0.0.1:4623/api/loans?status=AAA'); tool expected a 4xx/5xx rejection.",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "not-a-bug",
+      "fault_id": null,
+      "confidence": "high",
+      "rationale": "Documented behavior: openapi's status parameter says an unrecognised value falls back to 'all' and the echoed filters.status reports the value applied. Clean does exactly this for status=AAA (all 8 loans, filters.status 'all').",
+      "override": null
+    },
+    {
+      "claim_id": "C045",
+      "arm": "P",
+      "source_items": [
+        "I045"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTC1JR4VCSBJ4TMDK3HYQN9",
+          "state": "new"
+        }
+      ],
+      "text": "The decline action does not actually issue the approvals decline request. Evidence (title): \"Decline action never sends the approvals decline request\" (Category: expectation_violation, Severity: major).",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "harness-artifact",
+      "fault_id": null,
+      "confidence": "low",
+      "rationale": "The decline operation works on the clean reference (POST /api/approvals/L-1045/decline with a reason returns 200 and moves the loan to declined). 'Never sends the approvals decline request' describes the testing client failing to issue the call, not an API behavior; no product defect is demonstrated.",
+      "override": null
+    },
+    {
+      "claim_id": "C046",
+      "arm": "P",
+      "source_items": [
+        "I046"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTD6CVKFJ38B3KNW881Y3B2",
+          "state": "new"
+        }
+      ],
+      "text": "Restates the extension-rule defect as its action-flag symptom: \"After the first successful extension, the loan already had extensionsUsed: 1 but actions.canExtend still remained true and advertised an extendedDueDate of 2026-04-02, misleading t\" (truncated; Category: expectation_violation, Severity: minor).",
+      "duplicate_of": "C007",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C007",
+      "override": null
+    },
+    {
+      "claim_id": "C047",
+      "arm": "C",
+      "source_items": [
+        "I047"
+      ],
+      "provenance": [
+        {
+          "arm": "C",
+          "bug_n": 7
+        }
+      ],
+      "text": "Restates the once-only-extension defect with concrete evidence: \"Send POST /api/loans/L-1048/extend ... again. ... The first extension succeeds, but the response still advertises actions.canExtend = true and extendedDueDate = 2026-04-02. The second POST also succeeds with HTTP 200, moves the due date to 2026-04-02, and sets extensionsUsed = 2.\" Expected the second extension to be refused with HTTP 409. (Severity: high).",
+      "duplicate_of": "C007",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C007",
+      "override": null
+    },
+    {
+      "claim_id": "C048",
+      "arm": "P",
+      "source_items": [
+        "I048"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTAVW135QJSEFY2KPM23776",
+          "state": "new"
+        }
+      ],
+      "text": "Ambiguous/truncated statement about the review step flagging that approval is required: \"the review flags that approval is required, for both reasons\" (Category: expectation_violation, Severity: major). No further defect detail is given; carried verbatim for classification.",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "not-a-bug",
+      "fault_id": null,
+      "confidence": "medium",
+      "rationale": "As written it describes correct behavior: R5 requires a loan tripping both approval rules to show both reasons. No wrongness is articulated.",
+      "override": null
+    },
+    {
+      "claim_id": "C049",
+      "arm": "F",
+      "source_items": [
+        "I049"
+      ],
+      "provenance": [
+        {
+          "arm": "F",
+          "item_n": 12,
+          "ref": "POST /api/loans/{id}/cancel"
+        }
+      ],
+      "text": "Same missing-Allow-header defect on POST /api/loans/{id}/cancel: \"TRACE returned 405 without required `Allow` header\"; body `{\"error\":{\"message\":\"TRACE is not allowed on this endpoint.\"}}` (curl to /api/loans/L-1043/cancel).",
+      "duplicate_of": "C006",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C006",
+      "override": null
+    },
+    {
+      "claim_id": "C050",
+      "arm": "P",
+      "source_items": [
+        "I050"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTEZ1PWPHF50S4HZSTVA924",
+          "state": "new"
+        }
+      ],
+      "text": "Restates the loan action-flags defect in general terms: \"Loan action flags contradict lifecycle rules, which can lead clients to hide valid actions or show invalid ones.\" (Category: data_mismatch, Severity: minor).",
+      "duplicate_of": "C021",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C021",
+      "override": null
+    },
+    {
+      "claim_id": "C051",
+      "arm": "F",
+      "source_items": [
+        "I051"
+      ],
+      "provenance": [
+        {
+          "arm": "F",
+          "item_n": 4,
+          "ref": "POST /api/loan-drafts/{id}/submit"
+        }
+      ],
+      "text": "Same missing-Allow-header defect on POST /api/loan-drafts/{id}/submit: \"TRACE returned 405 without required `Allow` header\"; body `{\"error\":{\"message\":\"TRACE is not allowed on this endpoint.\"}}` (curl to /api/loan-drafts/D-1/submit).",
+      "duplicate_of": "C006",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C006",
+      "override": null
+    },
+    {
+      "claim_id": "C052",
+      "arm": "P",
+      "source_items": [
+        "I052"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTC1JR57KHXK6YWNAWYFFHE",
+          "state": "new"
+        }
+      ],
+      "text": "The cancel endpoint cancels loans that are pending approval without requiring a decline decision. Evidence (title): \"Cancel endpoint improperly cancels pending approval requests without a decline decision\" (Category: expectation_violation, Severity: major).",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "not-a-bug",
+      "fault_id": null,
+      "confidence": "high",
+      "rationale": "R12 explicitly allows cancelling a loan with status pending_approval, no decline decision required; the openapi cancelLoan description says the same. Verified on clean that cancelling pending-approval L-1044 succeeds. The observed behavior is the specified one.",
+      "override": null
+    },
+    {
+      "claim_id": "C053",
+      "arm": "P",
+      "source_items": [
+        "I053"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTD6CVHCNMX0T806PANDN3H",
+          "state": "new"
+        }
+      ],
+      "text": "Restates the once-only-extension defect: \"Loan extension endpoint permits a second extension\" (Category: expectation_violation, Severity: major).",
+      "duplicate_of": "C007",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C007",
+      "override": null
+    },
+    {
+      "claim_id": "C054",
+      "arm": "F",
+      "source_items": [
+        "I054"
+      ],
+      "provenance": [
+        {
+          "arm": "F",
+          "item_n": 8,
+          "ref": "GET /api/overview"
+        }
+      ],
+      "text": "Same missing-Allow-header defect on GET /api/overview: \"TRACE returned 405 without required `Allow` header\"; body `{\"error\":{\"message\":\"TRACE is not allowed on this endpoint.\"}}` (curl -X TRACE http://127.0.0.1:4623/api/overview).",
+      "duplicate_of": "C006",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C006",
+      "override": null
+    },
+    {
+      "claim_id": "C055",
+      "arm": "P",
+      "source_items": [
+        "I055"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTBFWQTJ74SF4SFK4ZMJAG8",
+          "state": "new"
+        }
+      ],
+      "text": "Draft creation requires the borrower name to be supplied at the top level of the request body, which the reporter found surprising. Evidence (title): \"Draft creation requires borrower name at the top level\" (Category: expectation_violation, Severity: minor).",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "not-a-bug",
+      "fault_id": null,
+      "confidence": "medium",
+      "rationale": "The documented BorrowerStepRequest shape has name/email/department at the top level of the create body; requiring them there matches openapi. A surprise about the documented shape is not a defect.",
+      "override": null
+    },
+    {
+      "claim_id": "C056",
+      "arm": "F",
+      "source_items": [
+        "I056"
+      ],
+      "provenance": [
+        {
+          "arm": "F",
+          "item_n": 1,
+          "ref": "POST /api/loan-drafts"
+        }
+      ],
+      "text": "Same missing-Allow-header defect on POST /api/loan-drafts: \"TRACE returned 405 without required `Allow` header\"; body `{\"error\":{\"message\":\"TRACE is not allowed on this endpoint.\"}}` (curl -X TRACE ... http://127.0.0.1:4623/api/loan-drafts).",
+      "duplicate_of": "C006",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C006",
+      "override": null
+    },
+    {
+      "claim_id": "C057",
+      "arm": "C",
+      "source_items": [
+        "I057"
+      ],
+      "provenance": [
+        {
+          "arm": "C",
+          "bug_n": 3
+        }
+      ],
+      "text": "Restates the off-by-one late-day counting defect with concrete evidence: \"Loan L-1042 was due on Wed 2026-03-11. With the desk clock on Mon 2026-03-16, late business days should be ... 3 days ... lateFeePreviewCents should be 4500. Observed: Both responses report lateBusinessDays = 4 and lateFeePreviewCents = 6000 for L-1042, apparently counting the due date as a late day.\" (Severity: high).",
+      "duplicate_of": "C025",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C025",
+      "override": null
+    },
+    {
+      "claim_id": "C058",
+      "arm": "P",
+      "source_items": [
+        "I058"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTD6CVJ56MCT170R1W73K5Q",
+          "state": "new"
+        }
+      ],
+      "text": "A loan extension that is rejected still mutates the loan's due date and extension count. Evidence (title): \"Rejected loan extension still mutates due date and extension count\" (Category: data_mismatch, Severity: major).",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "not-a-bug",
+      "fault_id": null,
+      "confidence": "medium",
+      "rationale": "Not reproducible on clean: both rejected-extension paths (already-extended and overdue) return 409 and leave dueDate and extensionsUsed unchanged (verified). The catalog extension fault is a second extension being accepted, not a rejected one mutating state, so this materially different description earns no seeded credit.",
+      "override": null
+    },
+    {
+      "claim_id": "C059",
+      "arm": "P",
+      "source_items": [
+        "I059"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTC6QTC8C399MTRG1YVAGPN",
+          "state": "new"
+        }
+      ],
+      "text": "Check-in required several retries because the request contract for `note` and `condition` was not published, only discoverable through field validation errors. Evidence (title): \"Check-in required several retries due to field validation around `note` and `condition`. The field-level errors helped recovery, but the workflow was not smooth without an API cont\" (truncated; Category: expectation_violation, Severity: minor).",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "soft-ux",
+      "fault_id": null,
+      "confidence": "medium",
+      "rationale": "The check-in contract (condition enum, note rule) is documented in the openapi CheckinRequest the systems received, and the field errors returned are the exact SPEC messages. Retries needed by the caller are a workflow-smoothness preference, not a SPEC/openapi violation.",
+      "override": null
+    },
+    {
+      "claim_id": "C060",
+      "arm": "P",
+      "source_items": [
+        "I060"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTAVW14E4C9875SXKRC3FW5",
+          "state": "new"
+        }
+      ],
+      "text": "The step-two draft update contract is effectively undiscoverable: PATCH requests fail with an error that does not name the allowed steps. Evidence (title): \"The step-two draft update contract was effectively undiscoverable: repeated PATCH requests to `/api/loan-drafts/D-1` only returned `400 \\\"Unknown draft step\\\"` without naming allowed\" (truncated; Category: expectation_violation, Severity: major).",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "soft-ux",
+      "fault_id": null,
+      "confidence": "medium",
+      "rationale": "'Unknown draft step.' is the exact documented 400 for an unrecognised step, and the allowed steps (borrower, schedule) are documented in the openapi updateDraft operation. Wanting the error to enumerate allowed steps is a polish suggestion.",
+      "override": null
+    },
+    {
+      "claim_id": "C061",
+      "arm": "C",
+      "source_items": [
+        "I061"
+      ],
+      "provenance": [
+        {
+          "arm": "C",
+          "bug_n": 10
+        }
+      ],
+      "text": "Restates the off-by-one late-day defect as its due-today symptom with evidence: \"The dueToday entry for L-1041 and the loan detail both show overdue = false but lateBusinessDays = 1.\" Expected lateBusinessDays = 0 for a loan due on the desk date. (Severity: medium).",
+      "duplicate_of": "C025",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C025",
+      "override": null
+    },
+    {
+      "claim_id": "C062",
+      "arm": "P",
+      "source_items": [
+        "I062"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTA87R19Z77Q6ZNEEHRGDFA",
+          "state": "new"
+        }
+      ],
+      "text": "Restates the loans status-filter validation gap: \"Unsupported loan status filters are silently ignored\" (Category: expectation_violation, Severity: minor).",
+      "duplicate_of": "C044",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C044",
+      "override": null
+    },
+    {
+      "claim_id": "C063",
+      "arm": "P",
+      "source_items": [
+        "I063"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTAVW150VPZ6ETDNE9AEGH0",
+          "state": "new"
+        }
+      ],
+      "text": "Several plausible draft-creation and add-item routes return terse, unhelpful 404/405 responses that do not guide the caller to the working endpoints. Evidence (title): \"Several plausible creation/add-item routes returned terse 405 or 404 responses (`/api/loans/drafts`, `/api/loans`, `/api/loan-drafts/D-1/lines`, `/items`, `/step-two`) with little\" (truncated; Category: expectation_violation, Severity: minor).",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "soft-ux",
+      "fault_id": null,
+      "confidence": "medium",
+      "rationale": "Terse 404/405 answers on guessed, undocumented routes are correct behavior for documented endpoints elsewhere; wanting more guidance in error bodies is a preference, and neither SPEC nor openapi is violated.",
+      "override": null
+    },
+    {
+      "claim_id": "C064",
+      "arm": "P",
+      "source_items": [
+        "I064"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTEZ1PSTKE73DK077SQFBRF",
+          "state": "new"
+        }
+      ],
+      "text": "Restates the late-fee business-day defect: \"Late fees do not follow the business-day rule.\" (Category: data_mismatch, Severity: major).",
+      "duplicate_of": "C025",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C025",
+      "override": null
+    },
+    {
+      "claim_id": "C065",
+      "arm": "F",
+      "source_items": [
+        "I065"
+      ],
+      "provenance": [
+        {
+          "arm": "F",
+          "item_n": 21,
+          "ref": "PATCH /api/loan-drafts/{id}"
+        }
+      ],
+      "text": "PATCH /api/loan-drafts/{id} rejected a fuzzed request the testing tool considered schema-compliant (containing additional undefined properties), returning 400. Evidence: \"Hint: The request body contains 2 additional properties not defined in the schema ... [400] Bad Request: `{\\\"error\\\":{\\\"message\\\":\\\"Check the highlighted fields.\\\",\\\"fields\\\":{\\\"items\\\":\\\"That equipment is no longer in the catalogue.\\\",\\\"pickupDate\\\":\\\"Pickup date must be on or before 2026-03-30.\\\"}}}`\"; the request body was fuzz data with empty/garbage equipmentIds and huge quantities.",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "not-a-bug",
+      "fault_id": null,
+      "confidence": "high",
+      "rationale": "The fuzzed body had an empty equipmentId and absurd quantities; rejecting it with 'That equipment is no longer in the catalogue.' and the pickup-date bound message is exactly the SPEC 7.2 validation. The tool's schema-compliance expectation was wrong.",
+      "override": null
+    },
+    {
+      "claim_id": "C066",
+      "arm": "F",
+      "source_items": [
+        "I066"
+      ],
+      "provenance": [
+        {
+          "arm": "F",
+          "item_n": 18,
+          "ref": "GET /api/loans/{id}"
+        }
+      ],
+      "text": "Same missing-Allow-header defect on GET /api/loans/{id}: \"TRACE returned 405 without required `Allow` header\"; body `{\"error\":{\"message\":\"TRACE is not allowed on this endpoint.\"}}` (curl -X TRACE http://127.0.0.1:4623/api/loans/L-1042).",
+      "duplicate_of": "C006",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C006",
+      "override": null
+    },
+    {
+      "claim_id": "C067",
+      "arm": "C",
+      "source_items": [
+        "I067"
+      ],
+      "provenance": [
+        {
+          "arm": "C",
+          "bug_n": 4
+        }
+      ],
+      "text": "Restates the canCancel action-flag defect in the opposite direction with evidence: \"L-1049 is returned with status \\\"pending_approval\\\" / \\\"Awaiting approval\\\", but actions.canCancel is false.\" Expected canCancel = true because cancellation is allowed for loans awaiting approval or ready for pickup. (Severity: medium).",
+      "duplicate_of": "C021",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C021",
+      "override": null
+    },
+    {
+      "claim_id": "C068",
+      "arm": "F",
+      "source_items": [
+        "I068"
+      ],
+      "provenance": [
+        {
+          "arm": "F",
+          "item_n": 5,
+          "ref": "GET /api/approvals"
+        }
+      ],
+      "text": "Same missing-Allow-header defect on GET /api/approvals: \"TRACE returned 405 without required `Allow` header\"; body `{\"error\":{\"message\":\"TRACE is not allowed on this endpoint.\"}}` (curl -X TRACE http://127.0.0.1:4623/api/approvals).",
+      "duplicate_of": "C006",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C006",
+      "override": null
+    },
+    {
+      "claim_id": "C069",
+      "arm": "P",
+      "source_items": [
+        "I069"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTA87R19Z77Q6ZNEEHRGDFF",
+          "state": "new"
+        }
+      ],
+      "text": "Restates the undiscoverability of the approve/decline operations from the approvals surface: \"`GET /api/approvals` existed and correctly returned the pending approval queue, but mutating the collection with `POST /api/approvals`, `PATCH /api/approvals`, or `PATCH /api/appro\" (truncated; Category: expectation_violation, Severity: minor).",
+      "duplicate_of": "C001",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C001",
+      "override": null
+    },
+    {
+      "claim_id": "C070",
+      "arm": "F",
+      "source_items": [
+        "I070"
+      ],
+      "provenance": [
+        {
+          "arm": "F",
+          "item_n": 15,
+          "ref": "POST /api/loans/{id}/extend"
+        }
+      ],
+      "text": "POST /api/loans/{id}/extend accepts a schema-violating request body (a bare number instead of an object) and performs the extension. Evidence: \"Invalid component: in body - violates `type` (was object, became number) ... [200] OK: `{\\\"loan\\\":{\\\"id\\\":\\\"L-1048\\\",...\\\"dueDate\\\":\\\"2026-03-26\\\",...\" (curl -X POST -d -137576790679332.0 http://127.0.0.1:4623/api/loans/L-1048/extend); tool expected a 4xx/5xx rejection.",
+      "duplicate_of": null,
+      "verdict": "invalid",
+      "sublabel": "not-a-bug",
+      "fault_id": null,
+      "confidence": "medium",
+      "rationale": "The extend request is documented with EmptyBody: 'If a body is sent it must be valid JSON; its contents are ignored.' A bare JSON number is valid JSON, so accepting it and performing a legitimate first extension matches the documented contract.",
+      "override": null
+    },
+    {
+      "claim_id": "C071",
+      "arm": "C",
+      "source_items": [
+        "I071"
+      ],
+      "provenance": [
+        {
+          "arm": "C",
+          "bug_n": 5
+        }
+      ],
+      "text": "The draft quote fails to apply the documented 10% bundle discount at the 3-unit threshold. Evidence: \"The draft has 3 units total, so the 10% bundle discount should apply. Base charge should be 5100 cents, bundleDiscountCents should be 510, and totalDueCents should be 4590. Observed: The draft preview returns baseChargeCents = 5100, bundleDiscountCents = 0, and totalDueCents = 5100.\" (Severity: high).",
+      "duplicate_of": null,
+      "verdict": "seeded",
+      "sublabel": null,
+      "fault_id": "f-bundle-threshold-off-by-one",
+      "confidence": "high",
+      "rationale": "Matches the catalog fault: a 3-unit draft gets no bundle discount (bundleDiscountCents 0, total 5100) where R4's threshold is three units. Clean returns bundleDiscountCents 510 and total 4590 for the same draft.",
+      "override": null
+    },
+    {
+      "claim_id": "C072",
+      "arm": "P",
+      "source_items": [
+        "I072"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTDQXEM5RK7XVP81NVBMVXF",
+          "state": "new"
+        }
+      ],
+      "text": "Restates the unhelpful generic 404/405 responses on plausible endpoint guesses during the task flow: \"Several plausible endpoints returned generic 404/405 endpoint errors during normal task flow, including draft creation guesses and the hyphenated check-in route. The business-rule\" (truncated; Category: expectation_violation, Severity: minor).",
+      "duplicate_of": "C063",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C063",
+      "override": null
+    },
+    {
+      "claim_id": "C073",
+      "arm": "P",
+      "source_items": [
+        "I073"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTE5ABBM94945D1KQMNXJCJ",
+          "state": "new"
+        }
+      ],
+      "text": "Restates the undiscoverable department values: \"Required borrower department values are undiscoverable\" (Category: expectation_violation, Severity: major).",
+      "duplicate_of": "C002",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C002",
+      "override": null
+    },
+    {
+      "claim_id": "C074",
+      "arm": "P",
+      "source_items": [
+        "I074"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTE5ABDPYKFQFCPT4C6HAM6",
+          "state": "new"
+        }
+      ],
+      "text": "Restates the draft-creation blockage as its downstream impact: \"Because no draft could be created, the user could not exercise the item, schedule, review, booking, date, availability, deposit, discount, or approval boundary rules at all.\" (Category: expectation_violation, Severity: major).",
+      "duplicate_of": "C002",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C002",
+      "override": null
+    },
+    {
+      "claim_id": "C075",
+      "arm": "P",
+      "source_items": [
+        "I075"
+      ],
+      "provenance": [
+        {
+          "arm": "P",
+          "finding_id": "01KYTEW997367DM1MM1474JFA7",
+          "state": "new"
+        }
+      ],
+      "text": "Restates the loan action-flags defect: \"Loan action flags contradict lifecycle transition rules\" (Category: data_mismatch, Severity: minor).",
+      "duplicate_of": "C021",
+      "verdict": "invalid",
+      "sublabel": "duplicate",
+      "fault_id": null,
+      "confidence": null,
+      "rationale": "duplicate of C021",
+      "override": null
+    }
+  ]
+}

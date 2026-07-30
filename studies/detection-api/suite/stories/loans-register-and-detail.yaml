@@ -1,0 +1,51 @@
+description: Filter the loan register by status and borrower, then read the overdue loan L-1042 in full.
+story: |
+  You are the desk supervisor at Fairmont University Media Services, chasing
+  the kit that has not come back. The desk clock is frozen at Monday 16 March
+  2026.
+
+  Read the whole loan register first. Then filter it to loans that are out;
+  then to overdue loans only; then to returned loans; then search it for the
+  borrower name "raman". Finally, open loan L-1042 in full.
+
+  You expect the register to hold 8 loans in total, and every filtered response
+  to keep reporting 8 as the register total while reporting the smaller number
+  it listed: 3 loans out (L-1048, L-1042 and L-1041, newest first), 1 overdue
+  (L-1042 only — overdue is the subset of the out loans that are past their due
+  date), 1 returned (L-1046), and 1 loan for the "raman" search (L-1041, Priya
+  Raman). You expect L-1042 itself to read as Marcus Webb of Film & Media,
+  overdue, 3 units of kit picked up on 4 March 2026 and due back on 11 March
+  2026 at 17:00, with a base charge of $231.00, a bundle discount of $23.10, a
+  refundable deposit of $669.00, a total due at pickup of $876.90, and a
+  late-fee preview of $45.00 if it comes back today.
+success:
+  - label: every register listing succeeds
+    response_status: { op: "GET /api/loans", status: "200", occurrence: all }
+  - label: the register total stays 8 under every filter
+    response_matches: { op: "GET /api/loans", match: "$.totalCount == 8", occurrence: all }
+  - label: the unfiltered register lists all 8 loans, newest first
+    response_matches: { op: "GET /api/loans", match: "$.shownCount == 8", occurrence: any }
+  - response_matches: { op: "GET /api/loans", match: '$.loans[0].id == "L-1048"', occurrence: any }
+  - label: three loans are out
+    response_matches: { op: "GET /api/loans", match: "$.shownCount == 3", occurrence: any }
+  - label: the overdue filter answers with the overdue subset only
+    response_matches: { op: "GET /api/loans", match: '$.filters.status == "overdue"', occurrence: any }
+  - label: L-1042 detail loads
+    response_status: { op: "GET /api/loans/{id}", status: "200", occurrence: last }
+  - label: L-1042 is Marcus Webb's overdue loan
+    response_matches: { op: "GET /api/loans/{id}", match: '$.loan.borrowerName == "Marcus Webb"', occurrence: last }
+  - response_matches: { op: "GET /api/loans/{id}", match: "$.loan.overdue == true", occurrence: last }
+  - response_matches: { op: "GET /api/loans/{id}", match: '$.loan.dueAt == "2026-03-11T17:00:00Z"', occurrence: last }
+  - label: the charge breakdown follows the desk's pricing rules
+    response_matches: { op: "GET /api/loans/{id}", match: "$.loan.quote.baseChargeCents == 23100", occurrence: last }
+  - response_matches: { op: "GET /api/loans/{id}", match: "$.loan.quote.bundleDiscountCents == 2310", occurrence: last }
+  - response_matches: { op: "GET /api/loans/{id}", match: "$.loan.quote.depositCents == 66900", occurrence: last }
+  - response_matches: { op: "GET /api/loans/{id}", match: "$.loan.quote.totalDueCents == 87690", occurrence: last }
+  - label: the late-fee preview is three business days at $5.00 a unit
+    response_matches: { op: "GET /api/loans/{id}", match: "$.loan.lateBusinessDays == 3", occurrence: last }
+  - response_matches: { op: "GET /api/loans/{id}", match: "$.loan.lateFeePreviewCents == 4500", occurrence: last }
+  - invariant: { policy: no_server_error }
+  - assert: >-
+      The response is loan L-1042 for Marcus Webb of Film & Media, carrying
+      three units across three catalogue lines, marked overdue rather than
+      simply out, and priced at 87690 cents due at pickup.

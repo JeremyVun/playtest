@@ -1,0 +1,49 @@
+description: Book a 3-day GoPro and Zoom H6 loan through the three-step flow; it needs no approval.
+story: |
+  You are the desk supervisor at Fairmont University Media Services, booking
+  out kit for a new borrower. The desk clock is frozen at Monday 16 March 2026.
+
+  Work through the desk's three-step new-loan flow. Step one: start a new loan
+  draft for Ada Byron, email ada.byron@fairmont.edu, department Design, purpose
+  "Studio test shoot." Step two: put 2 units of the GoPro Hero 12 Action Kit
+  and 1 unit of the Zoom H6 Field Recorder on the draft, with a loan period of
+  3 days and a pickup date of 2026-03-17. Step three: read back the review
+  figures the draft now shows, then confirm the booking. Finally, open the loan
+  that was created and check it.
+
+  You expect the review figures to be a base charge of $51.00 (2 GoPro units at
+  $6.00 a day for 3 days, plus 1 Zoom H6 at $5.00 a day for 3 days), a bundle
+  discount of $5.10 because the loan carries 3 units in total, no deposit
+  because neither item is worth $1,000.00 or more, a total due at pickup of
+  $45.90, a due date of Friday 20 March 2026 at 17:00, and no need for
+  supervisor approval. You expect confirming to create loan L-1049 with the
+  status "ready for pickup", carrying exactly those figures.
+success:
+  - label: the borrower step creates a draft
+    response_status: { op: "POST /api/loan-drafts", status: "201", occurrence: any }
+  - label: the items and dates step is accepted
+    response_status: { op: "PATCH /api/loan-drafts/{id}", status: "200", occurrence: any }
+  - label: the review shows the bundle discount and the $45.90 total
+    response_matches: { op: "PATCH /api/loan-drafts/{id}", match: "$.draft.preview.quote.baseChargeCents == 5100", occurrence: last }
+  - response_matches: { op: "PATCH /api/loan-drafts/{id}", match: "$.draft.preview.quote.bundleDiscountCents == 510", occurrence: last }
+  - response_matches: { op: "PATCH /api/loan-drafts/{id}", match: "$.draft.preview.quote.depositCents == 0", occurrence: last }
+  - response_matches: { op: "PATCH /api/loan-drafts/{id}", match: "$.draft.preview.quote.totalDueCents == 4590", occurrence: last }
+  - label: the review shows a Friday 20 March due date and no approval needed
+    response_matches: { op: "PATCH /api/loan-drafts/{id}", match: '$.draft.preview.dueDate == "2026-03-20"', occurrence: last }
+  - response_matches: { op: "PATCH /api/loan-drafts/{id}", match: "$.draft.preview.approvalRequired == false", occurrence: last }
+  - label: confirming books the loan
+    response_status: { op: "POST /api/loan-drafts/{id}/submit", status: "201", occurrence: any }
+  - response_matches: { op: "POST /api/loan-drafts/{id}/submit", match: '$.loan.id == "L-1049"', occurrence: any }
+  - response_matches: { op: "POST /api/loan-drafts/{id}/submit", match: '$.loan.status == "ready"', occurrence: any }
+  - label: the created loan carries the reviewed figures
+    response_matches: { op: "GET /api/loans/{id}", match: "$.loan.totalDueCents == 4590", occurrence: last }
+  - response_matches: { op: "GET /api/loans/{id}", match: "$.loan.quote.bundleDiscountCents == 510", occurrence: last }
+  - response_matches: { op: "GET /api/loans/{id}", match: '$.loan.dueAt == "2026-03-20T17:00:00Z"', occurrence: last }
+  - response_matches: { op: "GET /api/loans/{id}", match: '$.loan.pickupDate == "2026-03-17"', occurrence: last }
+  - response_matches: { op: "GET /api/loans/{id}", match: "$.loan.unitCount == 3", occurrence: last }
+  - invariant: { policy: no_server_error }
+  - assert: >-
+      The response is the newly booked loan L-1049 for Ada Byron of Design,
+      ready for pickup on 2026-03-17, holding 2 GoPro Hero 12 units and 1 Zoom
+      H6 unit, priced at 4590 cents due at pickup with no supervisor approval
+      required.

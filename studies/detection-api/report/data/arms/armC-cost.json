@@ -1,0 +1,14 @@
+{
+  "arm": "C",
+  "round": 1,
+  "priced_usd": 11.06,
+  "detail": {
+    "uncached_in": 2048631,
+    "cached_in": 353280,
+    "out": 21506,
+    "rates": "5/0.5/30 per M"
+  },
+  "wall_min": 12.3,
+  "messages": 51,
+  "requests": 38
+}

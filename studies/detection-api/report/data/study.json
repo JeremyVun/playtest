@@ -1,0 +1,369 @@
+{
+  "study": "detection-api",
+  "generated_at": "2026-07-30T21:46:22.487Z",
+  "protocol": "QUICK.md (2.5h indicative variant of docs/backlog/detection-study/api.md; web-study SCORING.md rules)",
+  "build_id": "a30cd991e92f",
+  "faults_total": 10,
+  "trial": 1,
+  "round": 1,
+  "arms": {
+    "P": {
+      "name": "Playtest probe (hosted, api driver)",
+      "model": "gpt5_5",
+      "seeded_found": 7,
+      "seeded_fault_ids": [
+        "f-cancel-button-missing",
+        "f-charges-late-fee",
+        "f-equipment-missing-message",
+        "f-extend-limit-off-by-one",
+        "f-late-fee-day-count",
+        "f-out-filter-drops-overdue",
+        "f-overview-units-total"
+      ],
+      "latent_found": 0,
+      "invalid_nondup": 18,
+      "noise_ratio": 0.783,
+      "claims": 42,
+      "cost_usd": 13.81,
+      "wall_min": 90.1,
+      "turns": 222,
+      "runs": [
+        {
+          "case": "approve-request-then-pickup",
+          "status": "pass",
+          "steps": 21,
+          "cost_usd": 1.325494
+        },
+        {
+          "case": "book-loan-needs-approval",
+          "status": "fail",
+          "steps": 15,
+          "cost_usd": 0.919585
+        },
+        {
+          "case": "book-loan-straight-to-shelf",
+          "status": "fail",
+          "steps": 26,
+          "cost_usd": 1.739473
+        },
+        {
+          "case": "cancel-and-decline-return-units",
+          "status": "fail",
+          "steps": 26,
+          "cost_usd": 1.659055
+        },
+        {
+          "case": "checkin-overdue-late-fee",
+          "status": "fail",
+          "steps": 8,
+          "cost_usd": 0.431525
+        },
+        {
+          "case": "desk-overview-figures",
+          "status": "fail",
+          "steps": 7,
+          "cost_usd": 0.399571
+        },
+        {
+          "case": "due-date-weekend-rollforward",
+          "status": "fail",
+          "steps": 16,
+          "cost_usd": 0.835434
+        },
+        {
+          "case": "equipment-catalogue-and-item",
+          "status": "fail",
+          "steps": 7,
+          "cost_usd": 0.39736
+        },
+        {
+          "case": "extend-loan-once",
+          "status": "fail",
+          "steps": 5,
+          "cost_usd": 0.327562
+        },
+        {
+          "case": "loans-register-and-detail",
+          "status": "fail",
+          "steps": 7,
+          "cost_usd": 0.376254
+        },
+        {
+          "case": "refusals-and-invalid-input",
+          "status": "fail",
+          "steps": 22,
+          "cost_usd": 1.136859
+        },
+        {
+          "case": "risk-booking-boundaries",
+          "status": "explored",
+          "steps": 21,
+          "cost_usd": 1.2134500000000001
+        },
+        {
+          "case": "risk-loan-lifecycle-conflicts",
+          "status": "explored",
+          "steps": 41,
+          "cost_usd": 2.833616
+        }
+      ]
+    },
+    "C": {
+      "name": "Coding agent (gpt-5.5 + http tool)",
+      "model": "claude-gpt-5.5",
+      "seeded_found": 10,
+      "seeded_fault_ids": [
+        "f-available-filter-ignored",
+        "f-bundle-threshold-off-by-one",
+        "f-cancel-button-missing",
+        "f-charges-late-fee",
+        "f-equipment-missing-message",
+        "f-extend-limit-off-by-one",
+        "f-late-fee-day-count",
+        "f-out-filter-drops-overdue",
+        "f-overview-units-total",
+        "f-saturday-roll-short"
+      ],
+      "latent_found": 0,
+      "invalid_nondup": 0,
+      "noise_ratio": 0,
+      "claims": 12,
+      "cost_usd": 11.06,
+      "wall_min": 12.3,
+      "turns": 51,
+      "requests": 38,
+      "end_reason": "finished"
+    },
+    "F": {
+      "name": "Schemathesis 4.24.3 (seed 20260731, max-examples 8, checks all)",
+      "model": null,
+      "seeded_found": 0,
+      "seeded_fault_ids": [],
+      "latent_found": 1,
+      "invalid_nondup": 7,
+      "noise_ratio": 0.875,
+      "claims": 21,
+      "cost_usd": 0,
+      "wall_min": 0.12,
+      "requests": 443
+    }
+  },
+  "verdicts": {
+    "B1_value_floor": {
+      "rule": "any value-adding arm strictly exceeds arm F seeded count (0)",
+      "P": true,
+      "C": true
+    },
+    "B2_marginal_value": {
+      "rule": "arm P seeded >= arm C seeded + 2",
+      "pass": false,
+      "delta": -3
+    },
+    "B3_replacement_noise": {
+      "rule": "no hidden clean build (QUICK dev. 3); invalid non-dup counts reported instead",
+      "P_noise_ratio": 0.783,
+      "C_noise_ratio": 0,
+      "F_noise_ratio": 0.875
+    },
+    "B4_envelope": {
+      "rule": "45 min wall / 360 requests per arm; $60 whole-study",
+      "P_wall_breach_min": 45.1,
+      "F_request_overage": 83,
+      "arm_spend_usd": 24.87
+    }
+  },
+  "matrix": [
+    {
+      "id": "f-overview-units-total",
+      "title": "Units available tile counts the catalogue as 40 units",
+      "flow": "A — Desk overview",
+      "found_by": {
+        "P": true,
+        "C": true,
+        "F": false
+      },
+      "triggered": {
+        "P": 0,
+        "C": 0,
+        "F": 0
+      },
+      "web_study_found": true
+    },
+    {
+      "id": "f-late-fee-day-count",
+      "title": "Late business days counted from the day before the due date",
+      "flow": "A — Desk overview",
+      "found_by": {
+        "P": true,
+        "C": true,
+        "F": false
+      },
+      "triggered": {
+        "P": 0,
+        "C": 0,
+        "F": 0
+      },
+      "web_study_found": true
+    },
+    {
+      "id": "f-charges-late-fee",
+      "title": "Late fees taken today never reach charges booked today",
+      "flow": "A — Desk overview",
+      "found_by": {
+        "P": true,
+        "C": true,
+        "F": false
+      },
+      "triggered": {
+        "P": 0,
+        "C": 0,
+        "F": 0
+      },
+      "web_study_found": false
+    },
+    {
+      "id": "f-equipment-missing-message",
+      "title": "Unknown catalogue item is refused with the loans sentence",
+      "flow": "B — Equipment",
+      "found_by": {
+        "P": true,
+        "C": true,
+        "F": false
+      },
+      "triggered": {
+        "P": 0,
+        "C": 0,
+        "F": 0
+      },
+      "web_study_found": false
+    },
+    {
+      "id": "f-available-filter-ignored",
+      "title": "Available now only filters nothing",
+      "flow": "B — Equipment",
+      "found_by": {
+        "P": false,
+        "C": true,
+        "F": false
+      },
+      "triggered": {
+        "P": 0,
+        "C": 0,
+        "F": 0
+      },
+      "web_study_found": true
+    },
+    {
+      "id": "f-out-filter-drops-overdue",
+      "title": "The Out status filter hides overdue loans",
+      "flow": "C — Loans",
+      "found_by": {
+        "P": true,
+        "C": true,
+        "F": false
+      },
+      "triggered": {
+        "P": 0,
+        "C": 0,
+        "F": 0
+      },
+      "web_study_found": false
+    },
+    {
+      "id": "f-cancel-button-missing",
+      "title": "Cancel loan is offered nowhere",
+      "flow": "C — Loans",
+      "found_by": {
+        "P": true,
+        "C": true,
+        "F": false
+      },
+      "triggered": {
+        "P": 0,
+        "C": 0,
+        "F": 0
+      },
+      "web_study_found": true
+    },
+    {
+      "id": "f-extend-limit-off-by-one",
+      "title": "A loan can be extended more than once",
+      "flow": "C — Loans",
+      "found_by": {
+        "P": true,
+        "C": true,
+        "F": false
+      },
+      "triggered": {
+        "P": 0,
+        "C": 0,
+        "F": 0
+      },
+      "web_study_found": true
+    },
+    {
+      "id": "f-bundle-threshold-off-by-one",
+      "title": "Three units miss the bundle discount",
+      "flow": "D — New loan",
+      "found_by": {
+        "P": false,
+        "C": true,
+        "F": false
+      },
+      "triggered": {
+        "P": 0,
+        "C": 0,
+        "F": 0
+      },
+      "web_study_found": true
+    },
+    {
+      "id": "f-saturday-roll-short",
+      "title": "A Saturday due date rolls forward only one day",
+      "flow": "D — New loan",
+      "found_by": {
+        "P": false,
+        "C": true,
+        "F": false
+      },
+      "triggered": {
+        "P": 0,
+        "C": 0,
+        "F": 0
+      },
+      "web_study_found": false
+    }
+  ],
+  "latents": [
+    {
+      "found_by": "F",
+      "summary": "HTTP 500 (generic handler) when a syntactically-valid JSON body of literal null is POSTed/PATCHed to body-reading routes; reproduces on clean."
+    }
+  ],
+  "arm_f_raw": {
+    "failures": 21,
+    "titles": [
+      "POST /api/loan-drafts: Unsupported methods",
+      "POST /api/loan-drafts: API rejected schema-compliant request",
+      "POST /api/loan-drafts/{id}/submit: API rejected schema-compliant request",
+      "POST /api/loan-drafts/{id}/submit: Unsupported methods",
+      "GET /api/approvals: Unsupported methods",
+      "GET /api/equipment: API accepted schema-violating request",
+      "GET /api/loans: API accepted schema-violating request",
+      "GET /api/overview: Unsupported methods",
+      "GET /api/session: Unsupported methods",
+      "POST /api/approvals/{id}/approve: Unsupported methods",
+      "POST /api/approvals/{id}/decline: Unsupported methods",
+      "POST /api/loans/{id}/cancel: Unsupported methods",
+      "POST /api/loans/{id}/checkin: Unsupported methods",
+      "POST /api/loans/{id}/extend: Unsupported methods",
+      "POST /api/loans/{id}/extend: API accepted schema-violating request",
+      "POST /api/loans/{id}/pickup: Unsupported methods",
+      "GET /api/equipment/{id}: Unsupported methods",
+      "GET /api/loans/{id}: Unsupported methods",
+      "GET /api/loan-drafts/{id}: Unsupported methods",
+      "PATCH /api/loan-drafts/{id}: Server error; Undocumented HTTP status code",
+      "PATCH /api/loan-drafts/{id}: API rejected schema-compliant request"
+    ]
+  }
+}

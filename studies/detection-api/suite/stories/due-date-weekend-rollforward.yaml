@@ -1,0 +1,45 @@
+description: A due date landing on a weekend rolls forward to the following Monday.
+story: |
+  You are the desk supervisor at Fairmont University Media Services, checking
+  that the desk never sets a return date on a day it is shut. The desk is open
+  Monday to Friday and closed at weekends, and the desk clock is frozen at
+  Monday 16 March 2026.
+
+  Start a new loan draft for Ravi Anand, email ravi.anand@fairmont.edu,
+  department Journalism, purpose "Friday afternoon interview kit." Then put 1
+  unit of the Rode Wireless GO II Lav Pair on the draft with a loan period of 3
+  days and a pickup date of Thursday 2026-03-19, and read the due date the desk
+  works out. Then change the draft to a loan period of 1 day with a pickup date
+  of Friday 2026-03-20, and read the due date again. Then confirm the booking
+  and open the loan that was created.
+
+  You expect both drafts to be due back on Monday 23 March 2026 at 17:00, not
+  at the weekend: three days after Thursday 19 March lands on Sunday 22 March
+  and moves on by one day, and one day after Friday 20 March lands on Saturday
+  21 March and moves on by two days. You expect the booked loan to be L-1049,
+  picked up on 2026-03-20, due 2026-03-23 at 17:00, charged $4.00 in total with
+  no deposit, and ready for pickup without needing supervisor approval.
+success:
+  - label: the borrower step creates a draft
+    response_status: { op: "POST /api/loan-drafts", status: "201", occurrence: any }
+  - label: every items-and-dates step is accepted
+    response_status: { op: "PATCH /api/loan-drafts/{id}", status: "200", occurrence: any }
+  - label: a Sunday due date rolls forward to Monday 23 March
+    response_matches: { op: "PATCH /api/loan-drafts/{id}", match: '$.draft.preview.dueDate == "2026-03-23"', occurrence: any }
+  - label: the final draft is the one-day Friday pickup
+    response_matches: { op: "PATCH /api/loan-drafts/{id}", match: "$.draft.loanDays == 1", occurrence: last }
+  - response_matches: { op: "PATCH /api/loan-drafts/{id}", match: '$.draft.pickupDate == "2026-03-20"', occurrence: last }
+  - response_matches: { op: "PATCH /api/loan-drafts/{id}", match: '$.draft.preview.dueAt == "2026-03-23T17:00:00Z"', occurrence: last }
+  - label: confirming books the loan with the rolled-forward due date
+    response_status: { op: "POST /api/loan-drafts/{id}/submit", status: "201", occurrence: any }
+  - response_matches: { op: "POST /api/loan-drafts/{id}/submit", match: '$.loan.dueDate == "2026-03-23"', occurrence: any }
+  - label: the created loan keeps the Monday due date and the $4.00 charge
+    response_matches: { op: "GET /api/loans/{id}", match: '$.loan.dueAt == "2026-03-23T17:00:00Z"', occurrence: last }
+  - response_matches: { op: "GET /api/loans/{id}", match: '$.loan.pickupDate == "2026-03-20"', occurrence: last }
+  - response_matches: { op: "GET /api/loans/{id}", match: "$.loan.totalDueCents == 400", occurrence: last }
+  - response_matches: { op: "GET /api/loans/{id}", match: '$.loan.status == "ready"', occurrence: last }
+  - invariant: { policy: no_server_error }
+  - assert: >-
+      The response is loan L-1049 for Ravi Anand, picked up on Friday
+      2026-03-20 for one day, and due back on Monday 2026-03-23 at 17:00 rather
+      than on Saturday 2026-03-21.

@@ -1,0 +1,53 @@
+description: Desk overview counters agree with the loan and catalogue lists behind them.
+story: |
+  You are Rowan Ellis, the desk supervisor at Fairmont University Media
+  Services, opening the Loanpoint desk console for the day (the desk clock is
+  frozen at Monday 16 March 2026, 09:00). You want the headline figures on the
+  desk overview, and you want to be sure they agree with the lists they are
+  summarising.
+
+  Read the desk overview and note its counters. Then read the loan register
+  filtered to loans that are out, and again filtered to loans awaiting a
+  supervisor decision, and read the equipment catalogue. Finally read the desk
+  overview once more.
+
+  You expect the overview to report 3 loans out with borrowers, 1 overdue loan,
+  1 loan due back today, 2 requests awaiting approval, 1 loan ready for pickup,
+  40 of 53 units available, and $341.00 of charges booked today. You expect the
+  three loans that are out to be L-1048, L-1042 and L-1041; the two waiting on
+  a decision to be L-1045 and L-1044; the catalogue to hold 12 items; the only
+  overdue loan to be L-1042 (Marcus Webb), shown with a late-fee preview of
+  $45.00 if it comes back today; and the only loan due back today to be L-1041
+  (Priya Raman).
+success:
+  - label: every overview read succeeds
+    response_status: { op: "GET /api/overview", status: "200", occurrence: all }
+  - label: three loans are out with borrowers
+    response_matches: { op: "GET /api/overview", match: "$.metrics.outCount == 3", occurrence: any }
+  - label: one loan is overdue and one is due back today
+    response_matches: { op: "GET /api/overview", match: "$.metrics.overdueCount == 1", occurrence: any }
+  - response_matches: { op: "GET /api/overview", match: "$.metrics.dueTodayCount == 1", occurrence: any }
+  - label: two requests await a supervisor decision
+    response_matches: { op: "GET /api/overview", match: "$.metrics.awaitingApprovalCount == 2", occurrence: any }
+  - label: 40 of 53 units are available
+    response_matches: { op: "GET /api/overview", match: "$.metrics.unitsAvailable == 40", occurrence: any }
+  - response_matches: { op: "GET /api/overview", match: "$.metrics.unitsTotal == 53", occurrence: any }
+  - label: charges booked today are $341.00
+    response_matches: { op: "GET /api/overview", match: "$.metrics.chargesBookedTodayCents == 34100", occurrence: any }
+  - label: the overdue list names L-1042 with a $45.00 late-fee preview
+    response_matches: { op: "GET /api/overview", match: '$.overdue[0].id == "L-1042"', occurrence: any }
+  - response_matches: { op: "GET /api/overview", match: "$.overdue[0].lateFeePreviewCents == 4500", occurrence: any }
+  - label: the due-back-today list names L-1041
+    response_matches: { op: "GET /api/overview", match: '$.dueToday[0].id == "L-1041"', occurrence: any }
+  - label: the out filter lists exactly three loans
+    response_matches: { op: "GET /api/loans", match: "$.shownCount == 3", occurrence: any }
+  - label: the register holds eight loans in total
+    response_matches: { op: "GET /api/loans", match: "$.totalCount == 8", occurrence: any }
+  - label: the catalogue holds twelve items
+    response_matches: { op: "GET /api/equipment", match: "$.totalCount == 12", occurrence: any }
+  - invariant: { policy: no_server_error }
+  - assert: >-
+      The desk overview reports 3 loans out, 1 overdue loan, 1 loan due back
+      today, 2 requests awaiting approval, 1 loan ready for pickup, 40 of 53
+      units available and 34100 cents of charges booked today, and its overdue
+      list contains only loan L-1042 for Marcus Webb.

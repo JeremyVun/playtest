@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Detection study — API: coding agent vs Playtest probe vs fuzzer</title>
+<style>
+  :root {
+    --ink: #1a1d21; --muted: #61686f; --line: #e3e6e9; --bg: #ffffff;
+    --wash: #f6f7f8; --good: #1a7f37; --bad: #b3261e; --warn: #9a6700;
+    --accent: #0b57d0;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.55 "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; }
+  main { max-width: 880px; margin: 0 auto; padding: 3rem 1.5rem 5rem; }
+  h1 { font-size: 1.7rem; line-height: 1.25; margin: 0 0 .3rem; }
+  h2 { font-size: 1.15rem; margin: 2.6rem 0 .7rem; border-bottom: 1px solid var(--line); padding-bottom: .3rem; }
+  p, li { max-width: 72ch; }
+  .kicker { color: var(--muted); font-size: .85rem; letter-spacing: .06em; text-transform: uppercase;
+    font-family: ui-sans-serif, system-ui, sans-serif; }
+  .lede { font-size: 1.08rem; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .92rem;
+    font-family: ui-sans-serif, system-ui, sans-serif; }
+  th, td { text-align: left; padding: .4rem .6rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 600; }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+  .found { color: var(--good); font-weight: 700; }
+  .miss { color: var(--bad); font-weight: 700; }
+  .zero { color: var(--muted); }
+  .pass { color: var(--good); font-weight: 600; }
+  .fail { color: var(--bad); font-weight: 600; }
+  .breach { color: var(--warn); font-weight: 600; }
+  code, .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: .85em; background: var(--wash);
+    padding: .08em .3em; border-radius: 3px; }
+  .callout { background: var(--wash); border-left: 3px solid var(--accent); padding: .8rem 1rem; margin: 1.2rem 0;
+    font-size: .95rem; }
+  .callout.warn { border-left-color: var(--warn); }
+  .foot { color: var(--muted); font-size: .85rem; margin-top: 3rem; border-top: 1px solid var(--line); padding-top: 1rem; }
+  ol.deviations { font-size: .95rem; }
+  ol.deviations li { margin-bottom: .35rem; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <p class="kicker">Playtest studies · detection-api · trial 1 · 2026-07-31</p>
+  <h1>Same API, same seeded bugs: a coding agent, the Playtest probe, and a fuzzer</h1>
+  <p class="lede">
+    Ten semantic faults were seeded into the Loanpoint JSON API (the web
+    study's subject, filtered to its API-observable faults). Each arm tested
+    the same build black-box with equal knowledge — base URL, an OpenAPI
+    document, the same user stories — and an arm-blind judge scored every
+    claim. <strong>The coding agent found all 10 seeded faults with zero
+    invalid claims ($11.06, 12 minutes). The Playtest probe found 7 of 10
+    with a 78% noise ratio ($13.81, 90 minutes). Schemathesis found 0 seeded
+    faults but the only genuine latent ($0, 7 seconds).</strong>
+  </p>
+
+  <div class="callout">
+    <strong>Read this first.</strong> This is the fast, indicative variant of
+    the pre-registered design: one trial, one round, one build, reused
+    subject and catalog, ~2.5 h wall clock end to end. Every cut from the
+    design, and everything that went sideways, is logged in
+    <a href="../QUICK.md">QUICK.md</a> — including one material fairness
+    caveat in the probe's disfavor (below).
+  </div>
+
+  <h2>Headline</h2>
+  <table>
+    <tr><th>arm</th><th class="n">seeded found /10</th><th class="n">latent</th><th class="n">invalid (non-dup)</th><th class="n">noise ratio</th><th class="n">cost</th><th class="n">wall</th><th class="n">volume</th></tr>
+    <tr><td><strong>C</strong> — coding agent (gpt-5.5 + one <code>http_request</code> tool)</td>
+      <td class="n found">10</td><td class="n zero">0</td><td class="n">0</td><td class="n">0.00</td>
+      <td class="n">$11.06</td><td class="n">12.3 min</td><td class="n">51 msgs · 38 requests</td></tr>
+    <tr><td><strong>P</strong> — Playtest probe (hosted, api driver, gpt-5.5 actor)</td>
+      <td class="n">7</td><td class="n zero">0</td><td class="n">18</td><td class="n">0.78</td>
+      <td class="n">$13.81</td><td class="n breach">90.1 min</td><td class="n">222 actor steps · 13 runs</td></tr>
+    <tr><td><strong>F</strong> — Schemathesis 4.24.3 (seed 20260731, all checks)</td>
+      <td class="n zero">0</td><td class="n found">1</td><td class="n">7</td><td class="n">0.88</td>
+      <td class="n">$0</td><td class="n">7 s</td><td class="n">443 generated requests</td></tr>
+  </table>
+  <p>
+    Verdict bars (as frozen in QUICK.md): <span class="pass">B1 pass</span> —
+    both intelligent arms strictly beat the fuzzer's seeded count.
+    <span class="fail">B2 fail</span> — the headline claim "Playtest adds
+    API detection value over a coding agent" required P ≥ C + 2; the coding
+    agent instead beat the probe by 3. Published plainly: <strong>on this
+    subject, a frontier coding agent holding the API document swept the
+    catalog.</strong> B3 (zero invalid on a hidden clean build) was not
+    evaluable — no clean build was fielded; noise ratios stand in.
+    <span class="breach">B4 breached</span> — arm P ran 90 min against the
+    45-min cap (no abort was wired; within the original design's 3-h
+    envelope), and arm F generated 443 requests against the 360 cap.
+  </p>
+
+  <h2>Per-fault matrix — and the web-study comparison</h2>
+  <p>
+    The right column shows whether <em>either</em> browser-level arm found
+    the fault in the web study (union of both trials). The four faults no
+    web arm found are exactly the server-side value/filter faults; the API
+    arms caught them.
+  </p>
+  <table>
+    <tr><th>fault</th><th>flow</th><th class="n">C</th><th class="n">P</th><th class="n">F</th><th class="n">web study</th></tr>
+    <tr><td><code>f-overview-units-total</code> — units tile counts 40, not 53</td><td>overview</td><td class="n found">✓</td><td class="n found">✓</td><td class="n miss">✗</td><td class="n">found</td></tr>
+    <tr><td><code>f-late-fee-day-count</code> — late days counted from day before due</td><td>overview</td><td class="n found">✓</td><td class="n found">✓</td><td class="n miss">✗</td><td class="n">found</td></tr>
+    <tr><td><code>f-charges-late-fee</code> — late fees missing from day's takings</td><td>overview</td><td class="n found">✓</td><td class="n found">✓</td><td class="n miss">✗</td><td class="n miss">missed</td></tr>
+    <tr><td><code>f-equipment-missing-message</code> — 404 uses the loans sentence</td><td>equipment</td><td class="n found">✓</td><td class="n found">✓</td><td class="n miss">✗</td><td class="n miss">missed</td></tr>
+    <tr><td><code>f-available-filter-ignored</code> — availability filter is a no-op</td><td>equipment</td><td class="n found">✓</td><td class="n miss">✗</td><td class="n miss">✗</td><td class="n">found</td></tr>
+    <tr><td><code>f-out-filter-drops-overdue</code> — status=out hides overdue loans</td><td>loans</td><td class="n found">✓</td><td class="n found">✓</td><td class="n miss">✗</td><td class="n miss">missed</td></tr>
+    <tr><td><code>f-cancel-button-missing</code> — cancel offered nowhere (<code>canCancel</code>)</td><td>loans</td><td class="n found">✓</td><td class="n found">✓</td><td class="n miss">✗</td><td class="n">found</td></tr>
+    <tr><td><code>f-extend-limit-off-by-one</code> — a loan extends more than once</td><td>loans</td><td class="n found">✓</td><td class="n found">✓</td><td class="n miss">✗</td><td class="n">found</td></tr>
+    <tr><td><code>f-bundle-threshold-off-by-one</code> — 3 units miss the bundle discount</td><td>new loan</td><td class="n found">✓</td><td class="n miss">✗</td><td class="n miss">✗</td><td class="n">found</td></tr>
+    <tr><td><code>f-saturday-roll-short</code> — Saturday due date rolls to Sunday</td><td>new loan</td><td class="n found">✓</td><td class="n miss">✗</td><td class="n miss">✗</td><td class="n miss">missed</td></tr>
+  </table>
+  <div class="callout">
+    <strong>Answer to the study's central question:</strong> API-level
+    testing caught exactly the class of fault browser-level testing missed.
+    Of the 4 faults both web arms missed, the API coding agent found 4/4 and
+    the API probe 3/4. Faults whose manifestation is a wrong number or a
+    dropped row in a JSON response are hard to see through a rendered page
+    and easy to see in the payload.
+  </div>
+
+  <h2>Triggering is not detecting</h2>
+  <p>
+    Server-side telemetry (diagnostic only, invisible to all arms) shows
+    <strong>every arm mechanically triggered all 10 fault paths</strong>.
+    Schemathesis hit the wrong overview total 55 times and the missing
+    late-fee charge 52 times — and reported none of them, because a fuzzer
+    has oracles for crashes and schema shape, not for <em>wrong values</em>.
+    Every seeded fault here returns well-formed, plausible, wrong JSON. Its
+    one real find is the one fault-shaped thing in its oracle class: a
+    reproducible-on-clean HTTP 500 when a literal JSON <code>null</code>
+    body hits a body-reading route — the only latent defect any arm found.
+  </p>
+
+  <h2>Why the probe missed 3 — a fairness caveat that cuts against the result</h2>
+  <p>
+    Arm P's three misses (<code>bundle-threshold</code>,
+    <code>saturday-roll</code>, <code>available-filter</code>) were all
+    covered by its frozen stories, and telemetry shows its runs triggered
+    all three paths. The deliverable contains no claim about any of them
+    (verified by keyword sweep): the actor burned those journeys fighting
+    request-shape discovery — most visibly the draft-creation contract —
+    and surfaced its own confusion as findings ("draft PATCH rejects valid
+    updates", "fresh drafts reported expired"), which the judge correctly
+    ruled not-a-bug. That confusion is also most of the probe's 78% noise.
+  </p>
+  <div class="callout warn">
+    <strong>The confound:</strong> arm C held the full OpenAPI document in
+    its context. The probe's actor works from story text alone — the frozen
+    suite config set no <code>app.openapi</code>, though the product
+    supports it and a customer testing an API would plausibly set it. The
+    probe was the only arm made to rediscover the request contract by
+    trial. The obvious follow-up: same protocol, <code>app.openapi</code>
+    set. Until then, the honest reading of B2 is "a coding agent with the
+    spec beat the probe without it", not "coding agents beat Playtest".
+  </div>
+
+  <h2>Cost and accounting</h2>
+  <table>
+    <tr><th>item</th><th class="n">priced-equivalent</th><th>notes</th></tr>
+    <tr><td>Arm P round (13 runs + synthesis)</td><td class="n">$13.81</td><td>run artifacts $13.60 + synthesis $0.22; 90.1 min wall</td></tr>
+    <tr><td>Arm C round</td><td class="n">$11.06</td><td>2.40M in (353k cached) / 21.5k out at $5/$30/$0.50 per M; finished by itself at 51 of 150 messages</td></tr>
+    <tr><td>Arm F round</td><td class="n">$0</td><td>no model; 6.9 s CPU</td></tr>
+    <tr><td>Suite smoke (2 cases, clean)</td><td class="n">$1.19</td><td>instrument overhead</td></tr>
+    <tr><td>Judge + authors (Fable/opus subagents)</td><td class="n">separate</td><td>shared study overhead per the frozen accounting; ≈490k subagent tokens total</td></tr>
+  </table>
+  <p>Arm-side spend $24.87 — under the $60 quick-study ceiling.</p>
+
+  <h2>What was cut (abridged from QUICK.md)</h2>
+  <ol class="deviations">
+    <li>Subject and fault catalog reused from the web study; the 10 API-observable faults were selected mechanically (manifestation check touches only <code>/api/*</code>).</li>
+    <li>One trial, one round, one build; no hidden clean build (B3 replaced by noise ratios; the judge still verified every latent claim against a running clean reference).</li>
+    <li>No served OpenAPI doc existed, so a fresh-context agent authored one from clean source; it is the shared API-surface input (and the source of the confound above).</li>
+    <li>Loanpoint has no auth, so the design's credential-role discovery was dropped with it.</li>
+    <li>Arm C capped at 150 messages (cost control; it finished at 51). Arms P and C ran concurrently on independent copies.</li>
+    <li>Human audit limited to low-confidence and contested rows — all were reviewed; zero overrides.</li>
+  </ol>
+
+  <p class="foot">
+    Build <code>a30cd991e92f</code> (10 active / 10 withdrawn, allocation
+    gate green). Judge: Fable 5, two-pass, arm-blind, catalog-blind
+    normalization; 75 claims, 39 duplicates, cross-arm dedupe per
+    SCORING.md. Ledger and all deliverables under
+    <a href="data/">data/</a>; machine-readable summary in
+    <a href="data/study.json">study.json</a>. Frozen artifact hashes in
+    <a href="../QUICK.md">QUICK.md</a>. Protocol vocabulary:
+    <a href="../../detection-web/PREREG.md">detection-web PREREG</a> +
+    SCORING.md.
+  </p>
+</main>
+</body>
+</html>

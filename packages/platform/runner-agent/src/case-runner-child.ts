@@ -27,6 +27,12 @@ const emit = (frame: RunnerDynamic) => {
 };
 
 const { rc, opts } = JSON.parse(input);
+// The resolved case rides JSON across this process boundary, which flattens
+// the assertion-routing Map into a plain object; the engine's gate then calls
+// .get() on it during clean-replay verdict inheritance. Revive it.
+if (rc?._assertions?.routing && !(rc._assertions.routing instanceof Map)) {
+  rc._assertions.routing = new Map(Object.entries(rc._assertions.routing));
+}
 const result = await runCase(rc, {
   runsRoot: opts.runsRoot,
   runId: opts.runId,

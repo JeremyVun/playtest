@@ -15,11 +15,12 @@ import * as statusQuo from './03-status-quo.jsx';
 import * as dontMakeMeClick from './04-dont-make-me-click.jsx';
 import * as story from './05-story.jsx';
 import * as loop from './06-loop.jsx';
-import * as demo from './07-demo.jsx';
-import * as webStudy from './08-web-study.jsx';
-import * as apiStudy from './09-api-study.jsx';
-import * as callback from './10-callback.jsx';
-import * as questions from './11-questions.jsx';
+import * as replay from './07-replay.jsx';
+import * as demo from './08-demo.jsx';
+import * as webStudy from './09-web-study.jsx';
+import * as apiStudy from './10-api-study.jsx';
+import * as callback from './11-callback.jsx';
+import * as questions from './12-questions.jsx';
 
 export const slides = [
   doesItWork,
@@ -28,6 +29,7 @@ export const slides = [
   dontMakeMeClick,
   story,
   loop,
+  replay,
   demo,
   webStudy,
   apiStudy,

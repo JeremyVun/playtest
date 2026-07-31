@@ -48,4 +48,4 @@ Supporting API testing properly would mean giving the product an execution works
 
 The product answer is not "one tool for everything". It is Playtest for every surface a user touches, and your coding agent for the ones they don't.
 
-WHY THIS LANDS: it is a scope boundary drawn by our own published experiment, not a retreat. A vendor who tells you where NOT to use their product earns the claims on slide 8.`;
+WHY THIS LANDS: it is a scope boundary drawn by our own published experiment, not a retreat. A vendor who tells you where NOT to use their product earns the claims on slide 9.`;

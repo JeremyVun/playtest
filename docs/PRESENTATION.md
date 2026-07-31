@@ -74,18 +74,18 @@ be delegating.
 
 ## Slide 5 — paved roads in a world of slop
 
-**Slide text:** build the story one line at a time on the same slide:
+**Slide text:** the real config surface, built one concept at a time —
+three small files with filename captions, YAML shown verbatim:
 
-> **Persona** — who is doing this
-> **Goal** — what they are trying to get done
-> **Assertions** — what must be true along the way
-> **Target** — web, mobile, api\*
+> **Persona** — `personas/busy-parent.yaml` — prose `description:` of who the user is
+> **Goal** — `stories/add-todo.yaml` — the plain-language `story:`
+> **Assertions** — same file — `success:` mixing LLM asserts with deterministic gates
+> **Target\*** — `playtest.yaml` — `persona:` by slug + `driver:` web · mobile · api
 
-\* asterisk on api is deliberate — "we'll come back to that" (slide 9).
+\* asterisk on api is deliberate — "we'll come back to that" (slide 10).
 
-**Talk track:** A Playtest story is a plain-language artifact: a persona
-with a goal, and assertions about what they must see and be able to do.
-The punchline for slide 3's AC row: **the story *is* the AC.** One-to-one
+**Talk track:** the slide *is* the files, not a diagram of them. The
+punchline for slide 3's AC row: **the story *is* the AC.** One-to-one
 mapping between the acceptance criterion and the executable test-case
 artifact — the chain of custody comes back, and it's written from the
 user's perspective by construction.
@@ -121,30 +121,51 @@ grading — that's what makes "the story is the AC" (slide 5) a mechanical
 fact rather than a slogan, and it's the thing that distinguishes this from
 "agent wanders around and writes a report."
 
-Optional second beat if asked: iterations of the loop get cheaper —
-recorded runs replay and self-heal, so the regression pass doesn't pay the
-full exploration cost each round.
+Closing beat is the segue to slide 7: iterations of the loop get cheaper —
+recorded runs replay and self-heal.
 
 ---
 
-## Slide 7 — demo
+## Slide 7 — record · replay · heal
+
+**Slide text:** headline "Every run is a recording." then three rows of
+the same 12-step journey, revealed one at a time (filled dot = model
+step, hollow = deterministic):
+
+> **Record** — ●●●●●●●●●●●● — $0.25 *(the actor explores once — every step is saved)*
+> **Replay** — ○○○○○○○○○○○○ — $0.00 *(the saved path re-runs deterministically — no model calls)*
+> **Heal** — ○○○○○○●●○○○○ — $0.04 *(the app changed — only the drifted steps re-engage the model)*
+
+Final fragment: **"25¢ to record. Free to replay. Heals only what
+breaks."** + sub-line *"And the same path every run — reproducible by
+construction."*
+
+**Talk track:** cost control and reproducibility — the two things
+everyone is asking of AI tooling — come from the same mechanism. The
+first green run is saved as the case's baseline path. Later runs replay
+it deterministically: no model calls, $0, and the *same path every time*,
+which is what makes runs comparable and CI-gateable. When the app
+legitimately changes, healing re-records only the drifted steps and saves
+the repaired path. Pay to explore once; pay for drift; never pay for
+repetition. Sets up the demo — the checked replays you're about to see
+live.
+
+---
+
+## Slide 8 — demo
 
 Slides mostly empty; live drive. Run sheet:
 
 1. **Web suite** — create a suite; "help me draft" to generate multiple
    stories; run; live view; context representation.
-2. **Pre-recorded and checked runs** — the regression/replay side.
-   **On-slide line: "25¢ to record. Free to replay. Heals only what
-   breaks."** Cost is becoming a first-class dimension of AI tooling, and
-   this is the steady-state economics: recording a journey costs ~25
-   cents of model usage, replaying it makes no model calls at all, and
-   when the app changes the run self-heals just the steps that drifted —
-   you pay for drift, not re-recording.
+2. **Pre-recorded and checked runs** — the regression/replay side, live.
+   Slide 7 made the economics point; here the audience sees a checked
+   replay actually run.
 3. **Findings system** — and real findings already caught in production
    systems.
 4. **Mobile** — short: a suite and a pre-recorded run.
 5. **API\*** — no demo. "One tool for everything?" — tease it, answer on
-   slide 9: no, and we tested our way to that answer.
+   slide 10: no, and we tested our way to that answer.
 
 **Fallback (planned move, not an apology):** pre-recorded checked runs
 ready for both web and mobile. If the live run flakes, switching to the
@@ -153,7 +174,7 @@ for."
 
 ---
 
-## Slide 8 — proof, not vibes: the web detection study
+## Slide 9 — proof, not vibes: the web detection study
 
 **Slide text (five lines):**
 
@@ -192,7 +213,7 @@ deck that shows its failed bars is the one worth trusting.
 
 ---
 
-## Slide 9 — the API detection study
+## Slide 10 — the API detection study
 
 **Slide text (four lines, nothing else):**
 
@@ -224,11 +245,11 @@ Walk the three result lines, then land the conclusion:
 
 **Why this lands well:** it's a scope boundary drawn by our own
 published experiment, not a retreat — and a vendor who tells you where
-*not* to use their product earns the claims on slide 8.
+*not* to use their product earns the claims on slide 9.
 
 ---
 
-## Slide 10 — wrap-up: the callback
+## Slide 11 — wrap-up: the callback
 
 **Slide text:** "Generating the app took an afternoon. Proving anything
 about it took a study."
@@ -249,7 +270,7 @@ every release, and get an answer with evidence attached."
 
 ---
 
-## Slide 11 — Q&A
+## Slide 12 — Q&A
 
 Backup facts for likely questions (disclose if asked; don't lead with
 them):

@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import Reveal from '../components/Reveal.jsx';
 
 export const label = 'demo · live';
-export const fragments = 1;
+export const fragments = 0;
 
 /** The locally running Playtest platform: `npm run hosted` at the repository root. */
 export const TARGET = 'http://127.0.0.1:4177';
 
-export default function Demo({ active, step }) {
+export default function Demo({ active }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div className="demo-bar">
@@ -24,17 +23,9 @@ export default function Demo({ active, step }) {
         </span>
       </div>
 
-      <div className={`demo-stage${step >= 1 ? ' dimmed' : ''}`} data-no-advance>
+      <div className="demo-stage" data-no-advance>
         <Frame active={active} />
       </div>
-
-      {/* Beat 2 of the run sheet: the steady-state economics. */}
-      <Reveal at={1} style={{ marginTop: 20 }}>
-        <p className="line" style={{ fontSize: 36 }}>
-          <span className="b">25¢</span> to record. <span className="b">Free</span> to replay.{' '}
-          <span className="b">Heals only what breaks.</span>
-        </p>
-      </Reveal>
     </div>
   );
 }
@@ -93,9 +84,9 @@ function Frame({ active }) {
 export const notes = `RUN SHEET
 
 1. Web suite — create a suite, "help me draft" to generate several stories, run it, live view, context representation.
-2. Pre-recorded and checked runs — the regression/replay side. Reveal the cost line here: recording a journey costs ~25 cents of model usage, replaying makes no model calls at all, and when the app changes the run self-heals just the steps that drifted. You pay for drift, not for re-recording. Cost is becoming a first-class dimension of AI tooling.
+2. Pre-recorded and checked runs — the regression/replay side, live. Slide 7 made the economics point; here the audience sees a checked replay actually run.
 3. Findings — including real findings already caught in production systems.
 4. Mobile — short: a suite and a pre-recorded run.
-5. API* — no demo. Tease "one tool for everything?" and answer it on slide 9.
+5. API* — no demo. Tease "one tool for everything?" and answer it on slide 10.
 
 FALLBACK (a planned move, not an apology): pre-recorded checked runs are ready for web and mobile. If the live run flakes, switch to the replay — that IS a product beat: "this is exactly what a checked replay is for."`;

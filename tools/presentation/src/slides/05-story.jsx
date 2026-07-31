@@ -95,4 +95,4 @@ TARGET — playtest.yaml wires it together: persona by slug, driver picks the su
 
 THE PUNCHLINE for slide 3's AC row — the story IS the acceptance criterion. One-to-one between the AC and the executable test-case artifact. The chain of custody comes back, written from the user's perspective by construction.
 
-The asterisk on "api" is deliberate: we'll come back to that (slide 9).`;
+The asterisk on "api" is deliberate: we'll come back to that (slide 10).`;

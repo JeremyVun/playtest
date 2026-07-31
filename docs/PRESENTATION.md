@@ -128,13 +128,14 @@ recorded runs replay and self-heal.
 
 ## Slide 7 — record · replay · heal
 
-**Slide text:** headline "Every run is a recording." then three rows of
-the same 12-step journey, revealed one at a time (filled dot = model
-step, hollow = deterministic):
+**Slide text:** headline "Every run is a recording." with a legend
+(green dot = model-driven step, costs money · ink dot = replayed step,
+free), then three rows of the same 12-step *connected path*, revealed
+one at a time:
 
-> **Record** — ●●●●●●●●●●●● — $0.25 *(the actor explores once — every step is saved)*
-> **Replay** — ○○○○○○○○○○○○ — $0.00 *(the saved path re-runs deterministically — no model calls)*
-> **Heal** — ○○○○○○●●○○○○ — $0.04 *(the app changed — only the drifted steps re-engage the model)*
+> **Record** — all green — $0.25 *(the actor explores the journey once — every step is saved)*
+> **Replay** — all ink, geometrically identical to Record — $0.00 *(the exact same path, step for step — no model calls)*
+> **Heal** — ink with two green steps, bracketed "app changed → re-recorded" — $0.04 *(two steps drifted — only they re-engage the model)*
 
 Final fragment: **"25¢ to record. Free to replay. Heals only what
 breaks."** + sub-line *"And the same path every run — reproducible by

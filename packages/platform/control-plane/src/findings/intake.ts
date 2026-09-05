@@ -24,7 +24,7 @@
 //     NEVER auto-merges.
 //   * A miss files a `new` finding and emits `finding.created`.
 //
-// Every function here runs inside an open `withTx` (BEGIN IMMEDIATE): the read
+// Every function here runs inside an open `withTx` on the serialized owned client: the read
 // that decides is protected by the write lock, and each mutating statement
 // re-asserts its precondition.
 import crypto from "node:crypto";
@@ -217,13 +217,13 @@ export async function appendFindingEvidence(tx: HostedDynamic, { projectId, find
         SET evidence_count = evidence_count + $2,
             last_seen = now(),
             state = CASE WHEN state = 'resolved'
-                         THEN CASE WHEN json_extract(summary, '$.confirmed_at') IS NOT NULL
+                         THEN CASE WHEN (summary #>> '{confirmed_at}') IS NOT NULL
                                    THEN 'reopened' ELSE 'new' END
                          ELSE state END,
             reject_reason = CASE WHEN state = 'resolved' THEN NULL ELSE reject_reason END,
             resolved_by_run_id = CASE WHEN state = 'resolved' THEN NULL ELSE resolved_by_run_id END,
             auto_resolved_at = CASE WHEN state = 'resolved' THEN NULL ELSE auto_resolved_at END,
-            summary = CASE WHEN state = 'resolved' THEN json_remove(summary, '$.auto_resolve.reason') ELSE summary END,
+            summary = CASE WHEN state = 'resolved' THEN jsonb_remove_paths(summary, '$.auto_resolve.reason') ELSE summary END,
             updated_at = now()
       WHERE id = $1 AND merged_into IS NULL
       RETURNING *`,

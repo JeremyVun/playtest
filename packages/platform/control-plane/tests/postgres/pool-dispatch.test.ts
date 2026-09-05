@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
 import { loadConfig, ServerConfigError } from "../../src/config.ts";
-import { connect } from "../../src/db.ts";
+import { connectTestDb } from "./helpers.ts";
 import { migrate } from "../../src/migrate.ts";
 import { ClaimBoard } from "../../src/dispatch/pool.ts";
 import { newRunnerCredential, labelsMatch, RUNNER_CREDENTIAL_PREFIX } from "../../src/auth/runner-credentials.ts";
@@ -24,10 +24,10 @@ after(() => {
 // ------------------------------------------------------------------ config
 
 test("config: board timeouts are seconds with documented defaults", () => {
-  const cfg: HostedDynamic = loadConfig({ ...base });
+  const cfg: HostedDynamic = loadConfig({ DATABASE_URL: "postgres://test:test@127.0.0.1/playtest_test", ...base });
   assert.equal(cfg.dispatch.pool.claimTimeoutMs, 600_000);
   assert.equal(cfg.dispatch.pool.heartbeatTimeoutMs, 120_000);
-  const tuned: HostedDynamic = loadConfig({
+  const tuned: HostedDynamic = loadConfig({ DATABASE_URL: "postgres://test:test@127.0.0.1/playtest_test",
     ...base,
     PLAYTEST_POOL_CLAIM_TIMEOUT_S: "30",
     PLAYTEST_POOL_HEARTBEAT_TIMEOUT_S: "15",
@@ -35,7 +35,7 @@ test("config: board timeouts are seconds with documented defaults", () => {
   assert.equal(tuned.dispatch.pool.claimTimeoutMs, 30_000);
   assert.equal(tuned.dispatch.pool.heartbeatTimeoutMs, 15_000);
   assert.throws(
-    () => loadConfig({ ...base, PLAYTEST_POOL_CLAIM_TIMEOUT_S: "-5" }),
+    () => loadConfig({ DATABASE_URL: "postgres://test:test@127.0.0.1/playtest_test", ...base, PLAYTEST_POOL_CLAIM_TIMEOUT_S: "-5" }),
     (e: HostedDynamic) => e instanceof ServerConfigError && /PLAYTEST_POOL_CLAIM_TIMEOUT_S/.test(e.message),
   );
 });
@@ -68,8 +68,8 @@ test("label matching is subset semantics, and no labels matches anything", () =>
 async function poolFixture(env: HostedDynamic = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "playtest-pool-"));
   roots.push(dir);
-  const config = loadConfig({ ...base, PLAYTEST_DATA_DIR: dir, ...env });
-  const db: HostedDynamic = await connect(config);
+  const config = loadConfig({ DATABASE_URL: "postgres://test:test@127.0.0.1/playtest_test", ...base, PLAYTEST_DATA_DIR: dir, ...env });
+  const db: HostedDynamic = await connectTestDb();
   await migrate(db);
   const projectId = ulid();
   await db.query(`INSERT INTO projects (id, key, name) VALUES ($1, 'pool', 'Pool')`, [projectId]);
@@ -84,7 +84,7 @@ async function poolFixture(env: HostedDynamic = {}) {
     await pool.postDispatch({ dispatchId: id, kind: "group", refId: "g", labels });
     return id;
   };
-  const runner = async ({ name = "laptop", labels = [], expiresAt = null, ephemeral = 0 }: HostedDynamic = {}) => {
+  const runner = async ({ name = "laptop", labels = [], expiresAt = null, ephemeral = false }: HostedDynamic = {}) => {
     const id = ulid();
     await db.query(
       `INSERT INTO runners (id, project_id, name, labels, credential_hash, ephemeral, expires_at)

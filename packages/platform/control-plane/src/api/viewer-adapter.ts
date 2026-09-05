@@ -132,12 +132,10 @@ export async function changedJson(ctx: HostedDynamic) {
        FROM runs r
        JOIN run_groups g ON g.id = r.run_group_id
       WHERE g.project_id = $1 AND r.manifest IS NOT NULL AND ${NOT_OPEN}
-        AND json_extract(r.manifest, '$.healed') IN (1, 'true')
-        AND json_extract(r.manifest, '$.result.status') = 'pass'`,
+        AND (r.manifest #>> '{healed}') IN ('1', 'true')
+        AND (r.manifest #>> '{result,status}') = 'pass'`,
     [project.id],
   );
-  // `pending` is a computed column, so it arrives as SQLite's 0/1 rather than a
-  // decoded boolean; the contract shape is a JSON boolean.
   const out = rows.map(({ run_id, case_id, score, manifest: m, pending }: HostedDynamic) => ({
     case_id: m.case?.id ?? null,
     run_id: m.run_id ?? null,

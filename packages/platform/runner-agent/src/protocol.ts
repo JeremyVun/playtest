@@ -11,6 +11,7 @@ import type { RunnerConfig } from "./runner-config.ts";
 /** What `POST /runner/exchange` answers: the bearer scoped to one claim. */
 export interface ExchangeAnswer {
   token: string;
+  executor_id?: string;
 }
 
 /** The per-case launch options a run group carries for one case. */

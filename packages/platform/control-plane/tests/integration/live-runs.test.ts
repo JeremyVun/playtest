@@ -1,3 +1,4 @@
+import { collectObjects } from "../../src/store/references.ts";
 // Control-plane open runs — ingest, staging, serving, seal and GC
 // (docs/contracts/hosted.md "Live runs").
 //
@@ -296,6 +297,7 @@ test("open → acked staged ingest → pre-bundle serving → live paging and st
       };
       const bytes = await buildBundle(tmp, "sealed", bundleEntries);
       const stagedKeys = (await stagingOf(app, target.db_id)).artifacts.map((a: HostedDynamic) => a.key);
+      const existingStagedKeys = stagedKeys.filter((key: string) => fs.existsSync(path.join(storeRoot, key)));
       assert.ok(stagedKeys.length >= 2, "there is staged object state to clean up");
       // A viewer holding through the seal must learn about it on the next wake,
       // not at the end of a full hold with no new trajectory line.
@@ -315,6 +317,8 @@ test("open → acked staged ingest → pre-bundle serving → live paging and st
       const afterSeal = await stagingOf(app, target.db_id);
       assert.deepEqual(afterSeal.artifacts, [], "ledger rows go in the report transaction");
       assert.deepEqual(afterSeal.batches, []);
+      for (const key of existingStagedKeys) assert.equal(fs.existsSync(path.join(storeRoot, key)), true, "seal leaves bytes through orphan grace");
+      await collectObjects(app.ctx, { now: new Date(Date.now() + 2 * DAY_MS) });
       for (const key of stagedKeys) {
         assert.equal(fs.existsSync(path.join(storeRoot, key)), false, `staged object ${key} is gone after commit`);
       }
@@ -323,13 +327,16 @@ test("open → acked staged ingest → pre-bundle serving → live paging and st
 
       // Sealed serving is byte-identical to a run that was never live.
       const neverLive = { run_id: other.run_id, case_id: other.case_id };
+      assert.equal((await runner.start(other.run_id)).status, 200);
       const twin = await runner.bundle(other.db_id, bytes);
-      await runner.report(other.run_id, {
+      assert.equal(twin.status, 200);
+      const twinReport = await runner.report(other.run_id, {
         status: "pass",
         bundle: twin.body.artifact,
         score: 90,
         manifest: JSON.parse(bundleEntries["manifest.json"]),
       });
+      assert.equal(twinReport.status, 200);
       for (const name of ["manifest.json", "trajectory.jsonl", "steps/001.png"]) {
         const wasLive = Buffer.from(await (await fetch(viewUrl(base, project, run, name))).arrayBuffer());
         const wasNot = Buffer.from(await (await fetch(viewUrl(base, project, neverLive, name))).arrayBuffer());
@@ -420,6 +427,7 @@ test("stale pending reservations are reaped and refunded; an owned reservation s
     const reserve = async (entry: string, ageMs: number, size: number) => {
       const key = `runs/${groupId}/live/${target.db_id}/${entry}`;
       await app.store.put(key, Buffer.alloc(size, 7));
+      fs.utimesSync(path.join(storeRoot, key), new Date(Date.now() - ageMs), new Date(Date.now() - ageMs));
       await app.db.query(
         `INSERT INTO live_artifacts (id, run_id, entry, key, state, size, sha256, created_at)
            VALUES ($1, $2, $3, $4, 'pending', $5, 'abc', $6)`,

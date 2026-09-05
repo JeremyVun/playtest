@@ -262,7 +262,7 @@ function modeChip(mode: ViewerDynamic, healed: ViewerDynamic, status: ViewerDyna
 // they re-execute (acted_from). Returns null when unknowable.
 function actionOf(env: ViewerDynamic) {
   if (env.agent?.action) return env.agent.action;
-  if (env.acted_from !== null) return state.baselineByStep.get(env.acted_from)?.agent?.action ?? null;
+  if (env.acted_from != null) return state.baselineByStep.get(env.acted_from)?.agent?.action ?? null;
   return null;
 }
 
@@ -1787,7 +1787,7 @@ async function showA11y(env: ViewerDynamic) {
   // recorded. The baseline step the action came from (acted_from) carries the
   // recorded a11y inline (snapshot_text), so we can show what the agent saw THEN
   // vs NOW as a two-column line diff — the visual form of the drift signal.
-  const baseline = env.confusion?.type === "state_drift" && env.acted_from !== null
+  const baseline = env.confusion?.type === "state_drift" && env.acted_from != null
     ? state.baselineByStep.get(env.acted_from)?.snapshot_text
     : null;
   if (typeof baseline === "string") showA11yDrift(pre, diff, baseline, current, env);
@@ -2352,7 +2352,7 @@ function renderDiff() {
   // the strip's step numbers stay accountable in the track.
   const failedReplayBy = new Map(
     state.steps
-    .filter((e: ViewerDynamic) => e.mode === "act" && e.result?.ok === false && e.acted_from !== null)
+    .filter((e: ViewerDynamic) => e.mode === "act" && e.result?.ok === false && e.acted_from != null)
       .map((e: ViewerDynamic) => [e.acted_from, e]),
   );
 
@@ -2591,7 +2591,7 @@ function renderEmptyRun() {
 function renderInspectorStep(env: ViewerDynamic) {
   const d = describe(env);
   const a = actionOf(env);
-  const replayed = env.acted_from !== null || env.mode === "act";
+  const replayed = env.acted_from != null || env.mode === "act";
   const failed = env.result?.ok === false;
 
   // What happened: the action, where it came from, whether it worked, and on
@@ -2626,9 +2626,11 @@ function renderInspectorStep(env: ViewerDynamic) {
     h("div", { class: "act-line" }, icon(d.icon), h("span", { class: "verb" }, d.verb), h("span", { class: "act-arg", title: d.arg ?? "" }, d.arg ?? "")),
     replayed
       ? h("div", { class: "step-src" }, `(no model call)`)
-      : heal
-        ? h("div", { class: "step-src" }, "the saved recording broke — the agent took over and chose this action")
-        : h("div", { class: "step-src" }, "the agent chose this action itself"),
+      : env.mode === "error"
+        ? h("div", { class: "step-src" }, "the model call did not produce a valid action")
+        : heal
+          ? h("div", { class: "step-src" }, "the saved recording broke — the agent took over and chose this action")
+          : h("div", { class: "step-src" }, "the agent chose this action itself"),
     status,
     kv.childElementCount ? kv : null));
 

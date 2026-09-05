@@ -115,17 +115,14 @@ export async function ensureSiteRunner(
 ) {
   const id = ulid();
   return await ctx.db.withTx(async (tx: HostedDynamic) => {
-    let rows;
-    try {
-      ({ rows } = await tx.query(
-        `INSERT INTO runners (id, project_id, name, labels, credential_hash)
-           VALUES ($1, NULL, $2, $3, $4) RETURNING *`,
-        [id, name, labels, hash],
-      ));
-    } catch (e: HostedDynamic) {
-      if (/UNIQUE constraint failed/.test(e.message)) return null;
-      throw e;
-    }
+    const { rows } = await tx.query(
+      `INSERT INTO runners (id, project_id, name, labels, credential_hash)
+       VALUES ($1, NULL, $2, $3, $4)
+       ON CONFLICT (name) WHERE project_id IS NULL AND revoked_at IS NULL DO NOTHING
+       RETURNING *`,
+      [id, name, labels, hash],
+    );
+    if (!rows.length) return null;
     await audit(tx, {
       actor,
       action: "runner.registered",

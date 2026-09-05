@@ -17,7 +17,7 @@ import { h, mount } from "../lib/dom.js";
 import { link, navigate, onPageLeave } from "../lib/router.js";
 import { page, currentTheme } from "../lib/shell.js";
 import { hasRole } from "../lib/state.js";
-import { statusChip, GLYPH, toast, toastError, emptyState, errorState, formModal, confirmModal, copyText, formField, overflowMenu } from "../lib/ui.js";
+import { statusChip, GLYPH, toast, toastError, emptyState, errorState, formModal, confirmModal, copyText, formField, overflowMenu, triggerDownload } from "../lib/ui.js";
 import { modeLabel, chipStatus, fmtCost, fmtMs, ago, short, clamp } from "../lib/labels.js";
 import { didNotRunLabel } from "../lib/vocab.js";
 import { findingStateLabel, findingStateTone } from "../lib/finding-buckets.js";
@@ -693,14 +693,6 @@ export async function runDetailPage(projectKey: WebDynamic, groupId: WebDynamic,
 
   // Downloads change no visible page state, which read as dead buttons in the
   // studies ("clicked Bundle… saw no visible result") — give a receipt.
-  function triggerDownload(href: WebDynamic) {
-    const a = document.createElement("a");
-    a.href = href;
-    a.rel = "noopener";
-    document.body.append(a);
-    a.click();
-    a.remove();
-  }
   function downloadClip() {
     triggerDownload(`/api/v1/runs/${runId}/clip`);
     toast("Clip downloading", "check your browser downloads", "ok");

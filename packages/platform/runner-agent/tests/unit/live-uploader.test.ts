@@ -222,6 +222,7 @@ test("ships artifacts before the lines that name them, one request at a time, in
     const batches = cp.routed("trajectory");
     assert.equal(batches.at(-1).body.from_line, 3, "the delta starts where the last ack left off");
     assert.deepEqual(batches.at(-1).body.lines, [dir.lines()[3]]);
+    await until(() => live.state().sentLines === 4, "the fourth line acknowledgement");
     assert.equal(live.state().sentLines, 4);
   } finally {
     await live.stop();
@@ -584,7 +585,7 @@ test("a control plane without the live routes stops the uploader instead of retr
   }
 });
 
-test("artifactRefs names only step artifacts, and apiPath keeps the advertised path but not its origin", () => {
+test("artifactRefs names only step artifacts, and apiPath accepts relative paths and refuses an unexpected origin", () => {
   assert.deepEqual(
     artifactRefs(envelope(7, { screenshot: "steps/007.png", a11y: "steps/007.a11y.txt", har_entries: [12, 13] })),
     ["steps/007.png", "steps/007.a11y.txt"],
@@ -595,10 +596,10 @@ test("artifactRefs names only step artifacts, and apiPath keeps the advertised p
   // The template's origin is the deployment's publicUrl, which is not
   // necessarily the origin this runner was pointed at; only the path survives.
   assert.equal(
-    apiPath("https://playtest.example/api/v1/runner/runs/{run_db_id}/live/{entry}", { run_db_id: "db1", entry: "steps/001.png" }, "/fallback"),
+    apiPath("https://playtest.example/api/v1/runner/runs/{run_db_id}/live/{entry}", { run_db_id: "db1", entry: "steps/001.png" }, "/fallback", "https://playtest.example"),
     "/runner/runs/db1/live/steps/001.png",
   );
   assert.equal(apiPath(undefined, {}, "/fallback"), "/fallback", "a spec predating uploads.live falls back");
-  assert.equal(apiPath("https://x/other/{run_id}", { run_id: "r" }, "/fallback"), "/fallback", "so does an unrecognizable path");
-  assert.equal(apiPath("https://x/api/v1/a/{missing}", {}, "/fallback"), "/fallback", "so does an unfilled variable");
+  assert.throws(() => apiPath("https://x/other/{run_id}", { run_id: "r" }, "/fallback"), /configured server/);
+  assert.throws(() => apiPath("https://x/api/v1/a/{missing}", {}, "/fallback"), /unresolved/);
 });

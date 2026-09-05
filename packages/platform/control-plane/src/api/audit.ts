@@ -21,13 +21,9 @@ export async function listAudit(ctx: HostedDynamic) {
   const action = ctx.query.get("action");
   if (action) add("action = $?", action);
   const actorUser = ctx.query.get("actor");
-  if (actorUser) add("json_extract(actor, '$.user_id') = $?", actorUser);
+  if (actorUser) add("(actor #>> '{user_id}') = $?", actorUser);
   const since = ctx.query.get("since");
   if (since) {
-    // Validate before binding, or garbage reaches the query as a raw 500 instead
-    // of a friendly 400. Bind a Date, never the raw string: `ts` is epoch-ms
-    // INTEGER, and SQLite compares an integer against non-numeric text by type
-    // rank — an ISO string would silently match nothing.
     if (Number.isNaN(Date.parse(since))) {
       throw badRequest(`"since" must be a parseable date/time (e.g. an ISO 8601 string)`);
     }

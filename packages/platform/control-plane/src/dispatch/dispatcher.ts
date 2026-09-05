@@ -333,14 +333,14 @@ function resolveModels(defaultsYaml: HostedDynamic, project: HostedDynamic) {
 async function runCostHistory(ctx: HostedDynamic, suiteId: HostedDynamic) {
   const { rows } = await ctx.db.query(
     `SELECT r.story_id,
-            COALESCE(json_extract(r.manifest, '$.mode'), r.mode) AS mode,
-            AVG(CAST(json_extract(r.totals, '$.cost_usd') AS REAL)) AS cost,
+            COALESCE((r.manifest #>> '{mode}'), r.mode) AS mode,
+            AVG(CAST((r.totals #>> '{cost_usd}') AS DOUBLE PRECISION)) AS cost,
             CAST(AVG(r.duration_ms) AS INTEGER) AS ms,
             COUNT(*) AS n
        FROM runs r JOIN run_groups g ON g.id = r.run_group_id
       WHERE g.suite_id = $1 AND r.status IN ('pass','fail','explored')
-        AND json_extract(r.totals, '$.cost_usd') IS NOT NULL
-      GROUP BY r.story_id, COALESCE(json_extract(r.manifest, '$.mode'), r.mode)`,
+        AND (r.totals #>> '{cost_usd}') IS NOT NULL
+      GROUP BY r.story_id, COALESCE((r.manifest #>> '{mode}'), r.mode)`,
     [suiteId],
   );
   const byStoryMode = new Map();
@@ -415,7 +415,7 @@ export async function getRunGroupView(ctx: HostedDynamic, id: HostedDynamic) {
   const group = await getRunGroup(ctx, id);
   // One windowed pass over artifacts replaces the two per-run LATERAL … LIMIT 1
   // subqueries: rn = 1 is the newest row of each (run, kind), joined twice.
-  // The CTE cannot be called `artifacts` — SQLite reads that as a self-reference.
+  // The CTE name differs from its source table to avoid a self-reference.
   const { rows } = await ctx.db.query(
     `WITH latest_artifacts AS (
        SELECT run_id, kind, key, sha256, size, tier,

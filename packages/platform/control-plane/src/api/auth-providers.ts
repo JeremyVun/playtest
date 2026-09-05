@@ -56,7 +56,7 @@ export async function createAuthProvider(ctx: HostedDynamic) {
     } catch (e: HostedDynamic) {
       // A concurrent create/rename hits `UNIQUE (project_id, name)` — surface the
       // friendly conflict, never the raw constraint error.
-      if (/UNIQUE constraint failed/.test(e.message)) {
+      if (e.code === "23505" && e.constraint === "auth_providers_project_id_name_key") {
         throw conflict(`an auth provider named "${fields.name}" already exists`);
       }
       throw e;
@@ -116,7 +116,7 @@ export async function updateAuthProvider(ctx: HostedDynamic) {
     } catch (e: HostedDynamic) {
       // A concurrent create/rename hits `UNIQUE (project_id, name)` — surface the
       // friendly conflict, never the raw constraint error.
-      if (/UNIQUE constraint failed/.test(e.message)) {
+      if (e.code === "23505" && e.constraint === "auth_providers_project_id_name_key") {
         throw conflict(`an auth provider named "${fields.name}" already exists`);
       }
       throw e;

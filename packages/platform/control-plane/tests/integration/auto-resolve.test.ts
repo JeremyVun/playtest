@@ -60,7 +60,7 @@ async function seedRun(app: HostedDynamic, { groupId, caseId = "checkout", story
   await app.db.query(
     `INSERT INTO runs (id, run_group_id, case_id, story_id, run_id, status, mode, gate, manifest, finished_at)
        VALUES ($1,$2,$3,$4,$5,$6,'record',$7,$8,$9)`,
-    [id, groupId, caseId, storyId, `${caseId}-${ulid().slice(-6)}`, status, gate, manifest, finishedAt],
+    [id, groupId, caseId, storyId, `${caseId}-${ulid().slice(-6)}`, status, gate, manifest, new Date(finishedAt)],
   );
   return { id, case_id: caseId, story_id: storyId };
 }
@@ -164,7 +164,7 @@ test("gate tier: fail → accept → passing rerun resolves with provenance; rec
     // invariant for the staleness comparison below.
     await app.db.query(
       `UPDATE finding_evidence SET created_at = $2 WHERE run_id = $1`,
-      [runC.id, Date.now() + 2 * MIN],
+      [runC.id, new Date(Date.now() + 2 * MIN)],
     );
     const reopened = await findingRow(app, finding.id);
     assert.equal(reopened.state, "reopened");
@@ -526,7 +526,7 @@ test("retention: an auto-resolved finding pins its evidence run inside the grace
       // Age the auto-resolution beyond the pin window: the normal schedule resumes.
       await app.db.query(
         `UPDATE findings SET auto_resolved_at = $2 WHERE id = $1`,
-        [finding.id, Date.now() - 91 * 86_400_000],
+        [finding.id, new Date(Date.now() - 91 * 86_400_000)],
       );
       await runRetentionCycle(app.ctx, { retention });
       artifacts = await app.db.query(`SELECT * FROM artifacts WHERE run_id = $1`, [runA.id]);

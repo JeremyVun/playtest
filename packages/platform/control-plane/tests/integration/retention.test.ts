@@ -16,7 +16,7 @@ const NOW = new Date("2026-07-06T00:00:00.000Z");
 test("retention lifecycle and on-demand clips", async () => {
   const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), "pt-retention-"));
   try {
-    await withApp(async ({ base, api, app }: HostedDynamic) => {
+    await withApp(async ({ base, api, app, storeRoot }: HostedDynamic) => {
       const { project, suite, application, ring, snapshotId } = await seedProject(api, app);
       const groupId = ulid();
       await app.db.query(
@@ -48,6 +48,8 @@ test("retention lifecycle and on-demand clips", async () => {
         [coreRun.id, new Date(NOW.getTime() - 2 * 24 * 60 * 60 * 1000)],
       );
       await app.store.put("runs/orphan.ptrun", Buffer.from("orphan"));
+
+      for (const key of await app.store.list("runs/")) await fsp.utimes(path.join(storeRoot, key), new Date(NOW.getTime() - 2 * 86400000), new Date(NOW.getTime() - 2 * 86400000));
 
       // Retention is deployment-wide now (no per-project policy API): the cycle
       // takes the resolved config directly.
@@ -265,7 +267,7 @@ test("retention cycles do not overlap and a lease left by a dead process is reco
 
     // …and once it expires (the dead process renews nothing), the next cycle
     // reclaims it without operator action.
-    await app.db.query(`UPDATE leases SET expires_at = $2 WHERE name = $1`, [RETENTION_LEASE, now - 1]);
+    await app.db.query(`UPDATE leases SET expires_at = $2 WHERE name = $1`, [RETENTION_LEASE, new Date(now - 1)]);
     const recovered = await runRetentionCycle(app.ctx);
     assert.equal(recovered.skipped, false, "an expired lease is reclaimed by the next cycle");
     assert.equal(await readLease(app.db, RETENTION_LEASE), null);

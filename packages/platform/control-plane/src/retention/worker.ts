@@ -1,3 +1,5 @@
+import { lifecycle } from "../store/lifecycle.ts";
+import { collectObjects } from "../store/references.ts";
 // Retention worker (docs/contracts/hosted.md#retention). It is a
 // leader-elected cycle, not a queue: one cycle at a time prunes old events, tiers
 // full bundles down to core with core `rewriteBundle`, deletes expired artifacts
@@ -91,13 +93,7 @@ export async function runRetentionCycle(
   };
 
   const held = await withLease(ctx.db, RETENTION_LEASE, { ttlMs: RETENTION_LEASE_TTL_MS, log: ctx.log }, async () => {
-    // Each step opens its own short transaction and does its object-store I/O
-    // outside it. One transaction for the whole cycle would hold the single
-    // SQLite write connection across bundle rewrites and integrity hashing —
-    // seconds of blocked API writes. The unit that must be atomic is one run's
-    // tier transition (artifact rows + run row + audit + event), and that still
-    // is; the cycle as a whole was never atomic, since it deletes objects after
-    // commit either way.
+    await lifecycle(ctx).read(async () => {
     const projects = await activeProjects(ctx.db);
     for (const { project_id } of projects) {
       const policy = {
@@ -122,13 +118,10 @@ export async function runRetentionCycle(
     summary.integrity_checked += integrity.checked;
     summary.integrity_failed += integrity.failed;
 
-    cleanupKeys.push(...(await orphanRunObjects(ctx)));
-
-    for (const key of unique(cleanupKeys)) {
-      await ctx.store.delete(key);
-      summary.orphan_objects_deleted += 1;
-    }
-    summary.blob_objects_deleted += await gcBlobs(ctx);
+    });
+    const collected = await collectObjects(ctx, { now });
+    summary.orphan_objects_deleted += collected.runs;
+    summary.blob_objects_deleted += collected.blobs;
   });
   if (!held.acquired) return { ...summary, skipped: true };
   return summary;
@@ -163,8 +156,6 @@ async function activeProjects(q: QueryTarget): Promise<DbRow[]> {
   return rows;
 }
 
-// One statement, so it is atomic on its own — no transaction wrapper needed.
-// SQLite's DELETE takes neither an alias nor USING, hence the IN (SELECT …).
 async function pruneEvents(q: QueryTarget, policy: RetentionPolicy, now: Date): Promise<number> {
   const cutoff = daysBefore(now, policy.events_days);
   const { rowCount } = await q.query(
@@ -211,7 +202,7 @@ async function tierFullRuns(
 
   let count = 0;
   for (const run of rows) {
-    const result = await rewriteToCore(ctx, run);
+    const result = await lifecycle(ctx).serial("heavy", () => rewriteToCore(ctx, run));
     cleanupKeys.push(run.artifact_key);
     await ctx.db.withTx(async (tx) => {
       await tx.query(
@@ -365,7 +356,7 @@ async function rewriteToCore(ctx: AppContext, run: DbRow) {
     await fsp.writeFile(src, original);
     const rewritten = rewriteBundle(src, out, retentionCoreKeepPath);
     const bytes = await fsp.readFile(out);
-    const key = `runs/${run.run_group_id}/${run.id}.core.ptrun`;
+    const key = `runs/${run.run_group_id}/${run.id}.${crypto.createHash("sha256").update(bytes).digest("hex")}.core.ptrun`;
     const stored = await ctx.store.put(key, bytes);
     return { key, sha256: stored.sha256, size: stored.size, dropped, index: rewritten.index };
   } finally {
@@ -537,32 +528,11 @@ async function gcLiveStaging(tx: Tx, now: Date, cleanupKeys: string[]): Promise<
   return collected + (strayLines.rowCount || 0);
 }
 
-/**
- * Objects under `runs/` that no row owns. Both ledgers count as owners: a
- * `bundle`/`clip` artifacts row, and a live staging row in EITHER state.
- *
- * The `pending` half is what closes the window the two-phase reservation exists
- * for. A reservation is committed before its object is written, so from the
- * instant a live object can exist it already has an owner here, and this sweep
- * — which deletes every unowned `runs/` object in the same cycle — can run
- * mid-stream without ever touching staged bytes. Any reader added later must be
- * listed here too, or its objects will be deleted out from under it.
- */
-async function orphanRunObjects(ctx: AppContext): Promise<string[]> {
-  const keys = await ctx.store.list("runs/");
-  if (!keys.length) return [];
-  const known = new Set<string>((await ctx.db.query(`SELECT key FROM artifacts`)).rows.map((r: DbRow) => r.key));
-  for (const row of (await ctx.db.query(`SELECT key FROM live_artifacts`)).rows) known.add(row.key);
-  return keys.filter((key: string) => !known.has(key));
-}
-
 async function pruneSnapshots(tx: Tx): Promise<{ deleted: number }> {
   const { rows: suites } = await tx.query(`SELECT id FROM suites`);
   let deleted = 0;
   for (const suite of suites) {
     const res = await tx.query(
-      // No alias on the DELETE target: SQLite's DELETE accepts neither an alias
-      // nor USING, so the correlated subquery references the bare table name.
       `DELETE FROM suite_snapshots
         WHERE suite_id = $1
           AND NOT EXISTS (SELECT 1 FROM run_groups g WHERE g.snapshot_id = suite_snapshots.id)
@@ -574,32 +544,6 @@ async function pruneSnapshots(tx: Tx): Promise<{ deleted: number }> {
     deleted += res.rowCount || 0;
   }
   return { deleted };
-}
-
-/**
- * Reclaim content-addressed blobs nothing names any more.
- *
- * `blobs/<sha256>` holds suite-snapshot file content, keyed by its own bytes.
- * Every referrer has to be listed here: a reader added later and forgotten here
- * would have its objects deleted out from under it. (The platform holds no
- * application bytes — a mobile build lives on the runner that will install it —
- * so snapshots are the only referrer.)
- */
-async function gcBlobs(ctx: AppContext): Promise<number> {
-  const keys = await ctx.store.list("blobs/");
-  if (!keys.length) return 0;
-  const { rows } = await ctx.db.query(`SELECT tree FROM suite_snapshots`);
-  const referenced = new Set<string>();
-  for (const row of rows) {
-    for (const sha of Object.values(row.tree || {})) referenced.add(`blobs/${sha}`);
-  }
-  let deleted = 0;
-  for (const key of keys) {
-    if (referenced.has(key)) continue;
-    await ctx.store.delete(key);
-    deleted += 1;
-  }
-  return deleted;
 }
 
 function envInt(raw: string | undefined, fallback: number, field: string): number {
@@ -625,8 +569,4 @@ function invalid(field: string, message: string): never {
 
 function daysBefore(now: Date, days: number): Date {
   return new Date(new Date(now).getTime() - days * DAY_MS);
-}
-
-function unique(values: string[]): string[] {
-  return [...new Set(values.filter(Boolean))];
 }

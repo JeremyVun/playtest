@@ -1,13 +1,12 @@
-// Filesystem-backed object store (Phase 1 default). Keys are "/"-joined logical
-// paths; they map to files under `root`, with traversal refused. Deterministic,
-// dependency-free, and exercised by every offline test in place of S3/MinIO.
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { AppError } from "../errors.ts";
+import { validateKey, validateRange } from "./keys.ts";
+import type { ObjectMetadata, ObjectStore } from "../types.ts";
 
-export class FsStore {
+export class FsStore implements ObjectStore {
   declare readonly root: string;
 
   constructor(root: string) {
@@ -15,6 +14,7 @@ export class FsStore {
   }
 
   #abs(key: string): string {
+    validateKey(key);
     const abs = path.resolve(this.root, key);
     if (abs !== this.root && !abs.startsWith(this.root + path.sep)) {
       throw new AppError("storage_error", `refusing object key outside the store: ${key}`);
@@ -44,7 +44,14 @@ export class FsStore {
   }
 
   async getRange(key: string, start: number, end: number): Promise<Buffer> {
+    validateRange(start, end);
     const abs = this.#abs(key);
+    try {
+      if ((await fsp.stat(abs)).size <= start) throw new AppError("bad_request", "object range starts beyond the object", { status: 416 });
+    } catch (error: any) {
+      if (error.code === "ENOENT") throw new AppError("not_found", `object not found: ${key}`);
+      throw error;
+    }
     return await new Promise<Buffer>((resolve, reject) => {
       const chunks: Buffer[] = [];
       const s = fs.createReadStream(abs, { start, end });
@@ -60,7 +67,8 @@ export class FsStore {
     try {
       await fsp.access(this.#abs(key));
       return true;
-    } catch {
+    } catch (error: any) {
+      if (error.code !== "ENOENT") throw error;
       return false;
     }
   }
@@ -73,25 +81,34 @@ export class FsStore {
     }
   }
 
-  async list(prefix = ""): Promise<string[]> {
-    const base = this.#abs(prefix);
-    const out: string[] = [];
-    const walk = async (dir: string, rel: string): Promise<void> => {
+  async *listPages(prefix = ""): AsyncGenerator<ObjectMetadata[]> {
+    validateKey(prefix, true);
+    const walk = async function* (dir: string, rel: string): AsyncGenerator<ObjectMetadata> {
       let entries: fs.Dirent[];
-      try {
-        entries = await fsp.readdir(dir, { withFileTypes: true });
-      } catch {
-        return;
-      }
-      for (const e of entries) {
-        const childRel = rel ? `${rel}/${e.name}` : e.name;
-        if (e.isDirectory()) await walk(path.join(dir, e.name), childRel);
-        else if (!e.name.endsWith(".tmp") && !e.name.includes(".tmp-")) out.push(childRel);
+      try { entries = await fsp.readdir(dir, { withFileTypes: true }); }
+      catch (error: any) { if (error.code === "ENOENT") return; throw error; }
+      entries.sort((a, b) => a.name.localeCompare(b.name));
+      for (const entry of entries) {
+        const key = rel + entry.name;
+        const abs = path.join(dir, entry.name);
+        if (entry.isDirectory()) yield* walk(abs, key + "/");
+        else if (entry.isFile() && !entry.name.includes(".tmp-") && key.startsWith(prefix)) {
+          const stat = await fsp.stat(abs);
+          yield { key, size: stat.size, lastModified: stat.mtime };
+        }
       }
     };
-    // Resolve the prefix relative to root for the returned keys.
-    const relBase = path.relative(this.root, base);
-    await walk(base, relBase === "" ? "" : relBase.split(path.sep).join("/"));
-    return out.sort();
+    let page: ObjectMetadata[] = [];
+    for await (const item of walk(this.root, "")) {
+      page.push(item);
+      if (page.length === 1000) { yield page; page = []; }
+    }
+    if (page.length) yield page;
   }
+  async list(prefix = ""): Promise<string[]> {
+    const keys: string[] = [];
+    for await (const page of this.listPages(prefix)) for (const item of page) keys.push(item.key);
+    return keys.sort();
+  }
+  close(): void {}
 }

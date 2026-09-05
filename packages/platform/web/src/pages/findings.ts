@@ -3,7 +3,7 @@ import { h, mount } from "../lib/dom.js";
 import { link, navigate } from "../lib/router.js";
 import { page } from "../lib/shell.js";
 import { hasRole, autoDedupeOn } from "../lib/state.js";
-import { statusChip, srOnly, toast, toastError, emptyState, errorState, formModal, copyText, formField } from "../lib/ui.js";
+import { statusChip, srOnly, toast, toastError, emptyState, errorState, formModal, copyText, formField, triggerDownload } from "../lib/ui.js";
 import { ago, short, clamp } from "../lib/labels.js";
 import { debouncedFeedRefresh } from "../lib/live-page.js";
 import { projectPage } from "../lib/project-page.js";
@@ -182,8 +182,22 @@ export async function findingsPage(projectKey: WebDynamic, query: WebDynamic = n
       looksFixed);
 
     const reviewTotal = items.length + suggested.length;
+    // The tab as one Markdown file — every finding with links back to its
+    // page, viewer step, and run bundle — for an LLM (or a person) to work
+    // through away from the console. Same filter as the list; nothing to
+    // download from an empty tab.
+    const exportButton = items.length
+      ? h("button.btn", {
+          title: "Download the findings in this tab as one Markdown file, with links to each finding and its evidence, to hand to an AI assistant or read offline.",
+          onclick: () => {
+            triggerDownload(`/api/v1/projects/${encodeURIComponent(projectKey)}/findings/export?state=${encodeURIComponent(FILTERS[filter].state)}`);
+            toast("Downloading findings", `A Markdown file with findings from ${FILTERS[filter].label.toLowerCase()} and links to their evidence is downloading.`, "ok");
+          },
+        }, "Download findings")
+      : null;
     mount(main, page({
       title: "Findings",
+      actions: exportButton ? [exportButton] : undefined,
       // Say what this bucket holds — "Open" alone left people experimenting to
       // find out which tab a confirmed finding was in.
       sub: reviewBucket

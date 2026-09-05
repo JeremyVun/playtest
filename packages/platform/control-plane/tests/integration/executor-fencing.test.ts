@@ -1,3 +1,4 @@
+import { collectObjects } from "../../src/store/references.ts";
 // Current-executor fencing at the HTTP boundary (docs/contracts/hosted.md,
 // "Current executor fencing").
 //
@@ -441,10 +442,10 @@ test("fencing race: a replacement during the bundle upload publishes neither byt
     assert.equal(artifacts.length, 0, "the stale upload published no artifact row");
     const row = (await app.db.query(`SELECT status FROM runs WHERE run_id = $1`, [first.run_id])).rows[0];
     assert.equal(row.status, "running", "the stale upload repainted nothing");
-    await assert.rejects(
-      app.store.get(`runs/${groupId}/${first.db_id}.${a.executor_id}.ptrun`),
-      "the refused upload's staged bytes were deleted",
-    );
+    const orphans = await app.store.list(`runs/${groupId}/${first.db_id}.${a.executor_id}.`);
+    assert.equal(orphans.length, 1, "refused bytes remain unreferenced until collection");
+    await collectObjects(app.ctx, { now: new Date(Date.now() + 2 * 86400000) });
+    assert.equal(await app.store.has(orphans[0]), false, "unreferenced failed upload is collected after grace");
   });
 });
 

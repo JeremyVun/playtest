@@ -12,10 +12,14 @@ export type ObjectStoreConfig =
   | {
       kind: "s3";
       url: string;
-      bucket: string | null;
-      region: string | null;
-      accessKeyId: string | null;
-      secretAccessKey: string | null;
+      bucket: string;
+      region: string;
+      accessKeyId: string;
+      secretAccessKey: string;
+      prefix: string;
+      forcePathStyle: boolean;
+      timeoutMs: number;
+      maxAttempts: number;
     };
 
 /** A numeric override that keeps its documented default when unset or empty. */
@@ -72,39 +76,61 @@ function resolveRetentionDays(env: NodeJS.ProcessEnv) {
  * @param {Record<string,string|undefined>} env
  */
 export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
-  const authMode = env.PLAYTEST_AUTH === "dev" ? "dev" : "oidc";
+  const authMode = env.PLAYTEST_AUTH || "oidc";
+  if (authMode !== "dev" && authMode !== "oidc" && authMode !== "proxy") {
+    throw new ServerConfigError("PLAYTEST_AUTH must be dev, oidc, or proxy");
+  }
 
-  // One data root holds the SQLite database and, by default, the object store,
-  // so a deployment cannot accidentally split durable state across volumes
-  // (docs/contracts/hosted.md, "Storage"). PLAYTEST_DATA_DIR is the single knob;
-  // OBJECT_STORE_URL remains the expert override for S3 or a separate mount.
+  if (env.PLAYTEST_DB_FILE) throw new ServerConfigError("PLAYTEST_DB_FILE is obsolete. Configure DATABASE_URL for a fresh Postgres database; old SQLite data is left untouched.");
   const dataDir = path.resolve(env.PLAYTEST_DATA_DIR || path.resolve(process.cwd(), ".playtest-data"));
-  const databaseFile = path.resolve(env.PLAYTEST_DB_FILE || path.join(dataDir, "playtest.sqlite"));
+  const databaseUrl = env.DATABASE_URL || "";
+  try {
+    const parsed = new URL(databaseUrl);
+    if (!["postgres:", "postgresql:"].includes(parsed.protocol) || !parsed.hostname || parsed.pathname.length < 2) throw new Error();
+  } catch {
+    throw new ServerConfigError("DATABASE_URL is required and must name a Postgres host and database");
+  }
 
-  // Object storage: an `s3://`/`http(s)://` OBJECT_STORE_URL selects the S3 adapter;
-  // anything else (or unset) is a local filesystem root — the default so
-  // `npm test` and local dev never need MinIO. `file://` and bare paths both work.
   const storeUrl = env.OBJECT_STORE_URL || "";
   let objectStore: ObjectStoreConfig;
-  if (/^s3:\/\//.test(storeUrl) || /^https?:\/\//.test(storeUrl)) {
+  if (/^[a-z]+:\/\//i.test(storeUrl) && !storeUrl.startsWith("file://")) {
+    let endpoint: URL;
+    try { endpoint = new URL(storeUrl); } catch { throw new ServerConfigError("OBJECT_STORE_URL must be an HTTPS S3 endpoint"); }
+    if ((endpoint.protocol !== "https:" && !(endpoint.protocol === "http:" && env.OBJECT_STORE_ALLOW_HTTP === "1")) || endpoint.username || endpoint.password || endpoint.search || endpoint.hash || endpoint.pathname !== "/") {
+      throw new ServerConfigError("OBJECT_STORE_URL must be an HTTPS endpoint without credentials, path or query; local tests may set OBJECT_STORE_ALLOW_HTTP=1");
+    }
+    const required = (name: string) => {
+      if (!env[name]?.trim()) throw new ServerConfigError(`${name} is required for S3 storage`);
+      return env[name]!;
+    };
+    const prefix = required("OBJECT_STORE_PREFIX").replace(/\/$/, "");
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9_/-]*$/.test(prefix) || prefix.split("/").some(p => !p)) throw new ServerConfigError("OBJECT_STORE_PREFIX must be a nonempty installation path without empty segments");
+    const timeoutMs = num(env.OBJECT_STORE_TIMEOUT_MS, 60_000);
+    const maxAttempts = num(env.OBJECT_STORE_MAX_ATTEMPTS, 3);
+    if (!Number.isInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 300_000) throw new ServerConfigError("OBJECT_STORE_TIMEOUT_MS must be 100–300000");
+    if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 5) throw new ServerConfigError("OBJECT_STORE_MAX_ATTEMPTS must be 1–5");
     objectStore = {
-      kind: "s3",
-      url: storeUrl,
-      bucket: env.OBJECT_STORE_BUCKET || null,
-      region: env.OBJECT_STORE_REGION || null,
-      accessKeyId: env.OBJECT_STORE_ACCESS_KEY || null,
-      secretAccessKey: env.OBJECT_STORE_SECRET_KEY || null,
+      kind: "s3", url: endpoint.origin,
+      bucket: required("OBJECT_STORE_BUCKET"), region: required("OBJECT_STORE_REGION"),
+      accessKeyId: required("OBJECT_STORE_ACCESS_KEY"), secretAccessKey: required("OBJECT_STORE_SECRET_KEY"),
+      prefix: `${prefix}/`, forcePathStyle: env.OBJECT_STORE_FORCE_PATH_STYLE === "1", timeoutMs, maxAttempts,
     };
   } else {
     const root = storeUrl.replace(/^file:\/\//, "") || path.join(dataDir, "objects");
     objectStore = { kind: "fs", root: path.resolve(root) };
   }
 
+  const bootstrapCredential = env.PLAYTEST_SITE_RUNNER_CREDENTIAL || "";
+  const bootstrapName = env.PLAYTEST_SITE_RUNNER_NAME || "";
+  if (Boolean(bootstrapCredential) !== Boolean(bootstrapName) || (bootstrapCredential && (!/^ptr_[A-Za-z0-9_-]{32,128}$/.test(bootstrapCredential) || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$/.test(bootstrapName)))) {
+    throw new ServerConfigError("PLAYTEST_SITE_RUNNER_NAME and PLAYTEST_SITE_RUNNER_CREDENTIAL must both be set with a valid name and ptr_ credential");
+  }
   const config = {
+    siteRunner: bootstrapCredential ? { name: bootstrapName, credential: bootstrapCredential } : null,
     port: Number(env.PORT || 4177),
     host: env.HOST || "127.0.0.1",
     dataDir,
-    databaseFile,
+    databaseUrl,
     objectStore,
     kmsKey: parseKmsKey(env.PLAYTEST_KMS_KEY),
     publicUrl: (env.PUBLIC_URL || `http://127.0.0.1:${Number(env.PORT || 4177)}`).replace(/\/$/, ""),
@@ -162,7 +188,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
       },
     },
     auth: { mode: authMode } as {
-      mode: "dev" | "oidc";
+      mode: "dev" | "oidc" | "proxy";
+      proxy?: { secret: string; logoutUrl: string };
       oidc?: { issuer: string; clientId: string; clientSecret: string; redirectUri: string; scope: string };
       devUser?: { subject: string; email: string; name: string };
     }, // SAFETY: The validated auth mode determines which optional branch is populated below.
@@ -409,6 +436,20 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
       redirectUri: env.OIDC_REDIRECT_URI || `${config.publicUrl}/auth/callback`,
       scope: env.OIDC_SCOPE || "openid email profile",
     };
+  } else if (authMode === "proxy") {
+    if (!/^[A-Za-z0-9_-]{43,128}$/.test(env.PLAYTEST_PROXY_SECRET || "")) {
+      throw new ServerConfigError("PLAYTEST_PROXY_SECRET must contain a generated key of at least 32 bytes, encoded as hex or base64url");
+    }
+    let publicUrl: URL;
+    let logoutUrl: URL;
+    try {
+      publicUrl = new URL(config.publicUrl);
+      logoutUrl = new URL(env.PLAYTEST_AUTH_LOGOUT_URL || "");
+      if ([publicUrl, logoutUrl].some((url) => url.protocol !== "https:" || url.username || url.password)) throw new Error();
+    } catch {
+      throw new ServerConfigError("Proxy auth requires HTTPS PUBLIC_URL and PLAYTEST_AUTH_LOGOUT_URL without embedded credentials");
+    }
+    config.auth.proxy = { secret: env.PLAYTEST_PROXY_SECRET!, logoutUrl: logoutUrl.href };
   } else {
     config.auth.devUser = {
       subject: env.PLAYTEST_DEV_SUBJECT || "dev-admin",

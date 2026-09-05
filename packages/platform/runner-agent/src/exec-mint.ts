@@ -1,3 +1,4 @@
+import { sweepDocker } from "./janitor.ts";
 // Standalone mint executor: a `mint` dispatch rides the same claim board as a
 // run group, and the pool loop (`pool.ts`) calls this after winning it.
 // Exchange → fetch the grant → run the provider script clean-room → POST the
@@ -31,6 +32,7 @@ export async function execMint(opts: MintExecutorOptions): Promise<RunnerDynamic
     isolation: opts.isolation,
     versions: { node: process.version, isolation: opts.isolation, job_image: process.env.PLAYTEST_JOB_IMAGE || null },
   });
+  if (opts.isolation === "container") sweepDocker({ includeRunning: true });
   const api = bootstrap.withToken(exchange.token);
   const grant = await api.json<MintGrant>("GET", `/runner/mints/${opts.claim}`);
   return await executeMint(api, {

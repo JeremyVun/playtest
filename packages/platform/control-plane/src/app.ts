@@ -1,3 +1,4 @@
+import { ensureConfiguredRunner } from "./bootstrap-runner.ts";
 // Assemble the running application from a config: logger, db (migrated), object
 // store, dev-user bootstrap, and the http server — but do NOT listen. Exported so
 // the integration tests can spin a whole control plane on an ephemeral port and tear
@@ -22,6 +23,10 @@ import { RunBundleCache } from "./run-storage.ts";
 import { cancelProjectSweeps } from "./findings/sweep-scheduler.ts";
 import type { AppContext } from "./types.ts";
 import type { ControlPlaneConfig } from "./config.ts";
+import { lifecycle, outsideTransactions } from "./store/lifecycle.ts";
+import { probeStore, initializeSentinel, checkStore } from "./store/probe.ts";
+import type { ObjectStore } from "./types.ts";
+import { seedUlid } from "./ulid.ts";
 
 export async function createApp(
   config: ControlPlaneConfig,
@@ -29,112 +34,146 @@ export async function createApp(
 ) {
   const log = makeLogger(config);
   const db = await connect(config);
-  if (runMigrations) {
-    await migrate(db, { log: (m) => log.debug({ msg: m }) });
-    // A bumped key/normalization algorithm version must not silently strand
-    // older findings: every input is recorded on the row, so recompute stored
-    // keys once at boot. A no-op when nothing is stale (DESIGN D4).
-    const { updated } = await db.withTx((tx) => recomputeFindingKeys(tx));
-    if (updated) log.info({ msg: "recomputed finding keys after an algorithm version bump", updated });
-  }
-  const store = makeObjectStore(config.objectStore);
+  let ownedStore: ObjectStore | undefined;
+  try {
+    if (runMigrations) {
+      await migrate(db, { log: (m) => log.debug({ msg: m }) });
+      seedUlid((await db.query("SELECT MAX(id) AS id FROM platform_events")).rows[0]?.id);
+      // A bumped key/normalization algorithm version must not silently strand
+      // older findings: every input is recorded on the row, so recompute stored
+      // keys once at boot. A no-op when nothing is stale (DESIGN D4).
+      const { updated } = await db.withTx((tx) => recomputeFindingKeys(tx));
+      if (updated) log.info({ msg: "recomputed finding keys after an algorithm version bump", updated });
+    }
+    const store = ownedStore = outsideTransactions(makeObjectStore(config.objectStore), db);
+    if (config.objectStore.kind === "s3") { await probeStore(store); await initializeSentinel(store); }
 
-  let devUserId: HostedDynamic = null;
-  if (config.auth.mode === "dev") {
-    devUserId = (await ensureUser(db, config.auth.devUser as HostedDynamic) as HostedDynamic).id;
-  }
+    let devUserId: HostedDynamic = null;
+    if (config.auth.mode === "dev") {
+      devUserId = (await ensureUser(db, config.auth.devUser as HostedDynamic) as HostedDynamic).id;
+    }
 
-  // In-process post-commit wakeups for the §4a long-poll feed. Held requests
-  // always retain the 1 s scan fallback, so a missed signal only costs latency.
-  const feedWaker = await new FeedWaker({ log }).start();
-  db.feedWaker = feedWaker;
+    // In-process post-commit wakeups for the §4a long-poll feed. Held requests
+    // always retain the 1 s scan fallback, so a missed signal only costs latency.
+    const feedWaker = await new FeedWaker({ log }).start();
+    db.feedWaker = feedWaker;
 
-  const ctx: AppContext = {
-    db,
-    store,
-    config,
-    log,
-    devUserId,
-    feedWaker,
-    board: new ClaimBoard(config, { db, log }),
-    runnerTokenKey: makeRunnerTokenKey(config),
-    writeLimiter: new WriteRateLimiter({
-      perMinute: config.rateLimit.writesPerMinute,
-      burst: config.rateLimit.writeBurst,
-    }),
-    runBundleCache: new RunBundleCache({ maxBytes: config.viewCache.maxBytes }),
-  };
-  // The dev peer runner: one site-scoped `local` runner and its credential file,
-  // ensured before anything can launch, so `npm run hosted` needs no runner
-  // ceremony at all (src/dev-runner.ts). It is a REGISTRATION, not a process —
-  // the control plane still starts nothing and connects to nothing.
-  if (config.auth.mode === "dev") {
-    const local = await ensureLocalPeerRunner(ctx);
-    log.info({
-      msg: local.created
-        ? `registered the local peer runner "${local.name}" — credential at ${local.credentialFile}`
-        : local.rotated
-          ? `re-issued the local peer runner's credential — ${local.credentialFile}`
-          : `local peer runner "${local.name}" is registered — credential at ${local.credentialFile}`,
-    });
-  }
-
-  const server = createServer(ctx);
-  let retentionTimer: HostedDynamic = null;
-  // Dispatch reconciler: the liveness safety net — an unclaimed board entry or
-  // a runner that stopped heartbeating. Stamps a heartbeat each pass so
-  // /projects/:p/ops can show lag.
-  let reconcileTimer: HostedDynamic = null;
-  if (config.reconcile.intervalMs > 0) {
-    // The `reconcile` lease, not a boolean: it refuses an overlapping tick the
-    // same way, and additionally recovers after a crash mid-cycle (the row
-    // expires because nothing renews it). See src/leases.js.
-    const leaseTtlMs = Math.max(60_000, config.reconcile.intervalMs * 4);
-    const tick = async () => {
-      try {
-        const held = await withLease(db, RECONCILE_LEASE, { ttlMs: leaseTtlMs, log }, async () => {
-          await reconcileDispatches(ctx);
-          await beatHeartbeat(ctx, "reconciler", { interval_s: Math.round(config.reconcile.intervalMs / 1000) });
-        });
-        if (!held.acquired) log.debug({ msg: "reconcile cycle skipped: lease held" });
-      } catch (e: HostedDynamic) {
-        log.error({ msg: "reconcile cycle failed", err: e?.stack || String(e) });
-      }
+    const ctx: AppContext = {
+      db,
+      store,
+      config,
+      log,
+      devUserId,
+      feedWaker,
+      board: new ClaimBoard(config, { db, log }),
+      runnerTokenKey: makeRunnerTokenKey(config),
+      writeLimiter: new WriteRateLimiter({
+        perMinute: config.rateLimit.writesPerMinute,
+        burst: config.rateLimit.writeBurst,
+      }),
+      runtime: { ready: true, draining: false },
+      runBundleCache: new RunBundleCache({ maxBytes: config.viewCache.maxBytes }),
     };
-    reconcileTimer = setInterval(tick, config.reconcile.intervalMs);
-    reconcileTimer.unref?.();
-  }
-  if (config.retention.intervalMs > 0) {
-    retentionTimer = setInterval(() => {
-      runRetentionCycle(ctx).catch((e) => log.error({ msg: "retention cycle failed", err: e?.stack || String(e) }));
-    }, config.retention.intervalMs);
-    retentionTimer.unref?.();
-  }
-
-  return {
-    ctx,
-    server,
-    db,
-    store,
-    config,
-    log,
-    /** Start listening; resolves with the bound address. */
-    async listen(port = config.port, host = config.host) {
-      await new Promise<void>((resolve, reject) => {
-        server.once("error", reject);
-        server.listen(port, host, resolve);
+    // The dev peer runner: one site-scoped `local` runner and its credential file,
+    // ensured before anything can launch, so `npm run hosted` needs no runner
+    // ceremony at all (src/dev-runner.ts). It is a REGISTRATION, not a process —
+    // the control plane still starts nothing and connects to nothing.
+    if (config.siteRunner) await ensureConfiguredRunner(ctx);
+    if (config.auth.mode === "dev" && !config.siteRunner) {
+      const local = await ensureLocalPeerRunner(ctx);
+      log.info({
+        msg: local.created
+          ? `registered the local peer runner "${local.name}" — credential at ${local.credentialFile}`
+          : local.rotated
+            ? `re-issued the local peer runner's credential — ${local.credentialFile}`
+            : `local peer runner "${local.name}" is registered — credential at ${local.credentialFile}`,
       });
-      return server.address();
-    },
-    async close() {
-      if (retentionTimer) clearInterval(retentionTimer);
-      if (reconcileTimer) clearInterval(reconcileTimer);
-      // Pending debounced sweeps must not fire against a closed database.
-      cancelProjectSweeps(ctx);
-      ctx.runBundleCache.clear();
-      await new Promise<void>((resolve) => server.close(resolve as HostedDynamic));
-      await feedWaker.stop();
-      await db.end();
-    },
-  };
+    }
+
+    const server = createServer(ctx);
+    db.once("disconnect", () => { ctx.runtime.ready = false; ctx.runtime.draining = true; server.close(); });
+    const background = new Set<Promise<unknown>>();
+    const track = (work: Promise<unknown>) => { background.add(work); void work.finally(() => background.delete(work)).catch(() => {}); };
+    let probing = false;
+    const readinessTimer = setInterval(() => {
+      if (probing || ctx.runtime.draining) return;
+      probing = true;
+      const check = (async () => {
+        try {
+          await db.query("SELECT 1");
+          if (config.objectStore.kind === "s3") await checkStore(store);
+          ctx.runtime.ready = !ctx.runtime.draining;
+        } catch { ctx.runtime.ready = false; } finally { probing = false; }
+      })();
+      track(check);
+    }, 30_000);
+    readinessTimer.unref();
+    let retentionTimer: HostedDynamic = null;
+    // Dispatch reconciler: the liveness safety net — an unclaimed board entry or
+    // a runner that stopped heartbeating. Stamps a heartbeat each pass so
+    // /projects/:p/ops can show lag.
+    let reconcileTimer: HostedDynamic = null;
+    if (config.reconcile.intervalMs > 0) {
+      // The `reconcile` lease, not a boolean: it refuses an overlapping tick the
+      // same way, and additionally recovers after a crash mid-cycle (the row
+      // expires because nothing renews it). See src/leases.js.
+      const leaseTtlMs = Math.max(60_000, config.reconcile.intervalMs * 4);
+      const tick = async () => {
+        try {
+          const held = await withLease(db, RECONCILE_LEASE, { ttlMs: leaseTtlMs, log }, async () => {
+            await reconcileDispatches(ctx);
+            await beatHeartbeat(ctx, "reconciler", { interval_s: Math.round(config.reconcile.intervalMs / 1000) });
+          });
+          if (!held.acquired) log.debug({ msg: "reconcile cycle skipped: lease held" });
+        } catch (e: HostedDynamic) {
+          log.error({ msg: "reconcile cycle failed", err: e?.stack || String(e) });
+        }
+      };
+      reconcileTimer = setInterval(() => track(tick()), config.reconcile.intervalMs);
+      reconcileTimer.unref?.();
+    }
+    if (config.retention.intervalMs > 0) {
+      retentionTimer = setInterval(() => {
+        track(runRetentionCycle(ctx).catch((e) => log.error({ msg: "retention cycle failed", err: e?.stack || String(e) })));
+      }, config.retention.intervalMs);
+      retentionTimer.unref?.();
+    }
+
+    return {
+      ctx,
+      server,
+      db,
+      store,
+      config,
+      log,
+      /** Start listening; resolves with the bound address. */
+      async listen(port = config.port, host = config.host) {
+        await new Promise<void>((resolve, reject) => {
+          server.once("error", reject);
+          server.listen(port, host, resolve);
+        });
+        return server.address();
+      },
+      async close() {
+        ctx.runtime.draining = true;
+        ctx.runtime.ready = false;
+        clearInterval(readinessTimer);
+        if (retentionTimer) clearInterval(retentionTimer);
+        if (reconcileTimer) clearInterval(reconcileTimer);
+        // Pending debounced sweeps must not fire against a closed database.
+        cancelProjectSweeps(ctx);
+        await feedWaker.stop();
+        await new Promise<void>((resolve) => server.close(resolve as HostedDynamic));
+        await Promise.allSettled([...background]);
+        await lifecycle(ctx).delete(async () => {});
+        ctx.runBundleCache.clear();
+        store.close();
+        await db.end();
+      },
+    };
+  } catch (error) {
+    ownedStore?.close();
+    await db.end().catch(() => {});
+    throw error;
+  }
 }

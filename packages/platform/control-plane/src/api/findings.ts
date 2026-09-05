@@ -11,6 +11,8 @@ import { scheduleAutoDedupe } from "../findings/auto-dedupe.ts";
 import { mergeFindings } from "../findings/merge.ts";
 import { CATEGORIES } from "../findings/keys.ts";
 import { inClause } from "../db.ts";
+import { HttpResult } from "../http.ts";
+import { exportJson, exportMarkdown, type ExportScope } from "../findings/export.ts";
 import { requireAuth, guard, getProjectByKey, parsePagination, stringField } from "./util.ts";
 
 const STATES = new Set(["new", "accepted", "rejected", "resolved", "reopened"]);
@@ -20,14 +22,6 @@ const SEVERITIES = new Set(["info", "minor", "major"]);
 // separate lifecycle.
 const REJECT_REASONS = new Set(["not_a_bug", "wont_fix", "duplicate"]);
 
-// The latest finished verdict for each story — the reconciliation signal ("is
-// this fixed, stale, still failing?") that decorates finding rows on list and
-// detail. Null when the story has no finished pass/fail run.
-//
-// SQLite has no LATERAL, and the correlation key is itself a JSON extraction
-// (`summary.story_id`), so the per-finding "newest run, LIMIT 1" becomes one
-// windowed pass over the runs of every story, filtered to the top row and
-// joined once. Both the list and the detail query use the same three parts.
 const STORY_HEALTH_CTE = `
   WITH story_health_latest AS (
     SELECT project_id, story_id, run_db_id, run_group_id, status, finished_at
@@ -47,10 +41,10 @@ const STORY_HEALTH_CTE = `
 const STORY_HEALTH_JOIN = `
   LEFT JOIN story_health_latest sh
          ON sh.project_id = f.project_id
-        AND sh.story_id = json_extract(f.summary, '$.story_id')`;
+        AND sh.story_id = (f.summary #>> '{story_id}')`;
 const STORY_HEALTH_SELECT = `
   CASE WHEN sh.run_db_id IS NULL THEN NULL
-       ELSE json_object('run_db_id', sh.run_db_id, 'run_group_id', sh.run_group_id,
+       ELSE jsonb_build_object('run_db_id', sh.run_db_id, 'run_group_id', sh.run_group_id,
                         'status', sh.status, 'finished_at', sh.finished_at)
   END AS story_health`;
 
@@ -66,13 +60,16 @@ function decodeStoryHealth(raw: HostedDynamic) {
   return { ...sh, finished_at: sh.finished_at == null ? null : new Date(sh.finished_at) };
 }
 
-/** GET /projects/:p/findings?state&severity&cursor [viewer] */
-export async function listFindings(ctx: HostedDynamic) {
-  const project = await getProjectByKey(ctx, ctx.params.p);
-  guard(ctx, project.id, "viewer");
-  const { limit, cursor } = parsePagination(ctx.query);
-  const params = [project.id];
+/**
+ * The list's filter vocabulary (`state`, `severity`, `fix_suggested`,
+ * `resolved_by_run`), shared with the export so a page and its file agree on
+ * what "these findings" means. `scope` restates the filter in words for the
+ * export's header.
+ */
+function findingFilter(ctx: HostedDynamic, projectId: HostedDynamic) {
+  const params = [projectId];
   const where = [`f.project_id = $1`, `f.merged_into IS NULL`];
+  const scope: ExportScope = { states: [...STATES], severity: null, fixSuggested: false };
 
   const stateQ = ctx.query.get("state");
   if (stateQ && stateQ !== "all") {
@@ -80,21 +77,25 @@ export async function listFindings(ctx: HostedDynamic) {
     for (const s of states) if (!STATES.has(s)) throw badRequest(`invalid finding state "${s}"`);
     where.push(`f.state IN (${inClause(states, params.length + 1)})`);
     params.push(...states);
+    scope.states = states;
   } else if (!stateQ) {
     const states = ["new", "reopened", "accepted"];
     where.push(`f.state IN (${inClause(states, params.length + 1)})`);
     params.push(...states);
+    scope.states = states;
   }
   const severity = ctx.query.get("severity");
   if (severity) {
     if (!SEVERITIES.has(severity)) throw badRequest(`invalid finding severity "${severity}"`);
     params.push(severity);
     where.push(`f.severity = $${params.length}`);
+    scope.severity = severity;
   }
   // The review queue's second section: findings wearing a pending "looks
   // fixed" suggestion, awaiting a person's Resolve / Not fixed call.
   if (ctx.query.get("fix_suggested")) {
-    where.push(`json_extract(f.summary, '$.auto_resolve.suggested') IS NOT NULL`);
+    where.push(`(f.summary #>> '{auto_resolve,suggested}') IS NOT NULL`);
+    scope.fixSuggested = true;
   }
   // The run chip's query: findings this run's report auto-resolved.
   const resolvedByRun = ctx.query.get("resolved_by_run");
@@ -102,6 +103,15 @@ export async function listFindings(ctx: HostedDynamic) {
     params.push(resolvedByRun);
     where.push(`f.resolved_by_run_id = $${params.length}`);
   }
+  return { params, where, scope };
+}
+
+/** GET /projects/:p/findings?state&severity&cursor [viewer] */
+export async function listFindings(ctx: HostedDynamic) {
+  const project = await getProjectByKey(ctx, ctx.params.p);
+  guard(ctx, project.id, "viewer");
+  const { limit, cursor } = parsePagination(ctx.query);
+  const { params, where } = findingFilter(ctx, project.id);
   if (cursor) {
     params.push(cursor);
     where.push(`f.id < $${params.length}`);
@@ -126,6 +136,54 @@ export async function listFindings(ctx: HostedDynamic) {
     })),
     next_cursor: rows.length === limit ? rows.at(-1).id : null,
   };
+}
+
+const EXPORT_FORMATS: Record<string, { contentType: string; ext: string }> = {
+  md: { contentType: "text/markdown; charset=utf-8", ext: "md" },
+  json: { contentType: "application/json; charset=utf-8", ext: "json" },
+};
+
+/**
+ * GET /projects/:p/findings/export?state&severity&fix_suggested&format=md|json [viewer]
+ * The list's filter, uncapped, as one downloadable file with every finding's
+ * evidence and absolute links back to the console, the viewer, and the run
+ * bundle entries — the handout for an LLM (or a person) verifying findings
+ * away from the console.
+ */
+export async function exportFindings(ctx: HostedDynamic) {
+  const project = await getProjectByKey(ctx, ctx.params.p);
+  guard(ctx, project.id, "viewer");
+  const formatQ = ctx.query.get("format") || "md";
+  const format = EXPORT_FORMATS[formatQ];
+  if (!format) throw badRequest(`invalid export format "${formatQ}" (expected md or json)`);
+  const { params, where, scope } = findingFilter(ctx, project.id);
+  const { rows } = await ctx.db.query(
+    `SELECT f.id FROM findings f WHERE ${where.join(" AND ")} ORDER BY f.last_seen DESC, f.id DESC`,
+    params,
+  );
+  const findings = [];
+  for (const row of rows) findings.push(await getFindingWithEvidence(ctx, row.id));
+  const input = { origin: requestOrigin(ctx), project: { key: project.key, name: project.name }, exportedAt: new Date(), scope, findings };
+  const body = format === EXPORT_FORMATS.json ? JSON.stringify(exportJson(input), null, 2) : exportMarkdown(input);
+  const stamp = input.exportedAt.toISOString().slice(0, 19).replace(/[:T]/g, "-");
+  return new HttpResult({
+    buffer: Buffer.from(body, "utf8"),
+    contentType: format.contentType,
+    headers: { "content-disposition": `attachment; filename="${project.key}-findings-${stamp}.${format.ext}"` },
+  });
+}
+
+/**
+ * The origin the caller is actually browsing (so the links in a file opened
+ * elsewhere resolve to the same host), falling back to the configured
+ * public URL for clients that send no Host header.
+ */
+function requestOrigin(ctx: HostedDynamic) {
+  const host = ctx.req.headers.host;
+  if (!host) return ctx.config.publicUrl;
+  const proto = String(ctx.req.headers["x-forwarded-proto"] || "").split(",")[0].trim()
+    || (ctx.config.publicUrl.startsWith("https://") ? "https" : "http");
+  return `${proto}://${host}`;
 }
 
 /**
@@ -154,7 +212,7 @@ export async function findingCounts(ctx: HostedDynamic) {
        FROM findings
       WHERE project_id = $1 AND merged_into IS NULL
         AND state IN ('reopened','accepted')
-        AND json_extract(summary, '$.auto_resolve.suggested') IS NOT NULL`,
+        AND (summary #>> '{auto_resolve,suggested}') IS NOT NULL`,
     [project.id],
   );
   return { counts, fix_suggested: Number(sugg[0].n) };
@@ -190,9 +248,9 @@ export async function acceptFinding(ctx: HostedDynamic) {
               severity = $3,
               state = 'accepted',
               reject_reason = NULL,
-              summary = json_patch(summary, json_object(
-                'confirmed_at', COALESCE(json_extract(summary, '$.confirmed_at'), $4),
-                'confirmed_by', json(COALESCE(json_extract(summary, '$.confirmed_by'), $5)))),
+              summary = jsonb_merge_patch(summary, jsonb_build_object(
+                'confirmed_at', COALESCE((summary #>> '{confirmed_at}'), $4::text),
+                'confirmed_by', COALESCE((summary #>> '{confirmed_by}'), $5::text)::jsonb)),
               updated_at = now()
         WHERE id = $1 AND merged_into IS NULL
         RETURNING *`,
@@ -247,7 +305,7 @@ export async function resolveFinding(ctx: HostedDynamic) {
     const { rows } = await tx.query(
       `UPDATE findings
           SET state = 'resolved', resolved_by_run_id = NULL, auto_resolved_at = NULL,
-              summary = json_remove(summary, '$.auto_resolve.reason'),
+              summary = jsonb_remove_paths(summary, '$.auto_resolve.reason'),
               updated_at = now()
         WHERE id = $1 AND merged_into IS NULL
         RETURNING *`,
@@ -284,8 +342,8 @@ export async function acknowledgeFinding(ctx: HostedDynamic) {
     assertMergeable({ at, by });
     const { rows } = await tx.query(
       `UPDATE findings
-          SET summary = json_patch(summary, json_object('auto_resolve',
-                json_object('acknowledged_at', $2, 'acknowledged_by', json($3)))),
+          SET summary = jsonb_merge_patch(summary, jsonb_build_object('auto_resolve',
+                jsonb_build_object('acknowledged_at', $2::text, 'acknowledged_by', $3::jsonb))),
               updated_at = now()
         WHERE id = $1 AND merged_into IS NULL AND state = 'resolved'
         RETURNING *`,
@@ -323,9 +381,9 @@ export async function suggestionNotFixed(ctx: HostedDynamic) {
     assertMergeable({ at, by });
     const { rows } = await tx.query(
       `UPDATE findings
-          SET summary = json_patch(json_remove(summary, '$.auto_resolve.suggested'),
-                json_object('auto_resolve', json_object('dismissed',
-                  json_object('run_id', $2, 'at', $3, 'by', json($4))))),
+          SET summary = jsonb_merge_patch(jsonb_remove_paths(summary, '$.auto_resolve.suggested'),
+                jsonb_build_object('auto_resolve', jsonb_build_object('dismissed',
+                  jsonb_build_object('run_id', $2::text, 'at', $3::text, 'by', $4::jsonb)))),
               updated_at = now()
         WHERE id = $1 AND merged_into IS NULL
         RETURNING *`,
@@ -355,7 +413,7 @@ export async function reopenFinding(ctx: HostedDynamic) {
               reject_reason = NULL,
               resolved_by_run_id = NULL,
               auto_resolved_at = NULL,
-              summary = json_remove(summary, '$.auto_resolve.reason'),
+              summary = jsonb_remove_paths(summary, '$.auto_resolve.reason'),
               updated_at = now()
         WHERE id = $1 AND merged_into IS NULL
         RETURNING *`,
@@ -403,8 +461,6 @@ export async function splitEvidence(ctx: HostedDynamic) {
   const title = stringField(body, "title", { required: true, max: 180 });
   let newId: HostedDynamic = null;
   await ctx.db.withTx(async (tx: HostedDynamic) => {
-    // No FOR UPDATE: the transaction's BEGIN IMMEDIATE already holds the write
-    // lock (same reasoning as findingInTx), and SQLite refuses the clause.
     const { rows } = await tx.query(
       `SELECT e.*, f.project_id, f.id AS source_id, f.fingerprint AS source_fingerprint, f.severity AS source_severity, f.merged_into
          FROM finding_evidence e
@@ -658,8 +714,6 @@ async function recordFindingTransition(tx: HostedDynamic, { projectId, principal
 }
 
 async function recalcFindingCounters(tx: HostedDynamic, id: HostedDynamic) {
-  // SQLite: no alias on an UPDATE target and no `::int` cast — the outer row
-  // is addressed by table name inside the correlated subqueries.
   await tx.query(
     `UPDATE findings
         SET evidence_count = (SELECT COUNT(*) FROM finding_evidence WHERE finding_id = findings.id),
@@ -677,10 +731,8 @@ async function findingRow(ctx: HostedDynamic, id: HostedDynamic) {
 }
 
 /**
- * Read a finding inside the enclosing transaction. `BEGIN IMMEDIATE` already
- * holds the write lock, so this read cannot observe a concurrent writer's
- * uncommitted state — the `FOR UPDATE` this replaces has no analogue and needs
- * none. The decision this read feeds is re-asserted by `assertWon` on write.
+ * Read on the serialized owned client. `assertWon` re-asserts the decision
+ * when writing; the application writer lock excludes a second process.
  */
 async function findingInTx(tx: HostedDynamic, id: HostedDynamic) {
   return (await tx.query(`SELECT * FROM findings WHERE id = $1`, [id])).rows[0] || null;

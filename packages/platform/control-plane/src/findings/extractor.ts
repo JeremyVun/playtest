@@ -269,9 +269,8 @@ export function publicEvidence(e: HostedDynamic) {
 
 /**
  * Follow the fingerprint to the active head of its merge chain. The reads need
- * no `FOR UPDATE`: extraction always runs inside `withTx` (`BEGIN IMMEDIATE`),
- * which holds the write lock from statement one, and every write below
- * re-asserts the state this read decided on.
+ * no per-row lock: extraction runs on the serialized owned client, and every
+ * write below re-asserts the state this read decided on.
  */
 async function resolveByFingerprint(tx: HostedDynamic, projectId: HostedDynamic, fingerprint: HostedDynamic) {
   const seen = new Set();

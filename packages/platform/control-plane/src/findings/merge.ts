@@ -1,11 +1,3 @@
-// The one merge implementation. A reviewer merge, a suggestion confirmation, and
-// an applied consolidation group are the same operation: the source finding's
-// evidence moves onto the survivor, the source becomes a tombstone, and the
-// change is audited (docs/contracts/hosted.md, "Consolidation").
-//
-// Runs inside an open `withTx` (BEGIN IMMEDIATE). Every mutating statement
-// carries `merged_into IS NULL`, so a merge that lost a race fails as a conflict
-// rather than writing against a tombstone.
 import { audit } from "../audit.ts";
 import { badRequest, conflict, notFound } from "../errors.ts";
 import { liveFinding } from "./intake.ts";
@@ -46,15 +38,12 @@ export async function mergeFindings(tx: HostedDynamic, { sourceId, targetId, act
   );
   await tx.query(`UPDATE finding_evidence SET finding_id = $2 WHERE finding_id = $1`, [src.id, target.id]);
 
-  // SQLite's UPDATE takes no alias, so the correlated subqueries name the table
-  // itself; `merged_into IS NULL` re-asserts that neither side of the merge was
-  // merged elsewhere between the read and this write.
   const bumped = await tx.query(
     `UPDATE findings
         SET title = COALESCE($3, findings.title),
             evidence_count = (SELECT COUNT(*) FROM finding_evidence WHERE finding_id = findings.id),
-            last_seen = MAX(findings.last_seen, COALESCE((SELECT MAX(created_at) FROM finding_evidence WHERE finding_id = findings.id), findings.last_seen)),
-            first_seen = MIN(findings.first_seen, COALESCE((SELECT MIN(created_at) FROM finding_evidence WHERE finding_id = findings.id), findings.first_seen)),
+            last_seen = GREATEST(findings.last_seen, COALESCE((SELECT MAX(created_at) FROM finding_evidence WHERE finding_id = findings.id), findings.last_seen)),
+            first_seen = LEAST(findings.first_seen, COALESCE((SELECT MIN(created_at) FROM finding_evidence WHERE finding_id = findings.id), findings.first_seen)),
             external_ref = COALESCE(findings.external_ref, $2),
             recurrence_count = findings.recurrence_count + $4,
             updated_at = now()

@@ -24,6 +24,7 @@ interface Principal {
   email?: string;
   roles: Record<string, Role>;
   is_dev_admin: boolean;
+  is_site_admin?: boolean;
   capabilities: Record<string, WebDynamic>;
   [key: string]: WebDynamic;
 }
@@ -84,6 +85,7 @@ export async function loadMe() {
     roles: isRecord(raw.roles) ? raw.roles as Record<string, Role> : {},
     capabilities: isRecord(raw.capabilities) ? raw.capabilities : {},
     is_dev_admin: raw.is_dev_admin === true,
+    is_site_admin: raw.is_site_admin === true,
   };
   return state.me;
 }
@@ -107,7 +109,7 @@ export async function loadProjects() {
 /** The principal's role in a project id (dev admin ⇒ admin everywhere). */
 export function roleIn(projectId: string): Role | null {
   if (!state.me) return null;
-  if (state.me.is_dev_admin) return "admin";
+  if (state.me.is_dev_admin || state.me.is_site_admin) return "admin";
   return state.me.roles?.[projectId] || null;
 }
 

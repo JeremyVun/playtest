@@ -8,6 +8,7 @@
 import { principalForToken } from "./tokens.ts";
 import { userForSession, parseCookies, COOKIE_NAME } from "./sessions.ts";
 import { loadMemberships } from "./users.ts";
+import { principalForProxy } from "./proxy.ts";
 
 export async function resolvePrincipal(ctx: HostedDynamic, req: HostedDynamic) {
   const auth = req.headers["authorization"];
@@ -16,6 +17,8 @@ export async function resolvePrincipal(ctx: HostedDynamic, req: HostedDynamic) {
     const principal = await principalForToken(ctx.db, token);
     return principal; // null when the token is unknown/expired → treated as anonymous
   }
+
+  if (ctx.config.auth.mode === "proxy") return principalForProxy(ctx, req);
 
   const cookies = parseCookies(req.headers["cookie"]);
   const sessionId = cookies[COOKIE_NAME];

@@ -1,3 +1,4 @@
+import { testDatabase } from "../postgres/helpers.ts";
 // Site-scoped runners and the dev peer runner (design "The local peer runner",
 // gates 6, 11 and 15).
 //
@@ -131,7 +132,7 @@ test("site runners: a project admin is not a site admin — the grant is above e
     const refused = await scoped.post("/site/runners", { name: "sneaky" });
     assert.equal(refused.status, 403);
     assert.match(refused.body.error.message, /site administrator/);
-    assert.match(refused.body.error.message, /PLAYTEST_AUTH=dev/);
+    assert.match(refused.body.error.message, /project-scoped runner/);
     assert.equal((await scoped.get("/site/runners")).status, 403);
     assert.equal((await scoped.del("/site/runners/whatever")).status, 403);
   });
@@ -370,9 +371,12 @@ test("project B sees the site runner and that it is busy — never project A's i
 // The dev peer runner
 // --------------------------------------------------------------------------
 
-/** Boot a control plane against `dataRoot` and close it again. */
+const databases = new Map<string, Awaited<ReturnType<typeof testDatabase>>>();
+
+/** Boot a control plane against the same database and work root. */
 async function boot(dataRoot: string, fn: (app: HostedDynamic) => Promise<void>) {
-  const config = loadConfig({
+  if (!databases.has(dataRoot)) databases.set(dataRoot, await testDatabase());
+  const config = loadConfig({ DATABASE_URL: databases.get(dataRoot)!.databaseUrl,
     PLAYTEST_DATA_DIR: dataRoot,
     PLAYTEST_AUTH: "dev",
     OBJECT_STORE_URL: path.join(dataRoot, "objects"),

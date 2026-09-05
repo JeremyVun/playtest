@@ -614,7 +614,7 @@ export async function applyConsolidationPlan(tx: HostedDynamic, { planRow, decis
       };
       const retitled = await tx.query(
         `UPDATE findings
-            SET title = $2, summary = json_patch(summary, $3), updated_at = now()
+            SET title = $2, summary = jsonb_merge_patch(summary, $3), updated_at = now()
           WHERE id = $1 AND merged_into IS NULL`,
         [survivorId, a.title, JSON.stringify(stripNulls(provenance))],
       );

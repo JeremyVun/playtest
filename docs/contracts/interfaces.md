@@ -526,8 +526,8 @@ case-ID-based filenames.
 
 ## Runner agent CLI
 
-`@playtest/runner-agent` ships one executable, `runner-agent`, and it has ONE
-mode. There is one placement model — the claim board
+`@playtest/runner-agent` ships one executable, `runner-agent`, with one execution
+mode and a container health probe. There is one placement model — the claim board
 ([Hosted runner contracts](hosted-runners.md#claim-board)) — so there is one arrival:
 
 ```text
@@ -555,12 +555,26 @@ executors remain internal modules the pool loop calls after winning a claim.
   the process with one actionable line, never a stack and never a retry loop.
   Anything else that fails to reach the control plane is retried with
   exponential backoff and jitter. A failed run group never takes the process
-  down.
+down.
 
 The startup banner states who the control plane thinks this runner is, its
 project or site scope, its labels, its isolation, its work directory, and — when
 `--config` was given — the file's path, its target keys, and its backends. The
 banner never prints a build path, a device, or a credential.
+
+The Compose profile requires a matching immutable `PLAYTEST_JOB_IMAGE`, an
+explicit `PLAYTEST_JOB_NETWORK`, non-root `PLAYTEST_JOB_UID`/`PLAYTEST_JOB_GID`,
+and the same absolute host workspace path in the agent. Startup checks the
+image revision and a real read/write mount. Deployment concurrency ceilings
+`PLAYTEST_RUNNER_MAX_TOTAL` and `PLAYTEST_RUNNER_MAX_RECORD` default to one;
+resolved suite/project settings can lower them. Resource configuration is
+listed in [Hosted deployment guidance](../guidance/hosted-deployment.md).
+
+`runner-agent health` checks the configured heartbeat file, Docker availability
+and job-image presence. It does not claim or execute work. Runner upload paths
+resolve against the configured server origin, stay under `/api/v1/`, refuse
+redirects and expire after 120 seconds. Cancelled queued request bodies must
+release their server admission slot.
 
 ### Runner configuration file
 

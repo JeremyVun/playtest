@@ -74,7 +74,7 @@ export class ClaimBoard {
   async dispatchStatus(dispatchId: string): Promise<BoardStatus | null> {
     if (!dispatchId) return null;
     const { rows } = await this.db.query(
-      `SELECT d.*, r.name AS runner_name FROM dispatches d
+      `SELECT d.*, now() AS observed_at, r.name AS runner_name FROM dispatches d
          LEFT JOIN runners r ON r.id = d.runner_id
         WHERE d.id = $1`,
       [dispatchId],
@@ -82,13 +82,13 @@ export class ClaimBoard {
     const row = rows[0];
     if (!row) return null;
     const id = dispatchId;
-    const now = Date.now();
+    const now = new Date(row.observed_at).getTime();
 
     if (row.canceled_at) {
       return { id, status: "completed", conclusion: "canceled", reason: "the run was canceled", redispatch: false };
     }
     if (!row.claimed_at) {
-      const waiting = now - new Date(row.requested_at).getTime();
+      const waiting = Math.max(0, now - new Date(row.requested_at).getTime());
       if (waiting < this.claimTimeoutMs) return { id, status: "queued", conclusion: null };
       return {
         id,
@@ -101,7 +101,7 @@ export class ClaimBoard {
       };
     }
     const lastSeen = new Date(row.heartbeat_at ?? row.claimed_at).getTime();
-    const silentMs = now - lastSeen;
+    const silentMs = Math.max(0, now - lastSeen);
     if (silentMs < this.heartbeatTimeoutMs) return { id, status: "in_progress", conclusion: null };
     return {
       id,

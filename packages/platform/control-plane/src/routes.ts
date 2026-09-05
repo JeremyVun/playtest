@@ -147,6 +147,7 @@ export function buildRouter() {
   // --- findings (findings own cross-run synthesis; no Insight mediates) ---
   r.get(`${v}/projects/:p/findings`, findings.listFindings);
   r.get(`${v}/projects/:p/findings/counts`, findings.findingCounts);
+  r.get(`${v}/projects/:p/findings/export`, findings.exportFindings);
   r.get(`${v}/findings/:f`, findings.getFinding);
   r.post(`${v}/findings/:f/accept`, findings.acceptFinding);
   r.post(`${v}/findings/:f/reject`, findings.rejectFinding);

@@ -180,8 +180,8 @@ export async function requireCurrentExecutor(
  * names this executor, and the group (for group work) has not settled. The gap
  * between the route guard and the write transaction is exactly where a
  * replacement exchange, a cancel, or a reconcile can land; every exchange
- * commits through `withTx` (`BEGIN IMMEDIATE`), so once this read holds the
- * write lock nothing can change the pointer again before the commit.
+ * commits through the serialized owned client, so no other application write
+ * can change the pointer before this transaction commits.
  *
  * Routes that widen the guard's state lists (completion) pass the same lists
  * here, so the owner's idempotent retry stays a retry and not a conflict.

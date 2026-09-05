@@ -1,3 +1,4 @@
+import { lifecycle } from "../store/lifecycle.ts";
 // On-demand clip worker. Clips run on the control plane
 // when ffmpeg is available: the sealed bundle is materialized to a temp run dir,
 // core `clip.ts` generates the same burned/slideshow output as the CLI, and the
@@ -26,7 +27,10 @@ export function normalizeClipRequest(body: HostedDynamic = {}) {
   return { captions, burn: body.burn !== false };
 }
 
-export async function generateClip(ctx: HostedDynamic, { run, project, actor, request, dispatchId = null }: HostedDynamic) {
+export async function generateClip(ctx: HostedDynamic, options: HostedDynamic) {
+  return lifecycle(ctx).read(() => lifecycle(ctx).serial("heavy", () => generateClipInner(ctx, options)));
+}
+async function generateClipInner(ctx: HostedDynamic, { run, project, actor, request, dispatchId = null }: HostedDynamic) {
   const bundle = await loadRunBundle(ctx, run.id);
   if (!bundle) throw new AppError("not_found", `run "${run.run_id}" has no bundle to clip`);
   if (bundle.artifact.tier !== "full" || run.artifact_tier !== "full") {
@@ -56,12 +60,15 @@ export async function generateClip(ctx: HostedDynamic, { run, project, actor, re
     const vttPath = result.vtt;
     const videoBytes = await fsp.readFile(videoPath);
     const vttBytes = vttPath ? await fsp.readFile(vttPath) : null;
-    const clipKey = `runs/${run.run_group_id}/${run.id}.clip.mp4`;
-    const vttKey = `runs/${run.run_group_id}/${run.id}.clip.vtt`;
+    const publication = ulid();
+    const clipKey = `runs/${run.run_group_id}/${run.id}.${publication}.clip.mp4`;
+    const vttKey = `runs/${run.run_group_id}/${run.id}.${publication}.clip.vtt`;
     const storedVideo = await ctx.store.put(clipKey, videoBytes);
     const storedVtt = vttBytes ? await ctx.store.put(vttKey, vttBytes) : null;
 
     await ctx.db.withTx(async (tx: HostedDynamic) => {
+      const current = await tx.query("SELECT artifact_tier FROM runs WHERE id = $1", [run.id]);
+      if (current.rows[0]?.artifact_tier !== "full") throw new AppError("conflict", "run evidence changed while the clip was being generated");
       await upsertArtifact(tx, {
         runId: run.id,
         kind: "clip",

@@ -77,6 +77,8 @@ async function recordedCaptions() {
   await page.locator("#strip .cell").first().click();
   const firstThought = await text(page, "#cap-thought");
   assert.ok(firstThought.trim().length > 10, `step caption should carry the agent thought, got "${firstThought}"`);
+  assert.match(await text(page, "#sec-step .step-src"), /agent chose this action itself/,
+    "an agent envelope without acted_from is not mislabeled as a replay");
   await page.locator("#strip .cell").last().click();
   const lastThought = await text(page, "#cap-thought");
   assert.notEqual(lastThought, firstThought, "captions must follow the selected step");

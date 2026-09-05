@@ -1,10 +1,13 @@
 #!/usr/bin/env node
+import { preflightContainers, runnerOwner } from "./container-profile.ts";
+import { deploymentBudget } from "./exec-group.ts";
 // `runner-agent` — the self-hosted runner, and the only entry point this
 // package has. There is one placement model (docs/contracts/hosted.md, "Runner
 // pool"), so there is one arrival: the long-lived pool loop, which polls the
 // claim board, claims what it can execute, exchanges for a scoped bearer, and
 // runs the group or mint executor. Nothing spawns this per job; the control
 // plane never starts it and never connects to it.
+import { checkRunnerHealth } from "./health.ts";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { runPool, parsePoolArgs, POOL_USAGE } from "./pool.ts";
@@ -41,12 +44,17 @@ export async function main(
 ): Promise<RunnerDynamic> {
   // `pool` is accepted as a leading word so the start command the console hands
   // over reads as a verb, but it is the only mode there is.
+  if (argv[0] === "health") { checkRunnerHealth(); return { exitCode: 0 }; }
   const args = argv[0] === "pool" ? argv.slice(1) : argv;
   if (args[0] === "--help" || args[0] === "-h") {
     process.stdout.write(POOL_USAGE);
     return { exitCode: 0 };
   }
-  return await runPool(parsePoolArgs(args, env));
+  const opts = parsePoolArgs(args, env);
+  deploymentBudget(env);
+  process.env.PLAYTEST_RUNNER_OWNER = runnerOwner(opts.credential);
+  if (opts.isolation === "container") await preflightContainers(opts, { ...env, PLAYTEST_RUNNER_OWNER: process.env.PLAYTEST_RUNNER_OWNER });
+  return await runPool(opts);
 }
 
 function firstLine(e: RunnerDynamic): string {

@@ -472,17 +472,16 @@ The hosted product is the same engine with team coordination around it:
                               │ → upload .ptrun bundle  │
                               └─────────────────────────┘
 
-        storage: one SQLite file + content-addressed object store,
-        both under PLAYTEST_DATA_DIR — one volume, one writer
+        storage: PostgreSQL metadata + private S3 objects,
+        one control-plane writer with transactional events
 ```
 
 The design choices worth knowing:
 
 - **The control plane is the only writer.** All state changes go through it;
   runners speak a retry-safe HTTP protocol with short-lived tokens scoped to
-  one run group and never touch the database. Dispatch (local child process
-  in dev, GitHub Actions with OIDC in CI) is placement only, never the
-  system of record.
+  one run group and never touch the database. Runners poll the claim board, exchange a scoped credential and execute
+  isolated jobs; the control plane starts no runner process.
 - **Suites are files, snapshots are immutable.** A hosted suite is stored as
   the same files the CLI reads, validated by the same core code. Every
   committed edit creates a content-addressed snapshot; a run group pins one
@@ -498,9 +497,9 @@ The design choices worth knowing:
   integrity — and a later clean pass auto-supersedes stale candidates.
   Confirmation and external handoff (copy for tracker) are human actions;
   Playtest never auto-files tickets.
-- **No database service.** Metadata is one SQLite file (WAL, single node);
-  artifacts live beside it in the object store. `PLAYTEST_DATA_DIR` is the
-  single storage knob.
+- **Hosted storage is explicit.** PostgreSQL holds metadata and private
+  S3-compatible storage holds immutable evidence. Local Compose supplies both;
+  production uses the shared tenant database and a dedicated object prefix.
 
 Contracts: [hosted platform](contracts/hosted.md),
 [runner](contracts/hosted-runners.md), and

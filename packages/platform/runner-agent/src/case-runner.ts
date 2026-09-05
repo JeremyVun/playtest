@@ -1,3 +1,4 @@
+import { jobArguments, jobProfile } from "./container-profile.ts";
 // Per-case execution behind the isolation seam
 // (docs/contracts/hosted.md#runner-protocol).
 //
@@ -128,7 +129,8 @@ async function runInProcess(rc: RunnerDynamic, opts: RunnerDynamic): Promise<Run
 }
 
 async function runInContainer(rc: RunnerDynamic, opts: RunnerDynamic): Promise<RunnerDynamic> {
-  const image = opts.image || process.env.PLAYTEST_JOB_IMAGE || "playtest-job:latest";
+  const image = jobProfile().image;
+  if (rc.env?.compose) throw new Error("Nested Compose targets are unsupported in hosted container mode; use an existing target network");
   const name = `playtest-case-${safeName(opts.runId)}`;
   // The child sees the workspace at /ws: translate every host path in the
   // resolved case (file, storage_state, init, compose, …) and the runs root.
@@ -145,17 +147,10 @@ async function runInContainer(rc: RunnerDynamic, opts: RunnerDynamic): Promise<R
     "--name", name,
     "-v", `${opts.workspaceRoot}:${CONTAINER_WS}`,
     "-w", CONTAINER_WS,
-    // Reach services on the runner host (an app under test bound to localhost)
-    // as host.docker.internal — mapped to the host gateway on Linux too.
-    "--add-host", "host.docker.internal:host-gateway",
-    "--memory", opts.memory || process.env.PLAYTEST_CASE_MEMORY || "2g",
-    "--cpus", opts.cpus || process.env.PLAYTEST_CASE_CPUS || "2",
+    ...jobArguments(opts.executorId || opts.runId),
   ];
   for (const key of Object.keys(opts.env || {})) args.push("-e", key);
   for (const key of PASSTHROUGH_ENV) if (env[key] !== undefined) args.push("-e", key);
-  // Managed-compose cases get the docker socket ONLY when the pool is
-  // capability-gated for it (runner labels include "docker" — §3).
-  if (rc.env?.compose && opts.allowDocker) args.push("-v", "/var/run/docker.sock:/var/run/docker.sock");
   args.push(image, "node", CONTAINER_CHILD);
 
   const result = await runChildCase({

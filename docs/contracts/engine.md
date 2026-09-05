@@ -493,7 +493,9 @@ required fields use `allOf` conditionals.
 The OpenAI-compatible endpoint does not constrain decoding, so returned tool
 arguments always pass through the strict validator. A field valid for a
 different verb of the same driver may survive validation; execution switches
-on `type` and ignores unrelated fields.
+on `type` and ignores unrelated fields. The wait-duration bounds apply only
+when `type` is `wait`: a generated `seconds: 0` is ignored on a click, while a
+wait still requires `seconds` in the 0.1–10 range.
 
 ### Web driver
 

@@ -16,7 +16,7 @@
 //      one authorized reopen is the in-place retry, which is a person's decision
 //      and carries its own precondition (`reopenGroupForRetry`).
 //   3. **Attempt allocation and dispatch creation are one transaction.** The
-//      attempt IS the generation, `(kind, ref_id, attempt)` is unique in SQLite,
+//      attempt IS the generation, `(kind, ref_id, attempt)` is unique in Postgres,
 //      and a partial unique index permits at most one active group dispatch —
 //      so two concurrent continuations have a database arbiter and not just an
 //      application-level `NOT EXISTS`.
@@ -26,7 +26,7 @@ import type { DbRow, QueryResult } from "../db.ts";
 
 /** A `Db` or a `Tx` — everything here works against either. */
 interface Queryable {
-  query(text: string, params?: unknown[]): Promise<QueryResult> | QueryResult;
+  query(text: string, params?: unknown[]): Promise<QueryResult>;
 }
 
 /**
@@ -211,9 +211,9 @@ export async function claimDispatchForRunner(
               SELECT 1 FROM dispatches held
                WHERE held.runner_id = $2 AND held.status IN ${ACTIVE_DISPATCH_STATES_SQL})
         AND NOT EXISTS (
-              SELECT 1 FROM json_each(COALESCE(dispatches.labels, '[]')) want
+              SELECT 1 FROM jsonb_array_elements_text(COALESCE(dispatches.labels, '[]')) want
                WHERE want.value NOT IN (
-                 SELECT value FROM json_each((SELECT COALESCE(labels, '[]') FROM runners WHERE id = $2))))
+                 SELECT value FROM jsonb_array_elements_text((SELECT COALESCE(labels, '[]') FROM runners WHERE id = $2))))
       RETURNING *`,
     [dispatchId, runnerId],
   );
@@ -322,7 +322,7 @@ export function reopenGroupForRetry(q: Queryable, groupId: string): Promise<Tran
  * null; its caller decides what that means.
  *
  * Both preconditions are restated in the INSERT itself, and both are also
- * enforced by SQLite (`dispatches_ref_idx`, `dispatches_active_group_idx`), so
+ * enforced by Postgres (`dispatches_ref_idx`, `dispatches_active_group_idx`), so
  * a future caller that forgets one still cannot create a second live attempt.
  */
 export async function createGroupDispatch(

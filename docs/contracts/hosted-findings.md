@@ -356,6 +356,30 @@ Playtest runs no project-authored exporter, webhook, or ticket integration.
 External references are written explicitly after human confirmation; **Copy for
 tracker** is the default handoff.
 
+### Bulk export
+
+```text
+GET /api/v1/projects/:p/findings/export?state&severity&fix_suggested&format=md|json
+```
+
+A `viewer` read that returns the list's filter, uncapped, as one attachment for
+an LLM or a person to work through away from the console. It accepts exactly
+the list's filter vocabulary and its default scope (`new`, `reopened`,
+`accepted`); `state=all` widens to every state. `format` defaults to `md`;
+`json` returns `{ format: "playtest.findings-export", version, exported_at,
+origin, project, scope, count, findings }`.
+
+Each exported finding carries its stored title, state and bucket, severity,
+category and source, claim (expected, observed, signals), failing check, story
+status derived by the console's reconciliation rules, resolution and
+fix-suggestion provenance, and every evidence row. Links are absolute on the
+caller's origin (the request `Host`, honouring `x-forwarded-proto`, else the
+configured public URL): the finding page and JSON read, the viewer at the cited
+step, the run JSON, the `.ptrun` bundle download, and the bundle entries
+`trajectory.jsonl`, `manifest.json`, `grade.json`, and the step's screenshot
+and accessibility text. The export is a read: no event, audit row, or state
+change. The console offers it as **Download findings** on the findings list.
+
 ## Contract changes
 
 Update this file for changes to finding identity, lifecycle, evidence,

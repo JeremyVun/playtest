@@ -65,6 +65,7 @@ export const tar = (buffer: Buffer, filename: string) =>
  * point the refusal has been written) is finally cut off.
  */
 async function collect(req: IncomingMessage, limit: number): Promise<Buffer> {
+  if (req.destroyed) throw new AppError("bad_request", "request ended before its body was read");
   return await new Promise<Buffer>((resolve, reject) => {
     let chunks: Buffer[] = [];
     let size = 0;
@@ -85,6 +86,7 @@ async function collect(req: IncomingMessage, limit: number): Promise<Buffer> {
     });
     req.on("end", () => resolve(Buffer.concat(chunks)));
     req.on("error", reject);
+    req.on("close", () => { if (!req.complete) reject(new AppError("bad_request", "request ended before its body was read")); });
   });
 }
 

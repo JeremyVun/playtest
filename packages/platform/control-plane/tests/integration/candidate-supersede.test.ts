@@ -194,7 +194,7 @@ async function seedCandidate(
     );
     await tx.query(
       `INSERT INTO runs (id, run_group_id, case_id, story_id, run_id, status, mode, healed, changed, manifest, finished_at)
-         VALUES ($1, $2, $3, $4, $5, 'pass', 'heal', 1, 1, $6, $7)`,
+         VALUES ($1, $2, $3, $4, $5, 'pass', 'heal', true, true, $6, $7)`,
       [runId, groupId, storyId, storyId, `${storyId}-${ulid().slice(-8)}`, manifest, new Date(Date.now() - 60_000)],
     );
     await tx.query(

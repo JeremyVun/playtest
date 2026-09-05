@@ -1,0 +1,145 @@
+name: playtest-local
+x-log: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
+x-store: &store
+  OBJECT_STORE_URL: http://objects:9000
+  OBJECT_STORE_ALLOW_HTTP: "1"
+  OBJECT_STORE_FORCE_PATH_STYLE: "1"
+  OBJECT_STORE_BUCKET: playtest-local
+  OBJECT_STORE_PREFIX: installation
+  OBJECT_STORE_REGION: us-east-1
+  OBJECT_STORE_ACCESS_KEY: playtest-disposable
+  OBJECT_STORE_SECRET_KEY: playtest-disposable-password
+services:
+  postgres:
+    image: postgres:18@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: playtest-disposable-admin
+    volumes:
+      - metadata:/var/lib/postgresql
+      - ./scripts/hosted/local-postgres.sql:/docker-entrypoint-initdb.d/tenant.sql:ro
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U playtest -d playtest"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 512m
+    cpus: 1
+    logging: *logging
+    restart: unless-stopped
+  objects:
+    image: minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    command: [server, /data]
+    environment:
+      MINIO_ROOT_USER: playtest-disposable
+      MINIO_ROOT_PASSWORD: playtest-disposable-password
+    volumes: ["objects:/data"]
+    healthcheck:
+      test: [CMD, curl, -f, http://localhost:9000/minio/health/ready]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 512m
+    cpus: 1
+    logging: *logging
+    restart: unless-stopped
+  bucket-init:
+    image: playtest-control-plane:${PLAYTEST_RELEASE:?run npm run hosted}
+    entrypoint: [node, packages/platform/control-plane/src/store/init-local.ts]
+    depends_on:
+      objects: { condition: service_healthy }
+    mem_limit: 128m
+    logging: *logging
+  control-plane:
+    image: playtest-control-plane:${PLAYTEST_RELEASE:?run npm run hosted}
+    environment:
+      <<: *store
+      DATABASE_URL: postgres://playtest:playtest-disposable-database@postgres:5432/playtest
+      PLAYTEST_AUTH: dev
+      PUBLIC_URL: http://127.0.0.1:${PLAYTEST_LOCAL_PORT:-4177}
+      PLAYTEST_DATA_DIR: /data
+      PLAYTEST_KMS_KEY: "0303030303030303030303030303030303030303030303030303030303030303"
+      PLAYTEST_SITE_RUNNER_NAME: compose
+      PLAYTEST_SITE_RUNNER_CREDENTIAL: ptr_local_compose_disposable_00000000
+      PLAYTEST_RETENTION_INTERVAL_S: "3600"
+      PLAYTEST_RECONCILE_INTERVAL_S: "10"
+      PLAYTEST_VIEW_CACHE_MB: "256"
+      PLAYTEST_AUTHORING_MODEL: ${PLAYTEST_AUTHORING_MODEL:-gpt5_6_sol}
+      PLAYTEST_LLM_BASE_URL: ${PLAYTEST_LLM_BASE_URL-http://host.docker.internal:8900}
+      PLAYTEST_LLM_API_KEY: ${PLAYTEST_LLM_API_KEY:-}
+    ports: ["127.0.0.1:${PLAYTEST_LOCAL_PORT:-4177}:4177"]
+    volumes: ["control-data:/data"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      bucket-init: { condition: service_completed_successfully }
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:4177/readyz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    stop_grace_period: 45s
+    mem_limit: 4g
+    cpus: 2
+    logging: *logging
+    restart: unless-stopped
+  runner:
+    image: playtest-runner:${PLAYTEST_RELEASE:?run npm run hosted}
+    user: "${PLAYTEST_JOB_UID:-1000}:${PLAYTEST_JOB_GID:-1000}"
+    group_add: ["${PLAYTEST_DOCKER_GID:-0}"]
+    environment:
+      PLAYTEST_SERVER_URL: http://control-plane:4177
+      PLAYTEST_RUNNER_CREDENTIAL: ptr_local_compose_disposable_00000000
+      PLAYTEST_RUNNER_ISOLATION: container
+      PLAYTEST_RUNNER_WORKDIR: ${PLAYTEST_RUNNER_WORKDIR:?run npm run hosted}
+      PLAYTEST_JOB_IMAGE: playtest-job:${PLAYTEST_RELEASE:?run npm run hosted}
+      PLAYTEST_JOB_NETWORK: playtest-local_targets
+      PLAYTEST_JOB_UID: ${PLAYTEST_JOB_UID:-1000}
+      PLAYTEST_JOB_GID: ${PLAYTEST_JOB_GID:-1000}
+      PLAYTEST_INSTALLATION: playtest-local
+      PLAYTEST_RUNNER_MAX_TOTAL: "1"
+      PLAYTEST_RUNNER_MAX_RECORD: "1"
+      PLAYTEST_CASE_MEMORY: 2g
+      PLAYTEST_CASE_CPUS: "2"
+      PLAYTEST_CASE_PIDS: "512"
+      PLAYTEST_CASE_SHM: 512m
+      PLAYTEST_RUNNER_HEALTH_FILE: /tmp/playtest-runner-health
+      PLAYTEST_LLM_BASE_URL: ${PLAYTEST_LLM_BASE_URL-http://host.docker.internal:8900}
+      PLAYTEST_LLM_API_KEY: ${PLAYTEST_LLM_API_KEY:-}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${PLAYTEST_RUNNER_WORKDIR}:${PLAYTEST_RUNNER_WORKDIR}
+    networks: [default, targets]
+    depends_on:
+      control-plane: { condition: service_healthy }
+    healthcheck:
+      test: [CMD, node, packages/platform/runner-agent/src/cli.ts, health]
+      interval: 20s
+      timeout: 12s
+      retries: 4
+      start_period: 60s
+    stop_grace_period: 45s
+    mem_limit: 1g
+    cpus: 1
+    logging: *logging
+    restart: unless-stopped
+  test-target:
+    image: node:24.18.0-bookworm-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d
+    profiles: [test]
+    command: [node, /app/server.ts]
+    volumes: ["./tests/fixtures/todo-app/server.ts:/app/server.ts:ro"]
+    environment: { PORT: "4173" }
+    networks: [targets]
+    mem_limit: 128m
+    logging: *logging
+volumes:
+  metadata:
+  objects:
+  control-data:
+networks:
+  default:
+  targets:
+    name: playtest-local_targets

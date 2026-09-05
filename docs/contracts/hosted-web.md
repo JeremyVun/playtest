@@ -182,6 +182,11 @@ Every finding and synthesized claim links to evidence. Resolutions name their
 source run and reason. Missing or pruned evidence is explicit. External handoff
 is a human confirmation/copy action, not an automatic tracker action.
 
+The findings list offers **Download findings**, which saves the current bucket
+as one Markdown file with links back to each finding, its viewer step, and its
+run bundle ([bulk export](hosted-findings.md#bulk-export)). It is a read for any
+role and appears only when the bucket has findings.
+
 ## Personas
 
 Personas has permanent navigation because personas are project-wide. Built-ins

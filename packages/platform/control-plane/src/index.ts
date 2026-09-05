@@ -32,6 +32,21 @@ async function main() {
   }
 
   const app = await createApp(config);
+  app.db.once("disconnect", () => {
+    console.error("Postgres connection lost. Restart the control plane to reacquire database ownership.");
+    process.exit(1);
+  });
+  let stopping = false;
+  const stop = async () => {
+    if (stopping) return;
+    stopping = true;
+    const deadline = setTimeout(() => { app.server.closeAllConnections(); process.exit(1); }, 40_000);
+    deadline.unref();
+    try { await app.close(); clearTimeout(deadline); process.exit(0); }
+    catch { process.exit(1); }
+  };
+  process.once("SIGTERM", stop);
+  process.once("SIGINT", stop);
   await app.listen();
   app.log.info({
     msg: `Playtest control plane listening on http://${config.host}:${config.port} ` +

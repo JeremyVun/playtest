@@ -12,6 +12,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadConfig } from "../../src/config.ts";
 import { createApp } from "../../src/app.ts";
+import { testDatabase } from "../postgres/helpers.ts";
 
 export const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../..");
 
@@ -21,7 +22,8 @@ export const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url
 export async function withApp(fn: HostedDynamic, envOverrides: HostedDynamic = {}, appOptions: HostedDynamic = {}) {
   const dataRoot = await fsp.mkdtemp(path.join(os.tmpdir(), "ptdata-"));
   const storeRoot = path.join(dataRoot, "objects");
-  const config = loadConfig({
+  const database = await testDatabase();
+  const config = loadConfig({ DATABASE_URL: database.databaseUrl,
     PLAYTEST_DATA_DIR: dataRoot,
     PLAYTEST_AUTH: "dev",
     OBJECT_STORE_URL: storeRoot,
@@ -35,13 +37,14 @@ export async function withApp(fn: HostedDynamic, envOverrides: HostedDynamic = {
     PLAYTEST_RECONCILE_INTERVAL_S: "0",
     ...envOverrides,
   });
-  const app = await createApp(config, appOptions);
+  const app = await createApp(config, appOptions).catch(async (error) => { await database.close(); throw error; });
   const addr: HostedDynamic = await app.listen(0, "127.0.0.1");
   const base = `http://127.0.0.1:${addr.port}`;
   try {
     await fn({ base, app, api: makeClient(base), storeRoot });
   } finally {
     await app.close();
+    await database.close();
     await fsp.rm(dataRoot, { recursive: true, force: true });
   }
 }

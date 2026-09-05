@@ -1,3 +1,4 @@
+import { lifecycle } from "../store/lifecycle.ts";
 // Suites of record (docs/contracts/hosted.md#suites-and-snapshots). `suite_files` is the
 // live working tree (always fully valid — every mutation validates the whole tree
 // with core before committing); each mutation also writes one immutable, content-
@@ -36,7 +37,7 @@ const STORY_COUNT_SQL = `(SELECT COUNT(*) FROM suite_files f
 const APPLICATION_JOIN_SQL = `a.key AS application_key, a.name AS application_name,
      a.driver AS application_driver, a.platform AS application_platform`;
 
-/** GET /projects/:p/suites — live suites; ?archived=1 lists the archived ones instead. */
+/** GET /projects/:p/suites — live suites; ?archived = true lists the archived ones instead. */
 export async function listSuites(ctx: HostedDynamic) {
   const project = await getProjectByKey(ctx, ctx.params.p);
   guard(ctx, project.id, "viewer");
@@ -87,7 +88,7 @@ export async function patchSuite(ctx: HostedDynamic) {
  * dangle references — archive is the retirement path. The pre-check gives the
  * friendly message; the run_groups FK (ON DELETE RESTRICT) backstops it.
  *
- * `withTx` opens BEGIN IMMEDIATE, so the count and the delete are serialized
+ * `withTx` queues the owned client, so the count and the delete are serialized
  * against a concurrent launch: either the run group commits first and the count
  * sees it, or the suite is gone and the group's FK rejects it.
  */
@@ -187,7 +188,7 @@ export async function createSuite(ctx: HostedDynamic) {
     } catch (e: HostedDynamic) {
       // Pre-check races: a concurrent create can slip past it and hit the unique
       // index — surface the same friendly conflict, never the raw constraint error.
-      if (/UNIQUE constraint failed/.test(e.message)) {
+      if (e.code === "23505" && e.constraint === "suites_project_id_slug_key") {
         throw conflict(`a suite with slug "${slug}" already exists in this project`);
       }
       throw e;
@@ -352,8 +353,7 @@ async function resolvedCasesFor(db: HostedDynamic, suiteId: HostedDynamic) {
   // Decorate each story with its latest finished runs — one window query for
   // the whole suite, so the suite page can show LAST and TREND without a
   // per-story history read. `recent` is newest-first, at most 5 statuses.
-  // `(started_at IS NULL)` leads the sort because SQLite orders NULL FIRST under
-  // DESC; without it a never-started run would masquerade as the latest one.
+  // `(started_at IS NULL)` keeps never-started runs behind dated runs.
   const { rows } = await db.query(
     `SELECT story_id, status, started_at, id, run_group_id FROM (
        SELECT r.story_id, r.status, r.started_at, r.id, r.run_group_id,
@@ -494,14 +494,8 @@ export async function applyCommit(ctx: HostedDynamic, suite: HostedDynamic, chan
   guard(ctx, suite.project_id, touchesCode ? "developer" : "editor");
   if (note != null && typeof note !== "string") throw badRequest(`"note" must be a string`);
 
-  // Everything that reads the current tree, decides the snapshot contents, or writes
-  // runs INSIDE the transaction, which `withTx` opens as BEGIN IMMEDIATE — the write
-  // lock is taken at statement one, so commits serialize. Reading `current` before
-  // the transaction let two concurrent commits to different paths each snapshot a
-  // stale whole-tree, so the newest snapshot's `tree` no longer matched suite_files —
-  // breaking the invariant /export and conflict detection rely on. Validation + blob
-  // writes happen under the lock (brief, and the blobs are content-addressed).
-  const committed = await ctx.db.withTx(async (tx: HostedDynamic) => {
+  const committed = await lifecycle(ctx).serial(`suite:${suite.id}`, async () => {
+    const tx = ctx.db;
     const current = await loadWorkingFiles(tx, suite.id);
 
     // Optimistic concurrency: if the client committed against base_seq, reject when a
@@ -526,6 +520,7 @@ export async function applyCommit(ctx: HostedDynamic, suite: HostedDynamic, chan
     // Content-addressed + idempotent; an orphan blob on a later rollback is harmless.
     const tree = await putBlobs(ctx.store, proposed);
 
+    return ctx.db.withTx(async (tx: HostedDynamic) => {
     for (const c of changes) {
       if (c.content == null) {
         await tx.query(`DELETE FROM suite_files WHERE suite_id = $1 AND path = $2`, [suite.id, c.path]);
@@ -554,10 +549,10 @@ export async function applyCommit(ctx: HostedDynamic, suite: HostedDynamic, chan
       );
     } catch (e: HostedDynamic) {
       // `UNIQUE (suite_id, seq)` is the real one-winner guarantee behind the
-      // MAX(seq)+1 allocation above. BEGIN IMMEDIATE should already have
+      // MAX(seq)+1 allocation above. The per-suite guard has already
       // serialized the two commits, so this only fires if that ever regresses —
       // the loser must still see the friendly conflict, never a raw constraint error.
-      if (/UNIQUE constraint failed/.test(e.message)) {
+      if (e.code === "23505" && e.constraint === "suite_snapshots_suite_id_seq_key") {
         throw conflict("someone else committed to this suite at the same time — reload and try again");
       }
       throw e;
@@ -572,6 +567,7 @@ export async function applyCommit(ctx: HostedDynamic, suite: HostedDynamic, chan
       detail: { snapshot_id: id, seq, changes: changes.map((c: HostedDynamic) => ({ path: c.path, deleted: c.content == null })), note: note ?? null },
     });
     return { snapshot: { id, seq, note: note ?? null }, cases: result.cases };
+    });
   });
 
   return committed;

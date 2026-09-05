@@ -17,6 +17,7 @@ import { ensureUser } from "../auth/users.ts";
 import { createSession, destroySession, sessionCookie, clearedSessionCookie, parseCookies, COOKIE_NAME } from "../auth/sessions.ts";
 import { redirect } from "../http.ts";
 import { badRequest, AppError } from "../errors.ts";
+import { requireAuth } from "./util.ts";
 
 const OIDC_STATE_COOKIE = "pt_oidc";
 
@@ -34,6 +35,10 @@ const isSecure = (ctx: HostedDynamic) => ctx.config.publicUrl.startsWith("https:
 /** GET /auth/login?returnTo= */
 export async function login(ctx: HostedDynamic) {
   const returnTo = safeReturn(ctx.query.get("returnTo"));
+  if (ctx.config.auth.mode === "proxy") {
+    requireAuth(ctx);
+    return redirect(returnTo);
+  }
   if (ctx.config.auth.mode === "dev") {
     const user: HostedDynamic = await ensureUser(ctx.db, ctx.config.auth.devUser);
     const session = await createSession(ctx.db, user.id);
@@ -51,6 +56,7 @@ export async function login(ctx: HostedDynamic) {
 
 /** GET /auth/callback?code=&state= */
 export async function callback(ctx: HostedDynamic) {
+  if (ctx.config.auth.mode === "proxy") throw new AppError("not_found", "This deployment uses proxy sign-in.");
   if (ctx.config.auth.mode === "dev") return redirect("/");
   const oidc = ctx.config.auth.oidc;
   const code = ctx.query.get("code");
@@ -82,6 +88,10 @@ export async function callback(ctx: HostedDynamic) {
 
 /** POST /auth/logout */
 export async function logout(ctx: HostedDynamic) {
+  if (ctx.config.auth.mode === "proxy") {
+    requireAuth(ctx);
+    return redirect(ctx.config.auth.proxy.logoutUrl, [clearedSessionCookie({ secure: true })]);
+  }
   const cookies = parseCookies(ctx.req.headers["cookie"]);
   if (cookies[COOKIE_NAME]) await destroySession(ctx.db, cookies[COOKIE_NAME]);
   return redirect("/", [clearedSessionCookie({ secure: isSecure(ctx) })]);

@@ -12,21 +12,26 @@
     "migrate": "node src/index.ts migrate",
     "typecheck": "tsc -p tsconfig.json",
     "test": "node --import ../../../tests/support/hermetic.ts --test tests/unit/*.test.ts",
-    "test:integration": "node --import ../../../tests/support/hermetic.ts --test tests/integration/*.test.ts",
+    "test:integration": "node --import ../../../tests/support/hermetic.ts --test --test-concurrency=6 tests/integration/*.test.ts",
     "test:load": "node --import ../../../tests/support/hermetic.ts tests/load/viewer-load.ts",
     "test:browser": "node --import ../../../tests/support/hermetic.ts --test tests/browser/*.test.ts",
-    "test:mobile": "node --test --test-timeout=900000 tests/mobile/*.test.ts"
+    "test:mobile": "node --test --test-timeout=900000 tests/mobile/*.test.ts",
+    "test:postgres": "node --import ../../../tests/support/hermetic.ts --test --test-concurrency=6 tests/postgres/*.test.ts",
+    "test:s3": "node --test tests/s3/*.test.ts"
   },
   "engines": {
     "node": ">=24.18.0"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1127.0",
     "@playtest/core": "^0.1.0",
     "@playtest/runner-agent": "^0.1.0",
     "@playtest/web": "^0.1.0",
+    "pg": "^8.23.0",
     "yaml": "^2.7.0"
   },
   "devDependencies": {
+    "@types/pg": "^8.23.1",
     "playwright": "^1.53.0"
   }
 }

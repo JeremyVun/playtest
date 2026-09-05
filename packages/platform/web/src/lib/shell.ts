@@ -151,8 +151,11 @@ function railToggle() {
 }
 
 async function logout() {
-  await fetch("/auth/logout", { method: "POST" });
-  location.href = "/login";
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = "/auth/logout";
+  document.body.append(form);
+  form.submit();
 }
 
 /**

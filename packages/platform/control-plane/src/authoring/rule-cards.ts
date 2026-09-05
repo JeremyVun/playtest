@@ -145,7 +145,7 @@ export async function insertRuleCard(tx: HostedDynamic, { projectId, suiteId, ca
       normalized.note ?? null,
       normalized.origin === "proposed" ? normalized.statement : null,
       normalized.state === "candidate" ? null : decidedBy,
-      normalized.state === "candidate" ? null : Date.now(),
+      normalized.state === "candidate" ? null : new Date(),
     ],
   );
   return rows[0];

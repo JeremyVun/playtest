@@ -2,7 +2,7 @@
 // signal that lets a held request return promptly instead of waiting out the
 // handler's 1 s scan fallback.
 //
-// Under SQLite the control plane is a single process (docs/contracts/hosted.md,
+// The control plane is a single writer process (docs/contracts/hosted.md,
 // "Deployment topology"), so an in-process emitter is sufficient: no broker, no
 // second connection. The one guarantee carried over from the LISTEN/NOTIFY era
 // is that a wakeup is delivered only after the emitting transaction COMMITs, so

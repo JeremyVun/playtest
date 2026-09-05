@@ -9,7 +9,7 @@
 //                                        entry in this runner's project, held on
 //                                        the feed's discipline (post-commit wake,
 //                                        bounded rescan, correctness from the row)
-//   POST /runner/pool/claims/:dispatch   BEGIN IMMEDIATE, precondition restated
+//   POST /runner/pool/claims/:dispatch   owned transaction, precondition restated
 //                                        in the mutating WHERE: exactly one winner
 //   POST /runner/pool/claims/:d/heartbeat coarse liveness + the cancel signal
 //
@@ -115,8 +115,8 @@ export async function registerViaOidc(ctx: HostedDynamic) {
   const expiresAt = new Date(now + pool.oidc.ttlMs);
   const { rows: live } = await ctx.db.query(
     `SELECT COUNT(*) AS n FROM runners
-      WHERE project_id = $1 AND ephemeral = 1 AND revoked_at IS NULL AND expires_at > $2
-        AND json_extract(source, '$.run_id') = $3`,
+      WHERE project_id = $1 AND ephemeral = true AND revoked_at IS NULL AND expires_at > $2
+        AND (source #>> '{run_id}') = $3`,
     [project.id, new Date(now), runId],
   );
   if (live[0].n >= MAX_EPHEMERAL_PER_RUN) {
@@ -144,7 +144,7 @@ export async function registerViaOidc(ctx: HostedDynamic) {
   const row = await ctx.db.withTx(async (tx: HostedDynamic) => {
     const { rows } = await tx.query(
       `INSERT INTO runners (id, project_id, name, labels, credential_hash, ephemeral, expires_at, source)
-         VALUES ($1, $2, $3, $4, $5, 1, $6, $7) RETURNING *`,
+         VALUES ($1, $2, $3, $4, $5, true, $6, $7) RETURNING *`,
       [id, project.id, name, labels, hash, expiresAt, source],
     );
     await audit(tx, {
@@ -210,22 +210,22 @@ export async function pollClaims(ctx: HostedDynamic) {
       // json_each over the stored arrays keeps the match in the same read that
       // orders the board, so a poll is one query however long the board is.
       //
-      // `$1 IS NULL` is the site-scoped runner: one board across every project,
+      // `$1::text IS NULL` is the site-scoped runner: one board across every project,
       // ordered by age exactly as a project board is. Its credential still
       // resolves to one row and its bearer is still scoped per claim; what
       // changes here is only which offers it may see.
       `SELECT d.id, d.kind, d.ref_id, d.attempt, d.labels, d.target, d.requested_at, d.claimed_at,
               d.project_id, p.key AS project_key
          FROM dispatches d JOIN projects p ON p.id = d.project_id
-        WHERE ($1 IS NULL OR d.project_id = $1)
+        WHERE ($1::text IS NULL OR d.project_id = $1)
           AND d.kind IN ('group','mint')
           AND d.status = 'requested'
           AND d.claimed_at IS NULL
           AND d.canceled_at IS NULL
-          AND d.id NOT IN (SELECT value FROM json_each($3))
+          AND d.id NOT IN (SELECT value FROM jsonb_array_elements_text($3))
           AND NOT EXISTS (
-                SELECT 1 FROM json_each(COALESCE(d.labels, '[]')) want
-                 WHERE want.value NOT IN (SELECT value FROM json_each($2)))
+                SELECT 1 FROM jsonb_array_elements_text(COALESCE(d.labels, '[]')) want
+                 WHERE want.value NOT IN (SELECT value FROM jsonb_array_elements_text($2)))
         ORDER BY d.requested_at, d.id
         LIMIT ${OFFER_PAGE}`,
       [runner.project_id ?? null, labels, skip],
@@ -316,7 +316,7 @@ async function activeClaim(ctx: HostedDynamic, runnerId: string) {
 /**
  * POST /runner/pool/claims/:dispatch — claim it.
  *
- * One `BEGIN IMMEDIATE` transaction whose mutating UPDATE restates the entire
+ * One owned-client transaction whose mutating UPDATE restates the entire
  * precondition — still `requested`, still unclaimed, not canceled, the runner
  * still live and still in this project, the labels still a subset. Exactly one
  * concurrent runner wins (transaction guarantee #2); the loser is told what
@@ -334,7 +334,7 @@ export async function claimDispatch(ctx: HostedDynamic) {
       // A site-scoped runner's board is every project's, so its lookup is not
       // narrowed — but the mutating UPDATE below still restates the whole scope
       // precondition, so scope is never decided by this read alone.
-      `SELECT * FROM dispatches WHERE id = $1 AND ($2 IS NULL OR project_id = $2)`,
+      `SELECT * FROM dispatches WHERE id = $1 AND ($2::text IS NULL OR project_id = $2)`,
       [dispatchId, runner.project_id ?? null],
     );
     const dispatch = rows[0];
@@ -429,7 +429,7 @@ export async function heartbeatClaim(ctx: HostedDynamic) {
   const { rows } = await ctx.db.query(
     `SELECT d.*, g.status AS group_status FROM dispatches d
        LEFT JOIN run_groups g ON d.kind = 'group' AND g.id = d.ref_id
-      WHERE d.id = $1 AND ($2 IS NULL OR d.project_id = $2)`,
+      WHERE d.id = $1 AND ($2::text IS NULL OR d.project_id = $2)`,
     [ctx.params.dispatch, runner.project_id ?? null],
   );
   const dispatch = rows[0];

@@ -193,7 +193,7 @@ export async function synthesizeStudyFindings(ctx: HostedDynamic, { project, gro
  * (docs/contracts/hosted.md). A claim whose cited steps carry no deterministic
  * signal enters with no exact keys and waits for review or consolidation.
  *
- * Pure of network I/O — exercised directly by the SQLite synthesis test.
+ * Pure of network I/O — exercised directly by the Postgres synthesis test.
  */
 export async function ingestSynthesisFindings(tx: HostedDynamic, { projectId, group, findings, knownRefs, actor }: HostedDynamic) {
   const results: HostedDynamic[] = [];

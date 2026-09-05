@@ -64,12 +64,9 @@ export async function createPersona(ctx: HostedDynamic) {
   ]);
   if (dup.rows.length) throw conflict(`a persona named "${slug}" already exists`);
 
+  const bytes = personaYaml({ name, description });
+  const tree = await putBlobs(ctx.store, { [personaPath(slug)]: bytes });
   const persona = await ctx.db.withTx(async (tx: HostedDynamic) => {
-    const bytes = personaYaml({ name, description });
-    // Content-addressed + idempotent; an orphan blob on a later rollback is
-    // harmless, but a row pointing at a missing blob is not — write the blob
-    // (in-tx, matching applyCommit's ordering in api/suites.ts) before the row.
-    const tree = await putBlobs(ctx.store, { [personaPath(slug)]: bytes });
     const id = ulid();
     let rows;
     try {
@@ -82,7 +79,7 @@ export async function createPersona(ctx: HostedDynamic) {
       // Pre-check race: a concurrent create can slip past it and hit the
       // unique index — surface the same friendly conflict, never the raw
       // constraint error.
-      if (/UNIQUE constraint failed/.test(e.message)) {
+      if (e.code === "23505" && e.constraint === "personas_project_id_slug_key") {
         throw conflict(`a persona named "${slug}" already exists`);
       }
       throw e;
@@ -122,9 +119,9 @@ export async function updatePersona(ctx: HostedDynamic) {
     { nameRequired: true, descriptionRequired: true },
   );
 
+  const bytes = personaYaml({ name, description });
+  const tree = await putBlobs(ctx.store, { [personaPath(persona.slug)]: bytes });
   const updated = await ctx.db.withTx(async (tx: HostedDynamic) => {
-    const bytes = personaYaml({ name, description });
-    const tree = await putBlobs(ctx.store, { [personaPath(persona.slug)]: bytes });
     const { rows } = await tx.query(
       `UPDATE personas SET name = $2, description = $3, blob_sha256 = $4, updated_at = now()
          WHERE id = $1 RETURNING *`,

@@ -64,6 +64,8 @@ interface RawAttempt {
 
 export class LlmError extends Error {
   declare rawAttempts?: RawAttempt[];
+  declare tokens?: TokenUsage;
+  declare retries?: string[];
 }
 
 // The env vars that supply a model API key, in resolution order.
@@ -581,6 +583,8 @@ export async function forcedToolCall<T extends Record<string, unknown> = Record<
   }
   const err = new LlmError(`${name} failed validation after retry: ${lastError}`);
   err.rawAttempts = rawAttempts;
+  err.tokens = tokens;
+  err.retries = retries;
   throw err;
 }
 

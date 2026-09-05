@@ -2,7 +2,16 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { loadConfig, ServerConfigError } from "../../src/config.ts";
 
-const base = { PLAYTEST_DATA_DIR: "/tmp/playtest-config-test" };
+const base = { DATABASE_URL: "postgres://test:test@127.0.0.1/playtest_test", PLAYTEST_DATA_DIR: "/tmp/playtest-config-test" };
+
+test("config: proxy auth requires an ingress key and explicit HTTPS URLs, without OIDC", () => {
+  const env = { ...base, PLAYTEST_AUTH: "proxy", PLAYTEST_PROXY_SECRET: "a".repeat(64), PUBLIC_URL: "https://playtest.example.test", PLAYTEST_AUTH_LOGOUT_URL: "https://auth.example.test/logout" };
+  assert.equal(loadConfig(env).auth.mode, "proxy");
+  assert.equal(loadConfig(env).auth.oidc, undefined);
+  for (const patch of [{ PLAYTEST_PROXY_SECRET: "short" }, { PUBLIC_URL: "http://playtest.example.test" }, { PLAYTEST_AUTH_LOGOUT_URL: "" }, { PLAYTEST_AUTH: "typo" }]) {
+    assert.throws(() => loadConfig({ ...env, ...patch }), ServerConfigError);
+  }
+});
 
 test("config: dev auth needs no OIDC", () => {
   const cfg: HostedDynamic = loadConfig({ ...base, PLAYTEST_AUTH: "dev" });
@@ -37,18 +46,11 @@ test("config: the development insecure runner exchange does not exist", () => {
   assert.equal("allowInsecureRunnerExchange" in cfg.dispatch, false);
 });
 
-test("config: the data root holds the database and the default object store", () => {
-  const cfg: HostedDynamic = loadConfig({ ...base, PLAYTEST_AUTH: "dev" });
-  assert.equal(cfg.dataDir, "/tmp/playtest-config-test");
-  assert.equal(cfg.databaseFile, "/tmp/playtest-config-test/playtest.sqlite");
-  assert.equal(cfg.objectStore.root, "/tmp/playtest-config-test/objects");
-  // No database service to configure: an empty env still yields a usable config.
-  const bare: HostedDynamic = loadConfig({ PLAYTEST_AUTH: "dev" });
-  assert.ok(bare.databaseFile.endsWith("/.playtest-data/playtest.sqlite"));
-  assert.ok(bare.objectStore.root.endsWith("/.playtest-data/objects"));
-  // Expert overrides may split them; PLAYTEST_DB_FILE wins over the data root.
-  const split = loadConfig({ ...base, PLAYTEST_AUTH: "dev", PLAYTEST_DB_FILE: "/srv/db/playtest.sqlite" });
-  assert.equal(split.databaseFile, "/srv/db/playtest.sqlite");
+test("config: Postgres is required and old SQLite configuration is refused", () => {
+  const cfg = loadConfig({ ...base, PLAYTEST_AUTH: "dev" });
+  assert.equal(cfg.databaseUrl, "postgres://test:test@127.0.0.1/playtest_test");
+  assert.throws(() => loadConfig({ ...base, DATABASE_URL: "", PLAYTEST_AUTH: "dev" }), /DATABASE_URL/);
+  assert.throws(() => loadConfig({ DATABASE_URL: cfg.databaseUrl, PLAYTEST_AUTH: "dev", PLAYTEST_DB_FILE: "/old/data.sqlite" }), /PLAYTEST_DB_FILE is obsolete/);
 });
 
 test("config: OIDC mode requires issuer/client id/secret, named", () => {
@@ -60,7 +62,7 @@ test("config: OIDC mode requires issuer/client id/secret, named", () => {
 
 test("config: object store defaults to fs; s3 url selects s3", () => {
   assert.equal(loadConfig({ ...base, PLAYTEST_AUTH: "dev" }).objectStore.kind, "fs");
-  assert.equal(loadConfig({ ...base, PLAYTEST_AUTH: "dev", OBJECT_STORE_URL: "s3://bucket" }).objectStore.kind, "s3");
+  assert.equal(loadConfig({ ...base, PLAYTEST_AUTH: "dev", OBJECT_STORE_URL: "https://s3.example.test", OBJECT_STORE_BUCKET: "bucket", OBJECT_STORE_PREFIX: "test", OBJECT_STORE_REGION: "us-east-1", OBJECT_STORE_ACCESS_KEY: "test", OBJECT_STORE_SECRET_KEY: "test" }).objectStore.kind, "s3");
   assert.equal(loadConfig({ ...base, PLAYTEST_AUTH: "dev", OBJECT_STORE_URL: "/data/objs" }).objectStore.kind, "fs");
 });
 

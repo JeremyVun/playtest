@@ -212,8 +212,8 @@ export function toolParamsFor(driverId: string = "web"): ShippedStepSchema {
 /**
  * The strict Ajv VALIDATION schema for a driver: the canonical flat schema with
  * `type`/`direction` enums scoped to the driver's verbs; $id/$schema stripped so
- * several driver schemas compile in one Ajv instance. Keeps additionalProperties,
- * the allOf per-verb requireds, and min/max — this is what forcedToolCall gates on.
+ * several driver schemas compile in one Ajv instance. Keeps additionalProperties
+ * and the allOf per-verb requirements/bounds — this is what forcedToolCall gates on.
  */
 export function stepSchemaFor(driverId: string = "web"): Record<string, unknown> {
   const id = normalizeDriver(driverId);

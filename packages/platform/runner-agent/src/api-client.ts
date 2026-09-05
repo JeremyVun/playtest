@@ -1,3 +1,13 @@
+import { Readable } from "node:stream";
+export function resolveApiPath(baseUrl: string, path: string): string {
+  const base = new URL(baseUrl);
+  if (!["http:", "https:"].includes(base.protocol) || base.username || base.password || base.search || base.hash || base.pathname !== "/") throw new Error("runner server must be an HTTP(S) origin without credentials or path");
+  if (path.includes("\\") || path.startsWith("//")) throw new Error("unsafe runner API path");
+  const url = new URL(/^https?:/.test(path) || path.startsWith("/api/v1/") ? path : `/api/v1${path}`, base);
+  if (url.origin !== base.origin || url.username || url.password || url.hash || !url.pathname.startsWith("/api/v1/")) throw new Error("runner API URL must remain on the configured server and API path");
+  return url.href;
+}
+
 /**
  * The control plane's one stale-ownership answer (409 `executor_conflict`,
  * docs/contracts/hosted.md "Current executor fencing"). It means this bearer is
@@ -62,11 +72,12 @@ export class ApiClient {
     const headers: Record<string, string> = {};
     if (this.token) headers.authorization = `Bearer ${this.token}`;
     if (body !== undefined) headers["content-type"] = "application/json";
-    const res = await fetch(`${this.baseUrl}/api/v1${path}`, {
+    const res = await fetch(resolveApiPath(this.baseUrl, path), {
       method,
+      redirect: "error",
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
-      signal,
+      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(120_000)]) : AbortSignal.timeout(120_000),
     });
     if (res.status === 204) return null as Answer; // SAFETY: a 204 route's caller reads nothing from it.
     const data = await res.json().catch(() => ({}));
@@ -77,7 +88,7 @@ export class ApiClient {
   async bytes(path: string): Promise<Buffer> {
     const headers: Record<string, string> = {};
     if (this.token) headers.authorization = `Bearer ${this.token}`;
-    const res = await fetch(`${this.baseUrl}/api/v1${path}`, { headers });
+    const res = await fetch(resolveApiPath(this.baseUrl, path), { headers, redirect: "error", signal: AbortSignal.timeout(120_000) });
     if (!res.ok) throw new RunnerApiError(res.status, await res.json().catch(() => ({})));
     return Buffer.from(await res.arrayBuffer());
   }
@@ -85,8 +96,8 @@ export class ApiClient {
   async putBytes<Answer = RunnerDynamic>(path: string, bytes: Buffer, contentType = "application/octet-stream", { signal }: { signal?: AbortSignal } = {}): Promise<Answer> {
     const headers: Record<string, string> = { "content-type": contentType };
     if (this.token) headers.authorization = `Bearer ${this.token}`;
-    // SAFETY: a Buffer is a Uint8Array; only its ArrayBufferLike generic keeps it out of BodyInit.
-    const res = await fetch(`${this.baseUrl}/api/v1${path}`, { method: "PUT", headers, body: bytes as unknown as BodyInit, signal });
+    // Streaming the existing buffer avoids fetch's full-size BodyInit copy.
+    const res = await fetch(resolveApiPath(this.baseUrl, path), { method: "PUT", redirect: "error", headers, body: Readable.toWeb(Readable.from([bytes])) as ReadableStream<Uint8Array>, duplex: "half", signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(120_000)]) : AbortSignal.timeout(120_000) } as RequestInit);
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new RunnerApiError(res.status, data);
     return data;

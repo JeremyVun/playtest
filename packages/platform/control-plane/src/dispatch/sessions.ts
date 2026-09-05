@@ -367,8 +367,7 @@ export async function listProviderSessions(ctx: HostedDynamic, providerId: Hoste
 }
 
 /**
- * Single-flight claim for a `script` provider (the enclosing BEGIN IMMEDIATE
- * holds the database write lock, so claim decisions serialize). Returns either a `wait`
+ * Single-flight claim for a `script` provider on the serialized client. Returns a `wait`
  * ticket (someone else is minting) or a `mint` grant carrying the provider code
  * and its resolved root secrets — delivered only in this response, never
  * persisted. The winner runs the script clean-room and POSTs …/fulfill.
@@ -613,17 +612,6 @@ function renderTemplates(value: HostedDynamic, vars: HostedDynamic): HostedDynam
   return value;
 }
 
-// The Postgres versions took FOR UPDATE on the provider row while a mint decided
-// what to write. Under SQLite the enclosing withTx is BEGIN IMMEDIATE — one
-// writer holds the whole database — and the session_artifacts upsert on
-// (provider_id, identity) is what actually makes the mint write idempotent, so
-// no per-row lock is needed or expressible.
-//
-// `ringId` is the ring whose session references are being resolved. A provider
-// is reachable from it only when the provider is project-wide (`ring_id` null)
-// or bound to that exact ring: a lookup by (project, name) alone would let one
-// ring borrow another ring's provider — and with it another ring's credentials —
-// simply by naming it in its own `auth.identities`.
 async function getProvider(q: HostedDynamic, projectId: HostedDynamic, name: HostedDynamic, ringId: HostedDynamic = null) {
   const { rows } = await q.query(`SELECT * FROM auth_providers WHERE project_id = $1 AND name = $2`, [
     projectId,

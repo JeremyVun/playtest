@@ -190,7 +190,7 @@ export async function putLiveEntry(ctx: HostedDynamic) {
   if (!outcome.reserve) return outcome;
 
   // Outside the transaction: the object store shares none of it, and a write
-  // this size must never hold the single SQLite write connection.
+  // this size must never hold the owned database connection.
   await ctx.store.put(outcome.reserve, buf);
   await ctx.db.withTx(async (tx: HostedDynamic) => {
     // Re-fenced on the publish side too: a replacement landing during the
@@ -205,6 +205,7 @@ export async function putLiveEntry(ctx: HostedDynamic) {
     await tx.query(`UPDATE runs SET live_activity_at = now() WHERE id = $1`, [run.id]);
     wakeLive(tx, run.id);
   });
+  if (!outcome.reserve) return outcome;
   return { accepted: true, entry, size: buf.length, sha256 };
 }
 

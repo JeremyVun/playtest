@@ -8,11 +8,14 @@
 // Every buffered response leaves through response.js (ETag/304 + Accept-Encoding);
 // handlers that stream (Range-capable viewer/bundle serving) write their own
 // headers and are detected here by res.headersSent.
+import { lifecycle } from "./store/lifecycle.ts";
+import { finished } from "node:stream/promises";
 import http from "node:http";
 import { platformWebAssetsDir } from "@playtest/web/assets";
 import { AppError } from "./errors.ts";
 import { HttpResult } from "./http.ts";
 import { resolvePrincipal } from "./auth/middleware.ts";
+import { requireProxyWriteOrigin } from "./auth/proxy.ts";
 import { limiterKey } from "./rate-limit.ts";
 import { sendBuffered, serveStatic } from "./response.ts";
 import { buildRouter } from "./routes.ts";
@@ -40,6 +43,14 @@ async function handle(ctx: HostedDynamic, router: HostedDynamic, req: HostedDyna
   const started = Date.now();
   const u = new URL(req.url, "http://localhost");
   const method = req.method === "HEAD" ? "GET" : req.method;
+
+  if (u.pathname === "/healthz" || u.pathname === "/readyz") {
+    if (u.pathname === "/readyz" && !["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(req.socket.remoteAddress)) { res.writeHead(403).end(); return; }
+    const ready = !ctx.runtime.draining && (u.pathname === "/healthz" || ctx.runtime.ready);
+    res.writeHead(ready ? 200 : 503, { "content-type": "application/json", "cache-control": "no-store" }).end(JSON.stringify({ ok: ready }));
+    return;
+  }
+  if (ctx.runtime.draining) { res.writeHead(503, { "connection": "close" }).end(); return; }
 
   if (req.method === "OPTIONS") {
     res.writeHead(204).end();
@@ -81,11 +92,18 @@ async function handle(ctx: HostedDynamic, router: HostedDynamic, req: HostedDyna
   }
 
   try {
+    if (principal?.authMethod === "proxy") requireProxyWriteOrigin(req, ctx.config.publicUrl);
     const match = router.match(method, u.pathname);
     if (match && match.handler) {
       const reqCtx: HostedDynamic = { ...ctx, req, res, principal, requestId, params: match.params, query: u.searchParams };
-      const result = await match.handler(reqCtx);
-      status = await writeResult(req, res, result);
+      const heavy = !u.pathname.endsWith("/live") && /\/view\/|\/runs\/[^/]+\/(bundle|download|live\/)|\/clip$/.test(u.pathname);
+      const deliver = async () => {
+        const result = await match.handler(reqCtx);
+        const code = await writeResult(req, res, result);
+        if (!res.writableFinished) await finished(res, { cleanup: true });
+        return code;
+      };
+      status = await lifecycle(ctx).read(() => heavy ? lifecycle(ctx).serial("heavy", deliver) : deliver());
     } else if (match && match.methodNotAllowed) {
       status = 405;
       sendError(res, ctx, new AppError("method_not_allowed", `method ${method} not allowed`, { status: 405 }), requestId, { Allow: match.allow.join(", ") });

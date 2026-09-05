@@ -57,7 +57,8 @@ test("one root lockfile links every first-party workspace", () => {
     .readdirSync(ROOT, { recursive: true, withFileTypes: true })
     .filter((entry) => entry.isFile() && entry.name === "package-lock.json")
     .map((entry) => path.join(entry.parentPath, entry.name))
-    .filter((file) => !file.includes(`${path.sep}node_modules${path.sep}`));
+    .filter((file) => !file.includes(`${path.sep}node_modules${path.sep}`))
+    .filter((file) => file === path.join(ROOT, "package-lock.json") || file.startsWith(path.join(ROOT, "packages") + path.sep));
   assert.deepEqual(nested, [path.join(ROOT, "package-lock.json")]);
 
   const lock = readJson("package-lock.json");

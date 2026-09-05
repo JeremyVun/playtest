@@ -29,7 +29,7 @@ export async function holdUntil<Row>(
   while (!rows.length) {
     if (ctx.req?.destroyed || ctx.res?.destroyed || ctx.res?.writableEnded) return [];
     if (ctx.feedWaker && !ctx.feedWaker.connected) break;
-    const remaining = deadline - Date.now();
+    const remaining = ctx.runtime?.draining ? 0 : deadline - Date.now();
     if (remaining <= 0) break;
     if (ctx.feedWaker && projectId) await ctx.feedWaker.wait(projectId, Math.min(remaining, 1000));
     else await sleep(Math.min(remaining, 1000));

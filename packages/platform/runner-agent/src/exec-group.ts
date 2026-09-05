@@ -35,6 +35,7 @@ export async function execGroup(opts: GroupExecutorOptions): Promise<RunnerDynam
     isolation: opts.isolation,
     versions: versions(opts),
   });
+  if (opts.isolation === "container") sweepDocker({ includeRunning: true });
   const api = bootstrap.withToken(exchange.token);
   const spec = await api.json<GroupSpec>("GET", `/runner/groups/${opts.group}`);
   const warnings: string[] = [];
@@ -177,6 +178,9 @@ export async function execGroup(opts: GroupExecutorOptions): Promise<RunnerDynam
     const byId = new Map(resolved.map((c) => [c.id, c]));
     const selectedResolved = spec.cases.map((item) => byId.get(item.case_id)).filter(Boolean);
     const budget = resolveHostedBudget(selectedResolved, spec.parallel, undefined, { serial: mobile });
+    const deployment = deploymentBudget(process.env);
+    budget.total = Math.min(budget.total, deployment.total);
+    budget.record = Math.min(budget.record, deployment.record, budget.total);
     const work = spec.cases.map((item, index) => {
       const resolvedCase = byId.get(item.case_id);
       return {
@@ -257,6 +261,7 @@ export async function execGroup(opts: GroupExecutorOptions): Promise<RunnerDynam
       try {
         const res = await runCaseIsolated(rc, {
           isolation: opts.isolation,
+          executorId: exchange.executor_id,
           workspaceRoot: workspace.root,
           runsRoot: workspace.runsRoot,
           runId: item.run_id,
@@ -602,4 +607,14 @@ function versions(opts: GroupExecutorOptions): Record<string, string | null> {
 
 function firstLine(e: RunnerDynamic): string {
   return String(e?.message || e).split("\n")[0];
+}
+
+export function deploymentBudget(env: NodeJS.ProcessEnv): { total: number; record: number } {
+  const read = (key: string, fallback: number) => {
+    const value = Number(env[key] || fallback);
+    if (!Number.isInteger(value) || value < 1 || value > 32) throw new Error(`${key} must be an integer from 1 to 32`);
+    return value;
+  };
+  const total = read("PLAYTEST_RUNNER_MAX_TOTAL", 1);
+  return { total, record: Math.min(total, read("PLAYTEST_RUNNER_MAX_RECORD", 1)) };
 }

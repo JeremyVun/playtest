@@ -13,7 +13,7 @@ import os from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { connect } from "../../src/db.ts";
+import { connectTestDb } from "./helpers.ts";
 import { migrate } from "../../src/migrate.ts";
 import { ulid } from "../../src/ulid.ts";
 import { reconcileDispatches } from "../../src/dispatch/reconciler.ts";
@@ -38,7 +38,7 @@ after(() => {
 async function fixture() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "playtest-dispatch-state-"));
   roots.push(dir);
-  const db: HostedDynamic = await connect({ databaseFile: path.join(dir, "playtest.sqlite") });
+  const db: HostedDynamic = await connectTestDb();
   await migrate(db);
   const ids = {
     project: ulid(),

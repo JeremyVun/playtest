@@ -25,7 +25,7 @@ group states are monotonic except for an editor's explicit in-place retry of an
 eligible finished group.
 
 Attempt allocation and dispatch creation are one transaction. `attempt` is the
-generation of `(kind, ref_id)`. SQLite enforces:
+generation of `(kind, ref_id)`. PostgreSQL enforces:
 
 - unique `(kind, ref_id, attempt)`; and
 - at most one active group dispatch, where active means `requested`,
@@ -58,9 +58,9 @@ Every executor route shares one current-owner guard. It verifies:
 
 Writes reassert the same facts inside their transaction. Replacement, cancel,
 or reconciliation landing after the route guard therefore fences the stale
-write. Bundle uploads use attempt-specific object keys and publish the artifact
-row only inside this fenced transaction; refused publication removes its staged
-object.
+write. Bundle uploads use executor- and hash-specific immutable keys and publish
+the artifact row only inside this fenced transaction. Refused publication leaves
+an orphan for reference-aware collection after the one-day grace period.
 
 All stale-ownership refusals are `409 executor_conflict` with a
 machine-readable `details.reason`:
@@ -269,7 +269,7 @@ uses three credential-authenticated operations:
    the runner's advertised labels. A runner already holding a claim receives it
    as `current` and no offers. A page permits local compatibility checks without
    letting one unclaimable mobile offer starve later work.
-2. **Claim.** In one `BEGIN IMMEDIATE` transaction, recheck dispatch state,
+2. **Claim.** In one queued database transaction, recheck dispatch state,
    cancellation, runner scope, credential liveness, labels, and absence of
    another claim. Exactly one caller wins; losers receive `409 conflict`.
 3. **Heartbeat.** The current claim holder updates coarse liveness and learns
@@ -366,10 +366,10 @@ site operator with every project; v1 has no per-project grants.
   finish.
 - It counts as presence for every project it can serve.
 
-Site runner lifecycle routes require the development-mode site-admin principal.
-A project admin is insufficient, production site-admin provisioning and
-site-scoped API tokens are deferred, and non-development deployments therefore
-have no site runner administration.
+Site runner lifecycle routes require a human site-admin principal: the local
+development admin or a user admitted through configured proxy authentication.
+A project admin or API token is insufficient. Proxy authentication gives each
+admitted user site-wide authority while preserving their individual audit identity.
 
 Project runner lists include live project and applicable site runners. Revoked
 runners disappear unless still executing, in which case they remain marked
@@ -417,15 +417,25 @@ Under development auth, startup ensures one site-scoped runner named `local`
 and writes its credential atomically with mode `0600` under the data root. This
 registers identity only; the control plane still starts no runner.
 
-The supported `npm run hosted` script supervises a peer `runner-agent pool`,
-restarts it, and stops it with the server. Ensuring the registration is
-idempotent. If the credential file no longer matches the stored hash, startup
-reissues the credential on the same runner row, invalidating the old value
-without losing runner history. An absent runner configuration file is seeded
-from the documented schema.
+`npm run hosted` uses Compose with an explicitly configured stable site runner.
+`PLAYTEST_SITE_RUNNER_NAME` and `PLAYTEST_SITE_RUNNER_CREDENTIAL` create its row
+once; subsequent starts verify the hash and refuse mismatch or revocation.
+Direct development without these inputs retains the development peer's file
+bootstrap. Production startup never rotates or resurrects a configured runner.
 
-Web and API runs therefore need no local runner setup while using the same
-claim and exchange path as CI and fleet runners.
+Runner snapshot/blob/baseline reads are constrained to the claimed group's
+snapshot, merged project personas and suite baselines. Mint-scoped tokens cannot
+use those group routes.
+
+Upload templates are relative API paths. The runner resolves them against its
+configured origin, accepts only same-origin absolute compatibility URLs, and
+refuses redirects. Container mode requires a matching release image, target
+network, non-root UID/GID, limits and a verified same-path host workspace mount.
+No job gets the Docker socket; nested Compose is unsupported in this profile.
+Total/record deployment ceilings cap suite/project settings. Cleanup matches
+installation and runner labels; surviving owned containers are removed only
+after a successful new exchange fences the previous attempt, or a poll confirms
+that the runner has no current claim.
 
 ## Pool agent behavior
 

@@ -342,7 +342,7 @@ export async function assertNoPhysicalFacts(
     }
   };
   const tables = (
-    await app.db.query(`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name`)
+    await app.db.query(`SELECT table_name AS name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name`)
   ).rows.map((r: HostedDynamic) => r.name);
   assert.ok(tables.includes("dispatches") && tables.includes("run_groups"), `unexpected schema: ${tables.join(", ")}`);
   for (const table of tables) {

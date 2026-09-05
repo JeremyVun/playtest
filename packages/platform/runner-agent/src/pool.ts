@@ -1,3 +1,6 @@
+import { stopActiveMints } from "./mint.ts";
+import { recordHealthy } from "./health.ts";
+import { sweepDocker } from "./janitor.ts";
 // Pool mode: the long-lived self-hosted runner (`runner-agent pool`).
 //
 // Everything here is this process dialling OUT. The control plane never starts
@@ -178,7 +181,10 @@ export async function runPool(opts: PoolOptions, deps: PoolDeps = {}): Promise<{
   const onSignal = () => {
     if (stopping) return;
     stopping = true;
-    log(busy ? "shutting down — finishing the case in flight, then exiting" : "shutting down");
+    log(busy ? "shutting down — stopping current work" : "shutting down");
+    stopActiveMints();
+    const deadline = setTimeout(() => process.exit(1), 40_000);
+    deadline.unref();
     if (!busy) process.exit(0);
   };
   process.on("SIGTERM", onSignal);
@@ -212,6 +218,7 @@ export async function runPool(opts: PoolOptions, deps: PoolDeps = {}): Promise<{
         if (skip.length) query.set("skip", skip.join(","));
         answer = await api.json<PollAnswer>("GET", `/runner/pool/claims?${query}`);
         if (failures) log("reconnected to the control plane");
+        recordHealthy();
         failures = 0;
         // The skip cap is the SERVER's limit, so the server's word wins over
         // the compiled-in fallback: a deployment that lowered it must not see
@@ -227,6 +234,7 @@ export async function runPool(opts: PoolOptions, deps: PoolDeps = {}): Promise<{
         continue;
       }
 
+      if (!announced && !answer.current && opts.isolation === "container") sweepDocker({ includeRunning: true });
       if (!announced) {
         const identity: RunnerIdentity | null = answer.runner ?? null;
         for (const line of startupLines(opts, identity)) log(line);
@@ -416,6 +424,7 @@ async function executeClaim(
     onCancel: (why: string) => {
       log(`${why} — tearing down ${describe(offer)}`);
       canceler.abort();
+      stopActiveMints();
     },
   });
   const started = Date.now();
@@ -474,6 +483,7 @@ function startHeartbeat(
     inFlight = true;
     try {
       const beat = await api.json<HeartbeatAnswer>("POST", `/runner/pool/claims/${dispatchId}/heartbeat`, {});
+      recordHealthy();
       if (beat?.canceled) onCancel("the control plane canceled this run");
     } catch (e) {
       // A transport hiccup is nothing: the next tick carries the liveness, and

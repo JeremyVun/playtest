@@ -194,9 +194,12 @@ test("appium: an external backend is reachability-probed, dialled, and never spa
 
     // Nothing answering is a skip reason before the claim and an actionable
     // failure after it — never a mid-case driver stack.
-    const dead = external(`http://127.0.0.1:${port + 1}`);
-    assert.match((await backends.startable(dead))!, /nothing is answering/);
-    await assert.rejects(() => backends.open(dead), /is not answering/);
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    const dead = external(url);
+    const unavailable = new AppiumBackends({ env: {}, log: () => {} });
+    assert.match((await unavailable.startable(dead))!, /nothing is answering/);
+    await assert.rejects(() => unavailable.open(dead), /is not answering/);
   } finally {
     server.closeAllConnections?.();
     await new Promise<void>((r) => server.close(() => r()));

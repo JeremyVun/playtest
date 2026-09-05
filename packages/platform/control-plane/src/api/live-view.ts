@@ -134,7 +134,7 @@ async function hold(
   let latest = first;
   while (!gone()) {
     if (ctx.feedWaker && !ctx.feedWaker.connected) break;
-    const remaining = deadline - Date.now();
+    const remaining = ctx.runtime?.draining ? 0 : deadline - Date.now();
     if (remaining <= 0) break;
     if (ctx.feedWaker) await ctx.feedWaker.wait(key, Math.min(remaining, 1000));
     else await new Promise((resolve) => setTimeout(resolve, Math.min(remaining, 1000)));

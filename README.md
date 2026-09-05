@@ -68,12 +68,11 @@ npm run hosted
 # → http://127.0.0.1:4177
 ```
 
-This builds both Vite applications, starts the control-plane API and web host,
-and starts **one peer runner** beside them. There is a single placement model:
-a launch posts to a claim board, and a runner polls, claims, and executes it.
-Local development uses the same path CI and a fleet do — the control plane
-starts nothing in response to a launch and never connects to a runner. The web
-and runner workspaces are not separate services to start manually.
+This builds three matching images and starts Docker Compose with PostgreSQL,
+private object storage, the control plane and one runner. Jobs use isolated
+containers on the target network. The helper never loads an env file. See the
+[hosted deployment guide](docs/guidance/hosted-deployment.md) for port overrides,
+configuration, authentication and backup/restore.
 
 A remotely hosted control plane cannot reach an app on your `localhost`, a build
 on your disk, or a device simulator. For those, run a **self-hosted runner** on
@@ -586,15 +585,14 @@ runs the explicit core, viewer, and hosted-console Playwright suites;
 install its browser once with `npx playwright install chromium`. `npm run test:all` runs
 both tiers. The example app runs with
 `PORT=4173 node examples/ledger-api/server.js`. Hosted control plane (not in the published package):
-`npm run hosted` starts the API, the static web platform, and one peer runner
-polling the claim board, on http://127.0.0.1:4177 — no database service;
-metadata is one SQLite file under `PLAYTEST_DATA_DIR` (default `.playtest-data`), and
-`npm run hosted:migrate` applies migrations without starting the server. That
-launcher, unlike the CLI, sources a gitignored repo-root `.env` so a local server
-picks up the model gateway; it also reclaims its port from a stale server and
-reports what is configured. Its default
-test command runs unit tests;
-`npm run test:integration --workspace=@playtest/control-plane`
-boots the whole control plane against temporary SQLite data roots. Deterministic
+`npm run hosted` builds and starts the local Compose stack on
+http://127.0.0.1:4177. PostgreSQL 18 holds metadata and private S3-compatible
+storage holds artifacts. `npm run hosted:direct` starts a developer server
+against explicitly configured dependencies. `npm run hosted:migrate` applies
+migrations without starting the server. These entrypoints never read env files.
+`npm run test:integration --workspace=@playtest/control-plane` uses isolated
+Postgres tenants through `PLAYTEST_TEST_POSTGRES_URL`; the S3/container tiers
+are documented in the [deployment guide](docs/guidance/hosted-deployment.md).
+Deterministic
 test applications and suites live under `tests/fixtures/`; `examples/` remains
 user-facing and independently deletable.

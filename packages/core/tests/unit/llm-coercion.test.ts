@@ -5,7 +5,8 @@
 // untouched. No network or API key is needed.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { coerceStringifiedArgs } from "../../src/llm.ts";
+import { coerceStringifiedArgs, forcedToolCall, LlmError } from "../../src/llm.ts";
+import { startJsonServer, toolCompletion } from "../../../../tests/support/json-server.ts";
 
 test("a stringified-object action becomes an object", () => {
   const args = {
@@ -65,4 +66,40 @@ test("the result is a new object (no mutation of the input)", () => {
   const out = coerceStringifiedArgs(args);
   assert.notEqual(out, args);
   assert.equal(args.action, '{"type":"done"}'); // input unchanged
+});
+
+test("a terminal validation failure retains usage from both model attempts", async () => {
+  const server = await startJsonServer(() => toolCompletion("step", { action: { type: "wait", seconds: 0 } }));
+  const saved = {
+    base: process.env.PLAYTEST_LLM_BASE_URL,
+    key: process.env.PLAYTEST_LLM_API_KEY,
+  };
+  process.env.PLAYTEST_LLM_BASE_URL = server.url;
+  delete process.env.PLAYTEST_LLM_API_KEY;
+
+  try {
+    await assert.rejects(
+      () => forcedToolCall({
+        model: "mock",
+        messages: [{ role: "user", content: "wait" }],
+        tool: {
+          type: "function",
+          function: { name: "step", parameters: { type: "object" } },
+        },
+        validate: () => "seconds must be >= 0.1",
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof LlmError);
+        assert.deepEqual(error.tokens, { in: 2, out: 2, cache_read: 0 });
+        assert.deepEqual(error.retries, ["seconds must be >= 0.1"]);
+        assert.equal(error.rawAttempts?.length, 2);
+        return true;
+      },
+    );
+    assert.equal(server.requests().length, 2);
+  } finally {
+    saved.base == null ? delete process.env.PLAYTEST_LLM_BASE_URL : (process.env.PLAYTEST_LLM_BASE_URL = saved.base);
+    saved.key == null ? delete process.env.PLAYTEST_LLM_API_KEY : (process.env.PLAYTEST_LLM_API_KEY = saved.key);
+    await server.close();
+  }
 });

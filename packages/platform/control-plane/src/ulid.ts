@@ -13,6 +13,17 @@ const RAND_LEN = 16; // 80 bits / 5
 let lastTime = 0;
 let lastRand: Uint8Array | null = null; // Uint8Array(RAND_LEN) of base32 digit values, incremented on collision
 
+export function seedUlid(value: string | null | undefined): void {
+  if (!value) return;
+  if (!isUlid(value)) throw new Error("Stored event cursor is not a ULID");
+  let time = 0;
+  for (const char of value.slice(0, TIME_LEN)) time = time * 32 + ENCODING.indexOf(char);
+  const current = lastRand ? encodeTime(lastTime) + Array.from(lastRand, (digit) => ENCODING[digit]).join("") : "";
+  if (value <= current) return;
+  lastTime = time;
+  lastRand = Uint8Array.from(value.slice(TIME_LEN), (char) => ENCODING.indexOf(char));
+}
+
 function encodeTime(now: number): string {
   let out = "";
   for (let i = TIME_LEN - 1; i >= 0; i--) {

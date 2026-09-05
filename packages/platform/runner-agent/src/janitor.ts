@@ -23,46 +23,20 @@ export async function cleanupWorkspace(workspace: RunnerDynamic): Promise<string
  * unremovable; returns [] silently when docker itself is unavailable (process
  * isolation pools have nothing to sweep).
  */
-export function sweepDocker() {
+export function sweepDocker({ includeRunning = false }: { includeRunning?: boolean } = {}) {
+  const owner = process.env.PLAYTEST_RUNNER_OWNER;
+  if (!owner) return [];
   const warnings: string[] = [];
-  let listing;
-  try {
-    listing = docker(["ps", "-a", "--filter", "name=playtest-", "--format", "{{.Names}}\t{{.State}}"]);
-  } catch {
-    return warnings;
-  }
+  const listing = docker(["ps", "-a", "--filter", `label=playtest.installation=${process.env.PLAYTEST_INSTALLATION || "playtest"}`, "--filter", `label=playtest.runner=${owner}`, "--format", "{{.ID}}\t{{.State}}"]);
   for (const line of listing.split("\n")) {
-    const [name, state] = line.split("\t");
-    if (!name || !name.startsWith("playtest-")) continue;
-    if (state === "running" || state === "restarting") continue; // never another group's live work
-    try {
-      docker(["rm", "-f", name]);
-      warnings.push(`janitor removed ${state ?? "stopped"} container ${name}`);
-    } catch (e: RunnerDynamic) {
-      warnings.push(`janitor could not remove container ${name}: ${firstLine(e.message)}`);
-    }
-  }
-  try {
-    const nets = docker(["network", "ls", "--filter", "name=playtest-", "--format", "{{.Name}}"]);
-    for (const net of nets.split("\n")) {
-      if (!net || !net.startsWith("playtest-")) continue;
-      try {
-        docker(["network", "rm", net]);
-        warnings.push(`janitor removed network ${net}`);
-      } catch {
-        /* in use by a live stack — that's the safety working */
-      }
-    }
-  } catch {
-    /* network listing unavailable */
+    const [id, state] = line.split("\t");
+    if (!id || (!includeRunning && ["running", "restarting"].includes(state || ""))) continue;
+    docker(["rm", "-f", id]);
+    warnings.push(`janitor removed owned ${state} container ${id}`);
   }
   return warnings;
 }
 
 function docker(args: string[]): string {
   return childProcess.execFileSync("docker", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
-}
-
-function firstLine(s: unknown): string {
-  return String(s || "").split("\n").find((l) => l.trim()) ?? "";
 }

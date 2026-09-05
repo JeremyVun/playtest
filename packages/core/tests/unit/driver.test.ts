@@ -104,8 +104,10 @@ test("stepSchemaFor('web') keeps the teeth, scopes the enums, strips $id", () =>
   assert.ok(Array.isArray(action.allOf), "per-verb requireds enforced");
   assert.deepEqual(action.properties.type.enum, WEB_VERBS, "type scoped to web verbs");
   assert.deepEqual(action.properties.direction.enum, ["up", "down"], "direction scoped to web");
-  assert.equal(action.properties.seconds.minimum, 0.1, "wait bounds kept");
-  assert.equal(action.properties.seconds.maximum, 10);
+  assert.equal(action.properties.seconds.minimum, undefined, "wait bounds are conditional on the wait verb");
+  const wait = action.allOf.find((branch: LegacyTestValue) => branch.if.properties.type.const === "wait");
+  assert.equal(wait.then.properties.seconds.minimum, 0.1, "wait lower bound kept");
+  assert.equal(wait.then.properties.seconds.maximum, 10, "wait upper bound kept");
 });
 
 test("the web validator enforces per-verb requireds and rejects foreign verbs", () => {
@@ -117,11 +119,14 @@ test("the web validator enforces per-verb requireds and rejects foreign verbs", 
   assert.ok(ok({ type: "scroll", direction: "down" }));
   assert.ok(ok({ type: "back" }), "back needs no extra fields");
   assert.ok(ok({ type: "done", summary: "added the todo" }));
+  assert.ok(ok({ type: "click", ref: "e3", seconds: 0 }), "a generated wait default is irrelevant to click");
   // missing the verb's required field -> rejected (the new allOf is the gate)
   assert.ok(!ok({ type: "click" }), "click without ref");
   assert.ok(!ok({ type: "type", ref: "e2" }), "type without text");
   assert.ok(!ok({ type: "select", ref: "e2" }), "select without value");
   assert.ok(!ok({ type: "navigate" }), "navigate without url");
+  assert.ok(!ok({ type: "wait", seconds: 0 }), "wait still enforces its lower bound");
+  assert.ok(!ok({ type: "wait", seconds: 11 }), "wait still enforces its upper bound");
   // a verb this driver doesn't have -> rejected by the scoped type enum
   assert.ok(!ok({ type: "request", method: "GET", path: "/x" }), "web has no request verb");
   assert.ok(!ok({ type: "swipe", direction: "left" }), "web has no swipe verb");

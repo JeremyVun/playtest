@@ -94,25 +94,23 @@ Real iOS Simulator runs (`npm run test:mobile`) need Xcode and, once:
 APPIUM_HOME="$HOME/.appium" npx appium driver install xcuitest
 ```
 
-The hosted product needs no database service. Metadata is one `node:sqlite`
-file under the data root, with the object store beside it; the repository-wide
-Node 24.18 floor applies. `PLAYTEST_DATA_DIR` is the single storage knob and
-defaults to `.playtest-data`.
+The hosted product uses PostgreSQL 18 and private S3-compatible storage. Docker
+Compose runs the control plane, one runner, local dependencies and a test target.
+Each case runs in a matching job image. Existing SQLite data is left untouched.
 
 ```sh
-npm run hosted                        # complete local platform at http://127.0.0.1:4177
-npm run hosted:migrate                # optional; the server migrates on boot
+npm run hosted                        # builds matching images and boots local Compose
+PLAYTEST_LOCAL_PORT=24177 npm run hosted   # optional loopback port override
+npm run hosted:down                   # preserve metadata and objects
+npm run hosted:direct                 # developer server; explicitly configure DB/storage
 ```
 
-`npm run hosted` is the sole local startup command. It builds both Vite
-applications, starts the control plane that serves the API and web UI, and
-supervises one peer `runner-agent pool` process beside it. There is one
-placement model: a launch posts to the claim board and that runner claims it,
-exactly as a CI or fleet runner would. The control plane starts no process in
-response to a launch and never connects to a runner. Under `PLAYTEST_AUTH=dev`
-it registers a site-scoped runner named `local` at boot and writes its
-credential `0600` under the data root, so local runs need no runner setup. Do
-not start the web or runner-agent workspaces as separate services.
+The helper never loads an env file. All admitted production users are site
+admins through validated Caddy/Authelia forwarded identity. The runner calls
+the internal API; it alone holds the Docker socket. See
+`docs/guidance/hosted-deployment.md` for service inputs, resource limits,
+readiness, maintenance backup and restore. Production registration and rollout
+remain gated by the hosted-compose acceptance record.
 
 The CLI does not load `.env`. Never read any `.env` file without the user's
 explicit permission.
@@ -138,7 +136,8 @@ npm run runner:test
 credentials, databases, and Docker, with zero skipped tests. Control-plane
 integration tests intentionally remain an explicit tier because they require
 integration dependencies; each boots the whole control plane against its own
-temporary SQLite data root. Their clip case does need
+isolated ordinary-tenant Postgres database using PLAYTEST_TEST_POSTGRES_URL.
+The explicit S3 tier additionally needs PLAYTEST_TEST_S3_URL. Their clip case needs
 `PLAYTEST_FFMPEG` pointed at an ffmpeg built with the `drawtext` and `subtitles`
 filters.
 

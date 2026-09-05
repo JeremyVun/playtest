@@ -1,3 +1,4 @@
+import { lifecycle } from "./store/lifecycle.ts";
 import { BundleProvider } from "@playtest/core/artifacts";
 
 /**
@@ -52,6 +53,9 @@ export class RunBundleCache {
  * store. Grading, findings, review, media, and viewer delivery share this path.
  */
 export async function loadRunBundle(ctx: HostedDynamic, runDbId: string) {
+  return lifecycle(ctx).read(() => loadRunBundleInner(ctx, runDbId));
+}
+async function loadRunBundleInner(ctx: HostedDynamic, runDbId: string) {
   const { rows } = await ctx.db.query(
     `SELECT * FROM artifacts WHERE run_id = $1 AND kind = 'bundle' ORDER BY created_at DESC LIMIT 1`,
     [runDbId],

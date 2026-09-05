@@ -208,10 +208,7 @@ export async function readyArtifact(q: QueryTarget, runDbId: string, entry: stri
 
 /**
  * Drop every ledger row for a run and return the object keys it owned. The
- * caller deletes those objects AFTER the transaction commits — SQLite and the
- * object store share no transaction, and the safe order is unambiguous: while
- * the row exists the object is owned, and once the row is gone the object is
- * the orphan sweep's problem. That is the backstop, not the primary path.
+ * collector removes unreferenced bytes only after the orphan grace period.
  */
 export async function dropStaging(tx: Tx, runDbId: string): Promise<string[]> {
   const { rows } = await tx.query(`SELECT key FROM live_artifacts WHERE run_id = $1`, [runDbId]);

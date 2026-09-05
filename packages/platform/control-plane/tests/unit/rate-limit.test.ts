@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { WriteRateLimiter, limiterKey } from "../../src/rate-limit.ts";
 import { loadConfig } from "../../src/config.ts";
 
-const BASE_ENV = { PLAYTEST_AUTH: "dev" };
+const BASE_ENV = { DATABASE_URL: "postgres://test:test@127.0.0.1/playtest_test", PLAYTEST_AUTH: "dev" };
 
 test("token bucket: burst, exhaustion, refill, and Retry-After", () => {
   let t = 0;

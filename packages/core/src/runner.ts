@@ -28,7 +28,7 @@ import { evaluateGate, isInheritable } from "./gate.ts";
 import { acceptHeal, classifyHealFailure } from "./heal.ts";
 import { writeDriftReport } from "./drift-report.ts";
 import { gradeRun, checkAssertion } from "./grader.ts";
-import { llmConfig, estimateCost } from "./llm.ts";
+import { llmConfig, estimateCost, LlmError } from "./llm.ts";
 import { prepareEnv, InfraError } from "./env.ts";
 import { junitXml } from "./report.ts";
 import { writeVideoSidecar, ffmpegPresent, buildSlideshow, FFMPEG_HINT } from "./clip.ts";
@@ -1560,7 +1560,19 @@ async function recordLoop({ driver, writer, rc, persona, deadline, r, emit, axeC
         },
       }));
     } catch (e) {
-      perf.span("actor_request", actorAt, stepNum, { ok: false, http_retries: httpRetries });
+      const failedTokens = e instanceof LlmError ? e.tokens : undefined;
+      const validationRetries = e instanceof LlmError ? e.retries : undefined;
+      if (failedTokens) addTokens(r.tokens, failedTokens);
+      perf.span("actor_request", actorAt, stepNum, {
+        ok: false,
+        ...(failedTokens ? {
+          tokens_in: failedTokens.in,
+          tokens_out: failedTokens.out,
+          cache_read: failedTokens.cache_read,
+        } : {}),
+        validation_retries: validationRetries?.length ?? 0,
+        http_retries: httpRetries,
+      });
       if (r.aborted) return;
       await axeCapture.barrier();
       const message = firstLine(e);
@@ -1571,11 +1583,20 @@ async function recordLoop({ driver, writer, rc, persona, deadline, r, emit, axeC
         perf: emptyPerf(),
         artifacts: artifactsFor(stepNum, [], artifactFlags(driver, snap)),
         network: { requests: [] },
+        ...(failedTokens ? { tokens: failedTokens } : {}),
+        ...(validationRetries?.length ? { llm_retries: validationRetries } : {}),
       });
       emit("step_start", { step: stepNum, summary: "actor error" });
       writer.appendEnvelope(envelope);
       r.envelopes.push(envelope);
-      emit("step_result", { step: stepNum, ok: false, error: message, settleMs: 0, costSoFar: costSoFar(), tokens: tokensSoFar(null) });
+      emit("step_result", {
+        step: stepNum,
+        ok: false,
+        error: message,
+        settleMs: 0,
+        costSoFar: costSoFar(),
+        tokens: tokensSoFar(failedTokens?.in ?? null),
+      });
       r.endReason = "error";
       r.runError = message;
       return;

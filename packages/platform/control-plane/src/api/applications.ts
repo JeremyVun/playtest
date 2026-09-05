@@ -129,7 +129,7 @@ export async function createApplication(ctx: HostedDynamic) {
     } catch (e: HostedDynamic) {
       // Pre-checks race; the unique index is the truth. Surface the friendly
       // conflict, never the raw constraint error.
-      if (/UNIQUE constraint failed/.test(e.message)) throw keyConflict(fields.key);
+      if (e.code === "23505" && e.constraint === "applications_project_id_key_key") throw keyConflict(fields.key);
       throw e;
     }
     await audit(tx, {
@@ -247,7 +247,7 @@ export async function createRing(ctx: HostedDynamic) {
         [id, app.id, fields.key, fields.name, fields.base_url, fields.runner_labels, fields.config],
       ));
     } catch (e: HostedDynamic) {
-      if (/UNIQUE constraint failed/.test(e.message)) throw ringKeyConflict(fields.key, app.key);
+      if (e.code === "23505" && e.constraint === "rings_application_id_key_key") throw ringKeyConflict(fields.key, app.key);
       throw e;
     }
     await audit(tx, {

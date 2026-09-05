@@ -44,7 +44,7 @@ export async function listRunners(ctx: HostedDynamic) {
        LEFT JOIN dispatches d
          ON d.runner_id = r.id AND d.status IN ${ACTIVE_DISPATCH_STATES_SQL}
       WHERE (r.project_id = $1 OR r.project_id IS NULL)
-        AND r.ephemeral = 0
+        AND r.ephemeral = false
         -- Revocation retires a machine, so it leaves the fleet list — the act is
         -- recorded in the audit log and in the run history it already earned.
         -- The one exception is a revoked runner still finishing the run it had
@@ -83,7 +83,7 @@ export async function createRunner(ctx: HostedDynamic) {
       // index — surface the friendly conflict, never the raw constraint error.
       // The index covers live runners only, so a revoked machine's name is free
       // to reuse and this can only mean a second runner that is still standing.
-      if (/UNIQUE constraint failed/.test(e.message)) {
+      if (e.code === "23505" && e.constraint === "runners_live_name_idx") {
         throw conflict(
           `a runner named "${name}" is already registered and live in this project — ` +
             `revoke that one first, or give this machine a different name`,

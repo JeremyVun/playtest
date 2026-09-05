@@ -7,7 +7,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
-import { connect } from "../../src/db.ts";
+import { connectTestDb } from "./helpers.ts";
 import { migrate } from "../../src/migrate.ts";
 import { claimLease, readLease, releaseLease, renewLease, withLease, OWNER_ID } from "../../src/leases.ts";
 
@@ -19,7 +19,7 @@ after(() => {
 async function freshDb(): Promise<HostedDynamic> {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "playtest-lease-"));
   roots.push(dir);
-  const db = await connect({ databaseFile: path.join(dir, "playtest.sqlite") });
+  const db = await connectTestDb();
   await migrate(db);
   return db;
 }

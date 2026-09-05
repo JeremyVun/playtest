@@ -1,0 +1,128 @@
+name: playtest
+x-log: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
+services:
+  control-plane:
+    image: ${REGISTRY_DOMAIN:?injected by infra}/playtest-control-plane:${PLAYTEST_RELEASE:?set matching immutable release}
+    environment:
+      DATABASE_URL: postgres://playtest:${POSTGRES_PASSWORD:?seal tenant password}@postgres:5432/playtest?sslmode=disable
+      PLAYTEST_AUTH: proxy
+      PUBLIC_URL: https://playtest.jeremyvun.com
+      PLAYTEST_AUTH_LOGOUT_URL: https://auth.jeremyvun.com/logout
+      PLAYTEST_PROXY_SECRET: ${PLAYTEST_PROXY_SECRET:?seal ingress key}
+      PLAYTEST_KMS_KEY: ${PLAYTEST_KMS_KEY:?seal durable KMS key}
+      PLAYTEST_SITE_RUNNER_NAME: hosted
+      PLAYTEST_SITE_RUNNER_CREDENTIAL: ${PLAYTEST_SITE_RUNNER_CREDENTIAL:?seal stable runner credential}
+      OBJECT_STORE_URL: ${OBJECT_STORE_URL:?set Spaces endpoint}
+      OBJECT_STORE_BUCKET: ${OBJECT_STORE_BUCKET:?set Spaces bucket}
+      OBJECT_STORE_PREFIX: ${OBJECT_STORE_PREFIX:?set dedicated installation prefix}
+      OBJECT_STORE_REGION: ${OBJECT_STORE_REGION:-us-east-1}
+      OBJECT_STORE_ACCESS_KEY: ${OBJECT_STORE_ACCESS_KEY:?seal Spaces access key}
+      OBJECT_STORE_SECRET_KEY: ${OBJECT_STORE_SECRET_KEY:?seal Spaces secret key}
+      PLAYTEST_RETENTION_INTERVAL_S: "3600"
+      PLAYTEST_RECONCILE_INTERVAL_S: "10"
+      PLAYTEST_VIEW_CACHE_MB: "256"
+      PLAYTEST_LLM_BASE_URL: ${PLAYTEST_LLM_BASE_URL:-}
+      PLAYTEST_LLM_API_KEY: ${PLAYTEST_LLM_API_KEY:-}
+    expose: ["4177"]
+    networks: [edge-proxy, shared-db, internal]
+    labels:
+      caddy_ingress_network: edge-proxy
+      caddy: playtest.jeremyvun.com
+      caddy.@private.path: /readyz /api/v1/runner /api/v1/runner/*
+      caddy.@health.path: /healthz
+      caddy.route.00_request_header: -Remote-User
+      caddy.route.01_request_header: -Remote-Email
+      caddy.route.02_request_header: -Remote-Name
+      caddy.route.03_request_header: -Remote-Groups
+      caddy.route.04_request_header: -X-Playtest-Proxy-Key
+      caddy.route.05_respond: "@private 404"
+      caddy.route.06_reverse_proxy: "@health {{upstreams 4177}}"
+      caddy.route.07_forward_auth: authelia:9091
+      caddy.route.07_forward_auth.uri: /api/authz/forward-auth
+      caddy.route.07_forward_auth.copy_headers: Remote-User Remote-Email Remote-Name
+      caddy.route.08_request_header: "X-Playtest-Proxy-Key {env.PLAYTEST_PROXY_SECRET}"
+      caddy.route.09_reverse_proxy: "{{upstreams 4177}}"
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:4177/readyz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 30s
+    mem_limit: 4g
+    cpus: 2
+    stop_grace_period: 45s
+    restart: unless-stopped
+    logging: *logging
+  job-image:
+    image: ${REGISTRY_DOMAIN:?injected by infra}/playtest-job:${PLAYTEST_RELEASE:?set matching immutable release}
+    network_mode: none
+    command: [node, -e, "process.exit(0)"]
+    mem_limit: 64m
+    logging: *logging
+  runner-init:
+    image: ${REGISTRY_DOMAIN:?injected by infra}/playtest-runner:${PLAYTEST_RELEASE:?set matching immutable release}
+    user: "0:0"
+    network_mode: none
+    command: [node, packages/platform/runner-agent/src/init-container.ts]
+    environment:
+      PLAYTEST_RUNNER_WORKDIR: ${PLAYTEST_RUNNER_WORKDIR:?set absolute host path}
+      PLAYTEST_RUNNER_CREDENTIAL: ${PLAYTEST_SITE_RUNNER_CREDENTIAL:?seal stable runner credential}
+      PLAYTEST_JOB_UID: "1000"
+      PLAYTEST_JOB_GID: "1000"
+    volumes:
+      - ${PLAYTEST_RUNNER_WORKDIR}:${PLAYTEST_RUNNER_WORKDIR}
+      - runner-credential:/credentials
+    mem_limit: 128m
+    logging: *logging
+  runner:
+    image: ${REGISTRY_DOMAIN:?injected by infra}/playtest-runner:${PLAYTEST_RELEASE:?set matching immutable release}
+    group_add: ["${PLAYTEST_DOCKER_GID:?set Docker socket group}"]
+    environment:
+      PLAYTEST_SERVER_URL: http://control-plane:4177
+      PLAYTEST_RUNNER_CREDENTIAL_FILE: /credentials/runner
+      PLAYTEST_RUNNER_ISOLATION: container
+      PLAYTEST_RUNNER_WORKDIR: ${PLAYTEST_RUNNER_WORKDIR:?set absolute host path}
+      PLAYTEST_JOB_IMAGE: ${REGISTRY_DOMAIN:?injected by infra}/playtest-job:${PLAYTEST_RELEASE:?set matching immutable release}
+      PLAYTEST_JOB_NETWORK: ${PLAYTEST_JOB_NETWORK:-playtest_targets}
+      PLAYTEST_JOB_UID: "1000"
+      PLAYTEST_JOB_GID: "1000"
+      PLAYTEST_INSTALLATION: playtest
+      PLAYTEST_RUNNER_MAX_TOTAL: "1"
+      PLAYTEST_RUNNER_MAX_RECORD: "1"
+      PLAYTEST_RUNNER_HEALTH_FILE: /tmp/playtest-runner-health
+      PLAYTEST_CASE_MEMORY: 2g
+      PLAYTEST_CASE_CPUS: "2"
+      PLAYTEST_CASE_PIDS: "512"
+      PLAYTEST_CASE_SHM: 512m
+      PLAYTEST_LLM_BASE_URL: ${PLAYTEST_LLM_BASE_URL:-}
+      PLAYTEST_LLM_API_KEY: ${PLAYTEST_LLM_API_KEY:-}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${PLAYTEST_RUNNER_WORKDIR}:${PLAYTEST_RUNNER_WORKDIR}
+      - runner-credential:/credentials:ro
+    networks: [internal, targets]
+    depends_on:
+      control-plane: { condition: service_healthy }
+      runner-init: { condition: service_completed_successfully }
+      job-image: { condition: service_completed_successfully }
+    healthcheck:
+      test: [CMD, node, packages/platform/runner-agent/src/cli.ts, health]
+      interval: 20s
+      timeout: 12s
+      retries: 4
+      start_period: 60s
+    mem_limit: 1g
+    cpus: 1
+    stop_grace_period: 45s
+    restart: unless-stopped
+    logging: *logging
+volumes:
+  runner-credential:
+networks:
+  edge-proxy: { external: true }
+  shared-db: { external: true }
+  internal:
+  targets:
+    name: ${PLAYTEST_JOB_NETWORK:-playtest_targets}

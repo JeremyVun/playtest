@@ -113,7 +113,7 @@
         "value": { "type": "string", "description": "Visible label or value of the option to select (select)." },
         "direction": { "enum": ["up", "down", "left", "right"], "description": "Direction to scroll (up/down) or swipe (up/down/left/right)." },
         "url": { "type": "string", "description": "Absolute URL or path relative to base_url (navigate)." },
-        "seconds": { "type": "number", "minimum": 0.1, "maximum": 10, "description": "How long to wait, in seconds (wait)." },
+        "seconds": { "type": "number", "description": "How long to wait, in seconds (wait)." },
         "method": { "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"], "description": "HTTP method (request)." },
         "path": { "type": "string", "description": "Request path or URL relative to base_url (request)." },
         "body": { "description": "Optional request body — a JSON value for application/json, or a string (request)." },
@@ -127,7 +127,7 @@
         { "if": { "required": ["type"], "properties": { "type": { "const": "select" } } }, "then": { "required": ["ref", "value"] } },
         { "if": { "required": ["type"], "properties": { "type": { "enum": ["scroll", "swipe"] } } }, "then": { "required": ["direction"] } },
         { "if": { "required": ["type"], "properties": { "type": { "const": "navigate" } } }, "then": { "required": ["url"] } },
-        { "if": { "required": ["type"], "properties": { "type": { "const": "wait" } } }, "then": { "required": ["seconds"] } },
+        { "if": { "required": ["type"], "properties": { "type": { "const": "wait" } } }, "then": { "required": ["seconds"], "properties": { "seconds": { "type": "number", "minimum": 0.1, "maximum": 10 } } } },
         { "if": { "required": ["type"], "properties": { "type": { "const": "request" } } }, "then": { "required": ["method", "path"] } },
         { "if": { "required": ["type"], "properties": { "type": { "const": "done" } } }, "then": { "required": ["summary"] } },
         { "if": { "required": ["type"], "properties": { "type": { "const": "give_up" } } }, "then": { "required": ["reason"] } }

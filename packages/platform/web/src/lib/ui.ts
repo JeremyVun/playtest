@@ -458,6 +458,16 @@ export function copyBox(text: string, { label, onCopy }: { label: string; onCopy
 }
 
 /** Copy text to the clipboard; resolves false when the browser refuses. */
+/** Navigate a throwaway anchor at an attachment URL so the session cookie rides the download. */
+export function triggerDownload(href: string) {
+  const a = document.createElement("a");
+  a.href = href;
+  a.rel = "noopener";
+  document.body.append(a);
+  a.click();
+  a.remove();
+}
+
 export async function copyText(text: WebDynamic) {
   try {
     await navigator.clipboard.writeText(text);

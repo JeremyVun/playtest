@@ -44,7 +44,7 @@ export async function listCandidates(ctx: HostedDynamic) {
   params.push(limit);
   const { rows } = await ctx.db.query(
     `SELECT c.*, r.run_id AS core_run_id, r.case_id, r.score, r.started_at, r.duration_ms,
-            r.run_group_id, json_extract(r.manifest, '$.case.story') AS story, s.slug AS suite_slug,
+            r.run_group_id, (r.manifest #>> '{case,story}') AS story, s.slug AS suite_slug,
             u.name AS resolved_by_name
        FROM candidates c
        JOIN runs r ON r.id = c.run_id
@@ -151,7 +151,7 @@ export async function acceptCandidate(ctx: HostedDynamic) {
 
   let accepted: HostedDynamic = null;
   await ctx.db.withTx(async (tx: HostedDynamic) => {
-    // `BEGIN IMMEDIATE` holds the write lock for the whole body, so this read is
+    // The owned client serializes the whole transaction, so this read is
     // already serialized against other reviewers; the resolving UPDATE below
     // re-asserts `status = 'pending'` so exactly one accept can ever promote.
     const current = await tx.query(`SELECT * FROM candidates WHERE id = $1`, [row.id]);
@@ -342,7 +342,7 @@ async function refuseResolved(tx: HostedDynamic, candidateId: HostedDynamic) {
 async function candidateById(ctx: HostedDynamic, id: HostedDynamic) {
   const { rows } = await ctx.db.query(
     `SELECT c.*, r.run_id AS core_run_id, r.case_id, r.score, r.started_at,
-            r.run_group_id, json_extract(r.manifest, '$.case.story') AS story, s.slug AS suite_slug,
+            r.run_group_id, (r.manifest #>> '{case,story}') AS story, s.slug AS suite_slug,
             u.name AS resolved_by_name
        FROM candidates c
        JOIN runs r ON r.id = c.run_id

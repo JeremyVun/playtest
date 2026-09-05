@@ -25,11 +25,14 @@ export interface Principal {
   role?: string;
   projectId?: string | null;
   isDevAdmin?: boolean;
+  isSiteAdmin?: boolean;
   roles?: Map<string, string>;
   system?: string;
   memberships?: Record<string, string>;
   [key: string]: unknown;
 }
+
+export interface ObjectMetadata { key: string; size: number; lastModified: Date }
 
 export interface ObjectStore {
   put(key: string, data: Buffer | Uint8Array | string): Promise<{ key: string; size: number; sha256: string }>;
@@ -38,6 +41,8 @@ export interface ObjectStore {
   has(key: string): Promise<boolean>;
   delete(key: string): Promise<void>;
   list(prefix?: string): Promise<string[]>;
+  listPages(prefix?: string): AsyncGenerator<ObjectMetadata[]>;
+  close(): void;
 }
 
 export interface AppContext {
@@ -53,6 +58,7 @@ export interface AppContext {
   writeLimiter: WriteRateLimiter;
   /** The app-owned run-bundle LRU (`run-storage.ts`); cleared on `app.close()`. */
   runBundleCache: RunBundleCache;
+  runtime: { ready: boolean; draining: boolean };
 }
 
 export interface RequestContext extends AppContext {

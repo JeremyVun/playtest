@@ -10,7 +10,7 @@ application, and runner agent. Read the narrower contracts for:
 Executable inventories remain authoritative:
 
 - `packages/platform/control-plane/src/routes.ts` owns HTTP routes.
-- `packages/platform/control-plane/migrations/` owns the SQLite schema.
+- `packages/platform/control-plane/migrations/` owns the PostgreSQL schema.
 - `packages/platform/control-plane/src/config.ts` owns environment variables,
   defaults, and validation.
 - `packages/platform/control-plane/src/errors.ts` owns error codes and status
@@ -36,50 +36,47 @@ Hosted components consume core through `@playtest/core/*` exports. The local
 CLI remains independent of the hosted platform. Generated browser builds live
 only under each browser package's `build/` directory.
 
-SQLite is the metadata system of record. The object store holds
-content-addressed suite blobs, run bundles, clips, reports, and transient live
-artifacts. Filesystem object storage is the only supported implementation.
+Postgres is the metadata system of record. `DATABASE_URL` is required; missing
+or unreachable storage never falls back to SQLite. `PLAYTEST_DB_FILE` is obsolete
+and refused. Existing SQLite data is never opened or imported by this release.
+`PLAYTEST_DATA_DIR` remains the working root for local objects and runner bootstrap
+files. The object-store boundary holds suite blobs, bundles, clips and live files;
+filesystem storage remains available for isolated adapter tests.
 
-`PLAYTEST_DATA_DIR` names the durable root and defaults to `.playtest-data`:
+Exactly one control plane owns a database. One `pg.Client` acquires a
+session advisory lock before migration or bootstrap, then serves all operations
+through a FIFO gate. Another writer or standalone migration command is refused
+until the owner closes. Connection loss fails closed; the server must restart
+and reacquire ownership rather than silently reconnecting.
 
-```text
-<data-root>/
-  playtest.sqlite
-  objects/
-```
-
-`PLAYTEST_DB_FILE` and `OBJECT_STORE_URL` may split these locations; backups
-must then cover both. Non-filesystem object-store URLs are reserved and fail
-when used.
-
-Migrations are forward-only, applied in filename order, one transaction each,
-and recorded in `schema_migrations`. Startup refuses a data root whose ledger
-names migrations absent from the running build. Retired migration lineages are
-recreated, not converted.
-
-Exactly one control-plane process writes the database. Active-active writers
-and storage without trustworthy locking and atomic rename are unsupported.
-Startup fails when the data root is unwritable or SQLite cannot enable WAL,
-foreign keys, a busy timeout, and `synchronous = FULL`.
+Migrations are forward-only, numbered SQL files. Each script and its SHA-256 ledger
+row commit together. Unknown applied files and changed checksums prevent startup.
+Migration errors roll back DDL as well as the ledger. The app uses ordinary tenant
+permissions and never creates a database. This lineage starts with a fresh database.
 
 ### Transaction guarantees
 
-- The control plane owns one write connection; writes serialize.
-- Contended read-decide-write operations use `BEGIN IMMEDIATE` and repeat their
-  precondition in the mutating statement. A zero-row mutation loses the race
-  and reports the winning state.
-- Foreign keys, delete actions, unique indexes, and finding-fingerprint
-  uniqueness are database constraints.
-- A state change, its audit row, and its platform event commit atomically.
-  Model calls, HTTP calls, object reads, and bundle rewrites run outside the
-  transaction.
-- Rolled-back changes emit no event or long-poll wake.
-- Cross-process coordination uses lease rows, never connection-held locks.
+- Query and migration execution return promises. Transactions hold the FIFO gate
+  from BEGIN through COMMIT or ROLLBACK; nested calls and loose `db.query` calls
+  inside a transaction use its owned client.
+- Mutating statements repeat read-decide-write preconditions. Zero changed rows
+  mean the race was lost; callers report the winning state.
+- Foreign keys, delete actions, unique indexes and finding fingerprints remain
+  database constraints. Expected conflicts use ON CONFLICT or roll back;
+  swallowing a SQL error cannot commit a partial transaction or emit a wake.
+- State, audit and platform event rows commit together. After-commit callbacks
+  fire only after a successful commit. The feed retains its bounded rescan.
+- Background scheduling uses lease rows in addition to the process ownership lock.
+  Remote object/model work must stay outside the database transaction; the ongoing
+  hosted-compose publication phase audits remaining legacy violations.
 
-JSON columns contain canonical JSON. Timestamps are UTC epoch milliseconds in
-SQLite and ISO-8601 `Z` strings at the API boundary; daily buckets are UTC.
-Booleans are constrained integers. Server-generated ULIDs keep feeds and
-keyset pagination time-ordered.
+JSON columns use jsonb with deliberately serialized array parameters. Recursive
+merge-patch preserves null-as-deletion semantics through `jsonb_merge_patch`.
+Booleans use boolean and ciphertext uses bytea. Timestamps use timestamptz(3),
+retain JavaScript Date values and ISO UTC API strings, and keep daily buckets UTC.
+Integer/numeric results preserve API numbers with checked safe bounds; floating
+cost calculations use double precision. IDs and cursor ordering use C collation.
+Event ULIDs seed from the persisted event cursor before startup admits work.
 
 ## Platform invariants
 
@@ -144,6 +141,17 @@ admin >= developer >= reviewer >= editor >= viewer
 - `admin` manages membership, project defaults, and permanent project deletion.
 
 API tokens carry a role and are project-scoped unless explicitly site-scoped.
+`PLAYTEST_AUTH=proxy` accepts Caddy/Authelia identity only with a matching
+`X-Playtest-Proxy-Key` from `PLAYTEST_PROXY_SECRET`. Ingress strips client identity
+headers, authorizes every request, and copies `Remote-User`, `Remote-Email` and
+`Remote-Name`. Duplicate or malformed identity headers are refused. Every admitted
+human is a site administrator, identified separately in audit rows; disabled users
+are refused. `/me` exposes `is_site_admin` separately from `is_dev_admin`.
+Proxy mode ignores Playtest session cookies. Bearer tokens retain their own scope
+and take precedence over forwarded identity. Proxy-authenticated writes require
+Origin (or Referer when Origin is absent) matching the configured HTTPS PUBLIC_URL.
+Login accepts only safe local return paths; logout navigates the browser to the
+configured HTTPS PLAYTEST_AUTH_LOGOUT_URL. No OIDC client is required in proxy mode.
 Development auth is a local admin bypass. Write routes are rate-limited per
 principal except for the separately limited runner protocol; refusal is
 `429 rate_limited` with `Retry-After`.
@@ -412,7 +420,7 @@ non-authoritative, and cannot affect status, review, export, retention
 decisions, or sealed bytes. It is open only while explicitly marked open and
 the run is non-terminal.
 
-Live manifest and trajectory data live in SQLite. Step artifacts use
+Live manifest and trajectory data live in PostgreSQL. Step artifacts use
 object-store ledger rows that reserve budget before upload and become readable
 only when ready. The deployment’s per-run staging budget defaults to and cannot
 exceed 512 MB, matching the sealed-bundle ceiling. Exhaustion is an explicit
@@ -504,3 +512,32 @@ change concerns runner protocol, findings/authoring, or console UX.
 
 Routes, columns, environment variables, module moves, tests, implementation
 history, and deployment plans do not belong here by themselves.
+
+## Hosted object storage and deployment
+
+The production profile uses private S3-compatible storage under an explicit
+installation prefix, with bounded requests, inclusive byte ranges, complete
+pagination and byte SHA-256 hashes independent of ETags. Permission/list errors
+propagate. Startup checks write/read/range/list/delete; readiness reads a stable
+sentinel. Filesystem storage remains available for offline tests and explicitly
+configured development.
+
+Object I/O is forbidden inside database transactions. Publishers/readers hold a
+shared lifecycle guard before database access; physical GC holds its exclusive
+side and rechecks the complete reference set. Suite publication serializes per
+suite outside the database. Bundles, clips and retention rewrites use immutable
+keys. Equal-byte bundle retries retain the accepted artifact identity; conflicting
+bytes cannot replace it. Failed uploads and seal cleanup leave collectible bytes,
+with a one-day object-age grace and a 1,000-object per-cycle deletion ceiling.
+
+References include snapshots, current suite content, personas, artifacts, pending
+and ready live reservations, and independent baseline/candidate bundle pointers.
+Backup and restore use the same enumerator. The 512 MiB bundle ceiling remains;
+heavy upload/view/clip work serializes and the app-owned cache remains budgeted.
+
+See [hosted deployment](../guidance/hosted-deployment.md) for Compose startup,
+health/drain, stable bootstrap credentials, service environment boundaries and
+verified maintenance backup/restore. The command requires a stopped application
+writer and a new backup directory. Restore requires an empty database/prefix and
+the original KMS key; it verifies hashes, migration history and decryption before
+an operator reopens admission.

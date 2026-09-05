@@ -272,7 +272,7 @@ async function decide(ctx: HostedDynamic, state: HostedDynamic, action: HostedDy
     const { rows, rowCount } = await tx.query(
       `UPDATE rule_cards SET state = $2, note = $3, decided_by = $4, decided_at = $5, updated_at = now()
         WHERE id = $1 AND updated_at = $6 RETURNING *`,
-      [card.id, state, note, userIdOf(ctx.principal), Date.now(), card.updated_at],
+      [card.id, state, note, userIdOf(ctx.principal), new Date(), card.updated_at],
     );
     row = await won(tx, card.id, rows, rowCount);
     await record(tx, ctx, suite, row, action, { from: card.state, to: state });

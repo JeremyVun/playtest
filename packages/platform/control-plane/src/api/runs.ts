@@ -200,7 +200,7 @@ async function groupStats(ctx: HostedDynamic, ids: HostedDynamic) {
             COUNT(*) FILTER (WHERE status = 'canceled') AS canceled,
             COUNT(*) FILTER (WHERE status = 'lost') AS lost,
             COUNT(*) FILTER (WHERE changed) AS changed,
-            COALESCE(SUM(CAST(json_extract(totals, '$.cost_usd') AS REAL)), 0) AS cost_usd,
+            COALESCE(SUM(CAST((totals #>> '{cost_usd}') AS DOUBLE PRECISION)), 0) AS cost_usd,
             SUM(duration_ms) AS work_ms,
             MIN(started_at) AS started_at,
             MAX(finished_at) AS finished_at
@@ -211,8 +211,6 @@ async function groupStats(ctx: HostedDynamic, ids: HostedDynamic) {
   );
   const out = new Map();
   for (const r of rows) {
-    // Aggregate expressions have no origin column, so the INT_TS decoder does
-    // not fire on them (db.js #decoders) — these two arrive as epoch ms.
     const started: HostedDynamic = r.started_at == null ? null : new Date(Number(r.started_at));
     const finished: HostedDynamic = r.finished_at == null ? null : new Date(Number(r.finished_at));
     const settled = r.done === r.total && r.total > 0;
@@ -257,8 +255,8 @@ async function groupRunRows(ctx: HostedDynamic, ids: HostedDynamic) {
   const { rows } = await ctx.db.query(
     `SELECT id, run_group_id, case_id, story_id, status, mode, healed, changed, score,
             duration_ms, started_at, error, progress,
-            CAST(json_extract(totals, '$.cost_usd') AS REAL) AS cost_usd,
-            CAST(json_extract(totals, '$.steps') AS INTEGER) AS steps
+            CAST((totals #>> '{cost_usd}') AS DOUBLE PRECISION) AS cost_usd,
+            CAST((totals #>> '{steps}') AS INTEGER) AS steps
        FROM runs
       WHERE run_group_id IN (${inClause(ids, 1)})
       ORDER BY run_group_id DESC, case_id
@@ -405,7 +403,7 @@ export async function retryGroup(ctx: HostedDynamic) {
     const ids = retryable.rows.map((r: HostedDynamic) => r.id);
     await tx.query(
       `UPDATE runs
-          SET status = 'queued', healed = 0, changed = 0, manifest = NULL,
+          SET status = 'queued', healed = false, changed = false, manifest = NULL,
               totals = NULL, score = NULL, gate = NULL, pins = NULL,
               duration_ms = NULL, started_at = NULL, finished_at = NULL,
               executor_id = NULL, error = NULL, progress = NULL, updated_at = now()
@@ -506,8 +504,6 @@ export async function feed(ctx: HostedDynamic) {
     const params = [project.id, after || "00000000000000000000000000"];
     let typeClause = "";
     if (types.size) {
-      // One placeholder per type: SQLite has no array parameter, and the list is
-      // a bounded, server-parsed set of event-type names.
       const list = [...types];
       typeClause = ` AND type IN (${inClause(list, params.length + 1)})`;
       params.push(...list);
@@ -619,24 +615,22 @@ async function runById(ctx: HostedDynamic, id: HostedDynamic) {
             app.key AS application_key, app.name AS application_name,
             app.driver AS application_driver, app.platform AS application_platform,
             ring.key AS ring_key, ring.name AS ring_name, ring.base_url AS ring_base_url,
-            (SELECT json_object('key', a.key, 'sha256', a.sha256, 'size', a.size,
+            (SELECT jsonb_build_object('key', a.key, 'sha256', a.sha256, 'size', a.size,
                                 'tier', a.tier, 'created_at', a.created_at)
                FROM artifacts a
               WHERE a.run_id = r.id AND a.kind = 'bundle'
               ORDER BY a.created_at DESC LIMIT 1) AS artifact,
-            (SELECT json_object('key', a.key, 'sha256', a.sha256, 'size', a.size,
+            (SELECT jsonb_build_object('key', a.key, 'sha256', a.sha256, 'size', a.size,
                                 'tier', a.tier, 'created_at', a.created_at)
                FROM artifacts a
               WHERE a.run_id = r.id AND a.kind = 'clip'
               ORDER BY a.created_at DESC LIMIT 1) AS clip,
             -- findings this run is already evidence in, so the run page can
             -- say "already triaged" instead of inviting a duplicate Promote.
-            -- SQLite has no ORDER BY inside an aggregate, so the newest-first
-            -- ordering lives in the subquery json_group_array consumes; over no
-            -- rows it already yields []. A finding can hold several evidence
+            -- A finding can hold several evidence
             -- rows from the same run (one per cited step), so group to one row
             -- per finding — the page counts findings, not evidence links.
-            (SELECT json_group_array(json_object(
+            (SELECT jsonb_agg(jsonb_build_object(
                       'id', id, 'title', title, 'state', state, 'severity', severity))
                FROM (SELECT f.id, f.title, f.state, f.severity
                        FROM finding_evidence e
@@ -646,7 +640,7 @@ async function runById(ctx: HostedDynamic, id: HostedDynamic) {
                       ORDER BY f.last_seen DESC)) AS findings,
             -- findings this run's report auto-resolved — the run page's calm
             -- "resolved N findings" chip, each linking to its finding.
-            (SELECT json_group_array(json_object(
+            (SELECT jsonb_agg(jsonb_build_object(
                       'id', f.id, 'title', f.title, 'severity', f.severity))
                FROM findings f
               WHERE f.resolved_by_run_id = r.id AND f.merged_into IS NULL
@@ -665,8 +659,8 @@ async function runById(ctx: HostedDynamic, id: HostedDynamic) {
   const run = rows[0];
   run.artifact = parseEmbeddedArtifact(run.artifact);
   run.clip = parseEmbeddedArtifact(run.clip);
-  run.findings = run.findings ? JSON.parse(run.findings) : [];
-  run.resolved_findings = run.resolved_findings ? JSON.parse(run.resolved_findings) : [];
+  run.findings = run.findings || [];
+  run.resolved_findings = run.resolved_findings || [];
   // The joined columns fold into the same two objects the group projection
   // serves, so one shape describes "where this ran" wherever it is read. A
   // mobile ring's `base_url` is null; nothing else about the device is here,
@@ -687,7 +681,7 @@ async function runById(ctx: HostedDynamic, id: HostedDynamic) {
 
 function parseEmbeddedArtifact(text: HostedDynamic) {
   if (text == null) return null;
-  const a = JSON.parse(text);
+  const a = text;
   return { ...a, created_at: a.created_at == null ? null : new Date(a.created_at) };
 }
 

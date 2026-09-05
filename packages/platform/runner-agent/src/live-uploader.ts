@@ -1,3 +1,4 @@
+import { resolveApiPath } from "./api-client.ts";
 // The live uploader (docs/contracts/hosted.md "Live staging routes").
 //
 // One serialized, single-flight queue per case, ticking beside the progress
@@ -92,10 +93,10 @@ export function liveUploader(
   // verification would call the second one `divergent`.
   const evidence = redact ? platformEvidence(redact) : null;
   const routes = {
-    open: apiPath(live?.open_url_template, { run_group_id: groupId, run_id: runId }, `/runner/groups/${groupId}/cases/${runId}/open`),
-    trajectory: apiPath(live?.trajectory_url_template, { run_db_id: runDbId }, `/runner/runs/${runDbId}/live/trajectory`),
+    open: apiPath(live?.open_url_template, { run_group_id: groupId, run_id: runId }, `/runner/groups/${groupId}/cases/${runId}/open`, api.baseUrl),
+    trajectory: apiPath(live?.trajectory_url_template, { run_db_id: runDbId }, `/runner/runs/${runDbId}/live/trajectory`, api.baseUrl),
     entry: (entry: string) =>
-      apiPath(live?.entry_url_template, { run_db_id: runDbId, entry }, `/runner/runs/${runDbId}/live/${entry}`),
+      apiPath(live?.entry_url_template, { run_db_id: runDbId, entry }, `/runner/runs/${runDbId}/live/${entry}`, api.baseUrl),
   };
   // A JSON body escapes the lines it carries, so half the route's body cap is
   // the margin raw line bytes are sized against.
@@ -450,28 +451,14 @@ export function artifactRefs(line: string): string[] {
   return out;
 }
 
-/**
- * The API path for an advertised URL template.
- *
- * The deployment owns the route SHAPE, so the template is what fills in the
- * variables — but its origin is `publicUrl`, which is not necessarily the origin
- * this runner was pointed at (a proxy, a tunnel, a test server on an ephemeral
- * port). So only the path survives, and it travels through the same client that
- * every other runner call uses. An unusable template falls back to the route as
- * this runner knows it, which is also what happens against a control plane whose
- * spec predates `uploads.live`.
- */
-export function apiPath(template: unknown, vars: Record<string, string>, fallback: string): string {
-  if (typeof template !== "string" || !template) return fallback;
+export function apiPath(template: unknown, vars: Record<string, string>, fallback: string, baseUrl = "http://localhost"): string {
+  if (template == null || template === "") return fallback;
+  if (typeof template !== "string") throw new Error("invalid runner upload template");
   let filled = template;
-  for (const [key, value] of Object.entries(vars)) filled = filled.replaceAll(`{${key}}`, value);
-  if (filled.includes("{")) return fallback;
-  try {
-    const { pathname } = new URL(filled);
-    return pathname.startsWith("/api/v1/") ? pathname.slice("/api/v1".length) : fallback;
-  } catch {
-    return fallback;
-  }
+  for (const [key, value] of Object.entries(vars)) filled = filled.replaceAll(`{${key}}`, value.split("/").map(encodeURIComponent).join("/"));
+  if (filled.includes("{")) throw new Error("unresolved runner upload template variable");
+  const url = new URL(resolveApiPath(baseUrl, filled));
+  return url.pathname.slice("/api/v1".length) + url.search;
 }
 
 /** Only the advertised caps that are usable numbers; anything else keeps its default. */

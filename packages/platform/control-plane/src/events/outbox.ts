@@ -20,7 +20,7 @@ export async function emitPlatformEvent(
   // Wake held long-polls, but only once the row is readable. `afterCommit`
   // defers to COMMIT inside a transaction (and fires nothing on rollback), which
   // is the guarantee `NOTIFY` used to give for free.
-  const db: Db = q.db || q as Db;
+  const db: Db = "db" in q ? q.db : q;
   db.afterCommit?.(() => db.feedWaker?.notify(projectId));
   return id;
 }

@@ -183,7 +183,7 @@ async function attachSuggestion(tx: HostedDynamic, { projectId, planId, suggesti
   };
   const { rowCount } = await tx.query(
     `UPDATE findings
-        SET suggested_finding_id = $2, summary = json_patch(summary, $3), updated_at = now()
+        SET suggested_finding_id = $2, summary = jsonb_merge_patch(summary, $3), updated_at = now()
       WHERE id = $1 AND state = 'new' AND merged_into IS NULL AND suggested_finding_id IS NULL`,
     [suggestion.candidate_id, target.id, JSON.stringify(provenance)],
   );

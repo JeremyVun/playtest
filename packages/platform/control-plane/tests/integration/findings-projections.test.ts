@@ -80,6 +80,62 @@ test("evidence split carves one occurrence into its own finding", async () => {
   });
 });
 
+// The bulk export: the list's filter as one file with absolute links back to
+// each finding, its viewer step, and its run bundle entries — the handout an
+// LLM works through offline. Markdown by default, JSON on request, the list's
+// own state vocabulary, and links built from the caller's Host header.
+test("findings export renders the filtered list with verification links", async () => {
+  await withApp(async ({ app, api, base }: HostedDynamic) => {
+    const project = (await api.post("/projects", { key: "finding-export", name: "Finding export" })).body;
+    const { suite, application, ring, snapshot } = await seedSuite(app, api, project);
+    const run1 = await seedRun(app, { project, suite, application, ring, snapshot, status: "fail", score: 40, detail: "button 123 not visible" });
+    await extract(app, project, run1.group, run1.run, "button 456 not visible");
+    const run2 = await seedRun(app, { project, suite, application, ring, snapshot, status: "fail", score: 40, caseId: "checkout", storyId: "checkout", detail: "total 9 wrong" });
+    await extract(app, project, run2.group, run2.run, "total 10 wrong");
+    const items = (await api.get(`/projects/${project.key}/findings?state=all`)).body.items;
+    const first = items.find((f: HostedDynamic) => f.summary.story_id === "save");
+    const second = items.find((f: HostedDynamic) => f.summary.story_id === "checkout");
+    await api.post(`/findings/${second.id}/reject`, { reason: "not_a_bug" });
+
+    const md = await api.get(`/projects/${project.key}/findings/export`);
+    assert.equal(md.status, 200);
+    assert.match(md.headers.get("content-type"), /^text\/markdown/);
+    assert.match(md.headers.get("content-disposition"), /^attachment; filename="finding-export-findings-.*\.md"$/);
+    const text = md.body.toString("utf8");
+    const detail = (await api.get(`/findings/${first.id}`)).body;
+    const evidence = detail.evidence[0];
+    assert.ok(text.startsWith("# Findings export: Finding export (finding-export)"));
+    assert.ok(text.includes(`Exported `) && text.includes(` from ${base}/p/finding-export/findings.`), "links are absolute on the caller's origin");
+    assert.ok(text.includes(`- Finding: ${base}/p/finding-export/findings/${first.id}`), "links to the finding page");
+    assert.ok(text.includes(`- JSON: ${base}/api/v1/findings/${first.id}`), "links to the finding JSON");
+    assert.ok(text.includes(`- Viewer: ${base}${evidence.viewer_url}`), "links to the viewer at the cited step");
+    assert.ok(text.includes(`- Bundle (.ptrun): ${base}/api/v1/runs/${run1.run.id}/download`), "links to the run bundle");
+    assert.ok(text.includes(`- Trajectory: ${base}/api/v1/projects/finding-export/view/run/${run1.run.run_id}/save/trajectory.jsonl`), "links to the trajectory entry");
+    assert.ok(text.includes("button 456 not visible"), "carries the evidence excerpt");
+    assert.ok(text.includes("**Failing check:** assert: save button visible: button 456 not visible"), "carries the failing gate check");
+    assert.ok(!text.includes(second.id), "the default scope is the open work, not rejected findings");
+
+    const all = await api.get(`/projects/${project.key}/findings/export?state=all&format=json`);
+    assert.equal(all.status, 200);
+    assert.equal(all.body.format, "playtest.findings-export");
+    assert.equal(all.body.count, 2);
+    assert.deepEqual(all.body.findings.map((f: HostedDynamic) => f.id).sort(), [first.id, second.id].sort());
+    assert.equal(all.body.findings.find((f: HostedDynamic) => f.id === second.id).state, "rejected");
+    assert.equal(all.body.origin, base);
+    const exported = all.body.findings.find((f: HostedDynamic) => f.id === first.id).evidence[0];
+    assert.equal(exported.step, evidence.step_from);
+    assert.equal(exported.links.viewer, `${base}${evidence.viewer_url}`);
+    assert.equal(exported.links.screenshot,
+      evidence.step_from == null ? null : `${base}/api/v1/projects/finding-export/view/run/${run1.run.run_id}/save/steps/${String(evidence.step_from).padStart(3, "0")}.png`);
+    assert.equal(exported.links.run_json, `${base}/api/v1/runs/${run1.run.id}`);
+
+    const rejectedOnly = await api.get(`/projects/${project.key}/findings/export?state=rejected&format=json`);
+    assert.deepEqual(rejectedOnly.body.findings.map((f: HostedDynamic) => f.id), [second.id]);
+    assert.equal((await api.get(`/projects/${project.key}/findings/export?format=csv`)).status, 400);
+    assert.equal((await api.get(`/projects/${project.key}/findings/export?state=bogus`)).status, 400);
+  });
+});
+
 async function seedSuite(app: HostedDynamic, api: HostedDynamic, project: HostedDynamic) {
   const { application, ring } = await createTarget(api, project, {
     ringKey: "staging",

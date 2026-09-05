@@ -28,7 +28,7 @@ export function effectiveRole(principal: Principal | null | undefined, projectId
     if (principal.projectId == null || principal.projectId === projectId) return principal.role;
     return null;
   }
-  if (principal.isDevAdmin) return "admin";
+  if (principal.kind === "user" && (principal.isDevAdmin || principal.isSiteAdmin)) return "admin";
   return principal.roles?.get(projectId) ?? null;
 }
 

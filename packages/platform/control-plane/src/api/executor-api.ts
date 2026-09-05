@@ -1,3 +1,4 @@
+import { sha256Hex } from "../suites/snapshots.ts";
 import { BundleProvider } from "@playtest/core/artifacts";
 import { HttpResult, readJsonBody, readRawBody } from "../http.ts";
 import { badRequest, conflict, forbidden, notFound, unauthenticated } from "../errors.ts";
@@ -168,7 +169,7 @@ async function mintExchange(ctx: HostedDynamic, { dispatch, executorId, versions
     // racing for one grant cannot both believe they own it.
     const bound = await tx.query(
       `UPDATE session_claims SET executor_id = $2
-        WHERE id = $1 AND status = 'pending' AND expires_at > $3 AND executor_id IS $4`,
+        WHERE id = $1 AND status = 'pending' AND expires_at > $3 AND executor_id IS NOT DISTINCT FROM $4`,
       [claimId, executorId, new Date(), claim.executor_id ?? null],
     );
     if (bound.rowCount === 0) {
@@ -329,14 +330,14 @@ export async function groupSpec(ctx: HostedDynamic) {
     sessions: { needed: sessionRefs(target.config || {}), current: {} },
     baselines: await currentBaselines(ctx, group.suite_id),
     uploads: {
-      bundle_url_template: `${ctx.config.publicUrl}/api/v1/runner/runs/{run_db_id}/bundle`,
+      bundle_url_template: `/api/v1/runner/runs/{run_db_id}/bundle`,
       // The live-staging surface and its caps, advertised rather than hardcoded
       // in the uploader: a runner sizes its batches by bytes under these
       // numbers, and a deployment may lower the run budget.
       live: {
-        open_url_template: `${ctx.config.publicUrl}/api/v1/runner/groups/{run_group_id}/cases/{run_id}/open`,
-        entry_url_template: `${ctx.config.publicUrl}/api/v1/runner/runs/{run_db_id}/live/{entry}`,
-        trajectory_url_template: `${ctx.config.publicUrl}/api/v1/runner/runs/{run_db_id}/live/trajectory`,
+        open_url_template: `/api/v1/runner/groups/{run_group_id}/cases/{run_id}/open`,
+        entry_url_template: `/api/v1/runner/runs/{run_db_id}/live/{entry}`,
+        trajectory_url_template: `/api/v1/runner/runs/{run_db_id}/live/trajectory`,
         max_manifest_bytes: LIVE_MANIFEST_LIMIT,
         max_entry_bytes: LIVE_ENTRY_LIMIT,
         max_body_bytes: LIVE_TRAJECTORY_BODY_LIMIT,
@@ -376,8 +377,9 @@ async function currentBaselines(ctx: HostedDynamic, suiteId: HostedDynamic) {
  * agreement 3).
  */
 export async function baselineTrajectory(ctx: HostedDynamic) {
-  await requireGroupExecutor(ctx);
+  const runner = await requireGroupExecutor(ctx);
   const row = await one(ctx, `SELECT * FROM baselines WHERE id = $1`, [ctx.params.id], `no baseline "${ctx.params.id}"`);
+  if (row.suite_id !== runner.group.suite_id || !(await currentBaselines(ctx, runner.group.suite_id)).some((b: HostedDynamic) => b.id === row.id)) throw forbidden("baseline is outside this claimed group");
   const [key, entry = "trajectory.jsonl"] = String(row.trajectory_key).split("#");
   const buf = await ctx.store.get(key);
   const provider = new BundleProvider({ readRange: (s: HostedDynamic, e: HostedDynamic) => buf.subarray(s, e + 1), size: buf.length } as HostedDynamic);
@@ -387,7 +389,8 @@ export async function baselineTrajectory(ctx: HostedDynamic) {
 }
 
 export async function snapshotTree(ctx: HostedDynamic) {
-  await requireGroupExecutor(ctx);
+  const runner = await requireGroupExecutor(ctx);
+  if (ctx.params.id !== runner.group.snapshot_id) throw forbidden("snapshot is outside this claimed group");
   const snap = await one(ctx, `SELECT * FROM suite_snapshots WHERE id = $1`, [ctx.params.id], `no snapshot "${ctx.params.id}"`);
   // Project personas are merged into the tree HERE, at read time, rather than
   // baked into the snapshot at commit time: a snapshot is immutable, so baking
@@ -411,9 +414,11 @@ export async function snapshotTree(ctx: HostedDynamic) {
 }
 
 export async function blob(ctx: HostedDynamic) {
-  await requireGroupExecutor(ctx);
+  const runner = await requireGroupExecutor(ctx);
   const sha = ctx.params.sha256;
   if (!/^[0-9a-f]{64}$/.test(sha)) throw badRequest(`invalid blob sha256 "${sha}"`);
+  const snapshot = await snapshotTree({ ...ctx, params: { id: runner.group.snapshot_id } });
+  if (!Object.values(snapshot.tree).includes(sha)) throw forbidden("blob is outside this claimed group");
   return new HttpResult({ buffer: await ctx.store.get(blobKey(sha)), contentType: "application/octet-stream" });
 }
 
@@ -494,7 +499,7 @@ export async function uploadBundle(ctx: HostedDynamic) {
   // for one run can never overwrite each other's upload; the fenced transaction
   // below decides which key the artifact row publishes. The same executor's
   // retry reuses its own key and stays idempotent.
-  const key = `runs/${run.run_group_id}/${run.id}.${runner.executorId}.ptrun`;
+  const key = `runs/${run.run_group_id}/${run.id}.${runner.executorId}.${sha256Hex(buf)}.ptrun`;
   const stored = await ctx.store.put(key, buf);
   const artifact: HostedDynamic = {
     id: ulid(),
@@ -505,17 +510,22 @@ export async function uploadBundle(ctx: HostedDynamic) {
     size: stored.size,
     tier: "full",
   };
-  let replacedKey: string | null = null;
-  try {
-    await ctx.db.withTx(async (tx: HostedDynamic) => {
+  await ctx.db.withTx(async (tx: HostedDynamic) => {
       // The publish is fenced: a replacement, cancel, or reconcile landing
       // after the route guard must refuse this artifact rather than let a
       // stale executor publish over its successor's.
       await reassertCurrentExecutor(tx, runner);
-      const prior = await tx.query(`SELECT key FROM artifacts WHERE run_id = $1 AND kind = 'bundle' AND tier = 'full'`, [
+      const prior = await tx.query(`SELECT * FROM artifacts WHERE run_id = $1 AND kind = 'bundle' AND tier = 'full'`, [
         run.id,
       ]);
-      replacedKey = prior.rows[0]?.key && prior.rows[0].key !== key ? prior.rows[0].key : null;
+      if (prior.rows[0]) {
+        if (prior.rows[0].sha256 !== stored.sha256) throw conflict("this run already has a bundle with different bytes");
+        Object.assign(artifact, prior.rows[0]);
+        return;
+      }
+      const fresh = (await tx.query("SELECT * FROM runs WHERE id = $1", [run.id])).rows[0];
+      requireRunOwner(runner, fresh);
+      if (!["running", "uploading"].includes(fresh.status)) throw conflict("this run no longer accepts a new bundle");
       await tx.query(
         `INSERT INTO artifacts (id, run_id, kind, key, sha256, size, tier, verified_at)
            VALUES ($1, $2, $3, $4, $5, $6, $7, now())
@@ -532,14 +542,6 @@ export async function uploadBundle(ctx: HostedDynamic) {
         [run.id, runner.executorId],
       );
     });
-  } catch (err) {
-    // A refused publish leaves no bytes behind. Best-effort — the retention
-    // orphan sweep is the backstop for a delete that fails here.
-    await ctx.store.delete(key).catch(() => {});
-    throw err;
-  }
-  // The row now points at this upload's key; the bytes it replaced are unowned.
-  if (replacedKey) await ctx.store.delete(replacedKey).catch(() => {});
   return { artifact };
 }
 
@@ -658,7 +660,6 @@ export async function caseReport(ctx: HostedDynamic) {
     ? await collectRunGradeIssues(ctx, run.id, manifest)
     : null;
   // Staged live objects to delete once the report commits (see below).
-  let stagedKeys: string[] = [];
   let accepted = false;
   await ctx.db.withTx(async (tx: HostedDynamic) => {
     await reassertCurrentExecutor(tx, runner);
@@ -735,21 +736,12 @@ export async function caseReport(ctx: HostedDynamic) {
     // retention grace window: it is then the only evidence the run produced.
     // Ledger rows go in this transaction; their objects go after it commits.
     const sealed = await tx.query(`SELECT 1 FROM artifacts WHERE run_id = $1 AND kind = 'bundle' LIMIT 1`, [run.id]);
-    if (sealed.rows.length) stagedKeys = await dropStaging(tx, run.id);
+    if (sealed.rows.length) await dropStaging(tx, run.id);
     // The run just went terminal, so every live holder must learn it is sealed
     // on the next wake rather than at the end of a full hold.
     wakeLive(tx, run.id);
   });
-  // Post-commit and best-effort: an object left behind because a delete failed
-  // has no ledger row any more, so the retention orphan sweep collects it. A
-  // live cleanup failure must never affect the case report.
-  for (const key of stagedKeys) {
-    try {
-      await ctx.store.delete(key);
-    } catch (e: HostedDynamic) {
-      ctx.log?.warn?.({ msg: "live staging object was not deleted at seal", key, err: e?.message || String(e) });
-    }
-  }
+  // Unreferenced staging is collected after the orphan grace period.
   // Post-commit, best-effort: this report may have filed unreviewed findings —
   // schedule the debounced semantic dedupe sweep over them.
   if (status === "fail" || gradeIssues) scheduleAutoDedupe(ctx, group.project_id);

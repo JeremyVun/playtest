@@ -34,3 +34,5 @@ tests/fixtures/todo-app-swiftui/build/
 packages/run-viewer/build/
 packages/platform/web/build/
 packages/platform/web/.test-build/
+
+.playtest-compose/

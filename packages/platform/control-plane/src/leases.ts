@@ -1,24 +1,4 @@
-// One application-level lease for every background cycle (retention,
-// reconciliation). This is the replacement for the PostgreSQL advisory lock, and
-// for the in-process boolean S1 left behind — see
-// docs/contracts/hosted.md, "Background cycles and leases".
-//
-// Two properties, one mechanism:
-//
-//   * **No overlap.** A claim is a conditional UPDATE inside `BEGIN IMMEDIATE`,
-//     so the read of `expires_at` and the write of the new owner cannot
-//     interleave with another claim. A live lease is never stolen — not even by
-//     a second cycle in the same process, because the claim never treats "same
-//     owner" as reentrant. That is deliberate: the overlapping-timer case is
-//     exactly what must be refused.
-//   * **Crash recovery.** The holder renews while it works. A process that dies
-//     mid-cycle renews nothing, so the row expires and the next cycle claims it.
-//     A process-memory flag cannot do this; the row can.
-//
-// The lease is advisory scheduling, not a correctness barrier. Each step of a
-// cycle is already individually safe (short transactions restating their
-// preconditions). The lease exists so two cycles do not duplicate slow object
-// work, and so one crashed cycle does not wedge the schedule forever.
+// Persisted leases prevent overlapping background cycles and expire after a crash.
 import os from "node:os";
 import { ulid } from "./ulid.ts";
 import type { Db, DbRow } from "./db.ts";
@@ -36,16 +16,7 @@ export const OWNER_ID = `${os.hostname()}:${process.pid}:${ulid()}`;
 /** Default lease lifetime; renewed at a third of this while a cycle runs. */
 export const DEFAULT_TTL_MS = 60_000;
 
-/**
- * Claim `name` if it is unheld or expired. One statement, so the whole
- * read-then-decide is the `BEGIN IMMEDIATE` transaction's write lock.
- *
- * The upsert's `WHERE leases.expires_at <= $now` is the condition: SQLite
- * reports zero changes when a `DO UPDATE` predicate is false, which is the
- * "somebody else holds it" answer.
- *
- * @returns {Promise<boolean>} true when this owner now holds the lease
- */
+// The conditional upsert returns no row while another owner holds the lease.
 export async function claimLease(
   db: Db,
   name: string,
@@ -61,7 +32,7 @@ export async function claimLease(
                   renewed_at = excluded.renewed_at,
                   expires_at = excluded.expires_at
             WHERE leases.expires_at <= $3`,
-      [name, owner, now, now + ttlMs],
+      [name, owner, new Date(now), new Date(now + ttlMs)],
     );
     return rowCount > 0;
   });
@@ -78,7 +49,7 @@ export async function renewLease(
 ): Promise<boolean> {
   const { rowCount } = await db.query(
     `UPDATE leases SET renewed_at = $3, expires_at = $4 WHERE name = $1 AND owner = $2`,
-    [name, owner, now, now + ttlMs],
+    [name, owner, new Date(now), new Date(now + ttlMs)],
   );
   return rowCount > 0;
 }

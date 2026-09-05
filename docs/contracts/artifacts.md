@@ -267,9 +267,11 @@ true`, final-state artifacts, and an empty request list.
 
 If the actor cannot produce a valid step, the final envelope has `mode:
 "error"`, a top-level `error` string, `result.ok: false` with the same message,
-and artifacts from the rejected snapshot. It has no `agent`, `resolution`, or
-`tokens`. The run ends with `end_reason: "error"` and cannot pass or become a
-baseline.
+and artifacts from the rejected snapshot. It has no `agent` or `resolution`.
+When the gateway returned usage, `tokens` records every failed attempt and
+`llm_retries` records the validation error that caused the retry; either may be
+absent when failure happened before usage was available. The run ends with
+`end_reason: "error"` and cannot pass or become a baseline.
 
 ## Diagnostic and progress logs
 
@@ -984,6 +986,21 @@ before serving. `playtest view <bundle>.ptrun` must provide the same single-run
 viewer behavior as an unpacked run directory, including media Range requests.
 
 ### Writing and retention rewrites
+
+Hosted metadata lives in PostgreSQL and evidence in a private installation
+prefix in S3-compatible storage. The bundle limit remains 512 MiB. Publication
+writes immutable executor/hash keys before a short fenced metadata transaction;
+same-byte retries retain the accepted artifact identity, and different bytes
+cannot replace it. Object I/O never runs inside a database transaction.
+
+Publication and reading share a lifecycle guard; physical collection takes its
+exclusive side. Collection preserves current files, snapshots, personas,
+artifacts, live reservations and independent baseline/candidate pointers. It
+removes only unreferenced objects older than one day, at most 1,000 per cycle.
+Heavy upload, view, clip and rewrite operations serialize through response
+completion. Maintenance backup uses the same complete reference enumerator;
+recovery requires the original KMS key, a fresh database and a fresh prefix.
+See [Hosted deployment guidance](../guidance/hosted-deployment.md).
 
 The writer runs only after core finishes all post-execution work and closes
 artifact writers. Hosted runners upload the bundle and sidecar, report their

@@ -1,3 +1,4 @@
+import { jobArguments, jobProfile } from "./container-profile.ts";
 // Clean-room execution of a `script` auth provider's mint grant. The provider
 // code runs with only the grant's resolved
 // root secrets + identity vars in env — never the group workspace, never suite
@@ -9,6 +10,9 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import { isRunnerRefusal } from "./api-client.ts";
 import type { MintGrant } from "./protocol.ts";
+
+const activeMints = new Set<() => void>();
+export function stopActiveMints(): void { for (const stop of [...activeMints]) stop(); }
 
 const STDOUT_LIMIT = 8 * 1024 * 1024;
 
@@ -101,7 +105,7 @@ export async function runMintScript(
   try {
     const stdout =
       isolation === "container"
-        ? await runContainer({ dir, env, timeoutMs, image: image || process.env.PLAYTEST_JOB_IMAGE || "playtest-job:latest", claimId: grant.claim_id })
+        ? await runContainer({ dir, env, timeoutMs, image: image || jobProfile().image, claimId: grant.claim_id })
         : await runProcess({ script, env, timeoutMs });
     return parseStorageState(stdout, grant);
   } finally {
@@ -125,7 +129,7 @@ function runProcess({ script, env, timeoutMs }: RunnerDynamic): Promise<string> 
 
 function runContainer({ dir, env, timeoutMs, image, claimId }: RunnerDynamic): Promise<string> {
   const name = `playtest-mint-${safeName(claimId)}`;
-  const args = ["run", "--rm", "--init", "--name", name, "-v", `${dir}:/mint:ro`];
+  const args = ["run", "--rm", "--init", "--name", name, ...jobArguments(claimId), "-v", `${dir}:/mint:ro`];
   for (const key of Object.keys(env)) args.push("-e", key); // value from docker's env, not argv
   args.push(image, "node", "/mint/mint.mjs");
   return collect(
@@ -145,6 +149,8 @@ function collect(child: RunnerDynamic, timeoutMs: number, onTimeout: (child: Run
     let stdout = "";
     let stderr = "";
     let timedOut = false;
+    const stop = () => { timedOut = true; onTimeout(child); child.kill("SIGKILL"); };
+    activeMints.add(stop);
     const timer = setTimeout(() => {
       timedOut = true;
       onTimeout(child);
@@ -158,10 +164,12 @@ function collect(child: RunnerDynamic, timeoutMs: number, onTimeout: (child: Run
     });
     child.on("error", (e: RunnerDynamic) => {
       clearTimeout(timer);
+      activeMints.delete(stop);
       reject(e);
     });
     child.on("close", (code: number | null) => {
       clearTimeout(timer);
+      activeMints.delete(stop);
       if (timedOut) return reject(new Error("mint script timed out"));
       if (code !== 0) return reject(new Error(firstLine(stderr) || `mint script exited ${code}`));
       resolve(stdout);

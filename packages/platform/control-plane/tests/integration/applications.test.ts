@@ -1,3 +1,4 @@
+import { testDatabase } from "../postgres/helpers.ts";
 // Applications and rings: the model that replaced environments
 // (docs/contracts/hosted.md, "Applications and rings").
 //
@@ -479,7 +480,9 @@ test("deletion: refused while referenced, naming the referrers; unreferenced del
 
 test("boot: a data root built by the retired schema fails with an actionable reset message", async () => {
   const dataRoot = await fsp.mkdtemp(path.join(os.tmpdir(), "ptdata-legacy-"));
+  const database = await testDatabase();
   const env = {
+    DATABASE_URL: database.databaseUrl,
     PLAYTEST_DATA_DIR: dataRoot,
     PLAYTEST_AUTH: "dev",
     OBJECT_STORE_URL: path.join(dataRoot, "objects"),
@@ -491,7 +494,7 @@ test("boot: a data root built by the retired schema fails with an actionable res
   try {
     // A normally-created root boots fine…
     const first = await createApp(loadConfig(env));
-    await first.db.query(`INSERT INTO schema_migrations (filename) VALUES ($1)`, ["0017_app_artifacts.sql"]);
+    await first.db.query(`INSERT INTO schema_migrations (filename, sha256) VALUES ($1, 'unknown')`, ["0017_app_artifacts.sql"]);
     await first.close();
 
     // …and the same root, once its ledger names a migration this build retired,
@@ -501,8 +504,7 @@ test("boot: a data root built by the retired schema fails with an actionable res
       (e: HostedDynamic) =>
         e instanceof ServerConfigError &&
         /0017_app_artifacts\.sql/.test(e.message) &&
-        /PLAYTEST_DATA_DIR/.test(e.message) &&
-        /Applications and environments replaced the previous target model/.test(e.message) &&
+        /compatible release/.test(e.message) &&
         !/at Object/.test(e.message),
     );
   } finally {

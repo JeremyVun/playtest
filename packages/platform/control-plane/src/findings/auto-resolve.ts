@@ -370,8 +370,8 @@ async function triplesOf(ctx: HostedDynamic, finding: HostedDynamic, io: HostedD
   const { rows: triples } = await ctx.db.query(
     `SELECT g.suite_id, g.ring_id, r.case_id,
             MAX(fe.created_at) AS last_evidence_at,
-            json_group_array(DISTINCT fe.run_id) AS evidence_run_ids,
-            json_group_array(DISTINCT fe.step_from) AS evidence_steps
+            jsonb_agg(DISTINCT fe.run_id) AS evidence_run_ids,
+            jsonb_agg(DISTINCT fe.step_from) AS evidence_steps
        FROM finding_evidence fe
        JOIN runs r ON r.id = fe.run_id
        JOIN run_groups g ON g.id = r.run_group_id
@@ -392,7 +392,7 @@ async function triplesOf(ctx: HostedDynamic, finding: HostedDynamic, io: HostedD
 
   const out: HostedDynamic[] = [];
   for (const t of triples) {
-    const evidenceRunIds = new Set(JSON.parse(t.evidence_run_ids || "[]"));
+    const evidenceRunIds = new Set((t.evidence_run_ids || []));
     const key = `${t.suite_id}${t.ring_id}${t.case_id}`;
     const { rows: newest } = await ctx.db.query(
       `SELECT r.id, r.status, r.gate, r.story_id, r.manifest, r.finished_at
@@ -435,7 +435,7 @@ async function triplesOf(ctx: HostedDynamic, finding: HostedDynamic, io: HostedD
         }
       }
       if (tierOf(finding) === "keyless" && worthReading) {
-        const steps = JSON.parse(t.evidence_steps || "[]").filter((n: HostedDynamic) => Number.isInteger(n) && n > 0);
+        const steps = (t.evidence_steps || []).filter((n: HostedDynamic) => Number.isInteger(n) && n > 0);
         await verifyCandidate(ctx, { finding, run, candidate, steps, io });
       }
     }
@@ -557,7 +557,7 @@ async function applyDecision(ctx: HostedDynamic, { project, finding, decision, r
          VALUES ($1,$2,$3,$4,$5,$6,$7)
          ON CONFLICT (finding_id, suite_id, ring_id, case_id)
          DO UPDATE SET run_id = excluded.run_id, method = excluded.method, stamped_at = excluded.stamped_at`,
-        [finding.id, s.suiteId, s.ringId, s.caseId, s.runId, s.method, s.stampedAt],
+        [finding.id, s.suiteId, s.ringId, s.caseId, s.runId, s.method, new Date(s.stampedAt)],
       );
     }
     if (checked.length) {
@@ -566,7 +566,7 @@ async function applyDecision(ctx: HostedDynamic, { project, finding, decision, r
       const memo = Object.fromEntries(checked.map((c: HostedDynamic) => [`${c.suiteId}${c.ringId}${c.caseId}`, c.runId]));
       await tx.query(
         `UPDATE findings
-            SET summary = json_patch(summary, json_object('auto_resolve', json_object('checked', json($2)))),
+            SET summary = jsonb_merge_patch(summary, jsonb_build_object('auto_resolve', jsonb_build_object('checked', $2::jsonb))),
                 updated_at = now()
           WHERE id = $1 AND merged_into IS NULL`,
         [finding.id, JSON.stringify({ ...(finding.summary?.auto_resolve?.checked || {}), ...memo })],
@@ -582,8 +582,8 @@ async function applyDecision(ctx: HostedDynamic, { project, finding, decision, r
     } else if (action === "suggest") {
       const { rowCount } = await tx.query(
         `UPDATE findings
-            SET summary = json_patch(summary, json_object('auto_resolve',
-                  json_object('suggested', json_object('run_id', $2, 'at', $3, 'reason', $6)))),
+            SET summary = jsonb_merge_patch(summary, jsonb_build_object('auto_resolve',
+                  jsonb_build_object('suggested', jsonb_build_object('run_id', $2::text, 'at', $3::text, 'reason', $6::text)))),
                 updated_at = now()
           WHERE id = $1 AND merged_into IS NULL AND state = $4 AND last_seen = $5`,
         [finding.id, resolveRunId, new Date().toISOString(), finding.state, finding.last_seen, reason],
@@ -610,10 +610,10 @@ async function applyDecision(ctx: HostedDynamic, { project, finding, decision, r
       // retract quietly; the audit trail of the original suggestion stands.
       await tx.query(
         `UPDATE findings
-            SET summary = json_remove(summary, '$.auto_resolve.suggested'),
+            SET summary = jsonb_remove_paths(summary, '$.auto_resolve.suggested'),
                 updated_at = now()
           WHERE id = $1 AND merged_into IS NULL
-            AND json_extract(summary, '$.auto_resolve.suggested') IS NOT NULL`,
+            AND (summary #>> '{auto_resolve,suggested}') IS NOT NULL`,
         [finding.id],
       );
     }
@@ -637,8 +637,8 @@ export async function autoResolveFinding(tx: HostedDynamic, { projectId, finding
         SET state = 'resolved',
             resolved_by_run_id = $2,
             auto_resolved_at = now(),
-            summary = json_patch(json_remove(summary, '$.auto_resolve.suggested', '$.auto_resolve.dismissed'),
-                        json_object('auto_resolve', json_object('reason', $5))),
+            summary = jsonb_merge_patch(jsonb_remove_paths(summary, '$.auto_resolve.suggested', '$.auto_resolve.dismissed'),
+                        jsonb_build_object('auto_resolve', jsonb_build_object('reason', $5::text))),
             updated_at = now()
       WHERE id = $1 AND merged_into IS NULL AND state = $3 AND last_seen = $4
       RETURNING *`,

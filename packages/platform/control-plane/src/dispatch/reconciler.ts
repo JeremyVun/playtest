@@ -41,7 +41,7 @@ export async function reconcileDispatches(ctx: HostedDynamic, { limit = 50 } = {
 
 async function repairSettledGroups(ctx: HostedDynamic, { limit }: { limit: number }) {
   const { rows: groups } = await ctx.db.query(
-    `SELECT DISTINCT g.id, g.project_id, g.status
+    `SELECT DISTINCT g.id, g.project_id, g.status, g.updated_at
        FROM run_groups g
        JOIN runs r ON r.run_group_id = g.id
       WHERE g.status IN ('done','canceled')

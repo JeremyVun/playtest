@@ -1,3 +1,4 @@
+import { testDatabase } from "../postgres/helpers.ts";
 // Cursor-feed resume semantics — the properties a real
 // dashboard client leans on when its connection to GET /events/feed dies and it
 // has to reconnect with whatever cursor it last durably observed. Complements the
@@ -124,7 +125,9 @@ test("consumer restart: every event committed while the consumer was dead is rec
   // from the old process died with it. Only committed rows + cursor can bridge
   // the gap, which is exactly the contract (hosted.md, "Events and long polling").
   const dataRoot = await fsp.mkdtemp(path.join(os.tmpdir(), "ptdata-resume-"));
+  const database = await testDatabase();
   const envBase = {
+    DATABASE_URL: database.databaseUrl,
     PLAYTEST_DATA_DIR: dataRoot,
     PLAYTEST_AUTH: "dev",
     OBJECT_STORE_URL: path.join(dataRoot, "objects"),

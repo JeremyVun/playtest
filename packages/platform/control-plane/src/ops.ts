@@ -35,7 +35,7 @@ async function dispatchDepth(ctx: AppContext, projectId: string) {
     // Timestamps are epoch milliseconds, so an age in seconds is plain integer
     // arithmetic; ROUND keeps the half-up rounding the old `::int` cast had.
     `SELECT status, COUNT(*) AS n,
-            CAST(ROUND((now() - MIN(requested_at)) / 1000.0) AS INTEGER) AS oldest_s
+            CAST(ROUND(EXTRACT(EPOCH FROM now() - MIN(requested_at))) AS INTEGER) AS oldest_s
        FROM dispatches
       WHERE project_id = $1 AND status IN ${ACTIVE_DISPATCH_STATES_SQL}
       GROUP BY status`,
@@ -66,7 +66,7 @@ async function dispatchDepth(ctx: AppContext, projectId: string) {
  */
 async function queueWaitStats(ctx: AppContext, projectId: string) {
   const { rows } = await ctx.db.query(
-    `SELECT (e.registered_at - d.requested_at) / 1000.0 AS wait_s
+    `SELECT EXTRACT(EPOCH FROM e.registered_at - d.requested_at) AS wait_s
        FROM dispatches d
        JOIN executors e ON e.id = d.executor_id
       WHERE d.project_id = $1 AND d.kind = 'group' AND e.registered_at >= d.requested_at
@@ -88,7 +88,7 @@ async function queueWaitStats(ctx: AppContext, projectId: string) {
 async function reconcilerStatus(ctx: AppContext) {
   const configured = ctx.config.reconcile.intervalMs > 0;
   const { rows } = await ctx.db.query(
-    `SELECT (now() - beat_at) / 1000.0 AS lag_s, beat_at, detail
+    `SELECT EXTRACT(EPOCH FROM now() - beat_at) AS lag_s, beat_at, detail
        FROM service_heartbeats WHERE name = 'reconciler'`,
   );
   const beat = rows[0] || null;
@@ -107,13 +107,11 @@ async function reconcilerStatus(ctx: AppContext) {
  * persisted, and the standalone authoring_sessions table is gone (P6).
  */
 async function llmSpend(ctx: AppContext, projectId: string) {
-  // The window start is computed here rather than in SQL: SQLite has no interval
-  // type, and a bound Date is the same instant the query would have derived.
   const since = new Date(Date.now() - SPEND_WINDOW_DAYS * 86_400_000);
   const runs = await ctx.db.query(
-    `SELECT COALESCE(SUM(CAST(json_extract(r.totals, '$.cost_usd') AS REAL)), 0) AS usd
+    `SELECT COALESCE(SUM(CAST((r.totals #>> '{cost_usd}') AS DOUBLE PRECISION)), 0) AS usd
        FROM runs r JOIN run_groups g ON g.id = r.run_group_id
-      WHERE g.project_id = $1 AND json_extract(r.totals, '$.cost_usd') IS NOT NULL
+      WHERE g.project_id = $1 AND (r.totals #>> '{cost_usd}') IS NOT NULL
         AND r.created_at > $2`,
     [projectId, since],
   );

@@ -21,7 +21,7 @@ const DEFAULT_PROJECT_PARALLEL = Object.freeze({ total: 10, record: 3 });
 /** True when the principal is admin of at least one project (or a dev/admin token). */
 function isAdminSomewhere(p: HostedDynamic) {
   if (p.kind === "token") return p.role === "admin";
-  if (p.isDevAdmin) return true;
+  if (p.kind === "user" && (p.isDevAdmin || p.isSiteAdmin)) return true;
   return p.roles ? [...p.roles.values()].includes("admin") : false;
 }
 
@@ -59,7 +59,7 @@ export async function me(ctx: HostedDynamic) {
   if (p.kind === "token") {
     return { kind: "token", project_id: p.projectId, role: p.role, capabilities };
   }
-  const roles = p.isDevAdmin
+  const roles = p.isDevAdmin || p.isSiteAdmin
     ? await allProjectsAsAdmin(ctx)
     : Object.fromEntries(p.roles);
   return {
@@ -69,6 +69,7 @@ export async function me(ctx: HostedDynamic) {
     email: p.email,
     name: p.name,
     is_dev_admin: !!p.isDevAdmin,
+    is_site_admin: !!(p.isSiteAdmin || p.isDevAdmin),
     roles,
     capabilities,
   };
@@ -83,7 +84,7 @@ async function allProjectsAsAdmin(ctx: HostedDynamic) {
 export async function listProjects(ctx: HostedDynamic) {
   const p = requireAuth(ctx);
   let rows;
-  if (p.kind === "user" && p.isDevAdmin) {
+  if (p.kind === "user" && (p.isDevAdmin || p.isSiteAdmin)) {
     ({ rows } = await ctx.db.query(`SELECT * FROM projects ORDER BY key`));
   } else if (p.kind === "user") {
     ({ rows } = await ctx.db.query(
@@ -120,10 +121,7 @@ export async function createProject(ctx: HostedDynamic) {
         [id, key, name, DEFAULT_PROJECT_PARALLEL],
       ));
     } catch (e: HostedDynamic) {
-      // The pre-check above is best-effort; a concurrent create can still race past
-      // it and hit the unique index — surface the same friendly conflict, never the
-      // raw SQLite constraint error.
-      if (/UNIQUE constraint failed/.test(e.message || "")) {
+      if (e.code === "23505" && e.constraint === "projects_key_key") {
         throw conflict(`a project with key "${key}" already exists`);
       }
       throw e;
@@ -529,10 +527,6 @@ export async function health(ctx: HostedDynamic) {
   guard(ctx, project.id, "viewer");
   const db = ctx.db;
 
-  // Window boundaries are computed here, not in SQL: SQLite has no interval
-  // type and no date_trunc, and timestamps are epoch milliseconds. All three
-  // are UTC, which is what date_trunc on a timestamptz already gave on a UTC
-  // server (S0-INVENTORY.md §6.7).
   const now = new Date();
   const sevenDaysAgo = new Date(now.getTime() - 7 * DAY_MS);
   const startOfDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
@@ -549,7 +543,7 @@ export async function health(ctx: HostedDynamic) {
     db.query(
       // Integer division by one day gives the UTC day bucket date_trunc used to
       // produce; the bucket index is turned back into a date in JS below.
-      `SELECT CAST(r.finished_at / 86400000 AS INTEGER) AS day,
+      `SELECT FLOOR(EXTRACT(EPOCH FROM r.finished_at) / 86400)::integer AS day,
               COUNT(*) FILTER (WHERE r.status = 'pass') AS pass,
               COUNT(*) FILTER (WHERE r.status = 'fail') AS fail
          FROM runs r JOIN run_groups g ON g.id = r.run_group_id
@@ -564,14 +558,12 @@ export async function health(ctx: HostedDynamic) {
       [project.id, startOfDay],
     ),
     db.query(
-      `SELECT COALESCE(SUM(CAST(json_extract(r.totals, '$.cost_usd') AS REAL)), 0) AS usd
+      `SELECT COALESCE(SUM(CAST((r.totals #>> '{cost_usd}') AS DOUBLE PRECISION)), 0) AS usd
          FROM runs r JOIN run_groups g ON g.id = r.run_group_id
         WHERE g.project_id = $1 AND r.finished_at > $2`,
       [project.id, startOfMonth],
     ),
     db.query(
-      // Latest group per suite. SQLite has no DISTINCT ON, so the pick is a
-      // row_number window filtered to the first row of each suite's partition.
       `WITH latest AS (
          SELECT g.suite_id, s.slug, g.id AS group_id, g.created_at, g.status,
                 row_number() OVER (PARTITION BY g.suite_id ORDER BY g.created_at DESC) AS rn
@@ -619,7 +611,7 @@ export async function health(ctx: HostedDynamic) {
             COUNT(DISTINCT CASE WHEN f.state IN ('accepted','reopened') THEN f.id END) AS open_n,
             COUNT(DISTINCT CASE WHEN f.state = 'new' THEN f.id END) AS review_n,
             COUNT(DISTINCT CASE WHEN f.state IN ('accepted','reopened')
-                                  AND json_extract(f.summary, '$.auto_resolve.suggested') IS NOT NULL
+                                  AND (f.summary #>> '{auto_resolve,suggested}') IS NOT NULL
                              THEN f.id END) AS fix_suggested_n
        FROM findings f
        JOIN finding_evidence fe ON fe.finding_id = f.id
@@ -643,7 +635,7 @@ export async function health(ctx: HostedDynamic) {
   const needsReview = await db.query(
     `SELECT COUNT(CASE WHEN state = 'new' THEN 1 END) AS n,
             COUNT(CASE WHEN state IN ('reopened','accepted')
-                         AND json_extract(summary, '$.auto_resolve.suggested') IS NOT NULL
+                         AND (summary #>> '{auto_resolve,suggested}') IS NOT NULL
                     THEN 1 END) AS fix_suggested_n
        FROM findings
       WHERE project_id = $1 AND merged_into IS NULL`,

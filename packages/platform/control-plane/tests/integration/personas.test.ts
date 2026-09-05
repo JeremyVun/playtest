@@ -174,7 +174,10 @@ test("personas: a project persona shows up in the runner snapshot tree; a suite-
     });
     assert.equal(commit2.status, 200, JSON.stringify(commit2.body));
     const snapshot2Id = commit2.body.snapshot.id;
-    const tree2Res = await fetch(`${base}/api/v1/runner/snapshots/${snapshot2Id}/tree`, { headers });
+    const refused = await fetch(`${base}/api/v1/runner/snapshots/${snapshot2Id}/tree`, { headers });
+    assert.equal(refused.status, 403, "an existing claim cannot read a newly committed snapshot");
+    const nextHeaders = await runnerAuth(api, base, project, suite, ring);
+    const tree2Res = await fetch(`${base}/api/v1/runner/snapshots/${snapshot2Id}/tree`, { headers: nextHeaders });
     const tree2 = await tree2Res.json();
     assert.notEqual(tree2.tree["personas/grumpy-tester.yaml"], rows[0].blob_sha256, "the suite's own file shadows the project persona");
   });

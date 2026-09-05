@@ -34,8 +34,9 @@ and "none" otherwise.
 that taught nothing new: repeated failed attempts or loops through screens
 already ruled out.
 
-`findings`: a scannable list of what the study learned, good and bad. Each note
-is one self-contained observation. Prioritise where the user expected the
+`findings`: a scannable list of what the study learned, good and bad. Give each
+one a concise, self-contained `title` (100 characters maximum) that names the
+issue; put steps, examples, and supporting detail in `note`. Prioritise where the user expected the
 capability, what wording or affordance they sought, where they got stuck or
 backtracked, what worked, and whether the attempt disturbed unrelated flows.
 Use "major" when the goal could not be found or completed, "minor" for friction,
@@ -69,7 +70,8 @@ candidate.
 
 Each candidate needs `kind` (the closest of `http_error`,
 `console_exception`, `expectation_violation`, `data_mismatch`, `no_effect`,
-`perf_regression`, `broken_navigation`), `severity`, a short `title`,
+`perf_regression`, `broken_navigation`), `severity`, a concise, self-contained
+`title` (100 characters maximum, no evidence detail or trailing punctuation),
 `expected`, `observed`, `evidence_steps`, and any supporting deterministic
 `signals`. An empty list is correct when no malfunction is supported.
 

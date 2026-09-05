@@ -1,10 +1,12 @@
 import { h, clear } from "./dom.js";
+import { setNavigationBlocker } from "./router.js";
 import { confirmModal, saveBar } from "./ui.js";
 
 interface SourceState {
   raw: string;
   savedRaw: string;
   view: "form" | "yaml";
+  saving?: boolean;
 }
 
 interface SourceEditorOptions<T> {
@@ -32,11 +34,17 @@ export function sourceEditor<T>(options: SourceEditorOptions<T>) {
   let debounce: ReturnType<typeof setTimeout> | null = null;
 
   const bar = saveBar({ onSave: options.save, onDiscard: discard });
-  const paintBar = () => bar.set({ dirty: st.raw !== st.savedRaw, invalid: !checksOk });
+  const formToggle = h("button", { class: st.view === "form" ? "on" : "", onclick: () => switchView("form") }, "Form");
+  const yamlToggle = h("button", { class: st.view === "yaml" ? "on" : "", onclick: () => switchView("yaml") }, "YAML");
   const toggle = h("div.seg", {},
-    h("button", { class: st.view === "form" ? "on" : "", onclick: () => switchView("form") }, "Form"),
-    h("button", { class: st.view === "yaml" ? "on" : "", onclick: () => switchView("yaml") }, "YAML"),
+    formToggle,
+    yamlToggle,
   );
+  const paintBar = () => {
+    bar.set({ dirty: st.raw !== st.savedRaw, invalid: !checksOk, saving: st.saving });
+    formToggle.disabled = Boolean(st.saving);
+    yamlToggle.disabled = Boolean(st.saving);
+  };
 
   function scheduleChecks() {
     options.onChange?.();
@@ -46,7 +54,7 @@ export function sourceEditor<T>(options: SourceEditorOptions<T>) {
   }
 
   function switchView(view: "form" | "yaml") {
-    if (view === st.view) return;
+    if (view === st.view || st.saving) return;
     st.view = view;
     options.rerender();
   }
@@ -86,6 +94,7 @@ export function sourceEditor<T>(options: SourceEditorOptions<T>) {
   }
 
   async function discard() {
+    if (st.saving) return;
     const ok = await confirmModal({
       title: "Discard your changes?",
       body: options.discardBody,
@@ -109,6 +118,16 @@ export function sourceEditor<T>(options: SourceEditorOptions<T>) {
     scheduleChecks,
     switchView,
     initialize() {
+      setNavigationBlocker(st, {
+        shouldBlock: () => editorSlot.isConnected && st.raw !== st.savedRaw,
+        confirm: async () => Boolean(await confirmModal({
+          title: "Discard unsaved changes?",
+          body: "If you leave this page, your unsaved changes will be discarded.",
+          confirmLabel: "Discard changes",
+          cancelLabel: "Keep editing",
+          danger: true,
+        })),
+      });
       options.onChange?.();
       paintEditor();
       paintBar();

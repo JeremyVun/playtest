@@ -402,7 +402,7 @@ async function runsIndex(main: WebDynamic, projectKey: WebDynamic, project: WebD
         ? "Runs holding a failure or a story that never ran"
         : liveOnly
           ? "Everything still moving, opened to its stories — watch it, or stop it"
-          : "Every run, story by story — open a story to replay what happened",
+          : null,
       actions,
       body,
     }));

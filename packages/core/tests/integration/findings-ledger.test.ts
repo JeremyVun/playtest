@@ -17,11 +17,13 @@ import {
   applyPlan,
   buildPlan,
   exportLedger,
+  intakeCandidate,
   intakeRunCandidates,
   ledgerPath,
   listCandidates,
   listFindings,
   mergeFindings,
+  matchText,
   openLedger,
   rejectItem,
   resolveItem,
@@ -46,6 +48,39 @@ async function withFixture(name: LegacyTestValue, fn: LegacyTestValue) {
 }
 
 const onlyCandidate = (ledger: LegacyTestValue) => listCandidates(ledger)[0];
+
+test("generated local titles are concise without changing legacy match text or claim detail", async () => {
+  await withFixture("title-boundary", async ({ suite }: LegacyTestValue) => {
+    const ledger = await openLedger({ suite });
+    try {
+      const title = "Checkout confirmation repeats the full delivery address and payment explanation after the order has already completed successfully without errors";
+      const observed = "The full delivery address and payment explanation remain visible after completion, despite the order already succeeding.";
+      intakeCandidate(ledger, {
+        source: "run_grade",
+        candidate: {
+          category: "expectation_violation",
+          storyId: "checkout",
+          signalType: null,
+          locus: null,
+          claim: { title, expected: "A compact confirmation", observed, severity: "minor", signals: [] },
+        },
+        evidence: [{ run_id: "legacy-run", case_id: "checkout", step: 3, excerpt: observed }],
+        intakeKey: "legacy-title",
+      });
+      const candidate = onlyCandidate(ledger);
+      assert.ok([...candidate.claim.title].length <= 100);
+      assert.match(candidate.claim.title, /…$/);
+      assert.equal(candidate.claim.observed, observed);
+      assert.equal(candidate.match_text, matchText({
+        category: "expectation_violation",
+        locus: null,
+        claim: { title: title.slice(0, 180), expected: "A compact confirmation", observed },
+      }));
+    } finally {
+      ledger.close();
+    }
+  });
+});
 
 test("a fresh ledger is created beside the suite, gitignored, and never inside runs/", async () => {
   await withFixture("ledger-create", async ({ suite, runs }: LegacyTestValue) => {
@@ -364,6 +399,7 @@ test("model cluster output is validated against its own input before it can be p
     [{ assignments: [{ candidate_ids: ["c9"], finding_id: "f1", confidence: "high", reason: "x" }] }, /not in this cluster's input/],
     [{ assignments: [{ candidate_ids: ["c1"], finding_id: "f9", confidence: "high", reason: "x" }] }, /omit it to propose a new group/],
     [{ assignments: [{ candidate_ids: ["c1"], confidence: "high", reason: "x" }] }, /needs a non-empty "proposed_title"/],
+    [{ assignments: [{ candidate_ids: ["c1"], proposed_title: "x".repeat(101), confidence: "high", reason: "x" }] }, /at most 100 characters/],
     [{ assignments: [
       { candidate_ids: ["c1"], finding_id: "f1", confidence: "high", reason: "x" },
       { candidate_ids: ["c1"], finding_id: "f1", confidence: "high", reason: "y" },

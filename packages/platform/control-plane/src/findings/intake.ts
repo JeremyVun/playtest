@@ -28,6 +28,7 @@
 // that decides is protected by the write lock, and each mutating statement
 // re-asserts its precondition.
 import crypto from "node:crypto";
+import { GENERATED_FINDING_TITLE_MAX, normalizeFindingTitle } from "@playtest/core/findings";
 import { ulid } from "../ulid.ts";
 import { audit } from "../audit.ts";
 import { badRequest, conflict, notFound } from "../errors.ts";
@@ -66,15 +67,20 @@ const MAX_EXCERPT = 1200;
 export async function intakeFinding(tx: HostedDynamic, {
   projectId, source, actor, claim: input, evidence, intakeKey = null, confirm = null,
 }: HostedDynamic) {
-  const claim = validateClaim(input);
+  const claim = validateClaim(input, source === "run_grade" || source === "synthesis" ? GENERATED_FINDING_TITLE_MAX : undefined);
   const cited = await validateEvidence(tx, projectId, evidence);
+  // Keep match-text-v1 stable while the stored title becomes display-sized.
+  const matchingClaim = {
+    ...claim,
+    title: String(input?.matchTitle || input?.title || "").trim().slice(0, 180),
+  };
   const keys = deriveCandidateKeys({
     projectId,
     storyId: input.storyId ?? null,
     signalType: input.signalType ?? null,
     locus: input.locus ?? null,
     category: input.category,
-    claim,
+    claim: matchingClaim,
   });
 
   // 1. Idempotent retry of the very same report.
@@ -342,7 +348,7 @@ export async function liveFinding(tx: HostedDynamic, id: HostedDynamic) {
 // Internals
 // ---------------------------------------------------------------------------
 
-function validateClaim(input: HostedDynamic) {
+function validateClaim(input: HostedDynamic, maxTitleLength?: number) {
   if (!input || typeof input !== "object") throw badRequest(`a finding claim must be an object`);
   if (!CATEGORIES.includes(input.category)) {
     throw badRequest(`"category" must be one of ${CATEGORIES.join(", ")}`);
@@ -350,7 +356,7 @@ function validateClaim(input: HostedDynamic) {
   const title = String(input.title || "").trim();
   if (!title) throw badRequest(`a finding claim needs a "title"`);
   return {
-    title: title.slice(0, 180),
+    title: normalizeFindingTitle(title, { maxLength: maxTitleLength }),
     expected: String(input.expected || "").slice(0, MAX_EXCERPT) || null,
     observed: String(input.observed || "").slice(0, MAX_EXCERPT) || null,
     severity: SEVERITIES.has(input.severity) ? input.severity : "minor",

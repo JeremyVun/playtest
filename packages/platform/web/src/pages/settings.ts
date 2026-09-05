@@ -44,19 +44,15 @@ export function settingsPage(projectKey: WebDynamic, tab?: WebDynamic) {
     ...tabs.map((t: WebDynamic) => h("button", { class: t.id === active.id ? "on" : "", onclick: () => navigate(`/p/${projectKey}/settings/${t.id}`) }, t.label)));
 
   const slot = h("div", {}, h("div.dim", {}, "Loading…"));
-  mount(main, page({ title: "Settings", sub: projectIdentity(project, projectKey), body: h("div", {}, tabBar, slot) }));
+  mount(main, page({ title: "Settings", sub: projectIdentity(projectKey), body: h("div", {}, tabBar, slot) }));
   active.render(projectKey, project, slot);
 }
 
-// The key is no longer asked for when a project is created, and no longer the
-// headline anywhere — but it is still what the URLs, the CLI and the API call
-// this project, so it has to stay findable. Read-only: nothing can change it.
-const projectIdentity = (project: WebDynamic, projectKey: WebDynamic) =>
+const projectIdentity = (projectKey: WebDynamic) =>
   h("span", {},
-    project.name || projectKey,
-    " · key ",
+    "Project key: ",
     h("span.mono", {}, projectKey),
-    h("span.faint", {}, " — the name this project goes by in its URLs and in the CLI and API. It can't be changed."),
+    h("span.faint", {}, " · can't be changed"),
   );
 
 // ---------- runners ----------

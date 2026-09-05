@@ -18,22 +18,22 @@ export const FINDING_BUCKETS: WebDynamic = {
   review: {
     label: "Needs review",
     state: "new",
-    blurb: "filed from run evidence — confirm the real ones, dismiss the rest; nothing is a confirmed finding until a person says so",
+    blurb: "Review findings from runs, then confirm or dismiss them.",
   },
   open: {
     label: "Open",
     state: "reopened,accepted",
-    blurb: "confirmed as real by a person, or resolved once and then seen again",
+    blurb: "Confirmed findings and issues seen again after resolution appear here.",
   },
   resolved: {
     label: "Resolved",
     state: "resolved",
-    blurb: "fixed, or otherwise finished with",
+    blurb: "Findings marked as fixed or finished appear here.",
   },
   rejected: {
     label: "Rejected",
     state: "rejected",
-    blurb: "judged not a bug, a duplicate, or not worth fixing — matching evidence stays suppressed",
+    blurb: "Dismissed findings appear here. Matching evidence stays suppressed.",
   },
 };
 

@@ -158,6 +158,7 @@ test("grader findings keep the run-local grade.json shape (not durable identity)
     for (const run of f.runs) {
       for (const finding of run.grade.findings) {
         assert.ok(["info", "minor", "major"].includes(finding.severity));
+        assert.equal(typeof finding.title, "string");
         assert.equal(typeof finding.note, "string");
         assert.ok(!("id" in finding), "a grader finding never carries a durable id");
       }

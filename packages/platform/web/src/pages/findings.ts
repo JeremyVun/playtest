@@ -1,11 +1,11 @@
 import { api } from "../lib/api.js";
 import { h, mount } from "../lib/dom.js";
-import { link, navigate } from "../lib/router.js";
+import { link, navigate, onPageLeave } from "../lib/router.js";
 import { page } from "../lib/shell.js";
 import { hasRole, autoDedupeOn } from "../lib/state.js";
-import { statusChip, srOnly, toast, toastError, emptyState, errorState, formModal, copyText, formField, triggerDownload } from "../lib/ui.js";
+import { statusChip, srOnly, toast, toastError, emptyState, errorState, formModal, copyText, formField, triggerDownload, enhanceSelect } from "../lib/ui.js";
 import { ago, short, clamp } from "../lib/labels.js";
-import { debouncedFeedRefresh } from "../lib/live-page.js";
+import { debouncedFeedRefresh, preserveFocus } from "../lib/live-page.js";
 import { projectPage } from "../lib/project-page.js";
 import { FINDING_BUCKETS, bucketId, bucketCounts, findingStateLabel, findingStateTone, findingStateGloss } from "../lib/finding-buckets.js";
 import { categoryLabel } from "../lib/vocab.js";
@@ -29,8 +29,19 @@ export async function findingsPage(projectKey: WebDynamic, query: WebDynamic = n
   if (!context) return;
   const { main, project } = context;
   const filter = bucketId(query.get("filter"));
+  let search = String(query.get("q") || "").slice(0, 300);
+  let severity = ["info", "minor", "major"].includes(query.get("severity")) ? query.get("severity") : "";
+  let rows: WebDynamic[] = [];
+  let counts: WebDynamic = {};
+  let total = 0;
+  let cursor: string | null = null;
+  let busy = false;
+  let revision = 0;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let pending: AbortController | undefined;
+  let failure: WebDynamic = null;
 
-  live = debouncedFeedRefresh(projectKey, {
+  const subscription = debouncedFeedRefresh(projectKey, {
     // consolidation.auto_applied: the auto-dedupe sweep merges rows without
     // emitting per-finding events, so the list listens for the sweep itself.
     // finding.fix_suggested: the auto-resolve sweep attached a "looks fixed"
@@ -38,30 +49,78 @@ export async function findingsPage(projectKey: WebDynamic, query: WebDynamic = n
     types: ["finding.created", "finding.evidence_added", "finding.accepted", "finding.rejected", "finding.resolved", "finding.reopened", "finding.fix_suggested", "consolidation.auto_applied"],
     refresh: load,
   });
+  live = subscription;
+  onPageLeave(() => { clearTimeout(timer); pending?.abort(); });
 
   await load();
 
-  async function load() {
+  function searchParams(bucket = filter) {
+    const params = new URLSearchParams({ state: FILTERS[bucket].state });
+    if (bucket === "review") params.set("include_fix_suggested", "1");
+    if (search.trim()) params.set("q", search.trim());
+    if (severity) params.set("severity", severity);
+    return params;
+  }
+
+  function listUrl(bucket = filter) {
+    const params = new URLSearchParams({ filter: bucket });
+    if (search.trim()) params.set("q", search.trim());
+    if (severity) params.set("severity", severity);
+    return `/p/${projectKey}/findings?${params}`;
+  }
+
+  function changeFilters(debounce = false) {
+    clearTimeout(timer);
+    pending?.abort();
+    revision++;
+    history.replaceState(history.state, "", listUrl());
+    rows = [];
+    cursor = null;
+    total = 0;
+    failure = null;
+    busy = true;
+    repaint();
+    if (debounce) timer = setTimeout(() => void load(), 250);
+    else void load();
+  }
+
+  function repaint() {
+    preserveFocus(() => paint(
+      rows.filter((f) => filter !== "review" || f.state === "new"), counts,
+      filter === "review" ? rows.filter((f) => f.state !== "new") : [],
+    ));
+  }
+
+  async function load(more = false) {
+    clearTimeout(timer);
+    const request = ++revision;
+    pending?.abort();
+    pending = new AbortController();
+    busy = true;
+    failure = null;
+    repaint();
     try {
       // The work-bucket counts ride on every view of this page: they are the
       // numbers that tell a person work is waiting behind another tab, and a
       // Confirm visibly moves one from the review tally to the open tally.
-      const [{ items }, tallies, suggested] = await Promise.all([
-        api.get(`/projects/${projectKey}/findings?state=${encodeURIComponent(FILTERS[filter].state)}&limit=100`),
+      const params = searchParams();
+      params.set("limit", "100");
+      if (more && cursor) params.set("cursor", cursor);
+      const [result, tallies] = await Promise.all([
+        api.get(`/projects/${projectKey}/findings?${params}`, { signal: pending.signal }),
         api.get(`/projects/${projectKey}/findings/counts`).catch(() => null),
-        // A pending "looks fixed" suggestion is review work — the sweep proved
-        // a newer pass but the judgment stays human, so the review tab carries
-        // these as its second queue.
-        filter === "review"
-          ? api.get(`/projects/${projectKey}/findings?state=reopened,accepted&fix_suggested=1&limit=100`).then((r: WebDynamic) => r.items).catch(() => [])
-          : Promise.resolve([]),
       ]);
-      if (!live?.current()) return;
-      const counts = tallies ? bucketCounts(tallies.counts) : { [filter]: items.length };
+      if (!subscription.current() || request !== revision) return;
+      rows = more ? [...new Map([...rows, ...result.items].map((f) => [f.id, f])).values()] : result.items;
+      total = result.total ?? rows.length;
+      cursor = result.next_cursor;
+      counts = tallies ? bucketCounts(tallies.counts) : { [filter]: total };
       if (tallies?.fix_suggested) counts.review = (counts.review || 0) + tallies.fix_suggested;
-      paint(items, counts, suggested);
     } catch (err: WebDynamic) {
-      mount(main, page({ title: "Findings", body: errorState(err, load) }));
+      if (!subscription.current() || request !== revision) return;
+      failure = err;
+    } finally {
+      if (subscription.current() && request === revision) { busy = false; repaint(); }
     }
   }
 
@@ -77,7 +136,7 @@ export async function findingsPage(projectKey: WebDynamic, query: WebDynamic = n
         role: "tab",
         "aria-selected": String(id === filter),
         title: f.blurb,
-        onclick: () => navigate(`/p/${projectKey}/findings?filter=${id}`),
+        onclick: () => navigate(listUrl(id)),
       }, (id === "review" || id === "open") && counts[id] != null ? `${f.label} · ${counts[id]}` : f.label)));
 
     const reviewBucket = filter === "review";
@@ -94,11 +153,9 @@ export async function findingsPage(projectKey: WebDynamic, query: WebDynamic = n
     const consolidateLine = reviewBucket && canReview
       ? (auto && items.length >= 1
           ? h("div.dim", {},
-              "Duplicates are merged automatically as runs report — anything here needs your judgment. ",
-              link(`/p/${projectKey}/consolidation`, "Dedupe history →"))
+              link(`/p/${projectKey}/consolidation`, "Duplicate review history →"))
           : !auto && items.length >= 2
             ? h("div.dim", { style: "display:flex;align-items:center;gap:8px" },
-                "Several of these may describe the same bug —",
                 h("button.btn.btn-sm", { onclick: () => navigate(`/p/${projectKey}/consolidation`) }, "Find duplicates"),
                 h("span.faint", {}, "(uses model calls)"))
             : null)
@@ -121,7 +178,8 @@ export async function findingsPage(projectKey: WebDynamic, query: WebDynamic = n
                 f.suggested_finding_id
                   ? h("div.desc", {}, "possibly the same bug as ",
                       link(`/p/${projectKey}/findings/${f.suggested_finding_id}`, displayTitle(f.suggested_finding_title) || short(f.suggested_finding_id)))
-                  : null),
+                  : null,
+                compactFindingMeta(f)),
               h("td", {}, severityChip(f.severity)),
               h("td.dim", {}, String(f.evidence_count)),
               h("td", {}, storyHealthCell(f)),
@@ -136,12 +194,13 @@ export async function findingsPage(projectKey: WebDynamic, query: WebDynamic = n
                 : null,
             ))),
           ))
-      : reviewBucket && suggested.length
+      : busy || failure || reviewBucket && suggested.length
         ? null // the looks-fixed queue below is the review work; a "nothing needs review" banner over it would lie
+        : search.trim() || severity
+          ? emptyState("No matching findings", "Try a different search or clear the filters.")
         : reviewBucket
-          ? emptyState("Nothing needs review",
-              "When a discovery run is synthesized or a graded run reports a defect it can cite, it lands here for you to confirm or dismiss. Exact repeats of anything already reviewed are absorbed automatically.")
-          : emptyState("No findings", "Failing runs dedupe into findings here; rejected findings stay suppressed.");
+          ? emptyState("No findings need review", "New findings from runs appear here for you to confirm or dismiss.")
+          : emptyState(`No ${FILTERS[filter].label.toLowerCase()} findings`, FILTERS[filter].blurb);
 
     // The review tab's second queue: open findings the sweep believes are
     // fixed (a newer run passed everywhere the bug was seen) but will not
@@ -158,7 +217,8 @@ export async function findingsPage(projectKey: WebDynamic, query: WebDynamic = n
             h("tbody", {}, ...suggested.map((f: WebDynamic) => h("tr", { style: "cursor:pointer", onclick: (e: WebDynamic) => { if (!e.target.closest("a, button")) navigate(`/p/${projectKey}/findings/${f.id}`); } },
               h("td", {}, findingChip(f)),
               h("td", {}, link(`/p/${projectKey}/findings/${f.id}`, h("span.rowtitle", {}, displayTitle(f.title))),
-                h("div.desc", {}, f.summary?.auto_resolve?.suggested?.reason || "A newer run passed this story — this may be fixed.")),
+                h("div.desc", {}, f.summary?.auto_resolve?.suggested?.reason || "A newer run passed this story — this may be fixed."),
+                compactFindingMeta(f)),
               h("td", {}, severityChip(f.severity)),
               h("td.dim", {}, String(f.evidence_count)),
               h("td", {}, storyHealthCell(f)),
@@ -174,24 +234,51 @@ export async function findingsPage(projectKey: WebDynamic, query: WebDynamic = n
     // With two queues on the tab, both wear parallel section titles naming the
     // system's claim about their rows ("New claims" / "Looks fixed"); a lone
     // table needs no title — the tab already names it.
+    const severityControl = enhanceSelect(h("select", {
+      onchange: (event: Event) => { severity = (event.currentTarget as HTMLSelectElement).value; changeFilters(); },
+    }, ...[["", "All severities"], ["major", "Major"], ["minor", "Minor"], ["info", "Info"]].map(([value, label]) => h("option", { value, selected: severity === value }, label))));
+    severityControl.style.width = "auto";
+    const severityButton = severityControl.querySelector("button");
+    severityButton.setAttribute("aria-label", "Filter by severity");
+    severityButton.setAttribute("data-fk", "finding-severity");
+
     const body = h("div.stack", {},
       h("div.runs-filter", {}, filterSeg, consolidateLine),
+      h("div.findings-controls", { style: "display:flex;align-items:center;gap:10px;flex-wrap:wrap" },
+        h("input", { type: "search", value: search, maxlength: 300, placeholder: "Search findings", "aria-label": "Search findings", "data-fk": "finding-search", style: "flex:1;min-width:200px;max-width:440px",
+          oninput: (event: InputEvent) => {
+            search = (event.currentTarget as HTMLInputElement).value;
+            if (!event.isComposing) changeFilters(true);
+          },
+          oncompositionend: (event: CompositionEvent) => {
+            search = (event.currentTarget as HTMLInputElement).value;
+            changeFilters(true);
+          },
+        }),
+        severityControl,
+        search || severity ? h("button.btn", { "data-fk": "finding-clear", onclick: () => {
+          search = ""; severity = ""; changeFilters();
+          main.querySelector('[data-fk="finding-search"]')?.focus();
+        } }, "Clear filters") : null,
+        h("span.dim", { role: "status", "aria-live": "polite" }, busy ? "Loading findings" : failure ? "Couldn't load findings" : `${rows.length} of ${total} finding${total === 1 ? "" : "s"}`)),
+      failure ? errorState(failure, () => load()) : null,
       looksFixed && items.length
         ? h("div", {}, h("h2.section-title", {}, `New claims (${items.length})`), listCard)
         : listCard,
-      looksFixed);
+      looksFixed,
+      cursor ? h("button.btn", { disabled: busy, "data-fk": "finding-more", onclick: () => load(true) }, "Load more findings") : null);
 
-    const reviewTotal = items.length + suggested.length;
     // The tab as one Markdown file — every finding with links back to its
     // page, viewer step, and run bundle — for an LLM (or a person) to work
     // through away from the console. Same filter as the list; nothing to
     // download from an empty tab.
-    const exportButton = items.length
+    const exportButton = total && !failure
       ? h("button.btn", {
-          title: "Download the findings in this tab as one Markdown file, with links to each finding and its evidence, to hand to an AI assistant or read offline.",
+          title: "Download all matching findings and evidence links as Markdown",
+          disabled: busy,
           onclick: () => {
-            triggerDownload(`/api/v1/projects/${encodeURIComponent(projectKey)}/findings/export?state=${encodeURIComponent(FILTERS[filter].state)}`);
-            toast("Downloading findings", `A Markdown file with findings from ${FILTERS[filter].label.toLowerCase()} and links to their evidence is downloading.`, "ok");
+            triggerDownload(`/api/v1/projects/${encodeURIComponent(projectKey)}/findings/export?${searchParams()}`);
+            toast("Downloading findings", "The Markdown file includes all matching findings and evidence links.", "ok");
           },
         }, "Download findings")
       : null;
@@ -200,9 +287,6 @@ export async function findingsPage(projectKey: WebDynamic, query: WebDynamic = n
       actions: exportButton ? [exportButton] : undefined,
       // Say what this bucket holds — "Open" alone left people experimenting to
       // find out which tab a confirmed finding was in.
-      sub: reviewBucket
-        ? `${reviewTotal} finding${reviewTotal === 1 ? "" : "s"} awaiting review — ${FILTERS.review.blurb}`
-        : `${items.length} ${FILTERS[filter].label.toLowerCase()} finding${items.length === 1 ? "" : "s"} — ${FILTERS[filter].blurb}`,
       body,
     }));
   }
@@ -286,8 +370,8 @@ export async function findingDetailPage(projectKey: WebDynamic, findingId: WebDy
     const unconfirmedOpen: WebDynamic = ["new", "reopened"].includes(f.state);
     const actions: WebDynamic = [
       canReview && unconfirmedOpen
-        ? h("button.btn.primary", { onclick: () => confirmAndCopy(f) }, "Confirm and copy")
-        : h("button.btn", { onclick: () => copyTracker(f) }, "Copy for tracker"),
+        ? h("button.btn.primary", { onclick: () => confirmAndCopy(f) }, "Confirm and copy summary")
+        : h("button.btn", { onclick: () => copyTracker(f) }, "Copy summary"),
       ...(canReview ? [
         // On an unreviewed claim the verb is "Dismiss" — the person is judging
         // a machine report, not overturning a confirmed finding.
@@ -307,8 +391,8 @@ export async function findingDetailPage(projectKey: WebDynamic, findingId: WebDy
     // the system, from cited evidence, awaiting exactly this person's call.
     const reviewBanner = needsReview
       ? h("div.card.pad.review-banner", {},
-          h("div", {}, h("b", {}, "Filed from run evidence, not yet reviewed. "),
-            h("span.dim", {}, `The ${f.source === "synthesis" ? "discovery synthesis" : f.source === "run_grade" ? "run grading" : "system"} filed this claim${f.category ? ` (${categoryLabel(f.category)})` : ""}. It isn't a confirmed finding until you confirm it; dismissing suppresses exact repeats.`)),
+          h("div", {}, h("b", {}, "Awaiting review. "),
+            h("span.dim", {}, `Reported by ${f.source === "synthesis" ? "discovery analysis" : f.source === "run_grade" ? "run grading" : "Playtest"}${f.category ? ` (${categoryLabel(f.category)})` : ""}. Check the evidence before confirming or dismissing.`)),
           f.suggested_finding_id
             ? h("div", { style: "margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap" },
                 h("span.dim", {}, "Possibly the same bug as "),
@@ -328,9 +412,9 @@ export async function findingDetailPage(projectKey: WebDynamic, findingId: WebDy
         // A UI telling a UI user to go call the API is a dead end; the sentence
         // now just states the fact, and Copy for tracker is right above it.
         copiedAt
-          ? h("span.copy-receipt", {}, `✓ copied for your tracker ${ago(copiedAt)} — paste it into a ticket`)
+          ? h("span.copy-receipt", {}, `✓ Summary copied ${ago(copiedAt)}`)
           : f.state === "accepted" && !f.external_ref
-            ? h("span.dim", { style: "font-size:12px" }, "not in a tracker yet")
+            ? h("span.dim", { style: "font-size:12px" }, "No linked ticket")
             : null),
       confirmedLine(f),
       claim.expected ? h("p", {}, h("strong", {}, "Expected: "), claim.expected) : null,
@@ -498,7 +582,7 @@ export async function findingDetailPage(projectKey: WebDynamic, findingId: WebDy
     const ok = await copyText(trackerSummary(f));
     if (ok) {
       copiedAt = Date.now();
-      toast("Copied for your tracker", "a markdown summary with evidence links is on your clipboard", "ok");
+      toast("Summary copied", "The Markdown summary and evidence links are on your clipboard.", "ok");
       paint(f); // leave a durable receipt on the page, not just a 3.5s toast
     } else toast("Couldn't copy", "your browser blocked clipboard access", "err");
   }
@@ -559,9 +643,9 @@ export async function findingDetailPage(projectKey: WebDynamic, findingId: WebDy
     const ok = await copyText(trackerSummary(confirmed));
     if (ok) {
       copiedAt = Date.now();
-      toast("Confirmed and copied", "confirmation recorded; a markdown summary with evidence links is on your clipboard", "ok");
+      toast("Confirmed and copied", "The finding is open. Its summary and evidence links are on your clipboard.", "ok");
     } else {
-      toast("Confirmed", "confirmation recorded, but your browser blocked the clipboard — use Copy for tracker", "ok");
+      toast("Confirmed", "The finding is open. Copying was blocked by your browser. Try Copy summary.", "ok");
     }
     load(); // reflect the confirmed state; copiedAt survives the repaint as the receipt
   }
@@ -655,6 +739,11 @@ function storyHealthCell(f: WebDynamic) {
 // the ✓/✗ glyph vocabulary (an open finding is work, not a failed run). Four
 // words, one mapping (lib/finding-buckets.ts); the API state stays in the
 // tooltip for anyone correlating with the audit log.
+function compactFindingMeta(f: WebDynamic) {
+  return h("div.finding-compact-meta", {}, findingChip(f), autoBadge(f),
+    h("span", {}, `${f.evidence_count} occurrence${f.evidence_count === 1 ? "" : "s"} · Seen ${ago(f.last_seen)}`));
+}
+
 function findingChip(f: WebDynamic) {
   const gloss = findingStateGloss(f.state);
   return h(`span.chip.${findingStateTone(f.state)}`,

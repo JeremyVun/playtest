@@ -13,9 +13,9 @@ records product-level behavior that must remain consistent across surfaces.
 The console is desktop-first and narrows to Playtest's core loop: author
 stories, run them, inspect evidence, and make human decisions.
 
-Project navigation has five items: **Suites**, **Runs**, **Findings**,
-**Personas**, and **Settings**. The project switcher and user menu remain in the
-top bar. Review queues, baseline candidates, applications, and insights do not
+Project navigation has six items: **Suites**, **Runs**, **Findings**,
+**Applications**, **Personas**, and **Settings**. The project switcher and user menu remain in the
+top bar. Review queues, baseline candidates, and insights do not
 add permanent rail items; they are contextual surfaces under the owning area.
 
 Every page maps to exactly one rail item. Suite detail, story editor, suite
@@ -24,6 +24,12 @@ maps to Runs. Deep links retain project context on not-found pages.
 
 Below the supported width, the console preserves the top bar and presents a
 desktop requirement with an explicit **Continue anyway** escape hatch.
+
+The desktop rail is compact (188px), with the existing selected-menu treatment.
+Tables retain rounded borders and use the available page width. Runs and
+Findings keep their primary tables without additional triage side panels.
+Run disclosure targets are at least 32px; destructive row actions are visible
+as such before hover. Both light and dark themes remain supported.
 
 ## Suites and authoring
 
@@ -44,10 +50,22 @@ tree. Story and defaults editing is form-first with a YAML view over the same
 bytes; comments and untouched keys survive. Personas, hooks, assertions, and
 other code-tier files move through import/export and are edited with the CLI.
 
+Dirty story and suite-default edits require confirmation before in-app
+navigation or browser history navigation discards them. Reload and tab close
+use the browser's unsaved-change warning. Switching Form/YAML preserves the
+draft; saving or explicitly discarding clears the warning. Saving records the
+submitted bytes. Edits made while that request is pending remain dirty, and a
+completed request cannot navigate a detached editor. Importing over dirty
+suite settings requires an explicit discard decision.
+
 Authoring asks product questions. A new story path derives from its description,
 is read-only by default, and becomes editable only under Advanced. Persona
 selection uses the project/built-in catalog rather than free text. Discovery
 selection states its resulting run count.
+
+The suite read's optional `personas` projection returns parseable suite-local
+identity records (`path`, `slug`, and `name`) without file contents so story
+pickers can show accurate provenance.
 
 Suite settings contains shared limits, concurrency, model, and browser-display
 controls where relevant:
@@ -72,7 +90,7 @@ that travels to authoring.
 
 ## Applications and environments
 
-Applications are developer-editable and viewer-readable contextual project
+Applications are developer-editable and viewer-readable project
 state. Their surfaces show immutable keys and drivers, bound suites, and
 environments. Web/API environment editing includes URL, routing labels, browser
 cookies, identities, and secret references.

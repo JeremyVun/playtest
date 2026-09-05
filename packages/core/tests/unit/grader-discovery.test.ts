@@ -26,7 +26,7 @@ const BASE_GRADE = {
   score: 30,
   completion: "none",
   efficiency: { assessment: "looked in two places, then gave up", wasted_steps: 0 },
-  findings: [{ severity: "major", note: "no export affordance anywhere", step: 2 }],
+  findings: [{ severity: "major", title: "Export cannot be found", note: "no export affordance anywhere", step: 2 }],
   summary: "The user looked for an export and gave up.",
 };
 
@@ -339,6 +339,8 @@ test("grade.schema.json validates bug_candidates and stays backward-compatible",
     bug_candidates: [{ kind: "data_mismatch", severity: "major", title: "t", expected: "e", observed: "o", evidence_steps: [2], signals: ["expectation_contradiction"] }],
   };
   assert.ok(validate(valid), `valid candidate accepted: ${JSON.stringify(validate.errors)}`);
+  assert.ok(!validate({ ...valid, bug_candidates: [{ ...valid.bug_candidates[0], title: "x".repeat(101) }] }), "overlong candidate title rejected");
+  assert.ok(!validate({ ...BASE_GRADE, findings: [{ severity: "major", title: "x".repeat(101), note: "detail" }] }), "overlong finding title rejected");
   // signals is optional.
   assert.ok(validate({ ...BASE_GRADE, bug_candidates: [{ kind: "no_effect", severity: "minor", title: "t", expected: "e", observed: "o", evidence_steps: [1] }] }));
   // Missing evidence_steps is rejected — every candidate must cite steps.
@@ -358,6 +360,7 @@ test("the discovery rubric separates UX findings from typed bug candidates, gene
   // Both output channels are described and kept distinct.
   assert.ok(/`findings`/.test(rubric), "findings channel documented");
   assert.ok(/`bug_candidates`/.test(rubric), "bug_candidates channel documented");
+  assert.match(rubric, /self-contained `title` \(100 characters maximum\)/);
   // The generic contradiction audit (DESIGN D2) is present.
   assert.ok(/contradiction/i.test(rubric), "instructs a contradiction audit");
   // Refutation-first exclusions (D7): intended behavior, confusion, environment.

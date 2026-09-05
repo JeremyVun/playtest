@@ -30,9 +30,10 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["severity", "note"],
+        "required": ["severity", "title", "note"],
         "properties": {
           "severity": { "enum": ["info", "minor", "major"] },
+          "title": { "type": "string", "minLength": 1, "maxLength": 100, "description": "A concise, self-contained title naming the observed issue. State the problem without evidence detail or trailing punctuation." },
           "note": { "type": "string" },
           "step": { "type": "number", "description": "Step number the finding refers to, if specific." }
         }
@@ -71,7 +72,7 @@
             "description": "One stable category from the fixed vocabulary. A broad comparison signal, not identity — the same defect may be labeled differently across runs."
           },
           "severity": { "enum": ["info", "minor", "major"] },
-          "title": { "type": "string", "description": "A short, human-readable name for the malfunction." },
+          "title": { "type": "string", "minLength": 1, "maxLength": 100, "description": "A concise, self-contained name for the malfunction. State the broken behavior without evidence detail or trailing punctuation." },
           "expected": { "type": "string", "description": "The behavior the story or product contract implies." },
           "observed": { "type": "string", "description": "What the recorded evidence actually showed." },
           "evidence_steps": {

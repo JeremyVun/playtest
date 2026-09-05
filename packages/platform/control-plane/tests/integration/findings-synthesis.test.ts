@@ -73,6 +73,7 @@ test("synthesis ingest: one claim becomes one finding carrying every cited run/s
         findings: [
           {
             severity: "major",
+            title: "Export fails with a server error",
             kind: "http_error",
             note: "Export fails with a server error after 12 attempts",
             expected: "the export downloads",
@@ -102,7 +103,9 @@ test("synthesis ingest: one claim becomes one finding carrying every cited run/s
     assert.equal(detail.signal_type, "http_error", "identity comes from the recorded signal, not the model");
     assert.ok(detail.strict_key && detail.loose_key, "a grounded claim carries both exact keys");
     assert.equal(detail.source, "synthesis");
+    assert.equal(detail.title, "Export fails with a server error");
     assert.equal(detail.claim.expected, "the export downloads");
+    assert.equal(detail.claim.observed, "the export endpoint returned 500");
 
     // Confirming it is a person's act, and the evidence stays whole.
     const confirmed = (await api.post(`/findings/${detail.id}/accept`, {})).body;
@@ -119,6 +122,7 @@ test("synthesis ingest: one claim becomes one finding carrying every cited run/s
         findings: [
           {
             severity: "major",
+            title: "Export download returns a server error",
             kind: "expectation_violation",
             note: "Downloading the export blew up after 3 tries",
             expected: "the export arrives",
@@ -148,7 +152,7 @@ test("synthesis ingest: an ungrounded claim carries no exact keys and waits for 
         projectId: project.id,
         group: { id: groupId, project_id: project.id },
         findings: [
-          { severity: "minor", note: "Users could not find the export affordance", evidence: [{ run_ref: runs[0].ref, step: 3 }] },
+          { severity: "minor", title: "Export cannot be found", note: "Users could not find the export affordance", evidence: [{ run_ref: runs[0].ref, step: 3 }] },
         ],
         knownRefs,
         actor: { user_id: app.ctx.devUserId },

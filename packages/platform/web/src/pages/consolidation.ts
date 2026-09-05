@@ -120,15 +120,15 @@ export async function consolidationPage(projectKey: WebDynamic) {
             h("td.dim", {}, ago(p.created_at)),
           ))),
         ))
-      : emptyState("No dedupe passes yet",
+      : emptyState("No duplicate reviews yet",
           auto
-            ? "After a run reports, the automatic dedupe sweep files its plan here — obvious duplicates merge on their own, and anything uncertain waits in Needs review."
+            ? "After a run reports, automatic duplicate review records its plan here. Clear duplicates merge, and uncertain groups wait in Needs review."
             : "A consolidation plan is a proposal you review before anything changes.");
 
     mount(main, page({
       crumbs: [link(`/p/${projectKey}/findings?filter=review`, "Findings — needs review"), " / ",
-        auto ? "Dedupe history" : "Find duplicates"],
-      title: auto ? "Dedupe history" : "Find duplicates",
+        auto ? "Duplicate review history" : "Find duplicates"],
+      title: auto ? "Duplicate review history" : "Find duplicates",
       sub: auto
         ? "duplicates merge automatically after each run — every pass is recorded here; uncertain groupings always wait in Needs review"
         : "group duplicate claims into one finding — you review every grouping before it is applied",
@@ -203,11 +203,11 @@ export async function consolidationPlanPage(projectKey: WebDynamic, planId: WebD
     const canReview = hasRole(project.id, "reviewer") && plan.status === "proposed";
     const summary = applySummary(plan, decisions);
 
-    const autoRan = ranBy(plan) === "auto-dedupe";
+    const autoRan = plan.created_by?.system === "auto_dedupe";
     const head = h("div.card.pad", {},
       h("div", { style: "display:flex;gap:8px;align-items:center;flex-wrap:wrap" },
         statusChip(plan.status === "applied" ? "pass" : plan.status === "discarded" ? "neutral" : "running", plan.status),
-        autoRan ? h("span.chip", { title: "planned by the automatic post-run dedupe sweep" }, "auto-dedupe") : null,
+        autoRan ? h("span.chip", { title: "planned by automatic duplicate review after a run" }, "automatic review") : null,
         h("span.chip", {}, `${plan.item_count} proposed group${plan.item_count === 1 ? "" : "s"}`),
         plan.unresolved_count ? h("span.chip.state-muted", {}, `${plan.unresolved_count} unresolved`) : null,
       ),

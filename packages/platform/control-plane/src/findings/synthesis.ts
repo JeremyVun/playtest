@@ -24,6 +24,7 @@ import { forcedToolCall, estimateCost } from "@playtest/core/llm";
 import { firstLine } from "@playtest/core/artifacts";
 import crypto from "node:crypto";
 import { extractAnomalies } from "@playtest/core/analysis";
+import { GENERATED_FINDING_TITLE_MAX, normalizeFindingTitle } from "@playtest/core/findings";
 import { AppError } from "../errors.ts";
 import { loadRunBundle } from "../run-storage.ts";
 import { intakeFinding } from "./intake.ts";
@@ -60,6 +61,8 @@ const STUDY_SYSTEM = [
   "- Findings are distinct product problems (severity info|minor|major), each cited with the",
   "  run_ref ids and step numbers given below. Never invent a run_ref or a step; an uncitable",
   "  claim must be dropped.",
+  `- Give every finding a specific, self-contained title of at most ${GENERATED_FINDING_TITLE_MAX} characters.`,
+  "  State the problem in the title; keep evidence, examples, and explanation in the note.",
   "- Merge personas that hit the SAME problem into one finding with all their evidence, rather",
   "  than emitting one finding per run. Cite EVERY run and step that supports the claim.",
   "- Where a claim says the APPLICATION malfunctioned, set `kind` to the matching category and",
@@ -109,6 +112,12 @@ export const STUDY_REPORT_TOOL: HostedDynamic = {
             type: "object",
             properties: {
               severity: { type: "string", enum: ["info", "minor", "major"] },
+              title: {
+                type: "string",
+                minLength: 1,
+                maxLength: GENERATED_FINDING_TITLE_MAX,
+                description: "concise, self-contained issue title without evidence detail or trailing punctuation",
+              },
               note: { type: "string" },
               kind: {
                 type: "string",
@@ -126,7 +135,7 @@ export const STUDY_REPORT_TOOL: HostedDynamic = {
                 },
               },
             },
-            required: ["severity", "note", "evidence"],
+            required: ["severity", "title", "note", "evidence"],
           },
         },
       },
@@ -218,7 +227,11 @@ export async function ingestSynthesisFindings(tx: HostedDynamic, { projectId, gr
         caseId: primary?.case_id ?? null,
         signalType,
         locus,
-        title: note,
+        title: normalizeFindingTitle(
+          typeof f.title === "string" && f.title.trim() ? f.title : note,
+          { maxLength: GENERATED_FINDING_TITLE_MAX },
+        ),
+        matchTitle: note.slice(0, 180),
         expected: typeof f.expected === "string" ? f.expected : null,
         observed: typeof f.observed === "string" ? f.observed : note,
         severity,
@@ -446,8 +459,11 @@ export function validateReportArgs(a: HostedDynamic, knownRefs: HostedDynamic): 
     if (err) return err;
   }
   for (const f of a.findings) {
-    if (!f || !["info", "minor", "major"].includes(f.severity) || typeof f.note !== "string") {
-      return `each finding needs severity info|minor|major and a "note"`;
+    if (!f || !["info", "minor", "major"].includes(f.severity) || typeof f.title !== "string" || !f.title.trim() || typeof f.note !== "string") {
+      return `each finding needs severity info|minor|major plus non-empty "title" and "note" strings`;
+    }
+    if ([...f.title].length > GENERATED_FINDING_TITLE_MAX) {
+      return `finding title must be at most ${GENERATED_FINDING_TITLE_MAX} characters`;
     }
     if (!Array.isArray(f.evidence) || !f.evidence.length) {
       return `finding "${String(f.note).slice(0, 40)}" has no evidence — every claim must be cited`;

@@ -68,7 +68,7 @@ function depthOf(ops: WebDynamic) {
 export function activityLine(ops: WebDynamic): WebDynamic {
   const { running, waiting, total, cap, oldest } = depthOf(ops);
   if (!total) {
-    return { value: "Idle", tone: "neutral", note: `nothing in flight — this project runs up to ${cap} at once` };
+    return { value: "No active runs", tone: "neutral", note: `this project runs up to ${cap} at once` };
   }
   const value = running && waiting
     ? `${running} running · ${waiting} waiting`
@@ -162,5 +162,5 @@ export function opsSummary(ops: WebDynamic): WebDynamic {
 export function feedIndicator(state: WebDynamic): WebDynamic {
   return state === "reconnecting"
     ? { value: "Reconnecting…", tone: "infra", note: "the event feed dropped — it resumes from its cursor, nothing is lost" }
-    : { value: "Live", tone: "pass", note: "connected to the event feed — this page updates itself" };
+    : { value: "Connected", tone: "pass", note: "this page updates as runs change" };
 }

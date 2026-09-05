@@ -25,6 +25,7 @@
 // cited steps (core extractAnomalies), never from the grader's wording.
 import crypto from "node:crypto";
 import { extractAnomalies } from "@playtest/core/analysis";
+import { GENERATED_FINDING_TITLE_MAX, normalizeFindingTitle } from "@playtest/core/findings";
 import { loadRunBundle } from "../run-storage.ts";
 import { intakeFinding } from "./intake.ts";
 import { CATEGORIES } from "./keys.ts";
@@ -73,7 +74,8 @@ export async function collectRunGradeIssues(ctx: HostedDynamic, runDbId: HostedD
 export function gradeIssues(grade: HostedDynamic) {
   const out: HostedDynamic[] = [];
   for (const c of Array.isArray(grade?.bug_candidates) ? grade.bug_candidates : []) {
-    const title = firstLine(c?.title);
+    const keyTitle = legacyKeyTitle(c?.title);
+    const title = normalizeFindingTitle(c?.title, { maxLength: GENERATED_FINDING_TITLE_MAX });
     if (!title || !CATEGORIES.includes(c?.kind)) continue;
     out.push({
       category: c.kind,
@@ -83,19 +85,24 @@ export function gradeIssues(grade: HostedDynamic) {
       observed: typeof c.observed === "string" ? c.observed : title,
       steps: steps(c.evidence_steps),
       modelSignals: Array.isArray(c.signals) ? c.signals.filter((s: HostedDynamic) => typeof s === "string") : [],
+      keyTitle,
     });
   }
   for (const f of Array.isArray(grade?.findings) ? grade.findings : []) {
-    const note = firstLine(f?.note);
+    const note = String(f?.note || "").trim();
     if (!note || (f?.severity !== "minor" && f?.severity !== "major")) continue;
     out.push({
       category: "expectation_violation",
       severity: f.severity,
-      title: note,
+      title: normalizeFindingTitle(
+        typeof f?.title === "string" && f.title.trim() ? f.title : note,
+        { maxLength: GENERATED_FINDING_TITLE_MAX },
+      ),
       expected: null,
       observed: note,
       steps: steps([f.step]),
       modelSignals: [],
+      keyTitle: legacyKeyTitle(note),
     });
   }
   return out;
@@ -127,6 +134,7 @@ export async function ingestRunGradeFindings(tx: HostedDynamic, { projectId, run
         signalType: derived.signalType,
         locus: derived.locus,
         title: issue.title,
+        matchTitle: issue.keyTitle,
         expected: issue.expected,
         observed: issue.observed,
         severity: issue.severity,
@@ -147,7 +155,7 @@ export async function ingestRunGradeFindings(tx: HostedDynamic, { projectId, run
 
 /** Stable per-issue idempotency key: category + normalized title + cited steps. */
 function issueKey(issue: HostedDynamic) {
-  const norm = issue.title.toLowerCase().replace(/\s+/g, " ").trim();
+  const norm = issue.keyTitle.toLowerCase().replace(/\s+/g, " ").trim();
   return crypto
     .createHash("sha256")
     .update([issue.category, norm, ...issue.steps].join("\u001f"))
@@ -159,6 +167,6 @@ function steps(xs: HostedDynamic) {
   return [...new Set((Array.isArray(xs) ? xs : []).filter((n) => Number.isInteger(n) && n > 0))];
 }
 
-function firstLine(s: HostedDynamic) {
+function legacyKeyTitle(s: HostedDynamic) {
   return String(s || "").split("\n").find((l) => l.trim())?.trim().slice(0, 180) || "";
 }

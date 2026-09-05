@@ -46,7 +46,7 @@ export async function storyEditor(projectKey: WebDynamic, slug: WebDynamic, case
   try {
     // Editing an existing story needs the resolved case list (path, driver,
     // next_run) — fold it onto the lookup instead of a second request.
-    const suite = await getSuiteBySlug(projectKey, slug, caseId ? "cases" : null);
+    const suite = await getSuiteBySlug(projectKey, slug, caseId ? "cases,personas" : "personas");
     if (!suite) return mount(main, page({ title: slug, body: h("div.dim", {}, "No such suite.") }));
     if (!hasRole(project.id, "editor")) {
       return mount(main, page({ title: caseId || "New story", body: h("div.dim", {}, "You need the editor role to edit stories.") }));
@@ -71,6 +71,8 @@ export async function storyEditor(projectKey: WebDynamic, slug: WebDynamic, case
     ]);
     st.baseSeq = snaps.items[0]?.seq ?? null;
     st.personas = personas?.items?.length ? personas.items : BUILTIN_PERSONAS;
+    st.personaCatalogLoaded = personas != null;
+    st.suitePersonas = suite.suite_personas || [];
 
     if (caseId) {
       const cases = suite.cases;
@@ -148,7 +150,7 @@ function renderEditor(main: WebDynamic, st: WebDynamic) {
       link(`/p/${st.projectKey}/suites/${st.slug}`, st.suiteName), " / ",
       st.isNew ? "New story" : caseIdFromPath(st.path),
     ],
-    title: st.isNew ? "New story" : caseIdFromPath(st.path),
+    title: storyHeading(st),
     actions: [
       source.toggle,
       // Disabled with the reason on a deployment that has no model gateway —
@@ -198,11 +200,11 @@ function renderEditor(main: WebDynamic, st: WebDynamic) {
       api.post(`/suites/${st.suiteId}/lint`, { changes }),
     ]);
     if (v.status !== "fulfilled") {
-      mount(checksSlot, h("div.dim", {}, "couldn't run checks"));
+      mount(checksSlot, checkRetry("Couldn't check this story.", runChecks));
       return undefined;
     }
     const findings = l.status === "fulfilled" ? l.value.findings : [];
-    mount(checksSlot, renderChecks(v.value, findings, st));
+    mount(checksSlot, renderChecks(v.value, findings, l.status !== "fulfilled", runChecks));
     return Boolean(v.value.ok);
   }
 
@@ -226,30 +228,48 @@ function renderEditor(main: WebDynamic, st: WebDynamic) {
   }
 
   async function save() {
+    if (st.saving) return;
     if (st.isNew) {
       st.path = currentPath();
       if (!st.path) {
         return toast("This story needs a name", "add a one-line description — it becomes the story's name and its file", "err");
       }
     }
-    source.bar.set({ dirty: true, saving: true });
+    const submittedRaw = st.raw;
+    const submittedPath = st.path;
+    const submittedBaseSeq = st.baseSeq;
+    const wasNew = st.isNew;
+    const name = caseIdFromPath(submittedPath);
+    st.saving = true;
+    source.paintBar();
     try {
       // The note is derived, not asked for. Versions is a shared log, and a
       // permanently blank "What changed" column would be worse than a plain
       // factual line — the diff of a story edit already says the rest.
-      const name = caseIdFromPath(st.path);
       const res = await api.post(`/suites/${st.suiteId}/commit`, {
-        changes: [{ path: st.path, content: st.raw }],
-        note: st.isNew ? `added story ${name}` : `edited story ${name}`,
-        base_seq: st.baseSeq,
+        changes: [{ path: submittedPath, content: submittedRaw }],
+        note: wasNew ? `added story ${name}` : `edited story ${name}`,
+        base_seq: submittedBaseSeq,
       });
-      st.savedRaw = st.raw;
+      st.baseSeq = res.snapshot.seq;
+      st.savedRaw = submittedRaw;
+      st.isNew = false;
+      st.caseId = name;
       toast("Saved", `version #${res.snapshot.seq}`, "ok");
-      navigate(`/p/${st.projectKey}/suites/${st.slug}`);
+      if (source.editorSlot.isConnected && st.raw === submittedRaw) {
+        navigate(`/p/${st.projectKey}/suites/${st.slug}`);
+      } else if (wasNew) {
+        st.saving = false;
+        history.replaceState(history.state, "", `/p/${st.projectKey}/suites/${st.slug}/stories/${encodeURIComponent(name)}`);
+        renderEditor(main, st);
+      }
     } catch (err: WebDynamic) {
-      source.paintBar();
+      if (!source.editorSlot.isConnected) return;
       if (err.status === 409) return handleConflict(st, err);
       toastError(err);
+    } finally {
+      st.saving = false;
+      source.paintBar();
     }
   }
 
@@ -270,7 +290,7 @@ function renderEditor(main: WebDynamic, st: WebDynamic) {
         base_seq: st.baseSeq,
       });
       toast("Story deleted", name, "ok");
-      navigate(`/p/${st.projectKey}/suites/${st.slug}`);
+      navigate(`/p/${st.projectKey}/suites/${st.slug}`, { guard: false });
     } catch (err: WebDynamic) {
       if (err.status === 409) return handleConflict(st, err);
       toastError(err);
@@ -896,7 +916,10 @@ function personaPicker(st: WebDynamic, model: WebDynamic, onChange: WebDynamic, 
       style: "margin-top:2px;align-self:flex-start",
       disabled: remaining.length ? undefined : true,
       title: remaining.length ? "Run this story once more as another persona" : "Every persona in this project is already listed",
-      onclick: () => commit([...shown, remaining[0].slug]),
+      onclick: () => {
+        const value = remaining[0].slug;
+        commit([...shown, value]);
+      },
     }, "+ add persona"));
   }
 
@@ -911,31 +934,48 @@ function personaPicker(st: WebDynamic, model: WebDynamic, onChange: WebDynamic, 
   );
 }
 
-/** One persona <select>: the project's list, with the tiers named when both exist. */
+/** One persona <select>, with the source visible in the selected value. */
 function personaSelect(st: WebDynamic, value: WebDynamic, label: WebDynamic, onPick: WebDynamic) {
   const all = st.personas || BUILTIN_PERSONAS;
-  const builtin = all.filter((p: WebDynamic) => p.builtin);
-  const project = all.filter((p: WebDynamic) => !p.builtin);
-  const known = all.some((p: WebDynamic) => p.slug === value);
-  const opt = (p: WebDynamic) => h("option", { value: p.slug, selected: p.slug === value }, p.name || p.slug);
-  // A disabled option is the group heading: enhanceSelect flattens <optgroup>
-  // into a plain list, and skips disabled entries in keyboard navigation.
-  const heading = (text: WebDynamic) => h("option", { disabled: true }, `— ${text} —`);
-  const grouped = project.length;
+  const catalogEntry = all.find((p: WebDynamic) => p.slug === value);
+  const origin = suitePersona(st, value)
+    ? "From suite"
+    : catalogEntry
+      ? catalogEntry.builtin ? "Built in" : "Project"
+      : st.personaCatalogLoaded ? "Unavailable" : "Source unknown";
+  const suiteOverridesValue = origin === "From suite";
+  const available = suiteOverridesValue ? all.filter((p: WebDynamic) => p.slug !== value) : all;
+  const opt = (p: WebDynamic) => {
+    const source = p.builtin ? "Built in" : "Project";
+    return h("option", { value: p.slug, selected: p.slug === value }, `${p.name || p.slug} — ${source}`);
+  };
 
   return h("select", {
     "aria-label": label,
     onchange: (e: WebDynamic) => onPick(e.target.value),
   },
-    grouped ? heading("this project") : null,
-    ...project.map(opt),
-    grouped ? heading("built in") : null,
-    ...builtin.map(opt),
-    // A story can name a persona this project doesn't have — one committed as a
-    // suite file by the CLI, or one deleted since. Keep it selectable and say
-    // so, rather than silently switching the story to a different actor.
-    known ? null : h("option", { value, selected: true }, `${value} — not in this project`),
+    ...available.filter((p: WebDynamic) => !p.builtin).map(opt),
+    ...available.filter((p: WebDynamic) => p.builtin).map(opt),
+    origin === "From suite"
+      ? h("option", { value, selected: true }, `${value} — From suite`)
+      : origin === "Unavailable"
+        ? h("option", { value, selected: true }, `${value} — Unavailable`)
+        : origin === "Source unknown"
+          ? h("option", { value, selected: true }, `${value} — Source unknown`)
+          : null,
   );
+}
+
+function suitePersona(st: WebDynamic, value: WebDynamic) {
+  const storyPath = st.path || derivedPath(st) || "stories/new-story.yaml";
+  const slash = storyPath.lastIndexOf("/");
+  const storyDir = slash === -1 ? "" : storyPath.slice(0, slash);
+  return st.suitePersonas.find((persona: WebDynamic) => {
+    const marker = persona.path.lastIndexOf("/personas/");
+    const base = marker === -1 && persona.path.startsWith("personas/") ? "" : persona.path.slice(0, marker);
+    const visible = !base || storyDir === base || storyDir.startsWith(`${base}/`);
+    return visible && (persona.slug === value || persona.name === value);
+  });
 }
 
 /**
@@ -965,35 +1005,32 @@ function syncFromForm(st: WebDynamic, model: WebDynamic) {
   st.raw = applyModelToText(st.raw, model);
 }
 
-/**
- * A missing app URL is a SUITE setting, not something wrong with this story —
- * core's message ("set it in a playtest.yaml, the case file, or pass
- * --base-url") names three fixes, none of which exist on this screen. Say where
- * it actually lives, and link there.
- */
-const NO_BASE_URL = /no app\.base_url configured/;
-function baseUrlCheck(st: WebDynamic) {
-  return h("li.check-item.err", {}, h("span.g", {}, "✗"), h("span.msg", {},
-    "This suite has no app URL, so no story in it can resolve. ",
-    link(`/p/${st.projectKey}/suites/${st.slug}/settings`, "Set it in Suite settings"),
-    " — under hosted execution the ring supplies it at launch instead."));
-}
-
-function renderChecks(validation: WebDynamic, findings: WebDynamic, st: WebDynamic) {
+function renderChecks(validation: WebDynamic, findings: WebDynamic, lintFailed: WebDynamic, retry: WebDynamic) {
   const items: WebDynamic = [];
-  if (validation.ok) items.push(checkItem("ok", "✓", "valid story"));
+  if (validation.ok) items.push(checkItem("ok", "✓", "Story checks passed"));
   else for (const e of validation.errors || []) {
-    if (st && NO_BASE_URL.test(e.message || "")) items.push(baseUrlCheck(st));
-    else items.push(checkItem("err", "✗", e.path ? `${e.path}: ${e.message}` : e.message));
+    items.push(checkItem("err", "✗", e.path ? `${e.path}: ${e.message}` : e.message));
   }
-  for (const f of findings || []) items.push(checkItem("warn", "⚠", `lint: ${f.message}`));
-  if (!items.length) items.push(checkItem("ok", "✓", "no issues"));
+  for (const f of findings || []) items.push(checkItem("warn", "⚠", f.message));
+  if (lintFailed) items.push(checkItem("warn", "⚠", checkRetry("Couldn't check for writing issues.", retry)));
+  if (!items.length) items.push(checkItem("ok", "✓", "No issues found"));
   return h("ul.check-list", {}, ...items);
 }
 
 const checkItem = (cls: WebDynamic, glyph: WebDynamic, msg: WebDynamic) => h(`li.check-item.${cls}`, {}, h("span.g", {}, glyph), h("span.msg", {}, msg));
+const checkRetry = (message: WebDynamic, retry: WebDynamic) => h("span.check-retry", {}, message,
+  h("button.linkish", { type: "button", onclick: retry }, "Try again"));
 const fieldBlock = formField;
 const caseIdFromPath = (p: WebDynamic) => String(p || "").replace(/\.ya?ml$/, "").replace(/^stories\//, "");
+
+function storyHeading(st: WebDynamic) {
+  if (st.isNew) return "New story";
+  try {
+    return toModel(parseYaml(st.raw)).description?.trim() || caseIdFromPath(st.path);
+  } catch {
+    return caseIdFromPath(st.path);
+  }
+}
 
 /**
  * A new story's file, derived from what the person actually wrote: the

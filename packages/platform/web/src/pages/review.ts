@@ -259,7 +259,7 @@ export async function reviewPage(projectKey: WebDynamic) {
     const params = new URLSearchParams(location.search);
     ctl.open.size ? params.set("open", [...ctl.open].join(",")) : params.delete("open");
     const qs = params.toString();
-    history.replaceState({}, "", qs ? `?${qs}` : location.pathname);
+    history.replaceState(history.state, "", qs ? `?${qs}` : location.pathname);
     paint();
   }
 

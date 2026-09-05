@@ -72,12 +72,18 @@ function findingFilter(ctx: HostedDynamic, projectId: HostedDynamic) {
   const scope: ExportScope = { states: [...STATES], severity: null, fixSuggested: false };
 
   const stateQ = ctx.query.get("state");
+  const includeSuggested = ctx.query.get("include_fix_suggested") === "1";
   if (stateQ && stateQ !== "all") {
     const states = stateQ.split(",").filter(Boolean);
+    if (!states.length) throw badRequest("at least one finding state is required");
     for (const s of states) if (!STATES.has(s)) throw badRequest(`invalid finding state "${s}"`);
-    where.push(`f.state IN (${inClause(states, params.length + 1)})`);
+    const stateFilter = `f.state IN (${inClause(states, params.length + 1)})`;
+    where.push(includeSuggested
+      ? `(${stateFilter} OR (f.state IN ('accepted', 'reopened') AND (f.summary #>> '{auto_resolve,suggested}') IS NOT NULL))`
+      : stateFilter);
     params.push(...states);
     scope.states = states;
+    if (includeSuggested) scope.includeFixSuggested = true;
   } else if (!stateQ) {
     const states = ["new", "reopened", "accepted"];
     where.push(`f.state IN (${inClause(states, params.length + 1)})`);
@@ -90,6 +96,15 @@ function findingFilter(ctx: HostedDynamic, projectId: HostedDynamic) {
     params.push(severity);
     where.push(`f.severity = $${params.length}`);
     scope.severity = severity;
+  }
+  const search = String(ctx.query.get("q") || "").trim();
+  if (search) {
+    if (search.length > 300) throw badRequest("finding search must be 300 characters or fewer");
+    params.push(search);
+    where.push(`strpos(lower(concat_ws(' ', f.title, f.external_ref, f.id,
+      f.summary #>> '{story_id}', f.summary #>> '{claim,expected}',
+      f.summary #>> '{claim,observed}')), lower($${params.length})) > 0`);
+    scope.search = search;
   }
   // The review queue's second section: findings wearing a pending "looks
   // fixed" suggestion, awaiting a person's Resolve / Not fixed call.
@@ -106,17 +121,34 @@ function findingFilter(ctx: HostedDynamic, projectId: HostedDynamic) {
   return { params, where, scope };
 }
 
-/** GET /projects/:p/findings?state&severity&cursor [viewer] */
+/** GET /projects/:p/findings?state&severity&q&cursor [viewer] */
 export async function listFindings(ctx: HostedDynamic) {
   const project = await getProjectByKey(ctx, ctx.params.p);
   guard(ctx, project.id, "viewer");
-  const { limit, cursor } = parsePagination(ctx.query);
+  const { limit: requestedLimit, cursor } = parsePagination(ctx.query);
+  const limit = Math.floor(requestedLimit);
   const { params, where } = findingFilter(ctx, project.id);
+  const { rows: totals } = await ctx.db.query(
+    `SELECT COUNT(*) AS n FROM findings f WHERE ${where.join(" AND ")}`, params,
+  );
   if (cursor) {
-    params.push(cursor);
-    where.push(`f.id < $${params.length}`);
+    if (cursor.startsWith("v1.")) {
+      let boundary;
+      try {
+        boundary = JSON.parse(Buffer.from(cursor.slice(3), "base64url").toString("utf8"));
+      } catch { throw badRequest("invalid findings cursor"); }
+      if (!Array.isArray(boundary) || boundary.length !== 2 || typeof boundary[0] !== "string"
+        || !Number.isFinite(Date.parse(boundary[0])) || typeof boundary[1] !== "string" || !boundary[1]) {
+        throw badRequest("invalid findings cursor");
+      }
+      params.push(boundary[0], boundary[1]);
+      where.push(`(f.last_seen, f.id) < ($${params.length - 1}::timestamptz, $${params.length})`);
+    } else {
+      params.push(cursor);
+      where.push(`(f.last_seen, f.id) < (SELECT last_seen, id FROM findings WHERE id = $${params.length} AND project_id = $1)`);
+    }
   }
-  params.push(limit);
+  params.push(limit + 1);
   const { rows } = await ctx.db.query(
     `${STORY_HEALTH_CTE}
      SELECT f.*, sf.title AS suggested_finding_title, ${STORY_HEALTH_SELECT}
@@ -129,12 +161,15 @@ export async function listFindings(ctx: HostedDynamic) {
     params,
   );
   return {
-    items: rows.map((r: HostedDynamic) => ({
+    items: rows.slice(0, limit).map((r: HostedDynamic) => ({
       ...publicFinding(r),
       suggested_finding_title: r.suggested_finding_title ?? null,
       story_health: decodeStoryHealth(r.story_health),
     })),
-    next_cursor: rows.length === limit ? rows.at(-1).id : null,
+    total: Number(totals[0].n),
+    next_cursor: rows.length > limit
+      ? `v1.${Buffer.from(JSON.stringify([new Date(rows[limit - 1].last_seen).toISOString(), rows[limit - 1].id])).toString("base64url")}`
+      : null,
   };
 }
 

@@ -134,7 +134,7 @@ test("a router link inside a modal takes the modal with it, except where dismiss
       const reveal = page.locator("#modal-root .modal");
       await reveal.getByText("adas-laptop is registered").waitFor();
       await page.goBack();
-      await reveal.getByText(/This credential cannot be shown again/).waitFor();
+      await reveal.getByText(/Close now and this credential is gone/).waitFor();
       assert.equal(await reveal.count(), 1, "the one dialog that cannot be reopened stays up until it is answered");
       await reveal.getByRole("button", { name: "Copy it first" }).click();
       await reveal.getByText("adas-laptop is registered").waitFor();
@@ -146,7 +146,7 @@ test("a router link inside a modal takes the modal with it, except where dismiss
   });
 });
 
-test("the Runners tab hands over a start command with --config, and holds no target inventory", async () => {
+test("the Runners tab hands over a start command and holds no target inventory", async () => {
   await withApp(async ({ base, api }: HostedDynamic) => {
     const { project, ring } = await seedLaunchable(api);
 
@@ -162,10 +162,6 @@ test("the Runners tab hands over a start command with --config, and holds no tar
       await page.goto(`${base}/p/${project.key}/settings/runners`);
       await page.getByRole("heading", { name: "Runners", exact: true }).waitFor();
 
-      // The tab says where a machine declares what it holds — a file on its own
-      // disk — and never lists targets itself.
-      await page.getByText(/--config <file>/).first().waitFor();
-      await page.getByText(/keyed by application and environment|per application and environment/).first().waitFor();
       assert.equal(
         await page.getByText(ring.base_url, { exact: true }).count(),
         0,
@@ -182,14 +178,15 @@ test("the Runners tab hands over a start command with --config, and holds no tar
 
       const reveal = page.locator("#modal-root .modal");
       await reveal.getByText("adas-laptop is registered").waitFor();
-      const command = await reveal.getByLabel("Runner start command").textContent();
+      const command = await reveal.locator('pre[aria-label="runner start command"]').textContent();
       assert.match(String(command), /^PLAYTEST_RUNNER_CREDENTIAL='/, "the credential rides the environment, not argv");
-      assert.match(String(command), /runner-agent pool --server .* --labels macos,ios-sim/);
-      await reveal.getByText(/For mobile runs, add/).waitFor();
-      await reveal.getByText(/--config <file>/).first().waitFor();
+      assert.match(String(command), /runner-agent pool --server /);
+      assert.doesNotMatch(String(command), /--labels/, "registration is the source of runner labels");
+      await reveal.getByText(/Options, including mobile:/).waitFor();
       await reveal.getByText(/docs\/guidance\/hosted-runners\.md/).first().waitFor();
 
       await reveal.getByRole("button", { name: "Done" }).click();
+      await reveal.getByRole("button", { name: "Close anyway" }).click();
       await reveal.waitFor({ state: "detached" });
       await page.getByText("adas-laptop", { exact: true }).first().waitFor();
 

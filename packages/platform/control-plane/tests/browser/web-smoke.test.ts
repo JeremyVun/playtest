@@ -31,6 +31,7 @@ test("hosted web loads a project and follows the suite hot path", async () => {
       await page.goto(`${base}/p/${project.key}`);
       await page.getByRole("heading", { name: "Suites", exact: true }).waitFor();
       const suite = page.getByRole("link", { name: "Smoke suite", exact: true });
+      await suite.waitFor();
       assert.equal(await suite.count(), 1);
 
       await suite.click();
@@ -58,7 +59,7 @@ test("hosted web loads a project and follows the suite hot path", async () => {
       await dialog.getByText("Application", { exact: true }).waitFor();
       // The themed dropdown mirrors the selected option into its own button, so
       // that is what a person actually reads.
-      await dialog.locator(".select-val").filter({ hasText: application.key }).first().waitFor();
+      await dialog.locator(".select-val").filter({ hasText: application.name }).first().waitFor();
       await dialog.getByRole("button", { name: "Cancel" }).click();
 
       // The launch dialog selects (suite, environment) and states what the environment

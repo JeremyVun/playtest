@@ -44,7 +44,7 @@ export function usageLine(plan: WebDynamic) {
 /** Who initiated a plan, in one word the history table reads at a glance. */
 export function ranBy(plan: WebDynamic) {
   const by = plan?.created_by;
-  if (by?.system === "auto_dedupe") return "auto-dedupe";
+  if (by?.system === "auto_dedupe") return "automatic";
   if (by?.system) return "system";
   return "manual";
 }

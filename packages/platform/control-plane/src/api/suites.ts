@@ -23,6 +23,7 @@ import { kindForPath, isCodeKind, normalizePath } from "../suites/paths.ts";
 import { contentTree, putBlobs, loadTreeFiles } from "../suites/snapshots.ts";
 import { resolveCases, validateTree, lintTree } from "../suites/resolve.ts";
 import { writeTar, readTar } from "../suites/tar.ts";
+import YAML from "yaml";
 
 // ---------- suite CRUD ----------
 
@@ -121,7 +122,7 @@ export async function deleteSuite(ctx: HostedDynamic) {
 
 /** GET /projects/:p/suites/:slug — one suite by its user-facing key (archived included). */
 /**
- * GET /projects/:p/suites/:slug[?include=cases,defaults] — one suite by slug.
+ * GET /projects/:p/suites/:slug[?include=cases,defaults,personas] — one suite by slug.
  * `include` folds in what the suite page needs so its first paint is one
  * request instead of a lookup-then-fetch waterfall: `cases` carries the same
  * items as GET /suites/:s/cases, `defaults` the same row as
@@ -141,8 +142,8 @@ export async function getSuiteBySlug(ctx: HostedDynamic) {
   if (!rows[0]) throw notFound(`no suite "${ctx.params.slug}" in project "${project.key}"`);
   const view: HostedDynamic = suiteView(rows[0]);
   const include = (ctx.query.get("include") || "").split(",").filter(Boolean);
-  const unknown = include.find((k: HostedDynamic) => k !== "cases" && k !== "defaults");
-  if (unknown !== undefined) throw badRequest(`unknown include "${unknown}" (supported: cases, defaults)`);
+  const unknown = include.find((k: HostedDynamic) => k !== "cases" && k !== "defaults" && k !== "personas");
+  if (unknown !== undefined) throw badRequest(`unknown include "${unknown}" (supported: cases, defaults, personas)`);
   if (include.includes("cases")) view.cases = await resolvedCasesFor(ctx.db, rows[0].id);
   if (include.includes("defaults")) {
     const f = await ctx.db.query(
@@ -150,6 +151,23 @@ export async function getSuiteBySlug(ctx: HostedDynamic) {
       [rows[0].id],
     );
     view.defaults = f.rows[0] || null;
+  }
+  if (include.includes("personas")) {
+    const files = await ctx.db.query(
+      `SELECT path, content FROM suite_files
+        WHERE suite_id = $1 AND path ~ '(^|/)personas/[^/]+\\.yaml$'
+        ORDER BY path`,
+      [rows[0].id],
+    );
+    view.suite_personas = files.rows.flatMap((file: HostedDynamic) => {
+      try {
+        const parsed = YAML.parse(file.content);
+        const slug = file.path.split("/").at(-1).replace(/\.yaml$/, "");
+        return [{ path: file.path, slug, name: typeof parsed?.name === "string" ? parsed.name : slug }];
+      } catch {
+        return [];
+      }
+    });
   }
   return view;
 }

@@ -101,7 +101,7 @@ test("settings → models commits as one draft and shows what closing by hand ma
 
       // Turning the sweep on reaches findings that are already filed, which is
       // the one consequence "On" does not imply — so it is said only then.
-      const dedupe = page.getByRole("radiogroup", { name: "Automatic dedupe" });
+      const dedupe = page.getByRole("radiogroup", { name: "Merge duplicate findings" });
       const sweepNote = page.getByText("Saving this also sweeps the findings already queued.");
       assert.equal(await sweepNote.count(), 0);
       await dedupe.getByRole("radio", { name: "On" }).click();

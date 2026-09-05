@@ -1,6 +1,7 @@
 // Shared model instrument for local and hosted findings consolidation.
 // The two callers format their stored records separately, but they ask the same
 // semantic question through the same system prompt and forced-tool schema.
+import { GENERATED_FINDING_TITLE_MAX } from "./title.ts";
 
 export const CONSOLIDATION_SYSTEM = [
   "You are consolidating candidate bug reports for one software project. Each candidate below is a typed,",
@@ -17,7 +18,8 @@ export const CONSOLIDATION_SYSTEM = [
   "- Two candidates that merely share a category or a surface are NOT the same defect. Distinct",
   "  failures on distinct surfaces stay in distinct groups.",
   "- Attach a group to an existing finding by its finding_id only when that finding describes the",
-  "  same defect. Otherwise omit finding_id and give the new group a short, specific proposed_title.",
+  "  same defect. Otherwise omit finding_id and give the new group a specific, self-contained proposed_title",
+  `  of at most ${GENERATED_FINDING_TITLE_MAX} characters. State the broken behavior; omit evidence detail and trailing punctuation.`,
   "- Use only the candidate_id and finding_id values listed below. Never invent an id.",
   "- Each candidate belongs to at most one group. A candidate you cannot place at medium confidence",
   "  or better goes in `unresolved` with a reason — there is deliberately no low confidence.",
@@ -50,7 +52,9 @@ export const CONSOLIDATION_TOOL = {
               },
               proposed_title: {
                 type: "string",
-                description: "short, specific title; REQUIRED when finding_id is omitted",
+                minLength: 1,
+                maxLength: GENERATED_FINDING_TITLE_MAX,
+                description: "specific, self-contained defect title; REQUIRED when finding_id is omitted",
               },
               confidence: { type: "string", enum: ["high", "medium"] },
               reason: { type: "string", description: "why these candidates are one defect" },

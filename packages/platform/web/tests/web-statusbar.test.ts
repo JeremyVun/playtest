@@ -62,7 +62,7 @@ test("status bar: watchdog liveness — off is a choice, silence is a fault", ()
 
 test("status bar: activity is a sentence about work, not a ratio", () => {
   const idle = activityLine(ops());
-  assert.equal(idle.value, "Idle");
+  assert.equal(idle.value, "No active runs");
   assert.equal(idle.tone, "neutral");
   assert.match(idle.note, /up to 4 at once/);
 
@@ -139,7 +139,7 @@ test("status bar: one payload paints the whole footer, and nothing paints withou
 });
 
 test("status bar: the feed indicator says what a dropped connection means", () => {
-  assert.equal(feedIndicator("live").value, "Live");
+  assert.equal(feedIndicator("live").value, "Connected");
   assert.equal(feedIndicator("live").tone, "pass");
   const down = feedIndicator("reconnecting");
   assert.equal(down.value, "Reconnecting…");

@@ -122,7 +122,7 @@ function render(main: WebDynamic, st: WebDynamic) {
       toggle,
       link(`/p/${projectKey}/suites/${slug}/history`, h("span.btn", {}, "Versions")),
       h("button.btn", { onclick: () => exportSuite(suite), title: "Download this suite as a .tar the CLI can run" }, "Export"),
-      h("button.btn", { onclick: () => importSuite(projectKey, suite, () => suiteSettingsPage(projectKey, slug)), title: "Replace the suite's files from an exported .tar" }, "Import"),
+      h("button.btn", { onclick: openImport, title: "Replace the suite's files from an exported .tar" }, "Import"),
     ],
     body: h("div", {}, h("div.editor", {}, editorSlot, side), bar.el),
   }));
@@ -144,6 +144,24 @@ function render(main: WebDynamic, st: WebDynamic) {
     try { st.raw = setViewportDimension(st.raw, key, value); }
     catch (err: WebDynamic) { return toastError(err); }
     scheduleChecks();
+  }
+
+  async function openImport() {
+    if (st.saving) return;
+    if (st.raw !== st.savedRaw) {
+      const discard = await confirmModal({
+        title: "Discard unsaved changes?",
+        body: "Import replaces this suite's files. Your unsaved settings changes will be discarded.",
+        confirmLabel: "Discard changes",
+        cancelLabel: "Keep editing",
+        danger: true,
+      });
+      if (!discard) return;
+      st.raw = st.savedRaw;
+      paintEditor();
+      scheduleChecks();
+    }
+    importSuite(projectKey, suite, () => suiteSettingsPage(projectKey, slug));
   }
 
   function setParallel(value: WebDynamic) {
@@ -470,14 +488,15 @@ function render(main: WebDynamic, st: WebDynamic) {
     let res;
     try { res = await api.post(`/suites/${st.suite.id}/validate`, { changes }); }
     catch {
-      mount(checksSlot, h("div.dim", {}, "couldn't run checks"));
+      mount(checksSlot, h("div.check-retry", {}, "Couldn't check these settings.",
+        h("button.linkish", { type: "button", onclick: runChecks }, "Try again")));
       return undefined;
     }
     if (res.ok) {
       const n = res.cases?.length ?? 0;
       mount(checksSlot, h("ul.check-list", {},
         h("li.check-item.ok", {}, h("span.g", {}, "✓"), h("span.msg", {},
-          n ? `valid — ${n} ${n === 1 ? "story" : "stories"} resolve` : "valid")),
+          n ? `Suite checks passed · ${n} ${n === 1 ? "story" : "stories"} resolve` : "Suite checks passed")),
       ));
       return true;
     }
@@ -487,19 +506,24 @@ function render(main: WebDynamic, st: WebDynamic) {
   }
 
   async function save() {
-    bar.set({ dirty: true, saving: true });
+    if (st.saving) return;
+    const submittedRaw = st.raw;
+    const submittedSavedRaw = st.savedRaw;
+    const submittedBaseSeq = st.baseSeq;
+    st.saving = true;
+    source.paintBar();
     try {
       const res = await api.put(`/suites/${st.suite.id}/files/${DEFAULTS_PATH}`, {
-        content: st.raw,
-        note: derivedNote(st.savedRaw, st.raw),
-        base_seq: st.baseSeq,
+        content: submittedRaw,
+        note: derivedNote(submittedSavedRaw, submittedRaw),
+        base_seq: submittedBaseSeq,
       });
       st.baseSeq = res.snapshot.seq;
-      st.savedRaw = st.raw;
+      st.savedRaw = submittedRaw;
       toast("Settings saved", `version #${res.snapshot.seq}`, "ok");
-      navigate(`/p/${projectKey}/suites/${slug}`);
+      if (source.editorSlot.isConnected && st.raw === submittedRaw) navigate(`/p/${projectKey}/suites/${slug}`);
     } catch (err: WebDynamic) {
-      source.paintBar();
+      if (!source.editorSlot.isConnected) return;
       if (err.status === 409) {
         const reload = await confirmModal({
           title: "Someone else changed this suite",
@@ -511,6 +535,9 @@ function render(main: WebDynamic, st: WebDynamic) {
         return;
       }
       toastError(err);
+    } finally {
+      st.saving = false;
+      source.paintBar();
     }
   }
 

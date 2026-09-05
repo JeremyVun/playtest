@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { GENERATED_FINDING_TITLE_MAX, normalizeFindingTitle } from "@playtest/core/findings";
 import { ulid } from "../ulid.ts";
 import { audit } from "../audit.ts";
 import { conflict } from "../errors.ts";
@@ -327,6 +328,5 @@ function firstLine(s: HostedDynamic) {
 }
 
 function clampTitle(s: HostedDynamic) {
-  const line = firstLine(s).replace(/\s+/g, " ").trim();
-  return (line || "Run failure").slice(0, 180);
+  return normalizeFindingTitle(s, { maxLength: GENERATED_FINDING_TITLE_MAX, fallback: "Run failure" });
 }

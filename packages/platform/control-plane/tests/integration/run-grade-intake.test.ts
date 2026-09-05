@@ -16,6 +16,10 @@ import { createTarget, withApp } from "./helpers.ts";
 import { ulid } from "../../src/ulid.ts";
 import { writeBundle } from "@playtest/core/artifacts";
 import { collectRunGradeIssues, ingestRunGradeFindings, gradeIssues } from "../../src/findings/run-grade.ts";
+import { deriveCandidateKeys } from "../../src/findings/keys.ts";
+
+const LEGACY_BUG_TITLE = "Export endpoint returns 500 after the user selects a date range and confirms the download from the reporting toolbar without changing any filters";
+const DETAIL_NOTE = "The results page never showed the eligibility outcome after the user completed every required field and submitted the final review step";
 
 const GRADE = {
   score: 38,
@@ -23,14 +27,14 @@ const GRADE = {
   efficiency: { assessment: "stalled" },
   summary: "The flow stopped before results.",
   findings: [
-    { severity: "major", note: "The results page never showed the eligibility outcome", step: 19 },
+    { severity: "major", title: "Eligibility outcome never appears", note: DETAIL_NOTE, step: 19 },
     { severity: "info", note: "Button copy is inconsistent" }, // info stays run-scoped
   ],
   bug_candidates: [
     {
       kind: "http_error",
       severity: "major",
-      title: "Export endpoint returns 500",
+      title: LEGACY_BUG_TITLE,
       expected: "the export downloads",
       observed: "POST /api/export answered 500",
       evidence_steps: [3],
@@ -46,9 +50,26 @@ test("gradeIssues: maps typed candidates and minor/major findings, skips info an
   assert.deepEqual(issues.map((i) => i.severity), ["major", "major"]);
   assert.deepEqual(issues[0].steps, [3]);
   assert.deepEqual(issues[1].steps, [19]);
+  assert.equal(issues[1].title, "Eligibility outcome never appears");
+  assert.equal(issues[1].observed, DETAIL_NOTE);
   // malformed entries are skipped, never thrown
   assert.deepEqual(gradeIssues({ findings: [{ severity: "major" }], bug_candidates: [{ kind: "nope", title: "x" }] }), []);
   assert.deepEqual(gradeIssues(null), []);
+});
+
+test("gradeIssues: legacy findings get complete titles without losing their notes", () => {
+  const note = "The confirmation panel repeats every delivery field and payment explanation after the order has already completed successfully";
+  const legacyIssues = gradeIssues({ findings: [
+    { severity: "major", title: { malformed: true }, note, step: 4 },
+    { severity: "minor", title: "   ", note, step: 5 },
+  ] });
+  const [legacy] = legacyIssues;
+  assert.equal(legacyIssues[1].title, legacy.title, "a blank title also falls back to the note");
+  assert.ok([...legacy.title].length <= 100);
+  assert.match(legacy.title, /…$/);
+  assert.doesNotMatch(legacy.title, /explan…$/);
+  assert.equal(legacy.observed, note);
+  assert.equal(legacy.keyTitle, note.slice(0, 180));
 });
 
 test("run_grade intake: grade issues from a sealed bundle become unreviewed findings, idempotently", async () => {
@@ -118,12 +139,30 @@ test("run_grade intake: grade issues from a sealed bundle become unreviewed find
         assert.equal(row.summary.story_id, "hobart");
       }
       assert.deepEqual(rows.map((r: HostedDynamic) => r.severity).sort(), ["major", "major"]);
-      assert.ok(rows.some((r: HostedDynamic) => r.title === "Export endpoint returns 500"));
-      assert.ok(rows.some((r: HostedDynamic) => r.title.includes("never showed the eligibility")));
+      const bug = rows.find((r: HostedDynamic) => r.category === "http_error");
+      assert.ok([...bug.title].length <= 100);
+      assert.match(bug.title, /…$/);
+      const expectedMatch = deriveCandidateKeys({
+        projectId: project.id,
+        storyId: "hobart",
+        signalType: null,
+        locus: null,
+        category: "http_error",
+        claim: {
+          title: LEGACY_BUG_TITLE.slice(0, 180),
+          expected: "the export downloads",
+          observed: "POST /api/export answered 500",
+        },
+      });
+      assert.equal(bug.match_text, expectedMatch.match_text, "shortening a display title does not change legacy match text");
+      assert.ok(rows.some((r: HostedDynamic) => r.title === "Eligibility outcome never appears"));
+      const quality = rows.find((r: HostedDynamic) => r.title === "Eligibility outcome never appears");
+      assert.equal(quality.summary.claim.observed, DETAIL_NOTE);
       const evidence = (
         await app.db.query(`SELECT * FROM finding_evidence ORDER BY created_at, id`, [])
       ).rows;
       assert.equal(evidence.length, 2, "each issue cites its run/step once");
+      assert.ok(evidence.some((e: HostedDynamic) => e.excerpt === DETAIL_NOTE), "the complete note remains evidence");
 
       // Runner retry: the same report re-lands on the same findings.
       const second = await ingest();

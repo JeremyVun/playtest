@@ -29,6 +29,8 @@ import crypto from "node:crypto";
 import {
   CONSOLIDATION_SYSTEM,
   CONSOLIDATION_TOOL,
+  GENERATED_FINDING_TITLE_MAX,
+  normalizeFindingTitle,
 } from "@playtest/core/findings";
 import { forcedToolCall, estimateCost } from "@playtest/core/llm";
 import { ulid } from "../ulid.ts";
@@ -309,8 +311,13 @@ export function validateClusterPlan(args: HostedDynamic, { candidateIds, finding
       if (typeof a.finding_id !== "string" || !targets.has(a.finding_id)) {
         return `assignment cites finding_id "${a.finding_id}" which was not in this cluster's input — omit it to propose a new group`;
       }
-    } else if (typeof a.proposed_title !== "string" || !a.proposed_title.trim()) {
-      return `a new group needs a non-empty "proposed_title"`;
+    } else {
+      if (typeof a.proposed_title !== "string" || !a.proposed_title.trim()) {
+        return `a new group needs a non-empty "proposed_title"`;
+      }
+      if ([...a.proposed_title].length > GENERATED_FINDING_TITLE_MAX) {
+        return `"proposed_title" must be at most ${GENERATED_FINDING_TITLE_MAX} characters`;
+      }
     }
     if (!CONFIDENCES.has(a.confidence)) {
       return `"confidence" must be high or medium — anything weaker belongs in "unresolved"`;
@@ -845,8 +852,7 @@ function pick(override: HostedDynamic, fallback: HostedDynamic) {
 }
 
 function clampTitle(s: HostedDynamic) {
-  const line = String(s || "").split("\n").find((l) => l.trim())?.trim() || "";
-  return line.replace(/\s+/g, " ").trim().slice(0, MAX_TITLE) || null;
+  return normalizeFindingTitle(s, { maxLength: MAX_TITLE }) || null;
 }
 
 function round(n: HostedDynamic) {

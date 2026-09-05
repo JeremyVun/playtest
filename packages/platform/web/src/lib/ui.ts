@@ -61,10 +61,11 @@ export function toastError(err: WebDynamic, fallback: WebDynamic = "Something we
 export function saveBar({ onSave, onDiscard, noun = "changes" }: WebDynamic) {
   const msg = h("span.savebar-msg", {}, "Unsaved changes");
   const saveBtn = h("button.btn.primary", { onclick: onSave }, "Save");
+  const discardBtn = h("button.btn.ghost", { onclick: onDiscard }, `Discard ${noun}`);
   const el = h("div.savebar", { role: "status", hidden: true },
     msg,
     h("div.savebar-actions", {},
-      h("button.btn.ghost", { onclick: onDiscard }, `Discard ${noun}`),
+      discardBtn,
       saveBtn,
     ),
   );
@@ -73,8 +74,9 @@ export function saveBar({ onSave, onDiscard, noun = "changes" }: WebDynamic) {
     set({ dirty, invalid = false, saving = false }: WebDynamic) {
       el.hidden = !dirty;
       saveBtn.disabled = invalid || saving;
-      msg.textContent = invalid ? "Unsaved changes — fix the failing checks to save"
-        : saving ? "Saving…"
+      discardBtn.disabled = saving;
+      msg.textContent = saving ? "Saving…"
+        : invalid ? "Unsaved changes — fix the failing checks to save"
         : "Unsaved changes";
       msg.classList.toggle("warn", invalid);
     },

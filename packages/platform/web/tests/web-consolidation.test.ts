@@ -97,7 +97,7 @@ test("a run with no cluster says so instead of implying a spend", () => {
 });
 
 test("a plan's initiator reads as one word in the history table", () => {
-  assert.equal(ranBy({ created_by: { system: "auto_dedupe" } }), "auto-dedupe");
+  assert.equal(ranBy({ created_by: { system: "auto_dedupe" } }), "automatic");
   assert.equal(ranBy({ created_by: { system: "findings" } }), "system");
   assert.equal(ranBy({ created_by: { user_id: "01ABC" } }), "manual");
   assert.equal(ranBy({}), "manual");

@@ -202,7 +202,6 @@ function suiteSubtitle(suite: WebDynamic, storyCount: WebDynamic) {
   return h("span", {},
     count,
     application ? h("span.dim", {}, " · ", application) : null,
-    h("span.dim", {}, " · ring chosen at launch"),
   );
 }
 

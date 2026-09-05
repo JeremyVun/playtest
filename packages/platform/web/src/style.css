@@ -209,7 +209,7 @@ code, .mono { font-family: var(--mono); font-size: var(--fs-sm); }
 .menu button:hover { background: var(--bg2); }
 
 /* ---------- layout ---------- */
-.layout { display: grid; grid-template-columns: 208px 1fr; min-height: 0; }
+.layout { display: grid; grid-template-columns: 188px 1fr; min-height: 0; }
 .layout.no-rail { grid-template-columns: 1fr; }
 #rail { background: var(--bg1); border-right: 1px solid var(--line); padding: 14px 10px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
 #rail .navlink {
@@ -232,7 +232,7 @@ code, .mono { font-family: var(--mono); font-size: var(--fs-sm); }
   margin-top: auto;
   display: flex; align-items: center; justify-content: center;
   align-self: flex-end;
-  width: 30px; height: 30px;
+  width: 32px; height: 32px;
   border-radius: 7px; color: var(--dim); cursor: pointer;
 }
 #rail .rail-toggle:hover { background: var(--bg2); color: var(--ink); }
@@ -320,7 +320,7 @@ code, .mono { font-family: var(--mono); font-size: var(--fs-sm); }
 .sb-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
 .sb-head .section-title { margin-bottom: 0; }
 .sb-empty { color: var(--faint); font-size: var(--fs-sm); }
-.page { max-width: 1180px; margin: 0 auto; padding: 22px 26px 60px; }
+.page { max-width: 1380px; margin: 0 auto; padding: 22px 28px 60px; }
 .page-head { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; flex-wrap: wrap; }
 .page-head h1 { font-size: var(--fs-lg); font-weight: var(--fw-semi); }
 .page-head .sub { color: var(--dim); }
@@ -585,6 +585,16 @@ textarea.prose-input { font-family: var(--sans); font-size: var(--fs-base); line
    column the flexible width instead of letting short cells steal it. */
 .findings-index .status { white-space: nowrap; }
 .findings-index td:nth-child(2) { width: 52%; }
+.finding-compact-meta { display: none; }
+@media (max-width: 1200px) {
+  .finding-compact-meta {
+    display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+    margin-top: 5px; color: var(--dim); font-size: var(--fs-xs);
+  }
+  .findings-index th:nth-child(1), .findings-index td:nth-child(1),
+  .findings-index th:nth-child(4), .findings-index td:nth-child(4),
+  .findings-index th:nth-child(6), .findings-index td:nth-child(6) { display: none; }
+}
 
 /* The runs filter row: the All runs / Needs attention split (a filter, so it
    wears the segmented control the rest of the console uses for filters — not a
@@ -683,11 +693,7 @@ textarea.prose-input { font-family: var(--sans); font-size: var(--fs-base); line
 .suite-head .expander { margin-top: 0; margin-right: -6px; }
 .suite-head .suite-launch { flex: none; }
 
-/* Runs are children of the suite head above them, and the RUN column has to
-   say so: head and row both open with a 22px expander, which put the suite's
-   name and its runs' names on the same left edge — a list, not a tree. The
-   whole child block steps right instead, so the suite name is the only thing
-   on the page at the margin. */
+/* Runs step right from their suite heading so the hierarchy stays visible. */
 .run-index .suite-runs .launch-row > td:first-child,
 .run-index .suite-runs .story-rows > td { padding-left: 30px; }
 .run-index .launch-row { cursor: default; }
@@ -707,6 +713,7 @@ textarea.prose-input { font-family: var(--sans); font-size: var(--fs-base); line
   padding: 3px 8px; border-radius: 6px; font-size: var(--fs-xs); color: var(--dim);
   border: 1px solid transparent; white-space: nowrap;
 }
+.row-act.danger { color: var(--fail); }
 .row-act:hover { background: var(--bg3); color: var(--ink); border-color: var(--line2); }
 .row-act.danger:hover { color: var(--fail); border-color: var(--fail); background: var(--fail-soft); }
 .row-act:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -732,7 +739,7 @@ textarea.prose-input { font-family: var(--sans); font-size: var(--fs-base); line
    actor's latest action. Everything the live block said, minus the room — the
    block itself is one click away, and is what the In flight tab opens. */
 .run-now {
-  display: flex; align-items: baseline; gap: 8px; margin: 3px 0 0 30px;
+  display: flex; align-items: baseline; gap: 8px; margin: 3px 0 0 40px;
   font-size: var(--fs-sm); white-space: nowrap; overflow: hidden;
 }
 .run-now .status { flex: none; font-size: var(--fs-xs); }
@@ -752,13 +759,13 @@ textarea.prose-input { font-family: var(--sans); font-size: var(--fs-base); line
    assistive technology has to be able to announce (aria-expanded), and a click
    handler on the row alone is invisible to it. */
 .expander {
-  flex: none; width: 22px; height: 22px; margin-top: -3px; border-radius: 5px;
+  flex: none; width: 32px; height: 32px; margin: -5px 0; border-radius: 6px;
   color: var(--dim); font-size: 13px; line-height: 1; display: grid; place-items: center;
 }
 .expander:hover { background: var(--bg3); color: var(--ink); }
 .expander:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .launch-row.open .expander { color: var(--accent); }
-.expander-spacer { flex: none; width: 22px; }
+.expander-spacer { flex: none; width: 32px; }
 .outcome-counts { display: inline-flex; align-items: center; gap: 10px; }
 .outcome-counts .status { font-variant-numeric: tabular-nums; }
 
@@ -895,7 +902,7 @@ a.story-watch-link:focus-visible { outline: 2px solid var(--accent); outline-off
    for>` cannot address — a radio group names itself with `aria-label`. */
 .field > label, .field > .field-label { display: block; margin-bottom: 5px; font-weight: var(--fw-med); font-size: var(--fs-sm); }
 .field .hint { color: var(--faint); font-size: var(--fs-xs); margin-top: 4px; }
-input[type=text], input[type=email], input[type=password], input[type=number], textarea, select {
+input[type=text], input[type=search], input[type=email], input[type=password], input[type=number], textarea, select {
   width: 100%; background: var(--bg2); border: 1px solid var(--line2); border-radius: 7px;
   padding: 8px 10px; color: var(--ink);
 }
@@ -974,6 +981,7 @@ textarea.code { min-height: 320px; white-space: pre; overflow-wrap: normal; tab-
 .check-item.err { color: var(--fail); }
 .check-item .msg { color: var(--ink); }
 .check-item.err .msg { color: var(--fail); }
+.check-retry .linkish { margin-left: 6px; }
 
 /* Success criteria. A row is one check read left to right — what to look at,
    what it has to be, and (under the value, where the eye already is) one line

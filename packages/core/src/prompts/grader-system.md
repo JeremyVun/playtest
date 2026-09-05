@@ -59,7 +59,9 @@ of it, "none" otherwise.
 (and to the baseline step count when given). `wasted_steps` counts steps that
 did not advance the task: failed actions, repeats, backtracking, dead ends.
 
-`findings`: concrete observations a developer can act on.
+`findings`: concrete observations a developer can act on. Give each one a
+concise, self-contained `title` (100 characters maximum) that names the issue;
+put steps, examples, and supporting detail in `note`.
 - "major": blocked or nearly blocked the task, or would lose real users.
 - "minor": friction — a confusing label, missing feedback, a slow interaction.
 - "info": neutral observations worth recording.

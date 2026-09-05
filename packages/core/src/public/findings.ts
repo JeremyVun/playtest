@@ -38,6 +38,12 @@ export {
   CONSOLIDATION_TOOL,
 } from "../findings/consolidation-prompt.ts";
 
+export {
+  GENERATED_FINDING_TITLE_MAX,
+  STORED_FINDING_TITLE_MAX,
+  normalizeFindingTitle,
+} from "../findings/title.ts";
+
 export { EXPORT_FORMAT, EXPORT_FORMAT_VERSION, exportLedger } from "../findings/exports.ts";
 
 // The pure, frozen identity and retrieval algorithms

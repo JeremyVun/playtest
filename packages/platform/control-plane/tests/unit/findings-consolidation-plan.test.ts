@@ -129,6 +129,12 @@ test("a new group without a title, and a hedged confidence, are both refused", (
   }
 });
 
+test("a generated title over the concise limit is refused", () => {
+  assert.match(validateClusterPlan({
+    assignments: [{ candidate_ids: ["c1"], proposed_title: "x".repeat(101), confidence: "high", reason: "r" }],
+  }, CTX), /at most 100 characters/);
+});
+
 test("malformed envelopes are refused rather than partially read", () => {
   assert.match(validateClusterPlan(null, CTX), /args must be an object/);
   assert.match(validateClusterPlan({}, CTX), /"assignments" must be an array/);

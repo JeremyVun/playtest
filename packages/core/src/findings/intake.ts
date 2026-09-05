@@ -24,6 +24,7 @@ import { ulid } from "../ulid.ts";
 import { nowIso } from "./ledger.ts";
 import { CATEGORIES, deriveCandidateKeys } from "./keys.ts";
 import type { Ledger, LedgerRow } from "./ledger.ts";
+import { GENERATED_FINDING_TITLE_MAX, normalizeFindingTitle } from "./title.ts";
 
 type DynamicValue = any; // SAFETY: intake spans validated model claims, persisted SQLite rows, and legacy evidence records
 const SEVERITIES = new Set(["info", "minor", "major"]);
@@ -59,15 +60,20 @@ const parse = (v: DynamicValue, fallback: DynamicValue = null): DynamicValue => 
  *   action ∈ appended | suggested | unassigned | auto_dismissed | idempotent
  */
 export function intakeCandidate(ledger: Ledger, { source, candidate, evidence, intakeKey = null }: DynamicValue): DynamicValue {
-  const claim = validateClaim(candidate);
+  const claim = validateClaim(candidate, source === "run_grade" ? GENERATED_FINDING_TITLE_MAX : undefined);
   const cited = validateEvidence(evidence);
+  // Keep match-text-v1 stable while the stored title becomes display-sized.
+  const matchingClaim = {
+    ...claim,
+    title: String(candidate?.claim?.title || "").trim().slice(0, 180),
+  };
   const keys = deriveCandidateKeys({
     scopeId: ledger.workspaceId,
     storyId: candidate.storyId ?? null,
     signalType: candidate.signalType ?? null,
     locus: candidate.locus ?? null,
     category: candidate.category,
-    claim,
+    claim: matchingClaim,
   });
 
   return ledger.tx(() => {
@@ -524,7 +530,7 @@ function candidateRow(ledger: Ledger, id: string): LedgerRow {
   return c;
 }
 
-function validateClaim(candidate: DynamicValue): DynamicValue {
+function validateClaim(candidate: DynamicValue, maxTitleLength?: number): DynamicValue {
   if (!candidate || typeof candidate !== "object") throw new DummyConfigError("a bug candidate must be an object");
   if (!CATEGORIES.includes(candidate.category)) {
     throw new DummyConfigError(`bug candidate "category" must be one of ${CATEGORIES.join(", ")}`);
@@ -533,7 +539,7 @@ function validateClaim(candidate: DynamicValue): DynamicValue {
   const title = String(claim.title || "").trim();
   if (!title) throw new DummyConfigError('a bug candidate needs a "title"');
   return {
-    title: title.slice(0, 180),
+    title: normalizeFindingTitle(title, { maxLength: maxTitleLength }),
     expected: String(claim.expected || "").slice(0, MAX_EXCERPT) || null,
     observed: String(claim.observed || "").slice(0, MAX_EXCERPT) || null,
     severity: SEVERITIES.has(claim.severity) ? claim.severity : "minor",
@@ -684,8 +690,7 @@ export function liveFinding(ledger: Ledger, id: string): LedgerRow | null {
 }
 
 function clampTitle(s: unknown): string {
-  const line = String(s || "").split("\n").find((l) => l.trim())?.trim() || "";
-  return (line.replace(/\s+/g, " ").trim() || "Bug candidate").slice(0, 180);
+  return normalizeFindingTitle(s, { fallback: "Bug candidate" });
 }
 
 export { promoteWithinTx, mergeWithinTx };

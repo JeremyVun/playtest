@@ -11,7 +11,7 @@ export function runsSettingsTab(projectKey: WebDynamic, project: WebDynamic, slo
   mount(slot, h("section", {},
     h("h3.section-title", { style: "margin-top:0" }, "Run concurrency"),
     h("p.dim.section-caption", {},
-      "The worker budget every suite inherits. A suite can replace it from Suite settings when its target or model limits need a different pool."),
+      "Project defaults. A suite can override them in Suite settings."),
     h("div.card.pad", {},
       h("div.run-limits-fields", {},
         formField("Concurrent stories", total,

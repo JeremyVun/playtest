@@ -189,9 +189,11 @@ Validation, linting, imports, and commits operate on the whole effective suite.
 An import commits atomically only after path and suite validation. Exports
 round-trip the stored tree without rewriting it.
 
-A suite read accepts `include=cases,defaults`. `cases` has the same items as
+A suite read accepts `include=cases,defaults,personas`. `cases` has the same items as
 the resolved-case endpoint; `defaults` has the stored `playtest.yaml` file row
-or null before the first commit. The folds do not change either resource shape.
+or null before the first commit. `personas` returns `suite_personas` identities
+(`path`, `slug`, `name`) from parseable suite-local persona files, without their
+prose. The folds do not change the case or defaults resource shapes.
 Unknown include values return 400 rather than being ignored.
 
 Resolved discovery stories report `next_run: explore`. Other stories report

@@ -66,6 +66,7 @@ interface Envelope {
 
 interface GradeFinding {
   severity: string;
+  title?: string;
   note: string;
   step: number;
 }
@@ -180,7 +181,7 @@ function grade({ score, completion = "partial", findings = [], summary, report }
     score,
     completion,
     efficiency: { assessment: "reasonable for the task", wasted_steps: 0 },
-    findings,
+    findings: findings.map((finding) => ({ ...finding, title: finding.title || finding.note })),
     summary,
     model: "grader-fixture",
     graded_at: "2026-07-20T09:30:00.000Z",

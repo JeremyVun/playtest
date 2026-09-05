@@ -22,6 +22,8 @@ export interface ExportScope {
   states: string[];
   severity: string | null;
   fixSuggested: boolean;
+  includeFixSuggested?: boolean;
+  search?: string;
 }
 
 export interface ExportInput {
@@ -41,6 +43,8 @@ export function scopeLabel(scope: ExportScope) {
   const parts = [states];
   if (scope.severity) parts.push(`severity ${scope.severity}`);
   if (scope.fixSuggested) parts.push("with a pending looks-fixed suggestion");
+  if (scope.includeFixSuggested) parts.push("including open findings with a pending looks-fixed suggestion");
+  if (scope.search) parts.push(`matching ${JSON.stringify(scope.search)}`);
   return parts.join(", ");
 }
 

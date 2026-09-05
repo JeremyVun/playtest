@@ -43,6 +43,7 @@ import {
   CONSOLIDATION_SYSTEM,
   CONSOLIDATION_TOOL,
 } from "./consolidation-prompt.ts";
+import { GENERATED_FINDING_TITLE_MAX } from "./title.ts";
 import type { Ledger } from "./ledger.ts";
 
 type DynamicValue = any; // SAFETY: consolidation joins legacy run artifacts, SQLite rows, and validated model plan payloads
@@ -458,8 +459,13 @@ export function validateClusterPlan(args: DynamicValue, { candidateIds, findingI
       if (typeof a.finding_id !== "string" || !targets.has(a.finding_id)) {
         return `assignment cites finding_id "${a.finding_id}" which was not in this cluster's input — omit it to propose a new group`;
       }
-    } else if (typeof a.proposed_title !== "string" || !a.proposed_title.trim()) {
-      return `a new group needs a non-empty "proposed_title"`;
+    } else {
+      if (typeof a.proposed_title !== "string" || !a.proposed_title.trim()) {
+        return `a new group needs a non-empty "proposed_title"`;
+      }
+      if ([...a.proposed_title].length > GENERATED_FINDING_TITLE_MAX) {
+        return `"proposed_title" must be at most ${GENERATED_FINDING_TITLE_MAX} characters`;
+      }
     }
     if (!CONFIDENCES.has(a.confidence)) {
       return `"confidence" must be high or medium — anything weaker belongs in "unresolved"`;

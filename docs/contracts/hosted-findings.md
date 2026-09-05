@@ -49,8 +49,8 @@ resolution, and dismiss a fix suggestion. Every intake and transition is
 authorized and audited in its state-change transaction.
 
 Reviewer filing from a run lands confirmed because filing is the human decision.
-**Confirm and copy** combines confirmation and tracker-summary copy; confirmed
-findings offer **Copy for tracker**. An external reference may be stored, but
+**Confirm and copy summary** combines confirmation and summary copy; confirmed
+findings offer **Copy summary**. An external reference may be stored, but
 Playtest never creates or updates an external ticket.
 
 ### Client projections and receipts
@@ -60,6 +60,19 @@ over live, unmerged findings. It returns one total per internal state plus
 `fix_suggested`, the number of `accepted` or `reopened` findings with a pending
 Looks-fixed suggestion. A `new` finding with such a suggestion is already
 counted as review work by state. Lists accept `fix_suggested=1`.
+
+The console offers text search and severity filtering within each bucket.
+`q` is a case-insensitive literal substring (up to 300 characters) across the
+title, finding ID, linked ticket, story ID and expected/observed claim. Search
+applies before pagination. Results include the exact filtered `total` and a
+`next_cursor` following descending `(last_seen, id)` order. Bucket tallies remain
+unfiltered. Controls persist in the URL and retain focus during live updates.
+New cursors freeze both sort values so recurrence cannot move the page boundary;
+legacy finding-ID cursors remain accepted.
+
+`state=new&include_fix_suggested=1` includes open findings with pending fix
+suggestions in the review queue. Search and severity apply to both sections.
+Downloads use the same filters and include every matching row.
 
 Project health carries:
 
@@ -139,6 +152,13 @@ Run report ingest reads the sealed `grade.json`: typed `bug_candidates` and
 minor/major free-form findings enter the same intake path; informational
 observations remain run-scoped. Identity comes from recorded anomaly signals,
 not grader prose, and intake keys are stable across runner retries.
+
+Grader, synthesis and consolidation prompts request separate, self-contained
+titles of at most 100 characters. Supporting detail stays in notes and claim
+evidence. Title-less legacy grades remain readable; overlong titles are safely
+abbreviated at a word boundary where possible. Manual/imported titles retain
+the 180-character storage bound. Title normalization does not rewrite historical
+records or change legacy retry keys and matching inputs.
 
 Discovery synthesis is editor-authorized and contextual to a finished discovery
 group. It mines graded runs and personas, but every claim must cite a real
@@ -359,7 +379,7 @@ tracker** is the default handoff.
 ### Bulk export
 
 ```text
-GET /api/v1/projects/:p/findings/export?state&severity&fix_suggested&format=md|json
+GET /api/v1/projects/:p/findings/export?state&severity&q&fix_suggested&include_fix_suggested&format=md|json
 ```
 
 A `viewer` read that returns the list's filter, uncapped, as one attachment for

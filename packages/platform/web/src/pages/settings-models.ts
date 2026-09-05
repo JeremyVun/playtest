@@ -101,10 +101,10 @@ export async function modelsTab(projectKey: WebDynamic, project: WebDynamic, slo
     "Grades finished runs and checks each story's assertions.");
 
   // ---- duplicate findings ----
-  const dedupeRow = policyField("Automatic dedupe",
-    choiceGroup({ label: "Automatic dedupe", options: ONOFF, value: shown("auto_dedupe"), onchange: answer("auto_dedupe") }),
+  const dedupeRow = policyField("Merge duplicate findings",
+    choiceGroup({ label: "Merge duplicate findings", options: ONOFF, value: shown("auto_dedupe"), onchange: answer("auto_dedupe") }),
     "Merges duplicate findings after each run reports.");
-  const dedupeModelRow = modelRow("consolidation_model", "Dedupe model",
+  const dedupeModelRow = modelRow("consolidation_model", "Duplicate review model",
     "Judges whether two differently worded findings describe the same bug.");
 
   // ---- fixed findings ----
@@ -130,7 +130,7 @@ export async function modelsTab(projectKey: WebDynamic, project: WebDynamic, slo
       cap.llm === false
         ? h("p.preview-warn", { style: "margin:8px 0 0" },
             "This deployment has no model gateway (", h("span.mono", {}, "PLAYTEST_LLM_BASE_URL"),
-            "), so the dedupe and fix-verification passes cannot run whatever they are set to.")
+            "), so duplicate review and fix verification can't run.")
         : null,
     ),
     // The group titles are the explanation: three jobs, each with the model it
@@ -306,7 +306,7 @@ function summarize(next: WebDynamic, before: WebDynamic, deployment: WebDynamic)
   const rung = rungOf(next);
   const said = [
     ...MODEL_KEYS.filter((k) => next[k] !== before[k]).map((k) => `${MODEL_WORDS[k]} ${next[k] || "engine default"}`),
-    next.auto_dedupe !== before.auto_dedupe ? `automatic dedupe ${switchWord(next.auto_dedupe)}` : null,
+    next.auto_dedupe !== before.auto_dedupe ? `merge duplicate findings ${switchWord(next.auto_dedupe)}` : null,
     rung !== rungOf(before) ? `fixed findings ${RUNGS.find((r) => r.value === rung)!.said}` : null,
   ].filter(Boolean);
   return said.join(" · ");
@@ -315,7 +315,7 @@ function summarize(next: WebDynamic, before: WebDynamic, deployment: WebDynamic)
 const MODEL_WORDS: WebDynamic = {
   actor_model: "actor",
   grader_model: "grader",
-  consolidation_model: "dedupe",
+  consolidation_model: "duplicate review",
   auto_resolve_model: "fix verification",
 };
 const switchWord = (v: WebDynamic) => (v ? "on" : "off");

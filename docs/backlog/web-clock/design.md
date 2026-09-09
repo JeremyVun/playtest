@@ -73,6 +73,8 @@ app:
 - `docs/contracts/engine.md` gains the key next to `viewport`, and
   `README.md` shows the YAML above.
 
+Done 2026-09-09 (029a57d).
+
 ## Closeout
 
 Migrate the key's description into `docs/contracts/engine.md` and delete

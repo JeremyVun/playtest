@@ -278,9 +278,11 @@ supplied at placement (`docs/contracts/engine.md#resolution-modes`) — bakes in
 no default: `PLAYTEST_BASE_URL` becomes the only source, and the spec throws one
 actionable error when it is unset. `BASE_URL` is always `string`, never
 `string | undefined`, and never the empty string. `app.cookies`
-become a `context.addCookies` call before the first navigation. Request and
-console-error collectors are emitted only when the gate needs them, so the file
-holds no unused bindings.
+become a `context.addCookies` call before the first navigation, and `app.clock`
+becomes a `test.use({ timezoneId })` plus a `context.clock.setFixedTime` in the
+same setup, so the spec replays under the instant the baseline was recorded at.
+Request and console-error collectors are emitted only when the gate needs them,
+so the file holds no unused bindings.
 
 Each recorded step emits a comment (step number, verb, and the actor's thought)
 followed by the action. Locators are the **raw saved strings** passed to

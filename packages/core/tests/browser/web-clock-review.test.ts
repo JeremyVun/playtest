@@ -5,6 +5,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 
+import { DummyConfigError } from "../../src/config.ts";
 import { resolveClock } from "../../src/config/resolve.ts";
 import { WebDriver } from "../../src/drivers/web.ts";
 
@@ -95,15 +96,17 @@ test("popups, later documents, iframes and the post-run check context all read t
   }
 });
 
-test("a web worker reads the fixed instant too", async () => {
+test("a web worker reads real time while its page reads the fixed instant", async () => {
   const driver = await WebDriver.launch({ baseUrl, runDir, clock: CLOCK });
   try {
     await driver.start();
-    const worker = await driver.page.evaluate(() => new Promise((resolve) => {
+    const worker: LegacyTestValue = await driver.page.evaluate(() => new Promise((resolve) => {
       const url = URL.createObjectURL(new Blob(["postMessage(new Date().toISOString())"], { type: "text/javascript" }));
       new Worker(url).onmessage = (e) => resolve(e.data);
     }));
-    assert.equal(worker, FIXED_ISO);
+    assert.notEqual(worker, FIXED_ISO);
+    assert.ok(Math.abs(Date.parse(worker) - Date.now()) < 60_000, `a worker reads the host's real time (got ${worker})`);
+    assert.equal(await driver.page.evaluate(() => new Date().toISOString()), FIXED_ISO);
   } finally {
     await driver.close();
   }
@@ -137,8 +140,14 @@ test("two launches snapshot identical text for a page that prints the date", asy
 });
 
 test("every zone load validation admits opens a browser context", async () => {
-  for (const timezone of ["Australia/sydney", "utc"]) {
-    const clock = resolveClock({ time: CLOCK.time, timezone }, "board.yaml");
+  for (const timezone of ["Australia/sydney", "utc", "europe/london", "EST", "Australia/Sydney", "UTC"]) {
+    let clock: LegacyTestValue;
+    try {
+      clock = resolveClock({ time: CLOCK.time, timezone }, "board.yaml");
+    } catch (e) {
+      assert.ok(e instanceof DummyConfigError, `${timezone}: ${e}`);
+      continue;
+    }
     const driver = await WebDriver.launch({ baseUrl, runDir, clock });
     await driver.close();
   }

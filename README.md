@@ -213,12 +213,16 @@ app:
     timezone: Australia/Sydney
 ```
 
-`time` is an RFC 3339 instant and `timezone` an IANA zone name, required
-together because the same instant renders differently in every zone. Every
-browser context the case opens reads that instant from `Date.now()`, `new
-Date()` and `Intl` formatting, while the page's timers keep running — a refresh
-loop still fires, it just keeps seeing the same time. Set it per suite, per
-case, or per `app.envs.<name>`; omit it for real time. Web only.
+`time` is an RFC 3339 instant and `timezone` an IANA zone name spelled exactly as
+Chromium accepts it (`Australia/Sydney`, not `Australia/sydney`, and no legacy
+alias like `EST`), required together because the same instant renders
+differently in every zone. Every browser context the case opens reads that
+instant from `Date.now()`, `new Date()` and `Intl` formatting, while the page's
+timers keep running — a refresh loop still fires, it just keeps seeing the same
+time. The page's navigation timing still reports real measurements, and
+dedicated and service workers are outside the pin: they read real time. Set it
+per suite or per case — an `app.envs.<name>` overlay cannot set it; omit it for
+real time. Web only. `playtest export` carries it into the exported spec.
 
 #### Secrets (api)
 

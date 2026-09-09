@@ -366,25 +366,6 @@
                 "additionalProperties": { "type": "string" },
                 "description": "Per-env identity map { <label>: <storage-state path> } (paths relative to this file) — each environment maps the same abstract labels to its own saved sessions, so the suite's app.auth labels stay environment-agnostic."
               },
-              "clock": {
-                "type": "object",
-                "additionalProperties": false,
-                "required": [
-                  "time",
-                  "timezone"
-                ],
-                "properties": {
-                  "time": {
-                    "type": "string",
-                    "description": "The fixed instant, RFC 3339 with an explicit offset or Z, e.g. \"2026-08-31T22:44:00+10:00\"."
-                  },
-                  "timezone": {
-                    "type": "string",
-                    "description": "IANA time-zone name the page formats in, e.g. \"Australia/Sydney\". Required whenever time is set."
-                  }
-                },
-                "description": "Per-env fixed page clock ({ time, timezone }) \u2014 replaces the top-level app.clock wholesale (no merge). Use when each environment's captured fixtures were taken at a different instant. web only."
-              },
               "platform": {
                 "enum": ["ios", "android"],
                 "description": "mobile only: this environment's target platform (Appium XCUITest for ios, UiAutomator2 for android)."

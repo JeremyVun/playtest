@@ -148,9 +148,8 @@ overlay (`init`, `storage_state`, `app`, `auth_states`). Durations accept a
 millisecond number or strings using `ms`, `s`, or `m`.
 
 `app.envs.<name>` is a named partial overlay containing only environment keys:
-`base_url`, cookies, storage state, init, auth/auth states, the fixed page
-clock, and the mobile device target (`platform`, `app`, `device`,
-`appium_url`). It
+`base_url`, cookies, storage state, init, auth/auth states, and the mobile
+device target (`platform`, `app`, `device`, `appium_url`). It
 shallow-overrides the merged top-level `app` after the defaults chain. The
 mobile device target is per-environment because the app binary, the device and
 the Appium endpoint all belong to the machine the device is attached to — a
@@ -317,14 +316,17 @@ kinds, and performance keys are validated according to the driver matrix.
 target requirements are the only ones structural resolution drops (see
 "Resolution modes"); every other rule here applies in both modes.
 
-`app.clock` is web-only and is valid in the defaults chain, in a case, and in an
-`app.envs.<name>` overlay, with the usual precedence: the case wins over
-defaults, the overlay over both. Declaring it on a mobile or API case is a
+`app.clock` is web-only and is valid in the defaults chain and in a case, the
+case winning over defaults. It is not an environment key: declaring it in an
+`app.envs.<name>` overlay is an unknown-key error, and a hosted ring cannot set
+it (owner ruling, 2026-09-09). Declaring it on a mobile or API case is a
 `DummyConfigError` naming `app.clock`. Both `time` and `timezone` are required
 together, because a bare instant renders differently in every zone; `time` must
-be an RFC 3339 instant carrying an explicit offset or `Z`, and `timezone` an
-IANA zone name. A malformed instant or an unknown zone is a configuration error
-at load, not a run failure. The resolved case echoes `env.clock` (null when
+be an RFC 3339 instant carrying an explicit offset or `Z`, with a real calendar
+day and an in-range clock time, and `timezone` an IANA zone name spelled exactly
+as Chromium accepts it — the spelling is case-sensitive and legacy aliases such
+as `EST` are rejected. A malformed instant or an unknown zone is a configuration
+error at load, not a run failure. The resolved case echoes `env.clock` (null when
 absent) and the run manifest records it.
 
 `visual_regression` and its drift threshold are accepted for every case but
@@ -520,8 +522,12 @@ case — in record, act and heal alike, including the post-run check context —
 created with the configured `timezoneId` and a fixed time, so `Date.now()`, `new
 Date()` and `Intl` formatting return that instant on every call while
 `setTimeout`, `setInterval` and `requestAnimationFrame` keep running. Only the
-reading of the clock is frozen: an app's refresh loop still fires. Omitted, the
-page reads real time. The clock is not a comparability pin.
+reading of the clock is frozen: an app's refresh loop still fires. The document's
+navigation timing survives the pin (`performance.getEntries*`, `timing`,
+`navigation`, `mark` and `measure` keep reporting the real measurements the run's
+`nav` telemetry reads), while dedicated and service workers are outside the pin
+and read real time. Omitted, the page reads real time. The clock is not a
+comparability pin.
 
 Snapshots assign fresh `data-dummy-ref="eN"` references and write PNG, MHTML,
 and text artifacts. The model screenshot is downscaled only when its longest

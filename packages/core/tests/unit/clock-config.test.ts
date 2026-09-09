@@ -1,6 +1,6 @@
 // app.clock, the web driver's fixed page clock
 // (docs/contracts/engine.md#discovery-and-configuration): load validation,
-// the defaults/case/overlay precedence, the resolved-case echo, and the
+// the defaults/case precedence, the resolved-case echo, and the
 // options createDriver hands the web driver. Offline — no browser.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
@@ -68,16 +68,15 @@ test("app.clock resolves onto env.clock and the case wins over the defaults chai
   assert.deepEqual(byId.overrides.env.clock, { time: "2026-01-01T09:00:00Z", timezone: "Europe/London" });
 });
 
-test("an app.envs overlay clock wins over both the defaults chain and the case", async () => {
+test("an app.envs overlay cannot set the clock", async () => {
   const dir = writeSuite({
     "playtest.yaml":
       "app:\n  base_url: http://localhost:9\n" +
       "  clock:\n    time: \"2026-08-31T22:44:00+10:00\"\n    timezone: Australia/Sydney\n" +
       "  envs:\n    stg:\n      clock:\n        time: \"2026-03-04T05:06:07Z\"\n        timezone: America/New_York\n",
-    "board.yaml": STORY + "app:\n  clock:\n    time: \"2026-01-01T09:00:00Z\"\n    timezone: Europe/London\n",
+    "board.yaml": STORY,
   });
-  const [rc]: LegacyTestValue = await discoverCases([dir], { env: "stg" });
-  assert.deepEqual(rc.env.clock, { time: "2026-03-04T05:06:07Z", timezone: "America/New_York" });
+  await expectConfigError(dir, { env: "stg" }, /unknown key "app\.envs\.stg\.clock"/);
 });
 
 test("app.clock on a mobile or api case is a configuration error naming the key", async () => {

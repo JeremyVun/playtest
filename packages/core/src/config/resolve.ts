@@ -840,7 +840,8 @@ export function resolveViewport(vp?: { width?: number; height?: number | null })
 // RFC 3339: a date-time with an explicit offset or Z. A bare local time is
 // rejected because it names a different instant on every machine, which is
 // exactly what pinning the clock exists to prevent.
-const RFC3339 = /^\d{4}-\d{2}-\d{2}[Tt ]\d{2}:\d{2}:\d{2}(\.\d+)?([Zz]|[+-]\d{2}:\d{2})$/;
+const RFC3339 =
+  /^\d{4}-\d{2}-\d{2}[Tt ]([01]\d|2[0-3]):[0-5]\d:[0-5]\d(\.\d+)?([Zz]|[+-](0\d|1\d|2[0-3]):[0-5]\d)$/;
 
 // Date.parse rolls an out-of-range day over (2026-02-31 becomes 3 March)
 // instead of rejecting it, so the calendar day is checked separately.
@@ -848,6 +849,11 @@ function isRealCalendarDay(date: string): boolean {
   const utc = new Date(`${date}T00:00:00Z`);
   return !Number.isNaN(utc.getTime()) && utc.toISOString().startsWith(date);
 }
+
+// Chromium's timezoneId is case-sensitive and rejects legacy aliases like EST,
+// while Intl.DateTimeFormat accepts both, so validating through Intl would turn
+// a typo into a browser launch failure mid-run.
+const CHROMIUM_ZONES = new Set([...Intl.supportedValuesOf("timeZone"), "UTC"]);
 
 /**
  * Validate app.clock into { time, timezone }, or null when unset. Exported for
@@ -861,9 +867,7 @@ export function resolveClock(clock: ClockConfig | undefined, file: string): Reso
       `${file}: app.clock.time must be an RFC 3339 instant with an offset, e.g. 2026-08-31T22:44:00+10:00 (got ${JSON.stringify(time)})`,
     );
   }
-  try {
-    new Intl.DateTimeFormat("en-US", { timeZone: timezone });
-  } catch {
+  if (!CHROMIUM_ZONES.has(timezone)) {
     throw new DummyConfigError(
       `${file}: app.clock.timezone must be an IANA zone name, e.g. Australia/Sydney (got ${JSON.stringify(timezone)})`,
     );

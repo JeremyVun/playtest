@@ -31,6 +31,8 @@ interface WebPerfWindow {
   paint: number | null;
 }
 
+type ClockGlobal = typeof globalThis & { __pwClock?: { builtins?: { performance?: Record<string, unknown> } } };
+
 declare global {
   interface Window {
     __dummy?: WebInstrumentation;
@@ -250,6 +252,27 @@ export async function processScreenshotImage(
     return { screenshotHash: null, screenshot: buf };
   }
 }
+// app.clock: fixed readings, running timers (docs/contracts/engine.md#web-driver).
+// Playwright's clock also blanks performance.getEntries*, timing, navigation,
+// mark and measure, which would empty the run's navigation timing, so the
+// originals it keeps page-side at __pwClock.builtins go back.
+async function applyClock(context: BrowserContext, clock: ResolvedClock): Promise<void> {
+  await context.clock.setFixedTime(new Date(clock.time));
+  await context.addInitScript(restoreNavigationTiming);
+}
+
+function restoreNavigationTiming(): void {
+  const builtins = (globalThis as ClockGlobal).__pwClock?.builtins?.performance;
+  if (!builtins) return;
+  const patched = performance as unknown as Record<string, unknown>;
+  for (const key of ["getEntries", "getEntriesByType", "getEntriesByName", "mark", "measure"] as const) {
+    patched[key] = (...args: unknown[]): unknown => (builtins[key] as (...a: unknown[]) => unknown)(...args);
+  }
+  for (const key of ["timing", "navigation"] as const) {
+    Object.defineProperty(patched, key, { get: () => builtins[key], configurable: true });
+  }
+}
+
 // Init script, installed on every document: mutation timestamp for dom-quiet,
 // longtask totals, and buffered nav-vitals (LCP/FCP/CLS) collectors. TTFB comes
 // from the navigation timing entry at read time.
@@ -550,10 +573,7 @@ export class WebDriver implements Driver {
         ...(clock ? { timezoneId: clock.timezone } : {}),
         ...(storageState ? { storageState } : {}),
       });
-      // app.clock: every page this context opens reads the same instant, so a
-      // screen that prints times replays identically. setFixedTime leaves
-      // timers running, which the apps under test poll and animate on.
-      if (clock) await context.clock.setFixedTime(new Date(clock.time));
+      if (clock) await applyClock(context, clock);
       context.setDefaultTimeout(ACTION_TIMEOUT_MS);
       context.setDefaultNavigationTimeout(NAV_TIMEOUT_MS);
       // Seed app.cookies against base_url's origin BEFORE the first navigation,
@@ -1174,7 +1194,7 @@ export class WebDriver implements Driver {
         viewport: checkViewport,
         ...(this.#clock ? { timezoneId: this.#clock.timezone } : {}),
       });
-      if (this.#clock) await this.#checkContext.clock.setFixedTime(new Date(this.#clock.time));
+      if (this.#clock) await applyClock(this.#checkContext, this.#clock);
       this.#checkPage = await this.#checkContext.newPage();
       await this.#checkPage.setContent(html, { waitUntil: "domcontentloaded" });
     } catch {

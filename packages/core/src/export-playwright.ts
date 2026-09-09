@@ -22,6 +22,7 @@ interface ExportCase {
   env?: {
     base_url?: string | null;
     cookies?: unknown;
+    clock?: { time: string; timezone: string } | null;
   };
   _assertions?: {
     routing?: Map<string, { name: string }>;
@@ -144,7 +145,8 @@ export function exportSpec({
   const needsConsole = kinds.includes("console_errors");
   const needsGlob = kinds.includes("url_matches") || needsRequests;
   const cookies = Array.isArray(caseCfg.env?.cookies) ? caseCfg.env.cookies : null;
-  const needsContext = Boolean(cookies?.length);
+  const clock = caseCfg.env?.clock ?? null;
+  const needsContext = Boolean(cookies?.length) || Boolean(clock);
 
   const out: string[] = [];
   out.push(...header({ caseCfg, meta, sourcePath, steps, success }));
@@ -152,6 +154,10 @@ export function exportSpec({
   out.push("");
   out.push(...baseUrlBinding(caseCfg.env?.base_url ?? null, notes));
   out.push("");
+  if (clock) {
+    out.push(`test.use({ timezoneId: ${js(clock.timezone)} });`);
+    out.push("");
+  }
   if (needsGlob) {
     out.push(`/** Playtest gate globs: \`*\` matches any run, \`?\` one character, anchored. */`);
     out.push(`function globToRegExp(glob: string): RegExp {`);
@@ -166,7 +172,7 @@ export function exportSpec({
 
   const args = needsContext ? "{ page, context }" : "{ page }";
   out.push(`test(${js(caseCfg.id)}, async (${args}) => {`);
-  out.push(...setup({ cookies, needsRequests, needsConsole }));
+  out.push(...setup({ cookies, clock, needsRequests, needsConsole }));
   out.push(...body(steps, notes));
   out.push(...gate({ success, perf, routing, notes }));
   out.push(`});`);
@@ -256,14 +262,20 @@ function header({
 
 function setup({
   cookies,
+  clock,
   needsRequests,
   needsConsole
 }: {
   cookies: Array<{ name?: unknown; value?: unknown }> | null;
+  clock: { time: string; timezone: string } | null;
   needsRequests: boolean;
   needsConsole: boolean;
 }): string[] {
   const out = [`  // ---- session setup (mirrors the Playtest web driver) ----`];
+  if (clock) {
+    out.push(`  // The instant the baseline was recorded at; the page's timers keep running.`);
+    out.push(`  await context.clock.setFixedTime(new Date(${js(clock.time)}));`);
+  }
   if (needsRequests) {
     out.push(`  const requests: { method: string; path: string }[] = [];`);
     out.push(`  page.on("request", (r) => {`);

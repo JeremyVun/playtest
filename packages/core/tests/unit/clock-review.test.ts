@@ -70,11 +70,13 @@ test("schema errors name the missing clock field at every level it is valid", as
   });
   assert.match(await configError(zoneOnly), /playtest\.yaml: missing required "app\.clock\.time"/);
 
+  // The owner ruled app.clock out of overlays on 2026-09-09, so an overlay
+  // never reaches the clock's own field validation.
   const overlay = writeSuite({
     "playtest.yaml": `app:\n  base_url: http://localhost:9\n  envs:\n    stg:\n      clock:\n        time: "${CLOCK.time}"\n`,
     "board.yaml": STORY,
   });
-  assert.match(await configError(overlay, { env: "stg" }), /missing required "app\.envs\.stg\.clock\.timezone"/);
+  assert.match(await configError(overlay, { env: "stg" }), /unknown key "app\.envs\.stg\.clock"/);
 });
 
 test("clock: null in a case is refused exactly like viewport: null", async () => {
@@ -98,7 +100,7 @@ test("structural resolution validates and echoes the clock like executable resol
   assert.match(await configError(bad, { resolution: "structural" }), /app\.clock\.time must be an RFC 3339 instant/);
 });
 
-test("a mobile case reached through defaults or an overlay names app.clock", async () => {
+test("a mobile case reached through defaults names app.clock, and an overlay never carries one", async () => {
   const defaults = writeSuite({
     "playtest.yaml": "app:\n  driver: mobile\n  app: ./App.app\n" + CLOCK_YAML,
     "board.yaml": STORY,
@@ -109,7 +111,7 @@ test("a mobile case reached through defaults or an overlay names app.clock", asy
     "playtest.yaml": `app:\n  driver: mobile\n  app: ./App.app\n  envs:\n    stg:\n      clock:\n        time: "${CLOCK.time}"\n        timezone: UTC\n`,
     "board.yaml": STORY,
   });
-  assert.match(await configError(overlay, { env: "stg" }), /app\.clock is not valid for the mobile driver/);
+  assert.match(await configError(overlay, { env: "stg" }), /unknown key "app\.envs\.stg\.clock"/);
 });
 
 function manifestFor(clock: LegacyTestValue) {

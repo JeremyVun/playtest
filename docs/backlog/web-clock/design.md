@@ -59,6 +59,7 @@ app:
 | 1 | Driver setting or app-side override? | Driver setting, owner 2026-09-09 (D14 in the ilovetrains item). |
 | 2 | Freeze timers too? | No. Fixed reading, running timers: the apps under test poll and animate. |
 | 3 | Default timezone? | None; `timezone` is required with `time`. |
+| 4 | Overlay or hosted ring? | No: defaults and case only, owner 2026-09-09; the design's "wherever viewport is valid, including overlays" sentence was self-contradictory. |
 
 ## Verify
 

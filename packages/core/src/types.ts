@@ -126,7 +126,6 @@ export interface EnvironmentOverlay {
   init?: string;
   auth?: string;
   auth_states?: Record<string, string>;
-  clock?: ClockConfig;
 }
 
 export interface AppConfig {

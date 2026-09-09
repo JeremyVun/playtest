@@ -198,6 +198,28 @@ are also most of what a run costs: on a typical web run the trace alone is about
 per case as well as per suite; the run records which profile it used, and the
 viewer works the same either way.
 
+#### Fixed page clock (web)
+
+A screen that prints times — a departure board saying "12:48" and "in 4 min" —
+only replays step for step if the browser sees the same instant every run. Pin
+it:
+
+```yaml
+app:
+  driver: web
+  base_url: http://127.0.0.1:8080
+  clock:
+    time: "2026-08-31T22:44:00+10:00"
+    timezone: Australia/Sydney
+```
+
+`time` is an RFC 3339 instant and `timezone` an IANA zone name, required
+together because the same instant renders differently in every zone. Every
+browser context the case opens reads that instant from `Date.now()`, `new
+Date()` and `Intl` formatting, while the page's timers keep running — a refresh
+loop still fires, it just keeps seeing the same time. Set it per suite, per
+case, or per `app.envs.<name>`; omit it for real time. Web only.
+
 #### Secrets (api)
 
 An API suite needs credentials, and a credential must never end up in YAML, in a

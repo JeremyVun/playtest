@@ -165,6 +165,7 @@ export async function createDriver(
         settle: rc.env.settle,
         viewport: rc.env.viewport,
         deviceScaleFactor: rc.env.device_scale_factor,
+        clock: rc.env.clock,
         cookies: rc.env.cookies,
         // Gate-only on web (docs/contracts/engine.md#invariant-policies): the
         // enriched spec the Tier-1 invariant policies judge the page's own

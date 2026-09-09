@@ -2278,6 +2278,10 @@ export function buildManifest({ rc, runId, mode, startedAt, videoStartedAt, llm,
       // surfaced on the clip intro card. Only emitted when set so cookie-less
       // runs keep the stable manifest env shape.
       ...(rc.env.cookies ? { cookies: rc.env.cookies } : {}),
+      // The instant every browser context for this case read its clock at
+      // (app.clock), so a reviewer can see what a baseline was recorded against.
+      // Only emitted when declared, like cookies.
+      ...(rc.env.clock ? { clock: rc.env.clock } : {}),
       // The abstract identity label this case ran as (app.auth: "member"/"none");
       // informational, only emitted when declared — NOT a comparability pin (a
       // session input, like cookies/storage_state).

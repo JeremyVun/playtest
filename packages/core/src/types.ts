@@ -109,6 +109,16 @@ export interface ResolvedViewport {
   height: number | null;
 }
 
+export interface ClockConfig {
+  time: string;
+  timezone: string;
+}
+
+export interface ResolvedClock {
+  time: string;
+  timezone: string;
+}
+
 export interface EnvironmentOverlay {
   base_url?: string;
   cookies?: Record<string, string>;
@@ -116,6 +126,7 @@ export interface EnvironmentOverlay {
   init?: string;
   auth?: string;
   auth_states?: Record<string, string>;
+  clock?: ClockConfig;
 }
 
 export interface AppConfig {
@@ -137,6 +148,7 @@ export interface AppConfig {
   settle?: SettleConfig;
   viewport?: ViewportConfig;
   device_scale_factor?: number;
+  clock?: ClockConfig;
   cookies?: Record<string, string>;
   envs?: Record<string, EnvironmentOverlay>;
 }
@@ -312,6 +324,7 @@ interface ResolvedEnvironmentBase<D extends DriverId> {
   settle: SettleConfig | null;
   viewport: ResolvedViewport | null;
   device_scale_factor: number | null;
+  clock: ResolvedClock | null;
   cookies: Record<string, string> | null;
 }
 

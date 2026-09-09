@@ -542,6 +542,25 @@
           },
           "description": "web only: cookies to set on the browser context before the first navigation, as a flat { name: value } map, e.g. { bvt: \"true\" }. Scoped domain-wide (base_url's host, path \"/\") so they ride EVERY request the app makes \u2014 useful for routing to a blue/green slot or a feature flag. A session input (like storage_state), not a manifest pin: a run with different cookies still compares against the baseline."
         },
+        "clock": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "time",
+            "timezone"
+          ],
+          "properties": {
+            "time": {
+              "type": "string",
+              "description": "The fixed instant, RFC 3339 with an explicit offset or Z, e.g. \"2026-08-31T22:44:00+10:00\"."
+            },
+            "timezone": {
+              "type": "string",
+              "description": "IANA time-zone name the page formats in, e.g. \"Australia/Sydney\". Required whenever time is set."
+            }
+          },
+          "description": "web only: pin the page's clock so a screen that prints times replays identically. time is an RFC 3339 instant WITH an offset (a bare local time names a different instant on every machine); timezone is an IANA zone name and is required with time \u2014 there is no default, because the same instant renders differently in every zone. Every browser context the case opens (record, act and heal) sets that zone and returns that instant from Date.now(), new Date() and Intl formatting, while setTimeout/setInterval/requestAnimationFrame keep running \u2014 only the reading of the clock is frozen, so an app's refresh loop still fires. Omit for real time. Recorded in the run manifest; not a comparability pin."
+        },
         "envs": {
           "type": "object",
           "additionalProperties": {
@@ -577,6 +596,25 @@
                   "type": "string"
                 },
                 "description": "Per-env identity map { <label>: <storage-state path> } (paths relative to this file) \u2014 each environment maps the same abstract labels to its own saved sessions, so the suite's app.auth labels stay environment-agnostic."
+              },
+              "clock": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "time",
+                  "timezone"
+                ],
+                "properties": {
+                  "time": {
+                    "type": "string",
+                    "description": "The fixed instant, RFC 3339 with an explicit offset or Z, e.g. \"2026-08-31T22:44:00+10:00\"."
+                  },
+                  "timezone": {
+                    "type": "string",
+                    "description": "IANA time-zone name the page formats in, e.g. \"Australia/Sydney\". Required whenever time is set."
+                  }
+                },
+                "description": "Per-env fixed page clock ({ time, timezone }) \u2014 replaces the top-level app.clock wholesale (no merge). Use when each environment's captured fixtures were taken at a different instant. web only."
               },
               "platform": {
                 "enum": ["ios", "android"],

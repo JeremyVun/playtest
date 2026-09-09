@@ -16,7 +16,7 @@ import type { AxeCapture } from "../axe-source.ts";
 import type { Driver, DriverResolution, DriverResult, DriverSnapshot } from "../driver.ts";
 import type { EnrichedOpenApi } from "../openapi.ts";
 import type { StepAction, StepEnvelope } from "../trajectory.ts";
-import type { ArtifactProfile, ResolvedViewport, SettleConfig } from "../types.ts";
+import type { ArtifactProfile, ResolvedClock, ResolvedViewport, SettleConfig } from "../types.ts";
 
 interface WebInstrumentation {
   lastMutationAt: number;
@@ -496,6 +496,7 @@ export class WebDriver implements Driver {
     settle = null,
     viewport = null,
     deviceScaleFactor = null,
+    clock = null,
     cookies = null,
     openapi = null,
     caseFile = null,
@@ -509,6 +510,7 @@ export class WebDriver implements Driver {
     settle?: SettleConfig | null;
     viewport?: ResolvedViewport | null;
     deviceScaleFactor?: number | null;
+    clock?: ResolvedClock | null;
     cookies?: Record<string, string> | null;
     openapi?: string | null;
     caseFile?: string | null;
@@ -545,8 +547,13 @@ export class WebDriver implements Driver {
       const context = await browser.newContext({
         viewport: contextViewport,
         deviceScaleFactor: dsf,
+        ...(clock ? { timezoneId: clock.timezone } : {}),
         ...(storageState ? { storageState } : {}),
       });
+      // app.clock: every page this context opens reads the same instant, so a
+      // screen that prints times replays identically. setFixedTime leaves
+      // timers running, which the apps under test poll and animate on.
+      if (clock) await context.clock.setFixedTime(new Date(clock.time));
       context.setDefaultTimeout(ACTION_TIMEOUT_MS);
       context.setDefaultNavigationTimeout(NAV_TIMEOUT_MS);
       // Seed app.cookies against base_url's origin BEFORE the first navigation,
@@ -565,7 +572,7 @@ export class WebDriver implements Driver {
       if (debugArtifacts) await context.tracing.start({ screenshots: true, snapshots: true });
       await context.addInitScript(initInstrumentation);
       const page = await context.newPage();
-      const session = new WebDriver({ baseUrl, runDir, browser, context, page, settle, viewport: vp, spec, perf, artifacts });
+      const session = new WebDriver({ baseUrl, runDir, browser, context, page, settle, viewport: vp, clock, spec, perf, artifacts });
       // When cookies route to a blue/green slot, the FIRST cold document hit can
       // serve a stale edge-cached HTML referencing chunk hashes that 404 (the
       // page renders unstyled and never hydrates); a warm second hit is correct.
@@ -624,6 +631,9 @@ export class WebDriver implements Driver {
   // Resolved Chromium viewport (app.viewport or DEFAULT_VIEWPORT). Rides
   // manifest.pins.viewport (part of the comparability key).
   #viewport: ResolvedViewport;
+  // app.clock, kept so the post-run check context reads the same fixed instant
+  // as the live one.
+  #clock: ResolvedClock | null;
   #warmReload = false;
   #cookies: Record<string, string> | null = null;
   // The enriched OpenAPI document (app.openapi), or null. Gate-only on web: the
@@ -653,6 +663,7 @@ export class WebDriver implements Driver {
     page,
     settle = null,
     viewport = DEFAULT_VIEWPORT,
+    clock = null,
     spec = null,
     perf = PerfSidecar.off(),
     artifacts = "debug"
@@ -664,6 +675,7 @@ export class WebDriver implements Driver {
     page: Page;
     settle?: SettleConfig | null;
     viewport?: ResolvedViewport;
+    clock?: ResolvedClock | null;
     spec?: EnrichedOpenApi | null;
     perf?: PerfSidecar;
     artifacts?: ArtifactProfile;
@@ -679,6 +691,7 @@ export class WebDriver implements Driver {
     this.#harFlusher = createHarFlusher(runDir, this.#har, { perf });
     this.#settlePolicy = settle ? { ...SETTLE, ...settle } : SETTLE;
     this.#viewport = viewport;
+    this.#clock = clock;
 
     context.on("request", (req) => {
       this.#reqInfo.set(req, { index: this.#har.length, startMs: Date.now() });
@@ -1157,7 +1170,11 @@ export class WebDriver implements Driver {
       // makes for the live context. Without this the check context throws for
       // every full-page run and #checkPage silently stays null.
       const checkViewport = { width: this.#viewport.width, height: this.#viewport.height ?? FULL_PAGE_FOLD_HEIGHT };
-      this.#checkContext = await this.#browser.newContext({ viewport: checkViewport });
+      this.#checkContext = await this.#browser.newContext({
+        viewport: checkViewport,
+        ...(this.#clock ? { timezoneId: this.#clock.timezone } : {}),
+      });
+      if (this.#clock) await this.#checkContext.clock.setFixedTime(new Date(this.#clock.time));
       this.#checkPage = await this.#checkContext.newPage();
       await this.#checkPage.setContent(html, { waitUntil: "domcontentloaded" });
     } catch {

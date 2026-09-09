@@ -59,6 +59,7 @@ and user-facing commands are defined in
     settle: {} | null,
     viewport: { width: 1280, height: 720 | null } | null,
     device_scale_factor: 2 | null,
+    clock: { time: "2026-08-31T22:44:00+10:00", timezone: "Australia/Sydney" } | null,
     cookies: { bvt: "true" } | null,
 
     // mobile
@@ -147,8 +148,9 @@ overlay (`init`, `storage_state`, `app`, `auth_states`). Durations accept a
 millisecond number or strings using `ms`, `s`, or `m`.
 
 `app.envs.<name>` is a named partial overlay containing only environment keys:
-`base_url`, cookies, storage state, init, auth/auth states, and the mobile
-device target (`platform`, `app`, `device`, `appium_url`). It
+`base_url`, cookies, storage state, init, auth/auth states, the fixed page
+clock, and the mobile device target (`platform`, `app`, `device`,
+`appium_url`). It
 shallow-overrides the merged top-level `app` after the defaults chain. The
 mobile device target is per-environment because the app binary, the device and
 the Appium endpoint all belong to the machine the device is attached to — a
@@ -314,6 +316,16 @@ kinds, and performance keys are validated according to the driver matrix.
 `base_url` is required for web and API. Mobile requires `app.app`. Those two
 target requirements are the only ones structural resolution drops (see
 "Resolution modes"); every other rule here applies in both modes.
+
+`app.clock` is web-only and is valid in the defaults chain, in a case, and in an
+`app.envs.<name>` overlay, with the usual precedence: the case wins over
+defaults, the overlay over both. Declaring it on a mobile or API case is a
+`DummyConfigError` naming `app.clock`. Both `time` and `timezone` are required
+together, because a bare instant renders differently in every zone; `time` must
+be an RFC 3339 instant carrying an explicit offset or `Z`, and `timezone` an
+IANA zone name. A malformed instant or an unknown zone is a configuration error
+at load, not a run failure. The resolved case echoes `env.clock` (null when
+absent) and the run manifest records it.
 
 `visual_regression` and its drift threshold are accepted for every case but
 are inert when the driver produces no screenshot hash. `artifacts` is accepted
@@ -502,6 +514,14 @@ wait still requires `seconds` in the 0.1–10 range.
 The web driver uses Chromium through Playwright. Its default context is
 1280×720, tracing is enabled, and no live video is recorded. A configured
 browser channel is used only through `PLAYTEST_BROWSER_CHANNEL`.
+
+`app.clock` pins the page clock. Every browser context the driver opens for the
+case — in record, act and heal alike, including the post-run check context — is
+created with the configured `timezoneId` and a fixed time, so `Date.now()`, `new
+Date()` and `Intl` formatting return that instant on every call while
+`setTimeout`, `setInterval` and `requestAnimationFrame` keep running. Only the
+reading of the clock is frozen: an app's refresh loop still fires. Omitted, the
+page reads real time. The clock is not a comparability pin.
 
 Snapshots assign fresh `data-dummy-ref="eN"` references and write PNG, MHTML,
 and text artifacts. The model screenshot is downscaled only when its longest

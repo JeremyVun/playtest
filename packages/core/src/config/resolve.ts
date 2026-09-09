@@ -28,6 +28,8 @@ import type {
   PerfConfig,
   RedactConfig,
   ResolutionMode,
+  ClockConfig,
+  ResolvedClock,
   ResolvedViewport,
   RuntimeTarget,
 } from "../types.ts";
@@ -194,6 +196,9 @@ const APP_KEY_DRIVERS: Record<string, DriverId[]> = {
   settle: ["web", "mobile"],
   viewport: ["web"],
   device_scale_factor: ["web"],
+  // Pinning the page's clock is a Chromium context setting (timezoneId plus
+  // Playwright's clock API); there is no equivalent seam on Appium or fetch.
+  clock: ["web"],
   cookies: ["web"],
 };
 const DURATION_UNITS: Record<"ms" | "s" | "m", number> = { ms: 1, s: 1000, m: 60000 };
@@ -799,6 +804,12 @@ export async function resolveCase(
       // crisper step stills; null = the driver's default of 1. Purely a
       // rendering knob — deliberately NOT a manifest pin (not a comparability key).
       device_scale_factor: merged.env.device_scale_factor ?? null,
+      // web key; null on mobile/api. The fixed instant and IANA zone every
+      // browser context for this case reads its clock at, so a page that prints
+      // times replays identically. Echoed for the manifest; NOT a comparability
+      // pin, because a baseline recorded at another instant is a different
+      // recording, not an incomparable one.
+      clock: driver === "web" ? resolveClock(merged.env.clock, file) : null,
       // web key; null on mobile/api. Cookies ({name, value}) set on the browser
       // context before the first navigation, against base_url's origin. A session
       // input like storage_state — NOT a manifest pin.
@@ -824,6 +835,40 @@ export function resolveViewport(vp?: { width?: number; height?: number | null })
   // Distinguish "no height key" (=> default) from "height: null" (=> full page).
   const height: number | null = vp && "height" in vp ? vp.height as number | null : VIEWPORT_DEFAULT_HEIGHT;
   return { width, height };
+}
+
+// RFC 3339: a date-time with an explicit offset or Z. A bare local time is
+// rejected because it names a different instant on every machine, which is
+// exactly what pinning the clock exists to prevent.
+const RFC3339 = /^\d{4}-\d{2}-\d{2}[Tt ]\d{2}:\d{2}:\d{2}(\.\d+)?([Zz]|[+-]\d{2}:\d{2})$/;
+
+// Date.parse rolls an out-of-range day over (2026-02-31 becomes 3 March)
+// instead of rejecting it, so the calendar day is checked separately.
+function isRealCalendarDay(date: string): boolean {
+  const utc = new Date(`${date}T00:00:00Z`);
+  return !Number.isNaN(utc.getTime()) && utc.toISOString().startsWith(date);
+}
+
+/**
+ * Validate app.clock into { time, timezone }, or null when unset. Exported for
+ * unit test.
+ */
+export function resolveClock(clock: ClockConfig | undefined, file: string): ResolvedClock | null {
+  if (!clock) return null;
+  const { time, timezone } = clock;
+  if (!RFC3339.test(time) || Number.isNaN(Date.parse(time)) || !isRealCalendarDay(time.slice(0, 10))) {
+    throw new DummyConfigError(
+      `${file}: app.clock.time must be an RFC 3339 instant with an offset, e.g. 2026-08-31T22:44:00+10:00 (got ${JSON.stringify(time)})`,
+    );
+  }
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: timezone });
+  } catch {
+    throw new DummyConfigError(
+      `${file}: app.clock.timezone must be an IANA zone name, e.g. Australia/Sydney (got ${JSON.stringify(timezone)})`,
+    );
+  }
+  return { time, timezone };
 }
 
 /** Nearest ancestor dir containing .git, or null. */

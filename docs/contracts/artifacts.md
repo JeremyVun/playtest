@@ -44,7 +44,8 @@ the pin set:
 All present pins must match. A pin missing from either manifest is a wildcard so
 legacy runs remain comparable. `gateway` is recorded for diagnosis but excluded
 because it may contain an ephemeral port. Rendering-only inputs such as
-`device_scale_factor`, session inputs such as cookies or authentication labels,
+`device_scale_factor`, session inputs such as cookies, the fixed page clock, or
+authentication labels,
 mobile `preserve_session`, and the [artifact profile](#artifact-profiles) are
 not comparability pins.
 
@@ -526,6 +527,7 @@ wall-clock `video.webm`, which consumers must continue to support.
     driver: "web" | "mobile" | "api",
     env_name?,
     cookies?,
+    clock?,
     auth?
   },
   result: {
@@ -638,8 +640,8 @@ manifest replaces it. Interrupted placeholders and infrastructure results may
 have an empty failing gate without `hardPass`; this keeps partial runs visible
 without inventing a hard-gate verdict.
 
-`env_name`, cookies, and auth are recorded only when declared. They are
-informational session inputs, not comparability pins.
+`env_name`, cookies, the fixed page clock, and auth are recorded only when
+declared. They are informational session inputs, not comparability pins.
 
 `setup` exists only when a `before_each` hook ran. `heal` exists only after an
 act replay escalated to healing. `baseline` identifies the accepted path used

@@ -159,7 +159,7 @@ test("the manifest records env.clock only when declared and never as a pin", () 
 
 test("an exported Playwright spec carries the clock the baseline was recorded under", () => {
   const { code } = exportSpec({
-    caseCfg: { id: "board", file: "/suite/board.yaml", story: "Read.", mode: "journey", success: [], perf: {}, env: { driver: "web", base_url: "http://app.test", cookies: null, clock: CLOCK } },
+    caseCfg: { id: "board", file: "/suite/board.yaml", story: "Read.", mode: "journey", success: [], perf: {}, env: { driver: "web", base_url: "http://app.test", cookies: null, clock: CLOCK } } as LegacyTestValue,
     envelopes: [],
   });
   assert.match(code, /timezoneId: "Australia\/Sydney"/);

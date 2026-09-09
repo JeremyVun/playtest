@@ -74,7 +74,7 @@ test("popups, later documents, iframes and the post-run check context all read t
   const driver = await WebDriver.launch({ baseUrl, runDir, clock: CLOCK });
   try {
     await driver.start();
-    const popup = await driver.page.evaluate(() => new (window.open("about:blank")!.Date)().toISOString());
+    const popup = await driver.page.evaluate(() => new ((window.open("about:blank") as LegacyTestValue).Date)().toISOString());
     assert.equal(popup, FIXED_ISO);
 
     await driver.page.goto(`${baseUrl}/second`);
@@ -113,7 +113,7 @@ test("navigation timing survives the fixed clock", async () => {
   const driver = await WebDriver.launch({ baseUrl, runDir, clock: CLOCK });
   try {
     const result = await driver.start();
-    assert.equal(typeof result.perf?.nav?.ttfb_ms, "number");
+    assert.equal(typeof (result.perf?.nav as LegacyTestValue)?.ttfb_ms, "number");
     assert.equal(await driver.page.evaluate(() => performance.getEntriesByType("navigation").length), 1);
     assert.equal(await driver.page.evaluate(() => typeof performance.timing), "object");
   } finally {

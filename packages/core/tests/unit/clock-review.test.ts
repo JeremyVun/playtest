@@ -7,6 +7,7 @@ import path from "node:path";
 import { discoverCases, DummyConfigError } from "../../src/config.ts";
 import { resolveClock } from "../../src/config/resolve.ts";
 import { buildManifest } from "../../src/runner.ts";
+import { exportSpec } from "../../src/export-playwright.ts";
 
 let tmpRoot: LegacyTestValue;
 let suiteSeq = 0;
@@ -154,4 +155,13 @@ test("the manifest records env.clock only when declared and never as a pin", () 
   assert.deepEqual(declared.env.clock, CLOCK);
   assert.equal("clock" in declared.pins, false);
   assert.equal("clock" in manifestFor(null).env, false);
+});
+
+test("an exported Playwright spec carries the clock the baseline was recorded under", () => {
+  const { code } = exportSpec({
+    caseCfg: { id: "board", file: "/suite/board.yaml", story: "Read.", mode: "journey", success: [], perf: {}, env: { driver: "web", base_url: "http://app.test", cookies: null, clock: CLOCK } },
+    envelopes: [],
+  });
+  assert.match(code, /timezoneId: "Australia\/Sydney"/);
+  assert.match(code, /clock\.setFixedTime\(/);
 });

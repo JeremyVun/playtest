@@ -141,6 +141,85 @@ export function cookiesFor(cookies: Record<string, string> | null | undefined, b
   return Object.entries(cookies).map(([name, value]) => ({ name, value: String(value), domain: host, path: "/" }));
 }
 
+/**
+ * The origins the web egress guard admits: base_url's own plus every entry of
+ * app.allowed_origins, exact scheme+host+port
+ * (docs/contracts/engine.md#origin-confinement). Entries arrive already
+ * validated as bare http(s) origins from config resolution; an unparseable one
+ * is dropped rather than widening the set. Pure; exported for test.
+ */
+export function allowedOriginSet(baseUrl: string, extra: string[] | null | undefined): Set<string> {
+  const set = new Set<string>();
+  for (const candidate of [baseUrl, ...(extra ?? [])]) {
+    try {
+      set.add(new URL(String(candidate)).origin);
+    } catch {}
+  }
+  return set;
+}
+
+/**
+ * Whether the guard admits `url`. `about:` and `data:` documents are the
+ * browser's own — no origin, no network — so they pass; every other non-http(s)
+ * scheme (javascript:, file:, chrome:) has no admissible origin and is refused.
+ * Pure; exported for test.
+ */
+export function originAdmitted(url: string, allowed: Set<string>): boolean {
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return false;
+  }
+  if (u.protocol === "about:" || u.protocol === "data:") return true;
+  if (u.protocol !== "http:" && u.protocol !== "https:") return false;
+  return allowed.has(u.origin);
+}
+
+type DriverEvent = (type: string, payload: Record<string, unknown>) => void;
+
+// Every context the driver opens is confined to the allowed origins
+// (docs/contracts/engine.md#origin-confinement). Routing runs again on each
+// redirect hop, so a chain dies at the hop that leaves the set.
+async function installOriginGuard(
+  context: BrowserContext,
+  allowed: Set<string>,
+  onEvent: DriverEvent,
+  onBlockedNavigation: (url: string) => void = () => {},
+): Promise<void> {
+  await context.route("**/*", async (route, request) => {
+    const url = request.url();
+    if (originAdmitted(url, allowed)) {
+      await route.continue();
+      return;
+    }
+    if (request.isNavigationRequest()) onBlockedNavigation(url);
+    onEvent("request_blocked", { url, method: request.method(), resource_type: request.resourceType() });
+    await route.abort("blockedbyclient");
+  });
+  // Playwright follows a redirect without routing the next hop, so an admitted
+  // path that answers 302 to another origin is seen here rather than at the
+  // route. The hop itself cannot be aborted; the driver unwinds the navigation
+  // instead (docs/contracts/engine.md#origin-confinement).
+  context.on("response", (response) => {
+    const status = response.status();
+    if (status < 300 || status >= 400) return;
+    const request = response.request();
+    if (!request.isNavigationRequest()) return;
+    const location = response.headers()["location"];
+    if (!location) return;
+    let target: string;
+    try {
+      target = new URL(location, response.url()).href;
+    } catch {
+      return;
+    }
+    if (originAdmitted(target, allowed)) return;
+    onBlockedNavigation(target);
+    onEvent("request_blocked", { url: target, method: request.method(), resource_type: "document" });
+  });
+}
+
 /** PNG IHDR dimensions (width/height at bytes 16-23, big-endian); null when not a PNG. */
 export function pngDimensions(buf: Buffer | null | undefined): { width: number; height: number } | null {
   if (!buf || buf.length < 24 || buf.readUInt32BE(0) !== 0x89504e47) return null;
@@ -522,6 +601,8 @@ export class WebDriver implements Driver {
     clock = null,
     cookies = null,
     openapi = null,
+    allowedOrigins = null,
+    onEvent = () => {},
     caseFile = null,
     perf = PerfSidecar.off(),
     artifacts = "debug"
@@ -536,6 +617,8 @@ export class WebDriver implements Driver {
     clock?: ResolvedClock | null;
     cookies?: Record<string, string> | null;
     openapi?: string | null;
+    allowedOrigins?: string[] | null;
+    onEvent?: DriverEvent;
     caseFile?: string | null;
     perf?: PerfSidecar;
     artifacts?: ArtifactProfile;
@@ -574,6 +657,8 @@ export class WebDriver implements Driver {
         ...(storageState ? { storageState } : {}),
       });
       if (clock) await applyClock(context, clock);
+      // Installed before the first page exists, so nothing this session opens
+      // can reach an origin the case did not name.
       context.setDefaultTimeout(ACTION_TIMEOUT_MS);
       context.setDefaultNavigationTimeout(NAV_TIMEOUT_MS);
       // Seed app.cookies against base_url's origin BEFORE the first navigation,
@@ -592,7 +677,10 @@ export class WebDriver implements Driver {
       if (debugArtifacts) await context.tracing.start({ screenshots: true, snapshots: true });
       await context.addInitScript(initInstrumentation);
       const page = await context.newPage();
-      const session = new WebDriver({ baseUrl, runDir, browser, context, page, settle, viewport: vp, clock, spec, perf, artifacts });
+      const session = new WebDriver({ baseUrl, runDir, browser, context, page, settle, viewport: vp, clock, spec, perf, artifacts, allowedOrigins, onEvent });
+      // Installed before anything navigates (a fresh page is about:blank), so no
+      // request this session makes escapes the case's origins.
+      await installOriginGuard(context, allowedOriginSet(baseUrl, allowedOrigins), onEvent, (url) => session.noteBlockedNavigation(url));
       // When cookies route to a blue/green slot, the FIRST cold document hit can
       // serve a stale edge-cached HTML referencing chunk hashes that 404 (the
       // page renders unstyled and never hydrates); a warm second hit is correct.
@@ -656,6 +744,17 @@ export class WebDriver implements Driver {
   #clock: ResolvedClock | null;
   #warmReload = false;
   #cookies: Record<string, string> | null = null;
+  // The egress guard's admitted origins (base_url plus app.allowed_origins) and
+  // the run's event sink. The route handler enforces them for every request;
+  // this copy is what the navigate verb refuses against before Playwright is
+  // asked to go anywhere (docs/contracts/engine.md#origin-confinement).
+  #allowedOrigins: Set<string>;
+  #onEvent: DriverEvent;
+  // The last off-origin URL the guard refused during the current step, and the
+  // last page URL the guard admitted. Together they let a step that ended
+  // somewhere it should not be say where it was headed and go back.
+  #blockedNavigation: string | null = null;
+  #lastAdmittedUrl: string | null = null;
   // The enriched OpenAPI document (app.openapi), or null. Gate-only on web: the
   // Tier-1 invariant policies read it to judge the requests the PAGE made
   // (docs/contracts/engine.md#invariant-policies). It never reaches the actor —
@@ -686,7 +785,9 @@ export class WebDriver implements Driver {
     clock = null,
     spec = null,
     perf = PerfSidecar.off(),
-    artifacts = "debug"
+    artifacts = "debug",
+    allowedOrigins = null,
+    onEvent = () => {}
   }: {
     baseUrl: string;
     runDir: string;
@@ -699,8 +800,12 @@ export class WebDriver implements Driver {
     spec?: EnrichedOpenApi | null;
     perf?: PerfSidecar;
     artifacts?: ArtifactProfile;
+    allowedOrigins?: string[] | null;
+    onEvent?: DriverEvent;
   }) {
     this.#artifacts = artifacts;
+    this.#allowedOrigins = allowedOriginSet(baseUrl, allowedOrigins);
+    this.#onEvent = onEvent;
     this.baseUrl = baseUrl;
     this.page = page;
     this.#spec = spec ?? null;
@@ -870,6 +975,36 @@ export class WebDriver implements Driver {
       return false;
     }
     return true;
+  }
+
+  /** The guard telling this session that a document request left the allowed
+   *  origins, so the step that ends off-origin can name where it was headed. */
+  noteBlockedNavigation(url: string): void {
+    this.#blockedNavigation = url;
+  }
+
+  /**
+   * Put the page back where the case is allowed to be. A blocked document
+   * request leaves Chromium on its own error page, and a redirect that left the
+   * origins cannot be aborted at the hop (Playwright does not route redirects),
+   * so the landing is unwound here: the actor never reads an off-origin page and
+   * the step it happened in fails with the reason
+   * (docs/contracts/engine.md#origin-confinement). Returns the refusal, or null
+   * when the page is where it should be.
+   */
+  async #unwindStrayNavigation(): Promise<string | null> {
+    const url = this.#pageUrl();
+    if (url && originAdmitted(url, this.#allowedOrigins)) {
+      this.#lastAdmittedUrl = url;
+      return null;
+    }
+    const target = this.#blockedNavigation ?? url ?? "an unknown location";
+    const back = this.#lastAdmittedUrl ?? this.baseUrl;
+    try {
+      await this.page.goto(back, { waitUntil: "domcontentloaded" });
+      await this.#settle();
+    } catch {}
+    return `navigation to ${target} refused: outside the target origin (allowed: ${[...this.#allowedOrigins].join(", ") || "none"}; widen with app.allowed_origins) — the page is back at ${back}`;
   }
 
   location(): string | null {
@@ -1195,6 +1330,9 @@ export class WebDriver implements Driver {
         ...(this.#clock ? { timezoneId: this.#clock.timezone } : {}),
       });
       if (this.#clock) await applyClock(this.#checkContext, this.#clock);
+      // The re-hosted final DOM would otherwise fetch its subresources from
+      // wherever it names, outside the guard the live context ran under.
+      await installOriginGuard(this.#checkContext, this.#allowedOrigins, this.#onEvent);
       this.#checkPage = await this.#checkContext.newPage();
       await this.#checkPage.setContent(html, { waitUntil: "domcontentloaded" });
     } catch {
@@ -1256,6 +1394,7 @@ export class WebDriver implements Driver {
     // mask the no_effect heuristic (perf.requests === 0) or skew perf data.
     const perfStart = this.#har.length;
     const errStart = this.#errorCount; // exact per-step count (js_errors)
+    this.#blockedNavigation = null;
     const errLogStart = this.#errorLog.length; // messages captured this step (may lag the count past the cap)
     let longTasksStart = 0;
       try {
@@ -1273,6 +1412,10 @@ export class WebDriver implements Driver {
       this.#perf.span("action_perform", performAt, null, { type: action.type });
 
       const settle_ms = await this.#settle();
+      // A blocked document request or an off-origin redirect leaves the page
+      // somewhere the case may not be; unwinding it is what makes the step fail.
+      const strayed = await this.#unwindStrayNavigation();
+      if (strayed) error ??= strayed;
       // The runner defers axe until the following snapshot has completed, then
       // overlaps it only with the actor request. This monotonic stamp never
       // leaves the process; it measures the settle-to-scan delay in perf.jsonl.
@@ -1381,8 +1524,18 @@ export class WebDriver implements Driver {
         if (!scrolled) await this.page.mouse.wheel(0, dy);
         return;
       }
-      case "navigate":
-        return this.page.goto(new URL(action.url as string, this.baseUrl).href, { waitUntil: "domcontentloaded" });
+      case "navigate": {
+        const target = new URL(action.url as string, this.baseUrl).href;
+        // Refused here rather than by the route handler so the actor is told why
+        // its step failed instead of reading a net::ERR_BLOCKED_BY_CLIENT.
+        if (!originAdmitted(target, this.#allowedOrigins)) {
+          this.#onEvent("request_blocked", { url: target, method: "GET", resource_type: "document" });
+          throw new Error(
+            `navigation to ${target} refused: outside the target origin (allowed: ${[...this.#allowedOrigins].join(", ") || "none"}; widen with app.allowed_origins)`,
+          );
+        }
+        return this.page.goto(target, { waitUntil: "domcontentloaded" });
+      }
       case "back":
         // Browser back button. goBack() resolves to null (no throw) at history
         // start — a benign no-op (url unchanged, ok:true), matching mobile back.

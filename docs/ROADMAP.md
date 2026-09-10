@@ -26,3 +26,10 @@ run each feature's explicit integration gates as well.
   Built and green on branch `hillclimb/p0`, awaiting merge and a hosted
   redeploy; the behavior is already written into
   [Hosted findings contracts](contracts/hosted-findings.md#repair-claims).
+- [ ] **Web origin guard** — `app.allowed_origins` on the web driver: every
+  browser context blocks requests outside the case's origins and records them,
+  and the `navigate` verb refuses an off-origin target. Built for the external
+  daemon that runs feedback-written discovery cases against production.
+  [Design](backlog/web-origin-guard/design.md). The behaviour is built and
+  binding in [Engine contracts](contracts/engine.md#origin-confinement); the
+  folder closes out and is deleted once that daemon runs against it.

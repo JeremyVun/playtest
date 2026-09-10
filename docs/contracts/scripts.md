@@ -97,7 +97,7 @@ wire by the proxy, which is the authority:
 
 | Guard | Rule |
 |---|---|
-| origin | the resolved origin must be `base_url`'s origin or an entry in the run's `allowed_origins`. The API-driver egress semantics apply ([Engine: API driver](engine.md#api-driver)): entries are bare http(s) origins, a different port or scheme is a different origin, and non-http(s) resolutions have no admissible origin. |
+| origin | the resolved origin must be `base_url`'s origin or an entry in the run's `allowed_origins`. The engine's egress semantics apply ([Engine: Origin confinement](engine.md#origin-confinement)): entries are bare http(s) origins, a different port or scheme is a different origin, and non-http(s) resolutions have no admissible origin. |
 | mode | in `read-only`, only `GET` and `HEAD` are forwarded. |
 | budget | past `budget.limit` nothing is forwarded and nothing is recorded, so the recorded trace **is** the budget. Exhaustion throws `BudgetExhausted` and is a defect. |
 | secrets | `{ $secret: NAME }` resolves only for a NAME the run declared, and only on a request to the target's own origin. A credential is bound to the target, not to the run, so an allow-listed auxiliary origin is reachable and receives no credential — the allowlist can never become an exfiltration channel. |

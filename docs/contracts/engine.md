@@ -69,7 +69,7 @@ and user-facing commands are defined in
     appium_url: "http://..." | null,
     preserve_session: true | null,
 
-    // API
+    // web + API
     openapi: "/abs/path/openapi.yaml" | null,
     allowed_origins: ["https://api.example"] | null
   }
@@ -468,6 +468,7 @@ own browser install flow ([Interfaces](interfaces.md#exit-codes-and-errors)).
 | Network capture | yes | no | yes |
 | Gate observation phase | no | no | yes |
 | `app.openapi` | gate only | no | actor + gate |
+| Origin confinement | requests blocked | no | requests refused |
 | Screenshot | yes | yes | no |
 
 `invariant` and the advisory `observe:` list follow network capture, not the
@@ -528,6 +529,10 @@ navigation timing survives the pin (`performance.getEntries*`, `timing`,
 `nav` telemetry reads), while dedicated and service workers are outside the pin
 and read real time. Omitted, the page reads real time. The clock is not a
 comparability pin.
+
+Every context the driver opens is confined to the case's origins: requests
+outside them are blocked and recorded, and the `navigate` verb refuses them
+([Origin confinement](#origin-confinement)).
 
 Snapshots assign fresh `data-dummy-ref="eN"` references and write PNG, MHTML,
 and text artifacts. The model screenshot is downscaled only when its longest
@@ -662,15 +667,12 @@ See [Artifact contracts](artifacts.md#baseline-files).
 (`expect.status`, the step-scoped expectation of
 [Act and heal](#act-and-heal)).
 
-**Egress guard.** The driver refuses any request whose resolved origin is not
-`base_url`'s origin or listed in `app.allowed_origins` (api-only key). The
+**Egress guard.** The driver refuses any request whose resolved origin is
+outside the case's admitted set ([Origin confinement](#origin-confinement)). The
 refusal happens before any network I/O or HAR entry and surfaces as a failed
-step returned to the actor — never a crash. `allowed_origins` entries must be
-bare http(s) origins (`scheme://host[:port]`); a path, query, hash, or
-credentials in an entry is a `DummyConfigError`, because an allowed origin
-admits the whole origin and anything narrower would imply a scoping the guard
-does not perform. Non-http(s) resolutions (`file:`, `data:`, …) have no
-admissible origin and are always refused.
+step returned to the actor — never a crash. Non-http(s) resolutions (`file:`,
+`data:`, …) have no admissible origin and are always refused here: unlike a
+browser, this driver has no use for a document it did not fetch.
 
 **Observation channel.** `driver.observe({ method, path })` issues the
 read-only requests an invariant policy declares
@@ -776,6 +778,46 @@ comparing, never when persisting, so a baseline always records the status that
 actually happened and an equivalence declared after recording still works.
 Malformed rules are `DummyConfigError`s naming the file; a `match` block that
 declares nothing resolves to no rules at all.
+
+### Origin confinement
+
+`app.allowed_origins` is the case's egress allowlist, valid on the web and api
+drivers and a `DummyConfigError` naming the key on a mobile one. The admitted set
+is `base_url`'s own origin — scheme, host and port, matched exactly — plus every
+entry of `app.allowed_origins`. Entries must be bare http(s) origins
+(`scheme://host[:port]`); a path, query, hash, or credentials in an entry is a
+`DummyConfigError`, because an allowed origin admits the whole origin and
+anything narrower would imply a scoping the guard does not perform. The key is
+optional, and the guard applies without it: an undeclared case may reach
+`base_url`'s origin and nothing else. It is a session input like `cookies`, not a
+comparability pin, and it resolves from the case and its defaults chain alone —
+no story, prompt, actor action, or runtime override can widen it.
+
+On web the guard is Chromium request routing, installed on every browser context
+the driver opens for the case — record, act, and heal alike, including the
+post-run check context — before anything navigates. A request whose URL falls
+outside the admitted set is aborted with `blockedbyclient` and records a
+`request_blocked` event carrying the URL, the request method, and the resource
+type ([Progress events](#progress-events)); the aborted request remains in
+`har.json` as a failed entry. `about:` and `data:` URLs are admitted — they are
+the browser's own documents and reach no network — while every other non-http(s)
+scheme, `javascript:` included, has no admissible origin and is refused.
+
+A blocked subresource — an image, a font, a third-party analytics script — never
+fails the case: the page renders without it and the run continues, which is the
+expected shape of a production site whose fonts and analytics live elsewhere.
+Only a document request is a step outcome. The `navigate` verb checks its
+resolved target before Playwright is asked for it, so an off-origin or
+`javascript:` navigation fails that step with the reason the actor reads and the
+page does not move. Two document paths are decided after the fact instead: a
+navigation the page itself started (a link click), which leaves Chromium on its
+own error page, and a redirect from an admitted URL to one outside the set, which
+cannot be aborted at the hop because Playwright does not route redirect hops —
+the single uncredentialed request the browser follows is the guard's known
+residue. Both are unwound before the step returns: the step fails with the
+refusal, the page goes back to the last admitted URL, and the off-origin document
+reaches neither the actor's snapshot nor the grader. A refused navigation is an
+ordinary step failure and never fails the run by itself.
 
 ### OpenAPI ingestion
 
@@ -1605,9 +1647,15 @@ heal_resume  { resumedAtStep }
 retry        { phase, step?, status, attempt, maxAttempts, waitMs }
 grading      {}
 gate_fail    { checks }
+request_blocked { url, method, resource_type }
 warn         { message }
 case_end     { status, result }
 ```
+
+`request_blocked` is the one event a driver emits rather than `runCase` itself
+([Origin confinement](#origin-confinement)). It rides the same listener stream
+and the same `events.jsonl`, and it is not tied to a step: a page that keeps
+retrying a blocked request emits one each time, including between steps.
 
 `case_end` is emitted on every exit path, including infrastructure failure, and
 it is emitted **after the finishing tail** — after grading, video, and every

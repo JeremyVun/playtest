@@ -250,6 +250,12 @@ export function publicFinding(f: HostedDynamic) {
     // ride inside `summary.auto_resolve`.
     resolved_by_run_id: f.resolved_by_run_id ?? null,
     auto_resolved_at: f.auto_resolved_at ?? null,
+    // The repair lease and what the last repair concluded. A daemon reads these
+    // to know whether the finding is its to work on.
+    repair_owner: f.repair_owner ?? null,
+    repair_generation: f.repair_generation ?? 0,
+    repair_expires_at: f.repair_expires_at ?? null,
+    repair_outcome: f.repair_outcome ?? "none",
     created_at: f.created_at,
     updated_at: f.updated_at,
   };

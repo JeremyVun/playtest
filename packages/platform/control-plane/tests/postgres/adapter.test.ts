@@ -14,7 +14,7 @@ test("Postgres migrations build the effective schema and reject edited or unknow
   const db = await connectTestDb();
   assert.deepEqual(await migrate(db), migrationFiles());
   assert.deepEqual(await migrate(db), []);
-  assert.equal((await db.query("SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'")).rows[0]?.n, 38);
+  assert.equal((await db.query("SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'")).rows[0]?.n, 39);
   assert.equal((await db.query("SELECT COUNT(*) AS n FROM information_schema.columns WHERE table_name = 'rings' AND column_name = 'discovery_allowed'")).rows[0]?.n, 0);
   await db.query("UPDATE schema_migrations SET sha256 = 'edited'");
   await assert.rejects(() => migrate(db), /was edited/);

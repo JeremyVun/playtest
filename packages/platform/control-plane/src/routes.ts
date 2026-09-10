@@ -28,6 +28,7 @@ import * as storyDraft from "./api/story-draft.ts";
 import * as ruleCards from "./api/rule-cards.ts";
 import * as findings from "./api/findings.ts";
 import * as consolidation from "./api/consolidation.ts";
+import * as repair from "./api/repair.ts";
 import * as ops from "./api/ops.ts";
 
 export function buildRouter() {
@@ -157,8 +158,16 @@ export function buildRouter() {
   r.post(`${v}/findings/:f/not-fixed`, findings.suggestionNotFixed);
   r.post(`${v}/findings/:f/merge`, findings.mergeFinding);
   r.post(`${v}/finding-evidence/:e/split`, findings.splitEvidence);
+  r.post(`${v}/findings/:f/notes`, repair.addFindingNote);
   r.post(`${v}/runs/:r/promote-finding`, findings.promoteRun);
   r.post(`${v}/run-groups/:g/synthesize-findings`, findings.synthesizeGroup);
+
+  // --- repair claims (an external repairer leases a finding; Playtest
+  //     arbitrates the lease and records the outcome, and dispatches nothing) ---
+  r.post(`${v}/findings/:f/repair-claim`, repair.claimRepairSlot);
+  r.post(`${v}/findings/:f/repair-claim/heartbeat`, repair.heartbeatRepairSlot);
+  r.post(`${v}/findings/:f/repair-claim/release`, repair.releaseRepairSlot);
+  r.post(`${v}/findings/:f/repair-outcome/reset`, repair.resetRepairOutcomeRoute);
 
   // --- consolidation (retrieve-then-verify over the unreviewed findings). A
   //     plan is a proposal: it mutates nothing until a reviewer applies it. ---

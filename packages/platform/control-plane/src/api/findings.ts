@@ -10,6 +10,8 @@ import { intakeFinding } from "../findings/intake.ts";
 import { scheduleAutoDedupe } from "../findings/auto-dedupe.ts";
 import { mergeFindings } from "../findings/merge.ts";
 import { CATEGORIES } from "../findings/keys.ts";
+import { repairableSql } from "../findings/repair.ts";
+import { publicNote } from "./repair.ts";
 import { inClause } from "../db.ts";
 import { HttpResult } from "../http.ts";
 import { exportJson, exportMarkdown, type ExportScope } from "../findings/export.ts";
@@ -112,6 +114,9 @@ function findingFilter(ctx: HostedDynamic, projectId: HostedDynamic) {
     where.push(`(f.summary #>> '{auto_resolve,suggested}') IS NOT NULL`);
     scope.fixSuggested = true;
   }
+  // The repair daemon's queue: what it may claim right now. Same rule the claim's
+  // own WHERE restates, so the queue never offers a finding the claim refuses.
+  if (ctx.query.get("repairable") === "1") where.push(repairableSql("f"));
   // The run chip's query: findings this run's report auto-resolved.
   const resolvedByRun = ctx.query.get("resolved_by_run");
   if (resolvedByRun) {
@@ -448,6 +453,9 @@ export async function reopenFinding(ctx: HostedDynamic) {
               reject_reason = NULL,
               resolved_by_run_id = NULL,
               auto_resolved_at = NULL,
+              repair_owner = NULL,
+              repair_expires_at = NULL,
+              repair_outcome = 'none',
               summary = jsonb_remove_paths(summary, '$.auto_resolve.reason'),
               updated_at = now()
         WHERE id = $1 AND merged_into IS NULL
@@ -687,6 +695,10 @@ export async function getFindingWithEvidence(ctx: HostedDynamic, id: HostedDynam
   // is by design NOT one of the evidence rows.
   const resolvedByRun = await runSummaryFor(ctx, f.resolved_by_run_id);
   const suggestedFixRun = await runSummaryFor(ctx, f.summary?.auto_resolve?.suggested?.run_id);
+  const notes = await ctx.db.query(
+    `SELECT * FROM finding_notes WHERE finding_id = $1 ORDER BY created_at DESC, id DESC`,
+    [f.id],
+  );
   return {
     ...publicFinding(f),
     project_key: f.project_key,
@@ -694,6 +706,7 @@ export async function getFindingWithEvidence(ctx: HostedDynamic, id: HostedDynam
     story_health: decodeStoryHealth(f.story_health),
     resolved_by_run: resolvedByRun,
     suggested_fix_run: suggestedFixRun,
+    notes: notes.rows.map(publicNote),
     evidence: ev.rows.map((e: HostedDynamic) => ({
       ...publicEvidence(e),
       run_db_id: e.run_id,

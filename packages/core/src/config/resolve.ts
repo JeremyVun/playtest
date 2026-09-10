@@ -188,7 +188,7 @@ const APP_KEY_DRIVERS: Record<string, DriverId[]> = {
   // never reaches a web actor's prompt, because a web journey is written in
   // clicks, not operations (docs/contracts/engine.md#openapi-ingestion).
   openapi: ["api", "web"],
-  allowed_origins: ["api"],
+  allowed_origins: ["api", "web"],
   // Request headers merged UNDER the actor's own action headers, values either
   // literal or a { $secret: NAME } reference resolved at driver launch
   // (docs/contracts/engine.md#secrets-and-redaction).
@@ -280,7 +280,7 @@ function applyRuntimeTarget(env: InternalAppConfig, target: RuntimeTarget, drive
 }
 
 /**
- * app.allowed_origins (api only): the egress allowlist — origins the driver may
+ * app.allowed_origins (api + web): the egress allowlist — origins the driver may
  * reach besides base_url's own. Entries must be BARE http(s) origins
  * (scheme://host[:port]); a path, query, hash, or credentials is a config error
  * rather than a silent normalization, because an allowed origin admits the
@@ -781,8 +781,8 @@ export async function resolveCase(
       // actor AND drives the Tier-1 invariant policies; on web it is gate-only
       // (docs/contracts/engine.md#openapi-ingestion).
       openapi: merged.env.openapi ?? null,
-      // Extra origins the api driver may reach besides base_url's own — the
-      // egress allowlist (docs/contracts/engine.md#api-driver). Normalized to
+      // Extra origins the driver may reach besides base_url's own — the egress
+      // allowlist (docs/contracts/engine.md#origin-confinement). Normalized to
       // bare origins here so the driver compares origin-to-origin. A session
       // input like cookies — NOT a manifest pin.
       allowed_origins: normalizeAllowedOrigins(merged.env.allowed_origins, file),

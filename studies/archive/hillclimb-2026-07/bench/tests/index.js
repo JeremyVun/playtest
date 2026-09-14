@@ -1,1 +1,0 @@
-import './bench.test.js';

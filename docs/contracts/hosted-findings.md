@@ -287,6 +287,62 @@ Deployment defaults control enablement, mode, model, debounce, and retention
 grace. Project admins may pin enablement and mode and may select the verification
 model. Enabling or widening policy schedules catch-up.
 
+## Repair claims
+
+An external repairer — a daemon outside Playtest — may attempt a fix for a
+finding. Playtest arbitrates who is working which finding and records what came
+of it. It never dispatches the work, never calls the repairer, and holds no
+attempt, worktree, branch or pull-request state: the claim is a lease on the
+finding row and nothing else.
+
+A finding is **repairable** when it is `new` or `reopened`, unmerged, carries no
+unexpired claim, and its repair outcome is `none`. The same rule is the queue's
+filter and the claim's own precondition, so the queue never offers a finding the
+claim would refuse.
+
+The outcome of the last repair stays on the finding — `none`, `suggested`,
+`not_fixed` or `needs_owner` — so a concluded finding leaves the queue instead of
+being retried forever. A reviewer reset, or reopening the finding, returns it to
+`none`. Reopening also clears any live claim. The generation only ever climbs, so
+a message from a previous holder is stale on arrival.
+
+| Route | Role | Body | Answer |
+|---|---|---|---|
+| `POST /api/v1/findings/:f/repair-claim` | developer | `{owner, ttl_s}` | `200 {finding_id, owner, generation, expires_at, heartbeat_interval_s}` |
+| `POST /api/v1/findings/:f/repair-claim/heartbeat` | developer | `{owner, generation, ttl_s}` | `200 {generation, expires_at}` |
+| `POST /api/v1/findings/:f/repair-claim/release` | developer | `{owner, generation, outcome, external_ref?, note?}` | `200 {finding}` |
+| `POST /api/v1/findings/:f/repair-outcome/reset` | reviewer | — | `200 {finding}` |
+| `POST /api/v1/findings/:f/notes` | editor | `{text, source}` | `201 {note}` |
+| `GET /api/v1/projects/:p/findings?repairable=1` | viewer | — | the list, filtered to repairable findings |
+
+`ttl_s` is clamped to 30–3600 seconds and `heartbeat_interval_s` is
+`max(5, floor(ttl_s / 10))`. A claim bumps the generation; the holder may
+re-claim its own live lease, which is a restart, not a race. An expired lease
+belongs to whoever asks next. `outcome` is `suggested`, `not_fixed` or
+`needs_owner`, and `suggested` requires an `external_ref` naming the fix — a
+suggestion without a link is unreviewable. An `external_ref` written by a
+release is an ordinary live external reference, so automatic resolution only
+ever suggests on that finding and never contradicts the fix silently.
+
+Every claim, heartbeat and release is one UPDATE whose WHERE restates the whole
+precondition. Zero affected rows means this caller lost, and the answer is `409`
+naming the fact that made the write impossible in `error.details`
+(`reason` ∈ `claimed | outcome | state | merged | stale`, plus the live `owner`
+and `expires_at`), so a repairer can tell "someone else is on it" from "this
+finding is done with repair". Releasing as `suggested` emits
+`finding.repair_suggested`; any other outcome emits `finding.repair_released`.
+Both carry `{finding_id, owner, generation, outcome, source: "repair"}` plus
+`external_ref` when one was written. A reset emits `finding.repair_reset`. Claim
+and heartbeat emit no event: only a conclusion is news. Claims, releases, resets
+and notes are audited in their own transaction.
+
+A note is prose attached to a finding without run evidence, so a duplicate report
+can land on the finding it duplicates. Notes are append-only, at most 4096
+characters, carry the caller's `source` label, ride in `GET /findings/:f`, and
+emit `finding.note_added`. A repair release's optional `note` is stored the same
+way with source `repair`. A note is not evidence: it never moves `last_seen`,
+recurrence or any count.
+
 ## Rule cards
 
 Rule cards are hosted Level 1 invariants from
@@ -403,6 +459,6 @@ change. The console offers it as **Download findings** on the findings list.
 ## Contract changes
 
 Update this file for changes to finding identity, lifecycle, evidence,
-consolidation, auto-resolution, rule-card governance, model grounding, or
-assisted-authoring persistence. Platform roles and event delivery remain in
+consolidation, auto-resolution, repair claims, notes, rule-card governance,
+model grounding, or assisted-authoring persistence. Platform roles and event delivery remain in
 [Hosted platform contracts](hosted.md).

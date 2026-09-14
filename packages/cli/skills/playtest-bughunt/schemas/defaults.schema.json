@@ -237,7 +237,7 @@
           "type": "array",
           "items": { "type": "string" },
           "minItems": 1,
-          "description": "api only: extra origins the driver may reach besides base_url's own — the egress allowlist (docs/contracts/engine.md#api-driver). Entries must be bare http(s) origins (scheme://host[:port]); a path, query, or credentials in an entry is a config error. By default the driver refuses any request resolving outside base_url's origin."
+          "description": "web + api: extra origins the driver may reach besides base_url's own — the egress allowlist (docs/contracts/engine.md#origin-confinement). Entries must be bare http(s) origins (scheme://host[:port]); a path, query, or credentials in an entry is a config error. By default the driver refuses any request resolving outside base_url's origin; on web the refusal blocks the request and records a request_blocked event."
         },
         "headers": {
           "type": "object",

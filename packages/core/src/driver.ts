@@ -144,6 +144,11 @@ interface PreparedEnvironment {
 interface CreateDriverOptions {
   runDir: string;
   headed?: boolean;
+  // The run's progress-event sink (runner.ts `emit`), so a driver-level event —
+  // today only the web origin guard's `request_blocked` — lands in the same
+  // events.jsonl and listener stream as every other event
+  // (docs/contracts/engine.md#progress-events).
+  onEvent?: (type: string, payload: Record<string, unknown>) => void;
   // The run's diagnostic timing sidecar (perf.ts). Absent => the shared no-op
   // recorder, so a driver constructed outside a run times nothing.
   perf?: PerfSidecar;
@@ -152,7 +157,7 @@ interface CreateDriverOptions {
 export async function createDriver(
   rc: ResolvedCase,
   env: PreparedEnvironment,
-  { runDir, headed = false, perf = PerfSidecar.off() }: CreateDriverOptions = {} as CreateDriverOptions // SAFETY: preserves the legacy optional argument while callers supply runDir
+  { runDir, headed = false, perf = PerfSidecar.off(), onEvent = () => {} }: CreateDriverOptions = {} as CreateDriverOptions // SAFETY: preserves the legacy optional argument while callers supply runDir
 ): Promise<Driver> {
   const driver = rc.env?.driver ?? "web";
   switch (driver) {
@@ -171,6 +176,10 @@ export async function createDriver(
         // enriched spec the Tier-1 invariant policies judge the page's own
         // requests against. case_file names the file if the spec won't load.
         openapi: rc.env.openapi ?? null,
+        // The egress guard's extra origins, and the sink its blocks are recorded
+        // on (docs/contracts/engine.md#origin-confinement).
+        allowedOrigins: rc.env.allowed_origins ?? null,
+        onEvent,
         caseFile: rc.file,
         perf,
         // The `artifacts` profile decides whether this run pays for the

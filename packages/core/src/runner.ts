@@ -628,7 +628,7 @@ async function prepareRun({ rc, runId, writer, r, emit, llm, startMode, startedA
 
     let driver: DynamicValue;
     try {
-      driver = await driverFactory(rc, env, { runDir: writer.dir, headed, perf });
+      driver = await driverFactory(rc, env, { runDir: writer.dir, headed, perf, onEvent: emit });
     } catch (e) {
       return { done: await finishInfra(`driver launch failed: ${firstLine(e)}`, { env }) };
     }

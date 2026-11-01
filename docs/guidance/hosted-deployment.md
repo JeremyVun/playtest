@@ -31,7 +31,7 @@ use another gateway. The endpoint must be reachable from the control plane,
 runner and job networks; Linux installations must supply a reachable endpoint.
 An explicitly empty `PLAYTEST_LLM_BASE_URL` disables model-backed features.
 Production requires its own explicit gateway configuration.
-Local story drafting defaults to `gpt5_6_sol`; `PLAYTEST_AUTHORING_MODEL`
+Local story drafting defaults to `gpt6_1_sol`; `PLAYTEST_AUTHORING_MODEL`
 overrides it. This selects the gateway's explicit GPT route rather than its
 fallback Codex SDK model.
 

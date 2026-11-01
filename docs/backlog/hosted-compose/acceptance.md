@@ -104,7 +104,7 @@ files sequentially: recreation deliberately stops local dependencies.
 ## Remaining acceptance and rollout
 
 Local gateway follow-up: Compose now defaults to the co-located codex-gateway
-at `http://host.docker.internal:8900`, with `gpt5_6_sol` for story authoring.
+at `http://host.docker.internal:8900`, with `gpt6_1_sol` for story authoring.
 The owner reported the disabled Help me draft control; the missing gateway URL
 caused the capability to be false. Health checks pass from control-plane, runner
 and job containers. A real story-draft request returned HTTP 200 and one validated

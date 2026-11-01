@@ -362,7 +362,7 @@ pending. No env files have been read and no production changes have been made.
 
 Owner follow-up: local Compose must use the existing co-located codex-gateway.
 The local default now names `host.docker.internal:8900`; explicit empty URL
-still disables model work. Authoring defaults to `gpt5_6_sol` to use the working
+still disables model work. Authoring defaults to `gpt6_1_sol` to use the working
 gateway route. Real drafting returned HTTP 200 with a validated draft; see
 acceptance.md. Production gateway settings remain explicit and unchanged.
 
